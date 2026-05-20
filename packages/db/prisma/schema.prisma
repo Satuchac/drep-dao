@@ -1,0 +1,645 @@
+// DRep DAO — Prisma schema. Faithful translation of design §24.
+// String columns hold the TEXT domains defined in @drep-dao/shared (enums.ts);
+// they are intentionally not Prisma enums, matching the design's "TEXT" columns.
+// Current merit balance (the §24.7 drep_merit_current VIEW) is computed in code
+// (sum of merit_ledger.delta, clamped to ±MERIT_POINT_MAX) rather than as a DB view.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+// §24.1 Identity and access
+// ===========================================================================
+
+model AppUser {
+  id           String   @id @default(uuid()) @db.Uuid
+  stakeKeyHash String   @unique @map("stake_key_hash")
+  stakeAddress String   @map("stake_address")
+  displayName  String?  @map("display_name")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  drep                   Drep?
+  experts                Expert[]
+  proposalsSubmitted     Proposal[]               @relation("ProposalSubmitter")
+  proposalVersionsEdited ProposalVersion[]
+  comments               Comment[]
+  privateMessages        PrivateMessage[]
+  notifications          Notification[]
+  notificationPreference NotificationPreference?
+  configUpdates          PlatformConfig[]         @relation("ConfigUpdater")
+
+  @@map("app_user")
+}
+
+model Drep {
+  id                 String    @id @default(uuid()) @db.Uuid
+  userId             String    @unique @map("user_id") @db.Uuid
+  drepIdOnchain      String    @unique @map("drep_id_onchain")
+  status             String // PENDING_ADMISSION, ADMITTED, REMOVED
+  bio                String?
+  socials            Json?
+  contact            Json?
+  subcategoryIds     String[]  @map("subcategory_ids")
+  kycOptin           Boolean   @default(false) @map("kyc_optin")
+  callsOptin         Boolean   @default(false) @map("calls_optin")
+  admissionCallOptin Boolean   @default(false) @map("admission_call_optin")
+  admittedAt         DateTime? @map("admitted_at") @db.Timestamptz(6)
+  removedAt          DateTime? @map("removed_at") @db.Timestamptz(6)
+
+  user                    AppUser               @relation(fields: [userId], references: [id])
+  boardMemberships        BoardMembership[]
+  roundEligibilities      RoundDrepEligibility[]
+  proposalsSubmitted      Proposal[]            @relation("ProposalSubmitterDrep")
+  filterAssignments       FilterAssignment[]    @relation("FilterAssignee")
+  filterReplacements      FilterAssignment[]    @relation("FilterReplacement")
+  milestoneAssignments    MilestoneAssignment[]
+  snapshotEntries         VoteSnapshotEntry[]
+  votes                   Vote[]
+  quickPollVotes          QuickPollVote[]
+  meritLedger             MeritLedger[]
+  rewardEntries           RewardEntry[]
+  multisigSignatures      MultisigSignature[]
+  avoidPeriods            DrepAvoidPeriod[]
+  recommendationsReceived DrepRecommendation[]  @relation("RecommendationRecommended")
+  recommendationsMade     DrepRecommendation[]  @relation("RecommendationRecommender")
+
+  @@map("drep")
+}
+
+model BoardMembership {
+  id        String    @id @default(uuid()) @db.Uuid
+  drepId    String    @map("drep_id") @db.Uuid
+  startedAt DateTime  @map("started_at") @db.Timestamptz(6)
+  endedAt   DateTime? @map("ended_at") @db.Timestamptz(6)
+
+  drep Drep @relation(fields: [drepId], references: [id])
+
+  @@map("board_membership")
+}
+
+model Expert {
+  id              String   @id @default(uuid()) @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  displayName     String   @map("display_name")
+  bio             String?
+  subcategoryIds  String[] @map("subcategory_ids")
+  approvedByBoard Boolean  @default(false) @map("approved_by_board")
+
+  user                 AppUser               @relation(fields: [userId], references: [id])
+  milestoneAssignments MilestoneAssignment[]
+
+  @@map("expert")
+}
+
+// ===========================================================================
+// §24.2 Configuration and taxonomy
+// ===========================================================================
+
+model PlatformConfig {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+  updatedBy String?  @map("updated_by") @db.Uuid
+
+  updater AppUser? @relation("ConfigUpdater", fields: [updatedBy], references: [id])
+
+  @@map("platform_config")
+}
+
+model Subcategory {
+  id      String  @id // slug
+  label   String
+  active  Boolean @default(true)
+  sortIdx Int     @default(0) @map("sort_idx")
+
+  @@map("subcategory")
+}
+
+// ===========================================================================
+// §24.3 Rounds and categories
+// ===========================================================================
+
+model Round {
+  id              String    @id @default(uuid()) @db.Uuid
+  number          Int       @unique
+  name            String?
+  status          String // PREPARATION, FILTERING, DV, FUNDING, CLOSED
+  budgetAda       BigInt    @map("budget_ada") // Lovelace
+  rewardsPoolAda  BigInt    @map("rewards_pool_ada")
+  multisigAddress String    @map("multisig_address")
+  intersectTxHash String?   @map("intersect_tx_hash")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  endedAt         DateTime? @map("ended_at") @db.Timestamptz(6)
+
+  categories         RoundCategory[]
+  eligibilities      RoundDrepEligibility[]
+  schedule           RoundSchedule[]
+  proposals          Proposal[]
+  quickPolls         QuickPoll[]
+  rewardCalculations RewardCalculation[]
+
+  @@map("round")
+}
+
+model RoundCategory {
+  id           String  @id @default(uuid()) @db.Uuid
+  roundId      String  @map("round_id") @db.Uuid
+  name         String
+  type         String // GRANT or RFP
+  description  String?
+  conditions   String?
+  minAda       BigInt? @map("min_ada")
+  maxAda       BigInt? @map("max_ada")
+  allocatedAda BigInt  @map("allocated_ada")
+
+  round      Round       @relation(fields: [roundId], references: [id])
+  proposals  Proposal[]
+  quickPolls QuickPoll[]
+
+  @@map("round_category")
+}
+
+model RoundDrepEligibility {
+  roundId String   @map("round_id") @db.Uuid
+  drepId  String   @map("drep_id") @db.Uuid
+  addedAt DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
+
+  round Round @relation(fields: [roundId], references: [id])
+  drep  Drep  @relation(fields: [drepId], references: [id])
+
+  @@id([roundId, drepId])
+  @@map("round_drep_eligibility")
+}
+
+model RoundSchedule {
+  roundId       String    @map("round_id") @db.Uuid
+  stageKey      String    @map("stage_key") // 'submission', 'filter_fb1', ...
+  startsAt      DateTime  @map("starts_at") @db.Timestamptz(6)
+  endsAt        DateTime  @map("ends_at") @db.Timestamptz(6)
+  prolongedFrom DateTime? @map("prolonged_from") @db.Timestamptz(6)
+
+  round Round @relation(fields: [roundId], references: [id])
+
+  @@id([roundId, stageKey])
+  @@map("round_schedule")
+}
+
+// ===========================================================================
+// §24.4 Proposals
+// ===========================================================================
+
+model Proposal {
+  id     String  @id @default(uuid()) @db.Uuid
+  type   String // FUNDING or INTERNAL
+  status String // DRAFT, PENDING, ACTIVE, APPROVED, REJECTED, COMPLETE, FAILED
+  stage  String? // FILTERING, DV, FUNDING, VOTING
+
+  submitterUserId String? @map("submitter_user_id") @db.Uuid
+  submitterDrepId String? @map("submitter_drep_id") @db.Uuid
+  title           String
+  contentMd       String  @map("content_md")
+  categoryId      String? @map("category_id") @db.Uuid
+  subcategoryIds  String[] @map("subcategory_ids")
+  roundId         String? @map("round_id") @db.Uuid
+
+  // funding
+  isCommercial        Boolean? @map("is_commercial")
+  requestedAmountAda  BigInt?  @map("requested_amount_ada")
+  submissionFeeAda    BigInt?  @map("submission_fee_ada")
+  submissionFeeTxHash String?  @map("submission_fee_tx_hash")
+  pledgeAmountAda     BigInt?  @map("pledge_amount_ada")
+  pledgeReturnMethod  String?  @map("pledge_return_method")
+  pledgeTxHash        String?  @map("pledge_tx_hash")
+  teamInfo            Json?    @map("team_info")
+  costBreakdownMd     String?  @map("cost_breakdown_md")
+  revenueSharing      Json?    @map("revenue_sharing")
+
+  // internal
+  internalType  String?   @map("internal_type")
+  votersScope   String?   @map("voters_scope")
+  actors        Json?
+  deliveryDate  DateTime? @map("delivery_date") @db.Timestamptz(6)
+  pollOptions   Json?     @map("poll_options")
+  thresholdKind String?   @map("threshold_kind")
+
+  // common
+  votingType           String // ONE_PERSON_ONE_VOTE or BALANCED
+  approvalThresholdPct Decimal?  @map("approval_threshold_pct") @db.Decimal(5, 2)
+  votingStartAt        DateTime? @map("voting_start_at") @db.Timestamptz(6)
+  votingEndAt          DateTime? @map("voting_end_at") @db.Timestamptz(6)
+  resultFinalizedAt    DateTime? @map("result_finalized_at") @db.Timestamptz(6)
+  version              Int       @default(1)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  submitterUser  AppUser?           @relation("ProposalSubmitter", fields: [submitterUserId], references: [id])
+  submitterDrep  Drep?              @relation("ProposalSubmitterDrep", fields: [submitterDrepId], references: [id])
+  category       RoundCategory?     @relation(fields: [categoryId], references: [id])
+  round          Round?             @relation(fields: [roundId], references: [id])
+  versions       ProposalVersion[]
+  milestones     Milestone[]
+  filterAssignments FilterAssignment[]
+  voteSnapshots  VoteSnapshot[]
+  votes          Vote[]
+  comments       Comment[]
+  privateThreads PrivateThread[]
+  quickPollsWon  QuickPoll[]        @relation("QuickPollWinner")
+  quickPollVotesFor QuickPollVote[] @relation("QuickPollChoice")
+
+  @@index([roundId, status])
+  @@index([type, status])
+  @@map("proposal")
+}
+
+model ProposalVersion {
+  id         String   @id @default(uuid()) @db.Uuid
+  proposalId String   @map("proposal_id") @db.Uuid
+  version    Int
+  contentMd  String   @map("content_md")
+  editedBy   String?  @map("edited_by") @db.Uuid
+  editedAt   DateTime @default(now()) @map("edited_at") @db.Timestamptz(6)
+
+  proposal Proposal @relation(fields: [proposalId], references: [id])
+  editor   AppUser? @relation(fields: [editedBy], references: [id])
+
+  @@unique([proposalId, version])
+  @@map("proposal_version")
+}
+
+model Milestone {
+  id          String    @id @default(uuid()) @db.Uuid
+  proposalId  String    @map("proposal_id") @db.Uuid
+  idx         Int
+  description String?
+  amountAda   BigInt    @map("amount_ada")
+  deadlineAt  DateTime? @map("deadline_at") @db.Timestamptz(6)
+  status      String // NOT_STARTED, POA_SUBMITTED, IN_REVIEW, APPROVED, REJECTED
+  closedAt    DateTime? @map("closed_at") @db.Timestamptz(6)
+
+  proposal    Proposal              @relation(fields: [proposalId], references: [id])
+  poas        MilestonePoa[]
+  assignments MilestoneAssignment[]
+  votes       Vote[]
+
+  @@unique([proposalId, idx])
+  @@map("milestone")
+}
+
+model MilestonePoa {
+  id          String   @id @default(uuid()) @db.Uuid
+  milestoneId String   @map("milestone_id") @db.Uuid
+  contentMd   String?  @map("content_md")
+  submittedAt DateTime @default(now()) @map("submitted_at") @db.Timestamptz(6)
+  attempt     Int
+
+  milestone Milestone @relation(fields: [milestoneId], references: [id])
+
+  @@map("milestone_poa")
+}
+
+// ===========================================================================
+// §24.5 Reviewer assignments
+// ===========================================================================
+
+model FilterAssignment {
+  id         String    @id @default(uuid()) @db.Uuid
+  proposalId String    @map("proposal_id") @db.Uuid
+  drepId     String    @map("drep_id") @db.Uuid
+  assignedAt DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(6)
+  releasedAt DateTime? @map("released_at") @db.Timestamptz(6)
+  replacedBy String?   @map("replaced_by") @db.Uuid
+
+  proposal     Proposal @relation(fields: [proposalId], references: [id])
+  drep         Drep     @relation("FilterAssignee", fields: [drepId], references: [id])
+  replacedByRef Drep?   @relation("FilterReplacement", fields: [replacedBy], references: [id])
+
+  @@map("filter_assignment")
+}
+
+model MilestoneAssignment {
+  id                  String    @id @default(uuid()) @db.Uuid
+  milestoneId         String    @map("milestone_id") @db.Uuid
+  reviewerDrepId      String?   @map("reviewer_drep_id") @db.Uuid
+  reviewerExpertId    String?   @map("reviewer_expert_id") @db.Uuid
+  assignedAt          DateTime  @default(now()) @map("assigned_at") @db.Timestamptz(6)
+  confirmedByBoardAt  DateTime? @map("confirmed_by_board_at") @db.Timestamptz(6)
+  releasedAt          DateTime? @map("released_at") @db.Timestamptz(6)
+
+  milestone      Milestone @relation(fields: [milestoneId], references: [id])
+  reviewerDrep   Drep?     @relation(fields: [reviewerDrepId], references: [id])
+  reviewerExpert Expert?   @relation(fields: [reviewerExpertId], references: [id])
+
+  @@map("milestone_assignment")
+}
+
+// ===========================================================================
+// §24.6 Votes and snapshots
+// ===========================================================================
+
+model VoteSnapshot {
+  id         String   @id @default(uuid()) @db.Uuid
+  proposalId String   @map("proposal_id") @db.Uuid
+  takenAt    DateTime @default(now()) @map("taken_at") @db.Timestamptz(6)
+  anchorId   String?  @map("anchor_id") @db.Uuid
+
+  proposal Proposal            @relation(fields: [proposalId], references: [id])
+  anchor   Anchor?             @relation(fields: [anchorId], references: [id])
+  entries  VoteSnapshotEntry[]
+
+  @@map("vote_snapshot")
+}
+
+model VoteSnapshotEntry {
+  snapshotId      String  @map("snapshot_id") @db.Uuid
+  drepId          String  @map("drep_id") @db.Uuid
+  stakeLovelace   BigInt  @map("stake_lovelace")
+  meritPoints     Int     @map("merit_points")
+  basePower       Decimal? @map("base_power") @db.Decimal(12, 4)
+  meritMultiplier Decimal? @map("merit_multiplier") @db.Decimal(12, 4)
+  finalPower      Decimal? @map("final_power") @db.Decimal(12, 4)
+
+  snapshot VoteSnapshot @relation(fields: [snapshotId], references: [id])
+  drep     Drep         @relation(fields: [drepId], references: [id])
+
+  @@id([snapshotId, drepId])
+  @@map("vote_snapshot_entry")
+}
+
+model Vote {
+  id           String   @id @default(uuid()) @db.Uuid
+  proposalId   String   @map("proposal_id") @db.Uuid
+  drepId       String   @map("drep_id") @db.Uuid
+  milestoneId  String?  @map("milestone_id") @db.Uuid
+  choice       String // YES, NO, ABSTAIN
+  rationale    String?
+  castAt       DateTime @default(now()) @map("cast_at") @db.Timestamptz(6)
+  supersededBy String?  @map("superseded_by") @db.Uuid
+
+  proposal     Proposal   @relation(fields: [proposalId], references: [id])
+  drep         Drep       @relation(fields: [drepId], references: [id])
+  milestone    Milestone? @relation(fields: [milestoneId], references: [id])
+  supersededByVote Vote?  @relation("VoteSupersede", fields: [supersededBy], references: [id])
+  supersedes   Vote[]     @relation("VoteSupersede")
+
+  @@index([proposalId, drepId])
+  @@map("vote")
+}
+
+model QuickPoll {
+  id         String    @id @default(uuid()) @db.Uuid
+  roundId    String    @map("round_id") @db.Uuid
+  categoryId String    @map("category_id") @db.Uuid
+  candidates String[]  @db.Uuid // tied proposal ids (loose; not FK)
+  startsAt   DateTime? @map("starts_at") @db.Timestamptz(6)
+  endsAt     DateTime? @map("ends_at") @db.Timestamptz(6)
+  extensions Int       @default(0)
+  status     String // PENDING_BOARD, ACTIVE, RESOLVED, FAILED
+  winnerId   String?   @map("winner_id") @db.Uuid
+
+  round    Round           @relation(fields: [roundId], references: [id])
+  category RoundCategory   @relation(fields: [categoryId], references: [id])
+  winner   Proposal?       @relation("QuickPollWinner", fields: [winnerId], references: [id])
+  votes    QuickPollVote[]
+
+  @@map("quick_poll")
+}
+
+model QuickPollVote {
+  quickPollId String   @map("quick_poll_id") @db.Uuid
+  drepId      String   @map("drep_id") @db.Uuid
+  choice      String   @db.Uuid // proposal id chosen
+  castAt      DateTime @default(now()) @map("cast_at") @db.Timestamptz(6)
+
+  quickPoll      QuickPoll @relation(fields: [quickPollId], references: [id])
+  drep           Drep      @relation(fields: [drepId], references: [id])
+  choiceProposal Proposal  @relation("QuickPollChoice", fields: [choice], references: [id])
+
+  @@id([quickPollId, drepId])
+  @@map("quick_poll_vote")
+}
+
+// ===========================================================================
+// §24.7 Merit ledger
+// ===========================================================================
+
+model MeritLedger {
+  id          String   @id @default(uuid()) @db.Uuid
+  drepId      String   @map("drep_id") @db.Uuid
+  delta       Decimal  @db.Decimal(6, 2)
+  reasonCode  String   @map("reason_code")
+  referenceId String?  @map("reference_id") @db.Uuid // loose ref (proposal/milestone/round)
+  occurredAt  DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  drep Drep @relation(fields: [drepId], references: [id])
+
+  @@index([drepId, occurredAt])
+  @@map("merit_ledger")
+}
+
+// ===========================================================================
+// §24.8 Rewards
+// ===========================================================================
+
+model RewardCalculation {
+  id         String   @id @default(uuid()) @db.Uuid
+  roundId    String   @map("round_id") @db.Uuid
+  kind       String // FILTER, DV_FIXED, DV_BONUS, MILESTONE
+  poolAda    BigInt   @map("pool_ada")
+  totalUnits Decimal? @map("total_units")
+  computedAt DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
+
+  round   Round         @relation(fields: [roundId], references: [id])
+  entries RewardEntry[]
+
+  @@map("reward_calculation")
+}
+
+model RewardEntry {
+  id                  String    @id @default(uuid()) @db.Uuid
+  rewardCalculationId String    @map("reward_calculation_id") @db.Uuid
+  drepId              String    @map("drep_id") @db.Uuid
+  amountAda           BigInt    @map("amount_ada")
+  paidInTx            String?   @map("paid_in_tx")
+  paidAt              DateTime? @map("paid_at") @db.Timestamptz(6)
+
+  rewardCalculation RewardCalculation @relation(fields: [rewardCalculationId], references: [id])
+  drep              Drep              @relation(fields: [drepId], references: [id])
+
+  @@map("reward_entry")
+}
+
+// ===========================================================================
+// §24.9 Treasury and Cardano
+// ===========================================================================
+
+model MultisigAction {
+  id          String   @id @default(uuid()) @db.Uuid
+  kind        String // REWARD_PAYOUT, PROJECT_FUNDING, PLEDGE_RETURN, OPS, LEFTOVER_RETURN
+  txCbor      String?  @map("tx_cbor")
+  txHash      String?  @map("tx_hash")
+  status      String // PENDING_SIGS, BROADCASTED, CONFIRMED, FAILED
+  amountAda   BigInt?  @map("amount_ada")
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  signatures MultisigSignature[]
+
+  @@map("multisig_action")
+}
+
+model MultisigSignature {
+  id          String   @id @default(uuid()) @db.Uuid
+  actionId    String   @map("action_id") @db.Uuid
+  boardDrepId String   @map("board_drep_id") @db.Uuid
+  witnessCbor String   @map("witness_cbor")
+  signedAt    DateTime @default(now()) @map("signed_at") @db.Timestamptz(6)
+
+  action MultisigAction @relation(fields: [actionId], references: [id])
+  drep   Drep           @relation(fields: [boardDrepId], references: [id])
+
+  @@unique([actionId, boardDrepId])
+  @@map("multisig_signature")
+}
+
+model CardanoTxObservation {
+  txHash      String    @id @map("tx_hash")
+  blockHeight BigInt?   @map("block_height")
+  confirmedAt DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  metadata    Json?
+  observedAt  DateTime  @default(now()) @map("observed_at") @db.Timestamptz(6)
+
+  @@map("cardano_tx_observation")
+}
+
+// ===========================================================================
+// §24.10 Anchoring
+// ===========================================================================
+
+model Anchor {
+  id            String    @id @default(uuid()) @db.Uuid
+  kind          String
+  roundId       String?   @map("round_id") @db.Uuid // loose ref
+  proposalId    String?   @map("proposal_id") @db.Uuid // loose ref
+  hash          String
+  preimage      Json?
+  txHash        String?   @map("tx_hash")
+  metadataLabel Int       @map("metadata_label") // 80808080
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  submittedAt   DateTime? @map("submitted_at") @db.Timestamptz(6)
+  confirmedAt   DateTime? @map("confirmed_at") @db.Timestamptz(6)
+
+  voteSnapshots VoteSnapshot[]
+
+  @@index([kind, createdAt])
+  @@map("anchor")
+}
+
+// ===========================================================================
+// §24.11 Communication and notifications
+// ===========================================================================
+
+model Comment {
+  id           String    @id @default(uuid()) @db.Uuid
+  proposalId   String    @map("proposal_id") @db.Uuid
+  parentId     String?   @map("parent_id") @db.Uuid
+  authorUserId String    @map("author_user_id") @db.Uuid
+  contentMd    String    @map("content_md")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  proposal Proposal  @relation(fields: [proposalId], references: [id])
+  parent   Comment?  @relation("CommentParent", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentParent")
+  author   AppUser   @relation(fields: [authorUserId], references: [id])
+
+  @@map("comment")
+}
+
+model PrivateThread {
+  id         String @id @default(uuid()) @db.Uuid
+  proposalId String @map("proposal_id") @db.Uuid
+  kind       String // SUBMITTER_BOARD, DREP_BOARD_SHARED
+
+  proposal Proposal         @relation(fields: [proposalId], references: [id])
+  messages PrivateMessage[]
+
+  @@map("private_thread")
+}
+
+model PrivateMessage {
+  id           String   @id @default(uuid()) @db.Uuid
+  threadId     String   @map("thread_id") @db.Uuid
+  authorUserId String   @map("author_user_id") @db.Uuid
+  contentMd    String   @map("content_md")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  thread PrivateThread @relation(fields: [threadId], references: [id])
+  author AppUser       @relation(fields: [authorUserId], references: [id])
+
+  @@map("private_message")
+}
+
+model Notification {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  kind         String
+  payload      Json
+  channelsSent String[]  @map("channels_sent")
+  readAt       DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user AppUser @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt])
+  @@map("notification")
+}
+
+model NotificationPreference {
+  userId         String  @id @map("user_id") @db.Uuid
+  inApp          Boolean @default(true) @map("in_app")
+  email          Boolean @default(true)
+  emailAddr      String? @map("email_addr")
+  telegram       Boolean @default(false)
+  telegramChatId String? @map("telegram_chat_id")
+
+  user AppUser @relation(fields: [userId], references: [id])
+
+  @@map("notification_preference")
+}
+
+// ===========================================================================
+// §24.12 Avoid periods and recommendations
+// ===========================================================================
+
+model DrepAvoidPeriod {
+  id        String   @id @default(uuid()) @db.Uuid
+  drepId    String   @map("drep_id") @db.Uuid
+  startsAt  DateTime @map("starts_at") @db.Timestamptz(6)
+  endsAt    DateTime @map("ends_at") @db.Timestamptz(6)
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  drep Drep @relation(fields: [drepId], references: [id])
+
+  @@map("drep_avoid_period")
+}
+
+model DrepRecommendation {
+  id                String   @id @default(uuid()) @db.Uuid
+  recommendedDrepId String   @map("recommended_drep_id") @db.Uuid
+  recommenderDrepId String   @map("recommender_drep_id") @db.Uuid
+  note              String?
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  recommended Drep @relation("RecommendationRecommended", fields: [recommendedDrepId], references: [id])
+  recommender Drep @relation("RecommendationRecommender", fields: [recommenderDrepId], references: [id])
+
+  @@map("drep_recommendation")
+}
