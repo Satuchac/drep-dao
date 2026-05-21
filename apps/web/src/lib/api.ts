@@ -153,3 +153,47 @@ export const boardRoundsApi = {
   startStage: (id: string, stage: string) =>
     request<RoundDetail>(`/admin/rounds/${id}/start-stage/${stage}`, { method: 'POST' }),
 };
+
+export interface ProposalMilestoneInput {
+  description: string;
+  amountAda: number;
+}
+export interface CreateProposalInput {
+  roundId: string;
+  categoryId: string;
+  title: string;
+  contentMd: string;
+  isCommercial: boolean;
+  requestedAmountAda: number;
+  milestones: ProposalMilestoneInput[];
+}
+export interface ProposalSummary {
+  id: string;
+  type: string;
+  status: string;
+  stage: string | null;
+  title: string;
+  categoryName: string | null;
+  roundId: string | null;
+  isCommercial: boolean | null;
+  requestedAmountAda: number;
+}
+export interface ProposalDetail extends ProposalSummary {
+  contentMd: string;
+  submissionFeeAda: number;
+  submissionFeeTxHash: string | null;
+  milestones: { id: string; idx: number; description: string; amountAda: number; status: string }[];
+}
+
+export const proposalsApi = {
+  byRound: (roundId: string) => request<ProposalSummary[]>(`/rounds/${roundId}/proposals`),
+  get: (id: string) => request<ProposalDetail>(`/proposals/${id}`),
+  mine: () => request<ProposalSummary[]>('/me/proposals'),
+  create: (input: CreateProposalInput) =>
+    request<ProposalDetail>('/proposals', { method: 'POST', body: JSON.stringify(input) }),
+  submit: (id: string, submissionFeeTxHash: string) =>
+    request<ProposalDetail>(`/proposals/${id}/submit`, {
+      method: 'POST',
+      body: JSON.stringify({ submissionFeeTxHash }),
+    }),
+};

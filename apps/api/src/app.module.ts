@@ -8,6 +8,7 @@ import { UsersModule } from './users/users.module';
 import { DrepModule } from './drep/drep.module';
 import { AdminModule } from './admin/admin.module';
 import { RoundsModule } from './rounds/rounds.module';
+import { ProposalsModule } from './proposals/proposals.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { RoundsModule } from './rounds/rounds.module';
     DrepModule,
     AdminModule,
     RoundsModule,
+    ProposalsModule,
   ],
 })
 export class AppModule {}

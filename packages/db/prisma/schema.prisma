@@ -249,6 +249,7 @@ model Proposal {
   // common
   votingType           String // ONE_PERSON_ONE_VOTE or BALANCED
   approvalThresholdPct Decimal?  @map("approval_threshold_pct") @db.Decimal(5, 2)
+  submittedAt          DateTime? @map("submitted_at") @db.Timestamptz(6)
   votingStartAt        DateTime? @map("voting_start_at") @db.Timestamptz(6)
   votingEndAt          DateTime? @map("voting_end_at") @db.Timestamptz(6)
   resultFinalizedAt    DateTime? @map("result_finalized_at") @db.Timestamptz(6)
