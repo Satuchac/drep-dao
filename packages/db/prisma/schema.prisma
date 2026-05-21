@@ -68,8 +68,26 @@ model Drep {
   avoidPeriods            DrepAvoidPeriod[]
   recommendationsReceived DrepRecommendation[]  @relation("RecommendationRecommended")
   recommendationsMade     DrepRecommendation[]  @relation("RecommendationRecommender")
+  admissionVotesReceived  AdmissionVote[]       @relation("AdmissionApplicant")
+  admissionVotesCast      AdmissionVote[]       @relation("AdmissionVoter")
 
   @@map("drep")
+}
+
+// §14.2 board votes on a DRep admission application (3-of-5 by default).
+model AdmissionVote {
+  id          String   @id @default(uuid()) @db.Uuid
+  drepId      String   @map("drep_id") @db.Uuid // the applicant
+  boardDrepId String   @map("board_drep_id") @db.Uuid // the board member voting
+  choice      String // YES, NO (NO requires feedback)
+  feedback    String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  applicant Drep @relation("AdmissionApplicant", fields: [drepId], references: [id])
+  voter     Drep @relation("AdmissionVoter", fields: [boardDrepId], references: [id])
+
+  @@unique([drepId, boardDrepId])
+  @@map("admission_vote")
 }
 
 model BoardMembership {

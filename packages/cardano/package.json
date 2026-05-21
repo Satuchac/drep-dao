@@ -10,7 +10,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@drep-dao/shared": "workspace:*"
+    "@drep-dao/shared": "workspace:*",
+    "blakejs": "^1.2.1"
   },
   "devDependencies": {
     "typescript": "^5.7.2"

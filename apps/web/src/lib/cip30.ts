@@ -1,12 +1,24 @@
 'use client';
 
-import { stakeAddressFromHex } from '@drep-dao/cardano';
+import { stakeAddressFromHex, drepIdFromPubKeyHex } from '@drep-dao/cardano';
 
-/** Minimal CIP-30 typings — just what wallet login needs. */
+/** Minimal CIP-30 (+ CIP-95) typings — just what login and DRep apply need. */
 export interface Cip30Api {
   getRewardAddresses(): Promise<string[]>; // hex reward addresses
   getNetworkId(): Promise<number>;
   signData(addressHex: string, payloadHex: string): Promise<{ signature: string; key: string }>;
+  /** CIP-95 — present on Lace/Eternl etc. */
+  cip95?: { getPubDRepKey(): Promise<string> };
+}
+
+/** Best-effort DRep ID via CIP-95; null if the wallet doesn't support it. */
+export async function detectDRepId(api: Cip30Api): Promise<string | null> {
+  try {
+    const hex = await api.cip95?.getPubDRepKey();
+    return hex ? drepIdFromPubKeyHex(hex) : null;
+  } catch {
+    return null;
+  }
 }
 
 export interface Cip30WalletEntry {

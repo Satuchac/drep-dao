@@ -4,7 +4,7 @@
     "target": "ES2022",
     "lib": ["ES2022"],
     "moduleResolution": "node",
-    "declaration": true,
+    "declaration": false,
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "esModuleInterop": true,

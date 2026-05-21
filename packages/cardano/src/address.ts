@@ -7,6 +7,8 @@
  * Cardano addresses routinely exceed it.
  */
 
+import { blake2b } from 'blakejs';
+
 const CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 const GENERATOR = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
 
@@ -165,4 +167,19 @@ export function stakeKeyHashFromBech32(stakeAddress: string): string {
 export function networkIdFromBech32(bech: string): number {
   const bytes = addressBytes(bech);
   return (bytes[0] ?? 0) & 0x0f;
+}
+
+/** True for a bech32 drep1... governance id. */
+export function isDRepId(bech: string): boolean {
+  return /^drep1[0-9a-z]+$/i.test(bech.trim());
+}
+
+/**
+ * DRep ID (bech32 'drep') from a CIP-95 DRep public key (hex). credential =
+ * blake2b-224(pubkey), bech32 hrp 'drep' (CIP-105 short form). Best-effort
+ * prefill for the application form; the user can override with their canonical id.
+ */
+export function drepIdFromPubKeyHex(pubKeyHex: string): string {
+  const keyHash = blake2b(fromHex(pubKeyHex), undefined, 28); // 224-bit credential
+  return bech32Encode('drep', convertBits(Array.from(keyHash), 8, 5, true));
 }

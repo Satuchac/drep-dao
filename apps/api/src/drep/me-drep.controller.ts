@@ -1,0 +1,27 @@
+import { Body, Controller, Get, Patch, Post, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
+import { DrepService } from './drep.service';
+import { DrepApplicationDto, UpdateDrepDto } from './dto';
+
+// §25.4 — the authenticated user's own DRep profile / application.
+@Controller('me')
+@UseGuards(JwtAuthGuard)
+export class MeDrepController {
+  constructor(private readonly drep: DrepService) {}
+
+  @Post('drep-application')
+  apply(@CurrentUser() ctx: AuthContext, @Body() dto: DrepApplicationDto) {
+    return this.drep.apply(ctx.userId, dto);
+  }
+
+  @Get('drep')
+  mine(@CurrentUser() ctx: AuthContext) {
+    return this.drep.getMine(ctx.userId);
+  }
+
+  @Patch('drep')
+  update(@CurrentUser() ctx: AuthContext, @Body() dto: UpdateDrepDto) {
+    return this.drep.updateMine(ctx.userId, dto);
+  }
+}

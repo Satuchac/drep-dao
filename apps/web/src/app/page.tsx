@@ -1,11 +1,12 @@
 import { PLATFORM_CONFIG_DEFAULTS, DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { HealthBadge } from './health-badge';
 import { ConnectWallet } from '@/components/connect-wallet';
+import { MemberArea } from '@/components/member-area';
 
 const PHASES = [
   { name: 'Scaffold', detail: 'monorepo, DB schema, health — running skeleton', done: true },
   { name: 'Auth slice', detail: 'CIP-30/CIP-8 wallet login → JWT session', done: true },
-  { name: 'DRep admission', detail: 'application form → board review', done: false },
+  { name: 'DRep admission', detail: 'application form → board review', done: true },
   { name: 'Rounds admin', detail: 'create/configure rounds (§6)', done: false },
 ];
 
@@ -30,6 +31,8 @@ export default function Home() {
       <div className="mt-6 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
         <ConnectWallet />
       </div>
+
+      <MemberArea />
 
       <h2 className="mt-10 text-lg font-semibold">Delivery path (§27 / §28.5)</h2>
       <ol className="mt-3 space-y-2">

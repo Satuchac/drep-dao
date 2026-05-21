@@ -104,10 +104,11 @@ export const RoundStatus = {
 } as const;
 export type RoundStatus = (typeof RoundStatus)[keyof typeof RoundStatus];
 
-/** §24.1 drep status */
+/** §24.1 drep status (REJECTED added for applications declined by the board, §14.2). */
 export const DRepStatus = {
   PENDING_ADMISSION: 'PENDING_ADMISSION',
   ADMITTED: 'ADMITTED',
+  REJECTED: 'REJECTED',
   REMOVED: 'REMOVED',
 } as const;
 export type DRepStatus = (typeof DRepStatus)[keyof typeof DRepStatus];
