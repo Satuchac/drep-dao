@@ -7,6 +7,7 @@
 import type { CardanoNetwork, AnchorKind } from '@drep-dao/shared';
 
 export * from './anchor';
+export * from './address';
 
 /** Resolve provider base URLs / params per network. */
 export interface NetworkConfig {

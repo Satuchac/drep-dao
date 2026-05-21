@@ -3,8 +3,10 @@ import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 
 /**
- * Shared Redis connection (BullMQ queues + session denylist, §22.1). lazyConnect
- * so the API boots without Redis present; health check pings on demand.
+ * Shared Redis connection (auth nonces + session denylist now; BullMQ later).
+ * ioredis auto-connects and retries in the background; we swallow 'error'
+ * events so a missing Redis never crashes the process at boot. The health
+ * check uses a timed ping so it can report 'down' without hanging.
  */
 @Injectable()
 export class RedisService implements OnModuleDestroy {
@@ -12,27 +14,25 @@ export class RedisService implements OnModuleDestroy {
 
   constructor(config: ConfigService) {
     this.client = new Redis(config.get<string>('REDIS_URL') ?? 'redis://localhost:6379', {
-      lazyConnect: true,
-      maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
+      maxRetriesPerRequest: 3,
+      retryStrategy: (times) => Math.min(times * 200, 2000),
     });
-    // Avoid unhandled 'error' events crashing the process when Redis is down.
     this.client.on('error', () => undefined);
   }
 
   async ping(): Promise<boolean> {
     try {
-      if (this.client.status === 'wait' || this.client.status === 'end') {
-        await this.client.connect();
-      }
-      const res = await this.client.ping();
+      const res = await Promise.race([
+        this.client.ping(),
+        new Promise<string>((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000)),
+      ]);
       return res === 'PONG';
     } catch {
       return false;
     }
   }
 
-  async onModuleDestroy(): Promise<void> {
+  onModuleDestroy(): void {
     this.client.disconnect();
   }
 }

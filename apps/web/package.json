@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@drep-dao/cardano": "workspace:^",
     "@drep-dao/shared": "workspace:*",
     "next": "^15.1.4",
     "react": "^19.0.0",
