@@ -661,3 +661,126 @@ model DrepRecommendation {
 
   @@map("drep_recommendation")
 }
+
+// ===========================================================================
+// §25.13 Platform Administration — fully separate from the wallet-auth tables.
+// No foreign key links admin_user to app_user/drep: the identities are
+// independent by design (§18.3).
+// ===========================================================================
+
+model AdminUser {
+  id           String    @id @default(uuid()) @db.Uuid
+  username     String    @unique
+  email        String
+  passwordHash String    @map("password_hash") // Argon2id
+  status       String // ACTIVE, DISABLED, REMOVED
+  createdById  String?   @map("created_by") @db.Uuid // null for the CLI-created first admin
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastLoginAt  DateTime? @map("last_login_at") @db.Timestamptz(6)
+  removedAt    DateTime? @map("removed_at") @db.Timestamptz(6)
+
+  createdBy          AdminUser?          @relation("AdminCreatedBy", fields: [createdById], references: [id])
+  created            AdminUser[]         @relation("AdminCreatedBy")
+  twoFa              Admin2fa?
+  recoveryCodes      AdminRecoveryCode[]
+  sessions           AdminSession[]
+  invitationsCreated AdminInvitation[]
+  auditLogs          AdminAuditLog[]
+  genesisApprovals   PlatformState[]     @relation("GenesisApprover")
+
+  @@map("admin_user")
+}
+
+model Admin2fa {
+  adminId    String    @id @map("admin_id") @db.Uuid
+  totpSecret String    @map("totp_secret") // encrypted at rest (TODO: KMS); base32 for now
+  enrolledAt DateTime? @map("enrolled_at") @db.Timestamptz(6)
+  required   Boolean   @default(true) // mandatory mainnet; may be FALSE on testnet
+
+  admin AdminUser @relation(fields: [adminId], references: [id])
+
+  @@map("admin_2fa")
+}
+
+model AdminRecoveryCode {
+  id       String    @id @default(uuid()) @db.Uuid
+  adminId  String    @map("admin_id") @db.Uuid
+  codeHash String    @map("code_hash") // Argon2id of the code
+  usedAt   DateTime? @map("used_at") @db.Timestamptz(6)
+
+  admin AdminUser @relation(fields: [adminId], references: [id])
+
+  @@map("admin_recovery_code")
+}
+
+model AdminSession {
+  id        String    @id @default(uuid()) @db.Uuid
+  adminId   String    @map("admin_id") @db.Uuid
+  ip        String?   @db.Inet
+  userAgent String?   @map("user_agent")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  admin AdminUser @relation(fields: [adminId], references: [id])
+
+  @@map("admin_session")
+}
+
+model AdminInvitation {
+  id          String    @id @default(uuid()) @db.Uuid
+  username    String
+  email       String
+  tokenHash   String    @map("token_hash")
+  createdById String?   @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  consumedAt  DateTime? @map("consumed_at") @db.Timestamptz(6)
+
+  createdBy AdminUser? @relation(fields: [createdById], references: [id])
+
+  @@map("admin_invitation")
+}
+
+model AdminAuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  adminId    String?  @map("admin_id") @db.Uuid
+  action     String
+  target     String?
+  payload    Json?
+  ip         String?  @db.Inet
+  userAgent  String?  @map("user_agent")
+  occurredAt DateTime @default(now()) @map("occurred_at") @db.Timestamptz(6)
+
+  admin AdminUser? @relation(fields: [adminId], references: [id])
+
+  @@index([adminId, occurredAt])
+  @@index([action, occurredAt])
+  @@map("admin_audit_log")
+}
+
+model AdminLoginAttempt {
+  id          String   @id @default(uuid()) @db.Uuid
+  username    String
+  ip          String   @db.Inet
+  success     Boolean
+  attemptedAt DateTime @default(now()) @map("attempted_at") @db.Timestamptz(6)
+
+  @@index([username, attemptedAt])
+  @@index([ip, attemptedAt])
+  @@map("admin_login_attempt")
+}
+
+// Singleton (id always 1) — platform-wide operational state.
+model PlatformState {
+  id                Int       @id @default(1)
+  genesisApprovedAt DateTime? @map("genesis_approved_at") @db.Timestamptz(6)
+  genesisApprovedBy String?   @map("genesis_approved_by") @db.Uuid
+  genesisPayload    Json?     @map("genesis_payload")
+  maintenanceMode   Boolean   @default(false) @map("maintenance_mode")
+  paused            Boolean   @default(false)
+
+  approver AdminUser? @relation("GenesisApprover", fields: [genesisApprovedBy], references: [id])
+
+  @@map("platform_state")
+}

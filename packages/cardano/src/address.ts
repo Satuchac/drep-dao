@@ -183,3 +183,8 @@ export function drepIdFromPubKeyHex(pubKeyHex: string): string {
   const keyHash = blake2b(fromHex(pubKeyHex), undefined, 28); // 224-bit credential
   return bech32Encode('drep', convertBits(Array.from(keyHash), 8, 5, true));
 }
+
+/** DRep ID (bech32 'drep') directly from a 28-byte DRep key-hash hex. */
+export function drepIdFromKeyHashHex(keyHashHex: string): string {
+  return bech32Encode('drep', convertBits(Array.from(fromHex(keyHashHex)), 8, 5, true));
+}

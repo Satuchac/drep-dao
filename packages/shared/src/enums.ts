@@ -13,8 +13,17 @@ export const Role = {
   MILESTONE_REVIEWER: 'MILESTONE_REVIEWER',
   EXPERT: 'EXPERT',
   BOARD: 'BOARD',
+  PLATFORM_ADMIN: 'PLATFORM_ADMIN', // §18 — operational, not governance; separate identity/session
 } as const;
 export type Role = (typeof Role)[keyof typeof Role];
+
+/** §25.13 admin account status */
+export const AdminStatus = {
+  ACTIVE: 'ACTIVE',
+  DISABLED: 'DISABLED',
+  REMOVED: 'REMOVED',
+} as const;
+export type AdminStatus = (typeof AdminStatus)[keyof typeof AdminStatus];
 
 /** §3.1/§3.2 */
 export const ProposalType = {

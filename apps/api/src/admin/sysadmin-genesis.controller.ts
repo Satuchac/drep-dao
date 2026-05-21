@@ -1,0 +1,35 @@
+import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import type { Request } from 'express';
+import { AdminGuard } from './admin.guard';
+import { CurrentAdmin } from './current-admin.decorator';
+import type { AdminIdentity } from './admin-auth.service';
+import { GenesisService } from './genesis.service';
+import { GenesisUploadDto } from './dto';
+
+// §18.7 / §26.6 — genesis approval (board bootstrap). Admin-only.
+@Controller('sysadmin/genesis')
+@UseGuards(AdminGuard)
+export class SysadminGenesisController {
+  constructor(private readonly genesis: GenesisService) {}
+
+  @Get()
+  state() {
+    return this.genesis.getState();
+  }
+
+  @Post('upload')
+  upload(@CurrentAdmin() admin: AdminIdentity, @Body() dto: GenesisUploadDto) {
+    return this.genesis.upload(admin.adminId, dto.genesis);
+  }
+
+  @Post('approve')
+  approve(@CurrentAdmin() admin: AdminIdentity, @Req() req: Request) {
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip;
+    return this.genesis.approve(admin.adminId, ip, req.headers['user-agent']);
+  }
+
+  @Post('reject')
+  reject(@CurrentAdmin() admin: AdminIdentity) {
+    return this.genesis.reject(admin.adminId);
+  }
+}

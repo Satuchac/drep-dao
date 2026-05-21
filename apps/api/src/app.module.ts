@@ -6,6 +6,7 @@ import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { DrepModule } from './drep/drep.module';
+import { AdminModule } from './admin/admin.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { DrepModule } from './drep/drep.module';
     UsersModule,
     AuthModule,
     DrepModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

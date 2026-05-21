@@ -23,23 +23,24 @@
 15. [DAO Treasury](#15-dao-treasury)
 16. [Pledge (Skin in the Game)](#16-pledge-skin-in-the-game)
 17. [DAO Board (Interim)](#17-dao-board-interim)
-18. [Submission Form](#18-submission-form)
-19. [Communication and Notifications](#19-communication-and-notifications)
-20. [Configurable Platform Parameters](#20-configurable-platform-parameters)
+18. [Platform Administration](#18-platform-administration)
+19. [Submission Form](#19-submission-form)
+20. [Communication and Notifications](#20-communication-and-notifications)
+21. [Configurable Platform Parameters](#21-configurable-platform-parameters)
 
 **Part II — Technical Architecture**
 
-21. [Technology Stack](#21-technology-stack)
-22. [Cardano Integration](#22-cardano-integration)
-23. [On-Chain Anchoring](#23-on-chain-anchoring)
-24. [Database Schema](#24-database-schema)
-25. [API Surface](#25-api-surface)
-26. [Background Jobs and Scheduler](#26-background-jobs-and-scheduler)
+22. [Technology Stack](#22-technology-stack)
+23. [Cardano Integration](#23-cardano-integration)
+24. [On-Chain Anchoring](#24-on-chain-anchoring)
+25. [Database Schema](#25-database-schema)
+26. [API Surface](#26-api-surface)
+27. [Background Jobs and Scheduler](#27-background-jobs-and-scheduler)
 
 **Part III — Delivery**
 
-27. [MVP Scope Cut and Phases](#27-mvp-scope-cut-and-phases)
-28. [Open Questions and TODOs](#28-open-questions-and-todos)
+28. [MVP Scope Cut and Phases](#28-mvp-scope-cut-and-phases)
+29. [Open Questions and TODOs](#29-open-questions-and-todos)
 
 ---
 
@@ -133,7 +134,7 @@ The DRep DAO platform is a self-hosted web application that integrates directly 
 
 **PostgreSQL Database**
 - All operational data: proposals, votes, comments, users, rewards, configuration
-- See section 24 for schema
+- See section 25 for schema
 
 **Notifier**
 - Three channels: in-app notifications (delivered when user is logged in), email (SendGrid or equivalent), Telegram bot
@@ -152,7 +153,7 @@ The DRep DAO platform is a self-hosted web application that integrates directly 
 **Anchor Service**
 - Periodically computes Merkle hashes of designated state (proposals, vote tallies, voting power snapshots, merit ledger)
 - Builds a Cardano metadata transaction containing the hash + a state identifier
-- Submits via a board signer's hot key (operational, not the multisig — see section 23)
+- Submits via a board signer's hot key (operational, not the multisig — see section 24)
 
 **Intersect** *(external, off-platform)*
 - Sends the per-round Treasury Withdrawal (project funding + operations) to the DAO Multisig address
@@ -186,15 +187,23 @@ A DRep can independently verify any of these by querying the platform's read-onl
 | **DRep — Milestone Reviewer** | A DRep (or Expert) assigned to check milestones for a specific funded project. |
 | **Expert** | A non-DRep with subject-matter knowledge, eligible only for milestone review. Approved per round by the board. |
 | **DAO Board Member** | A DRep with elevated capabilities: configure rounds, confirm assignments, distribute rewards (multisig), admit/remove DReps, prolong periods, launch quick polls. 5 members, 3-of-5 multisig for treasury actions. |
+| **Platform Admin** | An operational role, **not** a governance role. Manages the running platform: admin accounts, system health, backups, technical config, anchor hot wallet, genesis approval. Up to 3 Admins. Logs in with username + password + 2FA at `/sysadmin/login`. May or may not also be a DRep / board member — the two identities are separate. See section 18 for details. |
 
-A user can hold multiple roles simultaneously (e.g., a board member can also act as a regular DRep voter in the Debate & Vote stage if they explicitly opt in).
+A user can hold multiple roles simultaneously (e.g., a board member can also act as a regular DRep voter in the Debate & Vote stage if they explicitly opt in). The Platform Admin role is independent of all governance roles — see section 18.3.
 
 ### Login
 
-- All authenticated actions use a Cardano wallet (Eternl, Lace, Yoroi, Nami)
-- Login flow: CIP-30 `signData` with a server-issued nonce; backend verifies signature against the stake key
-- A `User` record is auto-created on first login, keyed by stake key hash
-- DRep status is granted only after admission (see section 14)
+There are **two independent authentication systems**:
+
+- **Wallet-based login** (`/login`) — for Viewers, Submitters, DReps, Board Members
+  - CIP-30 `signData` with a server-issued nonce; backend verifies signature against the stake key
+  - A `User` record is auto-created on first login, keyed by stake key hash
+  - DRep status is granted only after admission (see section 14)
+  - Session TTL 7 days, rolling
+- **Admin login** (`/sysadmin/login`) — for Platform Admins only
+  - Username + password (Argon2id) + mandatory 2FA on mainnet
+  - Session TTL 4 hours, non-rolling
+  - See section 18 for full details
 
 ---
 
@@ -1315,7 +1324,7 @@ A DRep starts at 0 merit points. Range is `[−200, +200]`. Linear mapping: ever
 
 ### 13.6 Ledger
 
-Every change is recorded in a `merit_ledger` table: `(drep_id, delta, reason_code, reference_id, occurred_at)`. The current points are computed by summing the ledger. The daily anchor service hashes this ledger and posts to chain (section 23).
+Every change is recorded in a `merit_ledger` table: `(drep_id, delta, reason_code, reference_id, occurred_at)`. The current points are computed by summing the ledger. The daily anchor service hashes this ledger and posts to chain (section 24).
 
 ---
 
@@ -1555,6 +1564,7 @@ After D&V approval, the proposal sits in `PENDING (pledge)` for `PLEDGE_GRACE_DA
 - Board members can be removed via an internal proposal with `IMPORTANT` threshold (75%), `voters_scope = DREPS_ONLY` (board excluded from this specific vote to avoid self-defense)
 
 **Board responsibilities (recap):**
+
 - Configure rounds (Preparation stage)
 - Confirm reviewer assignments
 - Distribute rewards (multisig signing)
@@ -1566,9 +1576,215 @@ After D&V approval, the proposal sits in `PENDING (pledge)` for `PLEDGE_GRACE_DA
 - Move leftovers to next round or back to Cardano Treasury
 - Keep accounting ledger
 
+### 17.5 Bootstrap (Founding Board)
+
+The 5 initial board members are determined off-platform during the Catalyst proposal phase. Their identities (Cardano stake addresses + on-chain DRep IDs) are committed to a `genesis.json` file that ships with the platform deployment. On first boot with an empty database, an Admin (see next section) reviews and approves the file; the backend then seeds the `board_membership` table.
+
+**The genesis file is public.** It is part of the Catalyst deliverable and is checked into the project repository before mainnet deployment. There is no hidden installer or auto-seeding.
+
+**Genesis schema (illustrative):**
+
+```json
+{
+  "deployment": {
+    "name": "DRep DAO — Production",
+    "network": "mainnet",
+    "deployed_at": "2026-04-01T00:00:00Z"
+  },
+  "founding_board": [
+    { "display_name": "Alice", "stake_address": "stake1...", "drep_id": "drep1..." },
+    { "display_name": "Bob",   "stake_address": "stake1...", "drep_id": "drep1..." },
+    { "display_name": "Carol", "stake_address": "stake1...", "drep_id": "drep1..." },
+    { "display_name": "Dave",  "stake_address": "stake1...", "drep_id": "drep1..." },
+    { "display_name": "Eve",   "stake_address": "stake1...", "drep_id": "drep1..." }
+  ],
+  "multisig_native_script": {
+    "type": "atLeast",
+    "required": 3,
+    "scripts": [
+      { "type": "sig", "keyHash": "..." }
+    ]
+  },
+  "anchor_hot_wallet_pubkeyhash": "..."
+}
+```
+
+**Subsequent board changes** happen through the normal mechanism — internal proposal with `IMPORTANT` threshold (section 10). Once the genesis board is seated, the platform itself is the authority for governance; Admins no longer touch the board roster.
+
+### 17.6 Founder selection (off-platform process)
+
+This is project-governance, not platform-design, but documented here for completeness:
+
+1. The Catalyst proposal lists candidates or selection criteria.
+2. Selection happens via one of:
+   - Direct nomination by the project team
+   - Off-chain poll among initial DReps interested in joining (Snapshot, Telegram, Google Form)
+   - Hybrid: project team nominates, an open call gathers volunteers, an off-chain vote selects 5
+3. The 5 confirmed founders provide their wallet stake addresses and DRep IDs.
+4. Those go into `genesis.json` before deployment.
+5. After 1 year, the first on-platform election happens via internal proposal.
+
 ---
 
-## 18. Submission Form
+## 18. Platform Administration
+
+The **Admin** is an operational role — distinct from any governance role. Admins keep the platform running. They do not vote, do not configure governance parameters, and do not control DAO funds. A DRep or board member *may also* hold an Admin account, but the two identities are strictly separate within the system.
+
+### 18.1 Why Admin is separate from Board
+
+| Concern | Belongs to |
+|---|---|
+| "The server is down, restart it" | Admin |
+| "Email provider quota exhausted, swap keys" | Admin |
+| "Database corruption, restore from backup" | Admin |
+| "Should we fund proposal X?" | Board (via voting) |
+| "Reduce voting threshold from 67% to 60%" | Board (via internal proposal) |
+| "Distribute round rewards" | Board (via multisig) |
+
+Mixing these into one role makes audit trails ambiguous and creates an "admin = secret board" anti-pattern. The split keeps each role minimal and accountable.
+
+### 18.2 Admin powers
+
+**Admin can:**
+
+- Manage admin accounts (create, disable, rotate credentials, force password reset, manage 2FA)
+- Approve / reject the `genesis.json` board roster on first boot
+- View system health, logs, error reports, metrics
+- Trigger backups, restores, maintenance mode
+- Force-pause the platform (e.g., during an incident — blocks all writes except by Admin)
+- Manage technical config that has no governance meaning: API rate limits, log retention, monitoring thresholds, email/Telegram provider keys
+- Manage the anchor hot wallet (rotate keys, top up ADA balance)
+- Reset/rotate compromised credentials
+- **Switch all admins at once** — see 18.6 below
+
+**Admin cannot:**
+
+- Cast any vote (filtering, D&V, quick poll, internal)
+- Sign DAO Multisig transactions
+- Modify governance configuration parameters (thresholds, fees, period defaults, splits)
+- Add or remove board members (except via the initial genesis approval)
+- Change merit points, vote tallies, or reward calculations
+- Submit proposals as themselves (their Admin identity has no DRep status)
+
+If an attempt is made from an Admin session to perform a board-only action, the API returns `403 Forbidden — wrong identity, log in with your wallet`.
+
+### 18.3 Admin and DRep are separate identities
+
+A single human may hold both. The system stores them in **separate tables** (`admin_user` and `app_user`/`drep`) with **no foreign-key link between them**.
+
+- When acting as **Admin**: log in at `/sysadmin/login` with username + password + 2FA. Session is `admin_session`, 4-hour TTL, no rolling.
+- When acting as **DRep / Board**: log in at `/login` with a Cardano wallet (CIP-30 + CIP-8). Session is `app_session`, 7-day rolling TTL.
+
+The two sessions are independent. If you are logged in as Admin and you want to vote on a proposal, you log out of Admin and log in with your wallet. The audit log records each session separately, so "Satucha-as-admin restarted the server at 10:00" and "Satucha-as-board signed payout TX at 10:30" are two unambiguous entries.
+
+It is allowed (and expected) that **some Admins are not DReps at all** — for example, a paid sysadmin or DevOps contractor.
+
+### 18.4 Authentication
+
+- **Login:** username + password
+- **Password hashing:** Argon2id (memory-hard, modern KDF)
+- **2FA:** TOTP (Time-based One-Time Password — compatible with Google Authenticator, Authy, 1Password)
+  - **Mandatory on mainnet**
+  - **Optional on testnet** (so testing isn't slowed down)
+- **Recovery codes:** 10 one-time backup codes generated at 2FA enrollment, shown once, hash-stored
+- **Session:** HTTP-only cookie, SameSite=Strict, 4-hour TTL, no rolling refresh
+- **Brute-force protection:** 5 failed login attempts → 15-minute lockout per IP + per account
+- **Audit log:** every Admin action recorded as `(admin_id, action, target, timestamp, ip, user_agent)` — append-only, visible to all Admins, exportable
+
+### 18.5 Admin lifecycle
+
+**Initial admin creation (bootstrap):**
+
+At deployment time, a CLI command creates the first Admin:
+
+```bash
+npm run admin:create -- --username=satucha --email=satucha@example.com
+# prompts for password (Argon2id-hashed)
+# outputs 2FA QR code on stdout
+# prints 10 recovery codes (shown once)
+```
+
+This is the **only** way to create the first Admin. After that, all admin creation happens through the platform UI by an existing Admin.
+
+**Up to 3 Admins.** This is a hard cap. Adding a 4th requires removing one first.
+
+**Adding a new Admin:**
+
+1. Existing Admin (any of the 3) opens the Admin dashboard → "Admins" page
+2. Clicks "Add Admin" → enters username + email
+3. System generates a one-time invitation token (24h TTL), shows a URL to share securely
+4. New Admin opens the URL, sets their password, enrolls 2FA, receives recovery codes
+5. New Admin is active
+
+**Removing an Admin:**
+
+Any existing Admin can remove any other Admin (including themselves — but the system refuses if it would leave 0 Admins).
+
+- Click "Remove" → confirm with own password
+- Removed Admin's sessions are revoked immediately
+- Their `admin_user` row is marked `status = 'REMOVED'`, NOT deleted (preserves audit log integrity)
+
+### 18.6 Switch all admins at once (key rotation)
+
+Use case: suspected compromise, team handover, end of contract.
+
+1. Any Admin opens "Switch All Admins" page
+2. Enters details for 1–3 new Admins (same fields as Add Admin)
+3. Confirms with own password + 2FA code
+4. System creates the new Admins (invitation URLs)
+5. **After the new Admins have completed enrollment**, the initiating Admin clicks "Disable Old Admins"
+6. All previously-existing Admins are marked `REMOVED`; their sessions are killed
+7. Result: only the newly enrolled Admins can log in
+
+This is a single audited operation — one row in `admin_audit_log` with `action = 'SWITCH_ALL'` containing the before/after roster.
+
+If the initiating Admin's account is itself the one being switched out, the workflow still works: they enroll the replacements, then remove themselves last.
+
+### 18.7 Genesis approval flow
+
+When the platform boots with an empty database:
+
+1. The first Admin (created via CLI) logs in
+2. The dashboard shows a banner: "No board configured. Approve `genesis.json` to install founding board."
+3. Admin uploads or selects the `genesis.json` file
+4. UI shows the 5 proposed board members: display name, stake address, DRep ID
+5. For each, a "Verify on-chain" button queries Blockfrost to confirm the DRep ID is registered
+6. Admin clicks "Approve and install"
+7. System writes 5 rows into `board_membership` + 1 row into `admin_audit_log` (action `GENESIS_APPROVED`)
+8. The genesis approval flow is **permanently disabled** for this deployment
+9. The 5 board members can now log in via wallet and start operating the DAO
+
+### 18.8 Recovery scenarios
+
+| Scenario | Recovery |
+|---|---|
+| Admin loses 2FA device | Use one of 10 recovery codes; after login, regenerate 2FA + new recovery codes |
+| Admin loses recovery codes too | Another Admin resets their 2FA (requires 2FA on the resetter) |
+| Admin forgets password | Another Admin triggers a password reset email (token-based, 1h TTL) |
+| All Admins locked out | Last-resort: direct database intervention by whoever has Postgres access — re-run `npm run admin:create` against the live DB, then log in and rotate everything |
+| Admin account compromised | Another Admin disables it immediately; review audit log; rotate any credentials the compromised admin had access to (anchor hot wallet, email provider keys, etc.) |
+| All 3 Admins compromised | Same as "all locked out" — DB intervention |
+
+### 18.9 Admin UI surface
+
+A dedicated dashboard at `/sysadmin/*`, visually distinct from the public site (different color scheme, banner "PLATFORM ADMIN — handle with care"). Sections:
+
+- **Overview** — system health (DB, Redis, Cardano indexer status), recent errors, queue depths
+- **Admins** — list, add, remove, switch-all
+- **Genesis** — only visible if board not yet seeded
+- **Audit log** — filterable, exportable
+- **Maintenance** — backup trigger, restore form, maintenance mode toggle, force-pause
+- **Technical config** — non-governance settings (rate limits, provider keys, etc.)
+- **Anchor wallet** — current balance, recent anchoring TXs, key rotation
+- **Logs** — application logs (filtered, paginated)
+
+---
+
+## 19. Submission Form
+
+Submitters fill in a single form. Fields by section:
+
+**Header**
 
 Submitters fill in a single form. Fields by section:
 
@@ -1615,9 +1831,9 @@ Validation: all required fields present, milestone amounts sum to total, submiss
 
 ---
 
-## 19. Communication and Notifications
+## 20. Communication and Notifications
 
-### 19.1 Comments (public)
+### 20.1 Comments (public)
 
 Every proposal has a comment thread:
 - Visible to everyone (no role gating)
@@ -1625,13 +1841,13 @@ Every proposal has a comment thread:
 - Threaded one level (a comment can have replies; no nested replies)
 - Editable for 5 minutes after posting; deletion creates a tombstone
 
-### 19.2 Private messaging
+### 20.2 Private messaging
 
 - **Submitter ↔ Board**: dedicated thread on each proposal page (only submitter + 5 board members can see)
 - **DReps ↔ Board (shared inbox)**: any DRep can DM "the board" — message visible to all 5
 - **No DM between individual DReps in MVP** (deferred — Telegram works for that)
 
-### 19.3 Notifications
+### 20.3 Notifications
 
 Three channels, all opt-in per user (defaults given):
 
@@ -1666,7 +1882,7 @@ Three channels, all opt-in per user (defaults given):
 
 ---
 
-## 20. Configurable Platform Parameters
+## 21. Configurable Platform Parameters
 
 Single source of truth for all configuration. All editable by the board via the platform's admin UI (which itself produces an `internal_proposal` for transparency, even if it doesn't require a vote for routine settings).
 
@@ -1708,11 +1924,11 @@ Single source of truth for all configuration. All editable by the board via the 
 
 # Part II — Technical Architecture
 
-## 21. Technology Stack
+## 22. Technology Stack
 
 Pragmatic, mainstream choices. The selection rationale: maximize free-tier hosting, minimize integration custom code, and lean on libraries with active Cardano community support.
 
-### 21.1 Stack overview
+### 22.1 Stack overview
 
 | Layer | Choice | Rationale |
 |---|---|---|
@@ -1732,14 +1948,14 @@ Pragmatic, mainstream choices. The selection rationale: maximize free-tier hosti
 | **Observability** | **Sentry** + **OpenTelemetry** | Errors and traces; Grafana Cloud free tier for metrics. |
 | **CI/CD** | **GitHub Actions** | Free for public repos. |
 
-### 21.2 Why not the alternatives
+### 22.2 Why not the alternatives
 
 - **Aiken/Plutus on-chain logic:** Out of scope. The design intentionally puts logic off-chain (backend = source of truth). Aiken would only be needed if we wanted on-chain enforcement of voting rules — explicitly deferred.
 - **GraphQL:** REST is sufficient and faster to build. Frontend doesn't have wildly varying query shapes.
 - **Cardano-CLI scripts:** Lucid Evolution handles everything from the backend; no need to shell out.
 - **MongoDB:** This domain is fundamentally relational (proposals → votes → users → merit deltas → rewards). Postgres is the right fit.
 
-### 21.3 Repo layout (proposed)
+### 22.3 Repo layout (proposed)
 
 ```
 drep-dao/
@@ -1759,9 +1975,9 @@ Monorepo with **pnpm workspaces** + **Turborepo** for build orchestration.
 
 ---
 
-## 22. Cardano Integration
+## 23. Cardano Integration
 
-### 22.1 Wallet authentication (CIP-30 + CIP-8)
+### 23.1 Wallet authentication (CIP-30 + CIP-8)
 
 Login flow:
 1. User clicks "Connect Wallet" in frontend
@@ -1774,7 +1990,7 @@ Login flow:
 
 The session cookie is HTTP-only, SameSite=Lax, 7-day rolling expiry. Logout revokes the JWT via a denylist (Redis).
 
-### 22.2 DRep identity (CIP-95)
+### 23.2 DRep identity (CIP-95)
 
 CIP-95-capable wallets expose:
 - `wallet.cip95.getPubDRepKey()` — the DRep public key
@@ -1782,7 +1998,7 @@ CIP-95-capable wallets expose:
 
 The platform stores both. When a DRep applies for admission, the backend verifies on-chain that this DRep ID is registered (via Blockfrost `/governance/dreps/{drep_id}`). The DRep's on-chain voting power (delegated stake) is fetched from `/governance/dreps/{drep_id}/delegators`.
 
-### 22.3 Multisig wallet (3-of-5)
+### 23.3 Multisig wallet (3-of-5)
 
 A **native multisig** (no Plutus script) is built using a `NativeScript` of type `atLeast`:
 
@@ -1810,7 +2026,7 @@ The script address is the DAO Multisig address.
 5. Backend collects partial signatures; when 3 are gathered, it assembles the witness set and submits the TX
 6. Result (TX hash) is stored against the action that triggered it
 
-### 22.4 Reading on-chain state
+### 23.4 Reading on-chain state
 
 For each functional need:
 
@@ -1828,9 +2044,9 @@ Koios is the fallback for free reads when Blockfrost is rate-limited; we abstrac
 
 ---
 
-## 23. On-Chain Anchoring
+## 24. On-Chain Anchoring
 
-### 23.1 What gets anchored
+### 24.1 What gets anchored
 
 Per decision #15, anchored items are:
 1. **Ready proposals** — when a proposal moves from `DRAFT/PENDING` to `ACTIVE` (filtering or D&V), anchor `hash(proposal_content + metadata)`
@@ -1840,7 +2056,7 @@ Per decision #15, anchored items are:
 5. **Reward payouts** — already on-chain (the multisig TX itself)
 6. **Configuration changes** — anchor a "configuration change" record whenever the board updates a parameter
 
-### 23.2 Anchor metadata schema
+### 24.2 Anchor metadata schema
 
 Cardano transaction metadata is JSON under a numeric label. We use label **`80808080`** (reserved for the DAO).
 
@@ -1867,13 +2083,13 @@ Fields:
 - `ts` — timestamp
 - `u` — verification URL on the platform
 
-### 23.3 Hashing scheme
+### 24.3 Hashing scheme
 
 For collections (vote tallies, merit deltas), we compute a **Merkle root** so a DRep can produce an inclusion proof for their own vote without revealing other votes' details.
 
 For single objects (proposal content), a simple SHA-256 over the canonicalized JSON is sufficient.
 
-### 23.4 Anchoring transaction
+### 24.4 Anchoring transaction
 
 Anchoring TXs are sent **from a hot wallet operated by the backend**, *not* from the multisig. Reason: anchoring happens daily and would require board signatures otherwise, which is impractical.
 
@@ -1881,7 +2097,7 @@ The hot wallet holds a small operating balance (~50 ADA, refilled monthly by the
 
 For higher security, the hot wallet's signer could be a 2-of-3 quorum among board members (still operationally tolerable for daily TXs).
 
-### 23.5 Verification UX
+### 24.5 Verification UX
 
 The platform exposes `GET /verify/<anchor_id>` showing:
 - The anchored data (preimage)
@@ -1894,11 +2110,11 @@ Any DRep can independently recompute the hash from the displayed preimage and ch
 
 ---
 
-## 24. Database Schema
+## 25. Database Schema
 
 PostgreSQL, managed via Prisma. Tables grouped by domain.
 
-### 24.1 Identity and access
+### 25.1 Identity and access
 
 ```sql
 -- Cardano wallet-authenticated users (everyone who logs in)
@@ -1946,7 +2162,7 @@ CREATE TABLE expert (
 );
 ```
 
-### 24.2 Configuration and taxonomy
+### 25.2 Configuration and taxonomy
 
 ```sql
 -- Singleton-row table of platform-level configurable parameters
@@ -1966,7 +2182,7 @@ CREATE TABLE subcategory (
 );
 ```
 
-### 24.3 Rounds and categories
+### 25.3 Rounds and categories
 
 ```sql
 CREATE TABLE round (
@@ -2011,7 +2227,7 @@ CREATE TABLE round_schedule (
 );
 ```
 
-### 24.4 Proposals
+### 25.4 Proposals
 
 ```sql
 CREATE TABLE proposal (
@@ -2085,7 +2301,7 @@ CREATE TABLE milestone_poa (
 );
 ```
 
-### 24.5 Reviewer assignments
+### 25.5 Reviewer assignments
 
 ```sql
 CREATE TABLE filter_assignment (
@@ -2109,7 +2325,7 @@ CREATE TABLE milestone_assignment (
 );
 ```
 
-### 24.6 Votes and snapshots
+### 25.6 Votes and snapshots
 
 ```sql
 CREATE TABLE vote_snapshot (
@@ -2162,7 +2378,7 @@ CREATE TABLE quick_poll_vote (
 );
 ```
 
-### 24.7 Merit ledger
+### 25.7 Merit ledger
 
 ```sql
 CREATE TABLE merit_ledger (
@@ -2183,7 +2399,7 @@ CREATE VIEW drep_merit_current AS
   GROUP BY drep_id;
 ```
 
-### 24.8 Rewards
+### 25.8 Rewards
 
 ```sql
 CREATE TABLE reward_calculation (
@@ -2205,7 +2421,7 @@ CREATE TABLE reward_entry (
 );
 ```
 
-### 24.9 Treasury and Cardano
+### 25.9 Treasury and Cardano
 
 ```sql
 CREATE TABLE multisig_action (
@@ -2237,7 +2453,7 @@ CREATE TABLE cardano_tx_observation (
 );
 ```
 
-### 24.10 Anchoring
+### 25.10 Anchoring
 
 ```sql
 CREATE TABLE anchor (
@@ -2257,7 +2473,7 @@ CREATE TABLE anchor (
 CREATE INDEX anchor_kind_idx ON anchor(kind, created_at);
 ```
 
-### 24.11 Communication and notifications
+### 25.11 Communication and notifications
 
 ```sql
 CREATE TABLE comment (
@@ -2304,7 +2520,7 @@ CREATE TABLE notification_preference (
 );
 ```
 
-### 24.12 Avoid periods and recommendations
+### 25.12 Avoid periods and recommendations
 
 ```sql
 CREATE TABLE drep_avoid_period (
@@ -2325,13 +2541,105 @@ CREATE TABLE drep_recommendation (
 );
 ```
 
+### 25.13 Platform Administration
+
+Completely separate from the wallet-authenticated user tables. No foreign keys link `admin_user` to `app_user` or `drep` — the identities are independent by design.
+
+```sql
+CREATE TABLE admin_user (
+  id              UUID PRIMARY KEY,
+  username        TEXT UNIQUE NOT NULL,
+  email           TEXT NOT NULL,
+  password_hash   TEXT NOT NULL,                -- Argon2id
+  status          TEXT NOT NULL,                -- ACTIVE, DISABLED, REMOVED
+  created_by      UUID REFERENCES admin_user(id),  -- nullable; first admin has NULL (created via CLI)
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  last_login_at   TIMESTAMPTZ,
+  removed_at      TIMESTAMPTZ
+);
+
+-- Hard cap of 3 active admins enforced by application logic.
+
+CREATE TABLE admin_2fa (
+  admin_id        UUID PRIMARY KEY REFERENCES admin_user(id),
+  totp_secret     TEXT NOT NULL,                -- encrypted at rest
+  enrolled_at     TIMESTAMPTZ,
+  required        BOOLEAN DEFAULT TRUE          -- mandatory mainnet, may be FALSE on testnet
+);
+
+CREATE TABLE admin_recovery_code (
+  id              UUID PRIMARY KEY,
+  admin_id        UUID REFERENCES admin_user(id),
+  code_hash       TEXT NOT NULL,                -- Argon2id of the code
+  used_at         TIMESTAMPTZ                   -- NULL = unused
+);
+
+CREATE TABLE admin_session (
+  id              UUID PRIMARY KEY,
+  admin_id        UUID REFERENCES admin_user(id),
+  ip              INET,
+  user_agent      TEXT,
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  expires_at      TIMESTAMPTZ NOT NULL,
+  revoked_at      TIMESTAMPTZ
+);
+
+CREATE TABLE admin_invitation (
+  id              UUID PRIMARY KEY,
+  username        TEXT NOT NULL,
+  email           TEXT NOT NULL,
+  token_hash      TEXT NOT NULL,                -- one-time invitation token
+  created_by      UUID REFERENCES admin_user(id),
+  created_at      TIMESTAMPTZ DEFAULT NOW(),
+  expires_at      TIMESTAMPTZ NOT NULL,
+  consumed_at     TIMESTAMPTZ
+);
+
+CREATE TABLE admin_audit_log (
+  id              UUID PRIMARY KEY,
+  admin_id        UUID REFERENCES admin_user(id),
+  action          TEXT NOT NULL,                -- e.g. GENESIS_APPROVED, ADMIN_ADDED, ADMIN_REMOVED, SWITCH_ALL, MAINTENANCE_MODE_ON, etc.
+  target          TEXT,                          -- free-form: target admin id, config key, etc.
+  payload         JSONB,                         -- structured details (before/after for switches)
+  ip              INET,
+  user_agent      TEXT,
+  occurred_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Append-only; no UPDATE or DELETE in application code.
+CREATE INDEX admin_audit_log_admin_idx ON admin_audit_log(admin_id, occurred_at);
+CREATE INDEX admin_audit_log_action_idx ON admin_audit_log(action, occurred_at);
+
+CREATE TABLE admin_login_attempt (
+  id              UUID PRIMARY KEY,
+  username        TEXT NOT NULL,
+  ip              INET NOT NULL,
+  success         BOOLEAN NOT NULL,
+  attempted_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Used for brute-force protection. Rows older than 24h are pruned by a daily job.
+CREATE INDEX admin_login_attempt_username_idx ON admin_login_attempt(username, attempted_at);
+CREATE INDEX admin_login_attempt_ip_idx ON admin_login_attempt(ip, attempted_at);
+
+CREATE TABLE platform_state (
+  id              SMALLINT PRIMARY KEY DEFAULT 1, -- singleton row
+  genesis_approved_at  TIMESTAMPTZ,
+  genesis_approved_by  UUID REFERENCES admin_user(id),
+  genesis_payload      JSONB,                     -- preserved for audit
+  maintenance_mode     BOOLEAN DEFAULT FALSE,
+  paused               BOOLEAN DEFAULT FALSE,
+  CHECK (id = 1)
+);
+```
+
 ---
 
-## 25. API Surface
+## 26. API Surface
 
 REST over HTTPS. JSON bodies. JWT session cookies for auth. Versioned under `/api/v1`. Read-only endpoints are open; write endpoints require an authenticated session.
 
-### 25.1 Authentication
+### 26.1 Authentication
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -2340,7 +2648,7 @@ REST over HTTPS. JSON bodies. JWT session cookies for auth. Versioned under `/ap
 | POST | `/auth/logout` | Revoke session |
 | GET  | `/auth/me` | Current user, roles, DRep status |
 
-### 25.2 Public read (no auth)
+### 26.2 Public read (no auth)
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -2359,7 +2667,7 @@ REST over HTTPS. JSON bodies. JWT session cookies for auth. Versioned under `/ap
 | GET | `/verify/anchor/:id` | Anchor verification page data |
 | GET | `/config` | Public-readable platform parameters |
 
-### 25.3 Submitters
+### 26.3 Submitters
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -2371,7 +2679,7 @@ REST over HTTPS. JSON bodies. JWT session cookies for auth. Versioned under `/ap
 | POST | `/proposals/:id/comments` | Post a public comment |
 | GET | `/me/proposals` | My proposals (drafts, active, history) |
 
-### 25.4 DReps
+### 26.4 DReps
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -2392,7 +2700,7 @@ REST over HTTPS. JSON bodies. JWT session cookies for auth. Versioned under `/ap
 | GET | `/me/merit` | My merit ledger |
 | GET | `/me/notifications` | My notifications |
 
-### 25.5 Board (elevated)
+### 26.5 Board (elevated)
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -2417,7 +2725,45 @@ REST over HTTPS. JSON bodies. JWT session cookies for auth. Versioned under `/ap
 | PATCH | `/admin/subcategories/:id` | Edit / deactivate |
 | POST | `/admin/experts` | Approve an expert |
 
-### 25.6 Webhooks / internal
+> Note: the `/admin/*` namespace is for **board** governance actions (named historically). The Platform Admin (sysadmin) namespace is `/sysadmin/*` below — entirely separate auth, entirely separate scope.
+
+### 26.6 Platform Admin (sysadmin)
+
+All `/sysadmin/*` endpoints require an `admin_session` cookie (username + password + 2FA login). Wallet sessions are rejected; `app_session` cookies cannot access this namespace. All actions are recorded in `admin_audit_log`.
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/sysadmin/login` | Username + password; returns a one-time challenge requiring 2FA |
+| POST | `/sysadmin/login/2fa` | Submit TOTP code; on success, issues `admin_session` |
+| POST | `/sysadmin/login/recovery` | Submit a one-time recovery code instead of TOTP |
+| POST | `/sysadmin/logout` | Revoke current admin session |
+| GET | `/sysadmin/me` | Current admin identity |
+| GET | `/sysadmin/admins` | List all admins (active + removed) |
+| POST | `/sysadmin/admins/invite` | Create an invitation token for a new admin |
+| POST | `/sysadmin/admins/accept-invite` | Consume an invitation: set password + enroll 2FA |
+| POST | `/sysadmin/admins/:id/disable` | Disable an admin (revokes sessions) |
+| POST | `/sysadmin/admins/:id/remove` | Remove an admin (status → REMOVED) |
+| POST | `/sysadmin/admins/:id/reset-2fa` | Reset another admin's 2FA (caller must complete 2FA) |
+| POST | `/sysadmin/admins/:id/reset-password` | Trigger password-reset email for another admin |
+| POST | `/sysadmin/admins/switch-all` | Atomic rotate: enroll new set, then disable old set |
+| GET | `/sysadmin/genesis` | Show current genesis state (proposed / approved) |
+| POST | `/sysadmin/genesis/upload` | Upload `genesis.json` for review |
+| POST | `/sysadmin/genesis/approve` | Approve the proposed founding board (one-time, irreversible) |
+| POST | `/sysadmin/genesis/reject` | Reject the proposed file (admin can re-upload) |
+| GET | `/sysadmin/health` | Detailed system health (DB, Redis, Cardano indexer, queue depths) |
+| GET | `/sysadmin/audit-log` | Filterable, paginated audit log; exportable |
+| POST | `/sysadmin/maintenance-mode` | Toggle read-only maintenance mode |
+| POST | `/sysadmin/pause` | Force-pause platform (block all non-admin writes) |
+| POST | `/sysadmin/backup` | Trigger an on-demand backup |
+| POST | `/sysadmin/restore` | Restore from a named backup (irreversible; requires re-confirmation) |
+| GET | `/sysadmin/tech-config` | Read non-governance technical config |
+| PATCH | `/sysadmin/tech-config/:key` | Update non-governance technical config |
+| GET | `/sysadmin/anchor-wallet` | Anchor hot wallet status (balance, recent TXs) |
+| POST | `/sysadmin/anchor-wallet/rotate-key` | Rotate the anchor hot wallet signing key |
+| POST | `/sysadmin/anchor-wallet/topup-request` | Build an unsigned TX from DAO Multisig → hot wallet (board must sign) |
+| GET | `/sysadmin/logs` | Stream / page through application logs |
+
+### 26.7 Webhooks / internal
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -2425,7 +2771,7 @@ REST over HTTPS. JSON bodies. JWT session cookies for auth. Versioned under `/ap
 | GET | `/internal/healthz` | Health check |
 | GET | `/internal/metrics` | Prometheus metrics |
 
-### 25.7 Standard conventions
+### 26.8 Standard conventions
 
 - Pagination via `?cursor=` and `?limit=` (max 100)
 - Filtering via query params (`?status=ACTIVE&category=Governance`)
@@ -2436,11 +2782,11 @@ REST over HTTPS. JSON bodies. JWT session cookies for auth. Versioned under `/ap
 
 ---
 
-## 26. Background Jobs and Scheduler
+## 27. Background Jobs and Scheduler
 
 BullMQ on Redis. Three job types: **scheduled** (cron-style), **delayed** (single-fire after N seconds), and **on-demand** (enqueued by API handlers).
 
-### 26.1 Scheduled jobs
+### 27.1 Scheduled jobs
 
 | Job | Schedule | Purpose |
 |---|---|---|
@@ -2456,7 +2802,7 @@ BullMQ on Redis. Three job types: **scheduled** (cron-style), **delayed** (singl
 | `board-reward-deadline-check` | weekly | Flag boards that haven't distributed rewards within 30 days |
 | `avoid-period-cleanup` | hourly | Activate/deactivate avoid periods based on time |
 
-### 26.2 Delayed jobs
+### 27.2 Delayed jobs
 
 | Job | Triggered by | Delay |
 |---|---|---|
@@ -2465,7 +2811,7 @@ BullMQ on Redis. Three job types: **scheduled** (cron-style), **delayed** (singl
 | `milestone-period-end` | POA submitted | `MILESTONE_CHECK_PERIOD_DAYS` |
 | `voting-period-end` | voting started | end_at − now |
 
-### 26.3 On-demand jobs
+### 27.3 On-demand jobs
 
 | Job | Triggered by | Action |
 |---|---|---|
@@ -2475,7 +2821,7 @@ BullMQ on Redis. Three job types: **scheduled** (cron-style), **delayed** (singl
 | `send-notification` | many events | Dispatch to in-app / email / Telegram |
 | `random-draw-reviewers` | submission stage end | Run category-match + random draw for all proposals |
 
-### 26.4 Idempotency and retries
+### 27.4 Idempotency and retries
 
 - Every job is keyed by a deterministic id (`{kind}:{reference_id}:{date}`) and the queue rejects duplicates within 24h
 - 3 retries with exponential backoff (1m, 5m, 30m) for transient failures
@@ -2486,11 +2832,11 @@ BullMQ on Redis. Three job types: **scheduled** (cron-style), **delayed** (singl
 
 # Part III — Delivery
 
-## 27. MVP Scope Cut and Phases
+## 28. MVP Scope Cut and Phases
 
 The full spec is a multi-month build. We slice the MVP to **the thinnest end-to-end path** that demonstrates the DAO can operate one round and one proposal through filtering, vote, funding, and one milestone review. Everything outside that path is deferred.
 
-### 27.1 MVP definition
+### 28.1 MVP definition
 
 A real DRep must be able to do, end-to-end:
 1. Connect their wallet, apply, and be admitted by the board
@@ -2505,7 +2851,7 @@ A real DRep must be able to do, end-to-end:
 
 If those work, the platform is operational.
 
-### 27.2 Phase 1 — MVP (target: ~3 months)
+### 28.2 Phase 1 — MVP (target: ~3 months)
 
 **In:**
 - Wallet login (CIP-30 + CIP-8 for Eternl, Lace) — Yoroi and Nami in Phase 2
@@ -2535,7 +2881,7 @@ If those work, the platform is operational.
 - Cardano webhook (use 30s polling)
 - Recommendation-based admission
 
-### 27.3 Phase 2 — Production (target: +2 months after MVP)
+### 28.3 Phase 2 — Production (target: +2 months after MVP)
 
 - Parallel rounds
 - Reward bonuses (full formula)
@@ -2548,7 +2894,7 @@ If those work, the platform is operational.
 - Private messaging (submitter ↔ board, DRep ↔ board)
 - Blockfrost webhook integration
 
-### 27.4 Phase 3 — Hardening (target: +1-2 months)
+### 28.4 Phase 3 — Hardening (target: +1-2 months)
 
 - Hot wallet → 2-of-3 quorum for anchoring
 - Audit logging UI for board actions
@@ -2557,7 +2903,7 @@ If those work, the platform is operational.
 - Security review and penetration test
 - Internationalisation framework (English-only content, but i18n-ready)
 
-### 27.5 Deferred (post-Phase 3)
+### 28.5 Deferred (post-Phase 3)
 
 - Private votes / blurred voting power
 - Stablecoin support
@@ -2569,11 +2915,11 @@ If those work, the platform is operational.
 
 ---
 
-## 28. Open Questions and TODOs
+## 29. Open Questions and TODOs
 
 Items that need a decision, verification, or further investigation before or during implementation.
 
-### 28.1 Verification required (external)
+### 29.1 Verification required (external)
 
 | # | Item | Owner | Notes |
 |---|---|---|---|
@@ -2581,12 +2927,12 @@ Items that need a decision, verification, or further investigation before or dur
 | Q2 | **Verify the chosen TW amount (4M ADA per round) covers project funding + DAO ops + rewards.** | You | Reconcile the per-round budget breakdown with the planned proposal sizes. |
 | Q3 | **Mainnet vs Preview/Preprod for initial testing.** Cardano DRep registration is mainnet-only for production. | You | Recommend: build/test on Preprod, deploy MVP on mainnet with limited initial DRep cohort. |
 
-### 28.2 Implementation decisions needed during build
+### 29.2 Implementation decisions needed during build
 
 | # | Item | Notes |
 |---|---|---|
-| I1 | **Board election mechanism for the interim period.** Off-chain only in MVP, but *how*? Telegram poll? Pre-existing list? Document the source of the 5 names. |
-| I2 | **Hot wallet for anchoring — single signer or 2-of-3?** Section 23.4 recommends single signer for MVP; revisit before mainnet launch. |
+| I1 | ~~Board election mechanism for the interim period.~~ **Resolved in section 18** (genesis.json + Admin approval flow). The 5 names are nominated off-platform per the Catalyst proposal; see section 17.6. |
+| I2 | **Hot wallet for anchoring — single signer or 2-of-3?** Section 24.4 recommends single signer for MVP; revisit before mainnet launch. |
 | I3 | **Exact Merkle tree library.** Standard sorted-keccak Merkle trees are fine; pick a Node.js lib with TypeScript types (e.g., `merkletreejs`). |
 | I4 | **Email service:** Resend has a clean DX; AWS SES is cheaper at scale. Recommend Resend for MVP. |
 | I5 | **What is the DAO Multisig's "operations" balance kept at?** A floor amount (e.g., 5,000 ADA) below which automated alerts fire. |
@@ -2595,7 +2941,7 @@ Items that need a decision, verification, or further investigation before or dur
 | I8 | **Comment moderation policy.** No moderation in MVP; if abuse happens, board can soft-delete a comment via DB. Document this. |
 | I9 | **Vote rationale minimum length.** Tentatively 200 chars; might need to lower to 100 or raise. Validate with a few real proposals. |
 
-### 28.3 Risk items to monitor
+### 29.3 Risk items to monitor
 
 | # | Item | Mitigation |
 |---|---|---|
@@ -2607,7 +2953,7 @@ Items that need a decision, verification, or further investigation before or dur
 | R6 | **Submission-fee TX hash from a different wallet than the submitter.** Reject in verification; show clear error. |
 | R7 | **Pledge sent to wrong address.** Submitter loses funds; this is on them, but the form should *prominently* display the correct address with a copy button + QR code. |
 
-### 28.4 Things we know we're skipping
+### 29.4 Things we know we're skipping
 
 - Multi-language UI (Phase 3+ with framework, no translations in MVP)
 - Mobile app (responsive web is sufficient)
@@ -2617,15 +2963,16 @@ Items that need a decision, verification, or further investigation before or dur
 - Automated KYC/KYB
 - Cross-DAO interoperability
 
-### 28.5 Action items for next session
+### 29.5 Action items for next session
 
 Before writing code, we should:
 
 1. **Get answer to Q1 from Intersect** (recipient address policy for TW)
-2. **Confirm the 5 initial board members** are identified, have wallets ready, and agree to operate the multisig
-3. **Decide hosting region** (latency for board members? GDPR for European users?)
-4. **Set up a clean monorepo** with the layout in 22.3
-5. **Begin Phase 1 MVP** starting with: wallet login → DRep admission → admin UI for rounds. These 3 unblock everything else.
+2. **Confirm the 5 initial board members** are identified, have wallets ready, agree to operate the multisig, and provide their stake addresses + DRep IDs for inclusion in `genesis.json` (section 17.5)
+3. **Identify the first Platform Admin** (likely the project lead / yourself) and decide on the 2nd and optionally 3rd Admin for redundancy (section 18.5)
+4. **Decide hosting region** (latency for board members? GDPR for European users?)
+5. **Set up a clean monorepo** with the layout in 22.3
+6. **Begin Phase 1 MVP** starting with: Admin bootstrap → genesis approval → wallet login → DRep admission → board UI for rounds. These steps unblock everything else.
 
 ---
 
@@ -2633,11 +2980,11 @@ Before writing code, we should:
 
 This v2 design integrates the 32 decisions from your review session, removes all Clarity references, and adds the technical layer (DB schema, API surface, anchoring spec, MVP cut) needed to start building.
 
-It is a draft. Items flagged in section 28 are open. Items flagged inline with `(per decision #N)` reference your earlier responses.
+It is a draft. Items flagged in section 29 are open. Items flagged inline with `(per decision #N)` reference your earlier responses.
 
 Next steps:
 1. Read this end-to-end. Mark anything you disagree with or that doesn't match your intent.
-2. Resolve open questions in section 28.
-3. Start implementation — proposed entry point is Phase 1 MVP per section 27.2.
+2. Resolve open questions in section 29.
+3. Start implementation — proposed entry point is Phase 1 MVP per section 28.2.
 
 ---

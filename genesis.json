@@ -1,0 +1,34 @@
+{
+  "deployment": {
+    "name": "DRep DAO — Preprod test",
+    "network": "Preprod",
+    "deployed_at": "2026-05-21T12:48:02.154Z"
+  },
+  "founding_board": [
+    {
+      "display_name": "Board 1",
+      "stake_address": "stake_test1uq4yz3qemr6g3p7q0e2rtrutjxy07422wmg7hrzcx0peaxg0p5aqf",
+      "drep_id": "drep18vzutq0c5x90wavzjlds3nyryek5r538eayuxg9z5eeskt03zhz"
+    },
+    {
+      "display_name": "Board 2",
+      "stake_address": "stake_test1upaz8wqsxnstdsna4ljfuw9ksj3rj7p3ng8pmdhr5yk093g3eshkd",
+      "drep_id": "drep1cpdfs9uycz9n2pv65e8saxnjvz6r2q7na0ssphdnjskkxczay8g"
+    },
+    {
+      "display_name": "Board 3",
+      "stake_address": "stake_test1uqkx9apf762s064e0pzpt3y5fcf820sq24g55krxcs77vfsxw500j",
+      "drep_id": "drep1qw8n9zjz8lkg5k8r4k3tllzn6nqvj704x2mgl3277qprk5m2qku"
+    },
+    {
+      "display_name": "Board 4",
+      "stake_address": "stake_test1uqx9sqrzk2mqgsm446tdelnm7vmar4qf4al0nntju65xhuchrqt4q",
+      "drep_id": "drep1qw7s7q8fm6skz3c78mwl25xapkq6l5xt60ev6e2t5npvxtrlv6r"
+    },
+    {
+      "display_name": "Board 5",
+      "stake_address": "stake_test1uzmtrkz30029twmak4trsz2zlfd9hpcj6swvwxhthnxqvhqtyjz0h",
+      "drep_id": "drep1jsc3fjynrz87f60p4292vww5uak4nmryfffqppqv6alakfjx2h7"
+    }
+  ]
+}
