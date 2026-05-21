@@ -1,0 +1,183 @@
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import {
+  basePower,
+  clampMerit,
+  isApproved,
+  approvalRatio,
+  meritMultiplier,
+  ProposalStage,
+  ProposalStatus,
+  VoteChoice,
+  VotePhase,
+} from '@drep-dao/shared';
+import { PrismaService } from '../prisma/prisma.service';
+
+const LOVELACE = 1_000_000n;
+
+@Injectable()
+export class DvService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+  ) {}
+
+  /**
+   * §4.3 — take the voting-power snapshot and open D&V voting. Idempotent.
+   * NOTE: on-chain stake isn't wired yet (no Blockfrost), so each eligible DRep
+   * is snapshotted with a nominal stake (DV_SNAPSHOT_STAKE_ADA, default 1,000,000)
+   * and their real merit. The balanced-tally machinery (§4) is fully real.
+   */
+  async openVoting(proposalId: string) {
+    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    if (!proposal) throw new NotFoundException('proposal not found');
+    if (proposal.stage !== ProposalStage.DEBATE_VOTE) {
+      throw new ConflictException('proposal is not in the DEBATE_VOTE stage');
+    }
+
+    const existing = await this.prisma.voteSnapshot.findFirst({ where: { proposalId } });
+    if (existing) return this.result(proposalId);
+
+    const eligible = await this.prisma.roundDrepEligibility.findMany({
+      where: { roundId: proposal.roundId ?? undefined, drep: { status: 'ADMITTED' } },
+      select: { drepId: true },
+    });
+    const nominalStake = toLovelaceAda(Number(this.config.get('DV_SNAPSHOT_STAKE_ADA') ?? 1_000_000));
+
+    const snapshot = await this.prisma.voteSnapshot.create({ data: { proposalId } });
+    for (const { drepId } of eligible) {
+      const merit = await this.currentMerit(drepId);
+      const bp = basePower(nominalStake);
+      const mm = meritMultiplier(merit);
+      await this.prisma.voteSnapshotEntry.create({
+        data: {
+          snapshotId: snapshot.id,
+          drepId,
+          stakeLovelace: nominalStake,
+          meritPoints: merit,
+          basePower: bp,
+          meritMultiplier: mm,
+          finalPower: bp * mm,
+        },
+      });
+    }
+    await this.prisma.proposal.update({ where: { id: proposalId }, data: { votingStartAt: new Date() } });
+    return this.result(proposalId);
+  }
+
+  /** §8.2 — eligible DRep casts/changes a balanced D&V vote (rationale mandatory). */
+  async vote(userId: string, proposalId: string, choice: string, rationale: string) {
+    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    if (!proposal || proposal.stage !== ProposalStage.DEBATE_VOTE) {
+      throw new ConflictException('proposal is not in the DEBATE_VOTE stage');
+    }
+    const drep = await this.prisma.drep.findUnique({ where: { userId } });
+    if (!drep) throw new ForbiddenException('DReps only');
+
+    const snapshot = await this.prisma.voteSnapshot.findFirst({ where: { proposalId } });
+    if (!snapshot) throw new ConflictException('voting has not opened yet');
+    const entry = await this.prisma.voteSnapshotEntry.findUnique({
+      where: { snapshotId_drepId: { snapshotId: snapshot.id, drepId: drep.id } },
+    });
+    if (!entry) throw new ForbiddenException('you are not eligible to vote in this round');
+
+    const existing = await this.prisma.vote.findFirst({
+      where: { proposalId, drepId: drep.id, phase: VotePhase.DEBATE_VOTE },
+    });
+    if (existing) {
+      await this.prisma.vote.update({ where: { id: existing.id }, data: { choice, rationale } });
+    } else {
+      await this.prisma.vote.create({
+        data: { proposalId, drepId: drep.id, phase: VotePhase.DEBATE_VOTE, choice, rationale },
+      });
+    }
+    return this.result(proposalId);
+  }
+
+  /** §4.4 tally against the frozen snapshot; missing-no-avoid = implicit NO. */
+  async result(proposalId: string) {
+    const snapshot = await this.prisma.voteSnapshot.findFirst({
+      where: { proposalId },
+      include: { entries: true },
+    });
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      select: { status: true, stage: true, approvalThresholdPct: true },
+    });
+    if (!snapshot) {
+      return { open: false, status: proposal?.status, stage: proposal?.stage };
+    }
+    const votes = await this.prisma.vote.findMany({
+      where: { proposalId, phase: VotePhase.DEBATE_VOTE },
+    });
+    const choiceByDrep = new Map(votes.map((v) => [v.drepId, v.choice]));
+
+    let yesPower = 0;
+    let abstainPower = 0;
+    let totalPower = 0;
+    let cast = 0;
+    for (const e of snapshot.entries) {
+      const fp = Number(e.finalPower ?? 0);
+      totalPower += fp;
+      const c = choiceByDrep.get(e.drepId);
+      if (c) cast++;
+      if (c === VoteChoice.YES) yesPower += fp;
+      else if (c === VoteChoice.ABSTAIN) abstainPower += fp;
+      // NO or missing → counts in denominator (implicit NO), not in yes/abstain
+    }
+    const thresholdPct = proposal?.approvalThresholdPct
+      ? Number(proposal.approvalThresholdPct)
+      : Number(this.config.get('DV_APPROVAL_THRESHOLD_PCT') ?? 67);
+    const tally = { yesPower, totalPower, abstainPower, thresholdPct };
+
+    return {
+      open: true,
+      eligible: snapshot.entries.length,
+      cast,
+      yesPower: round2(yesPower),
+      abstainPower: round2(abstainPower),
+      totalPower: round2(totalPower),
+      denominator: round2(totalPower - abstainPower),
+      ratioPct: round2(approvalRatio(tally) * 100),
+      thresholdPct,
+      approved: isApproved(tally),
+      status: proposal?.status,
+      stage: proposal?.stage,
+    };
+  }
+
+  /** §9.3 — board finalizes: APPROVED if threshold met, else REJECTED. */
+  async finalize(proposalId: string) {
+    const r = await this.result(proposalId);
+    if (!('open' in r) || !r.open) throw new BadRequestException('voting has not opened');
+    const status = r.approved ? ProposalStatus.APPROVED : ProposalStatus.REJECTED;
+    const stage = status === ProposalStatus.APPROVED ? ProposalStage.FUNDING : null;
+    await this.prisma.proposal.update({
+      where: { id: proposalId },
+      data: { status, stage, resultFinalizedAt: new Date() },
+    });
+    return { ...r, status, stage, finalized: true };
+  }
+
+  private async currentMerit(drepId: string): Promise<number> {
+    const rows = await this.prisma.meritLedger.aggregate({
+      where: { drepId },
+      _sum: { delta: true },
+    });
+    const sum = rows._sum.delta ? Number(rows._sum.delta) : 0;
+    return clampMerit(sum);
+  }
+}
+
+function toLovelaceAda(ada: number): bigint {
+  return BigInt(Math.round(ada)) * LOVELACE;
+}
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}

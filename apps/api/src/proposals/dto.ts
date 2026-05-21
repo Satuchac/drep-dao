@@ -11,6 +11,7 @@ import {
   IsUUID,
   Min,
   MaxLength,
+  MinLength,
   ValidateNested,
 } from 'class-validator';
 
@@ -60,4 +61,10 @@ export class SubmitProposalDto {
 export class FilterVoteDto {
   @IsIn(['YES', 'NO', 'ABSTAIN']) choice!: 'YES' | 'NO' | 'ABSTAIN';
   @IsOptional() @IsString() @MaxLength(5000) rationale?: string;
+}
+
+export class DvVoteDto {
+  @IsIn(['YES', 'NO', 'ABSTAIN']) choice!: 'YES' | 'NO' | 'ABSTAIN';
+  // §8.2 — rationale mandatory (min 200 chars) for any cast D&V vote.
+  @IsString() @MinLength(200) @MaxLength(10000) rationale!: string;
 }

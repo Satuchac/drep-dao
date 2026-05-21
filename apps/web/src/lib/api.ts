@@ -223,10 +223,38 @@ export const filteringApi = {
     }),
 };
 
-// Board: draw filtering reviewers / confirm fee.
+// Board: confirm fee / draw reviewers / open D&V voting / finalize.
 export const boardProposalsApi = {
   confirmFee: (id: string) =>
     request<ProposalDetail>(`/admin/proposals/${id}/confirm-fee`, { method: 'POST' }),
   drawReviewers: (id: string) =>
     request<FilterResult>(`/admin/proposals/${id}/draw-reviewers`, { method: 'POST' }),
+  openDvVote: (id: string) =>
+    request<DvResult>(`/admin/proposals/${id}/open-dv-vote`, { method: 'POST' }),
+  finalizeDv: (id: string) =>
+    request<DvResult>(`/admin/proposals/${id}/finalize-dv`, { method: 'POST' }),
+};
+
+export interface DvResult {
+  open: boolean;
+  eligible?: number;
+  cast?: number;
+  yesPower?: number;
+  abstainPower?: number;
+  totalPower?: number;
+  denominator?: number;
+  ratioPct?: number;
+  thresholdPct?: number;
+  approved?: boolean;
+  status?: string;
+  stage?: string | null;
+}
+
+export const dvApi = {
+  result: (id: string) => request<DvResult>(`/proposals/${id}/dv-result`),
+  vote: (id: string, choice: 'YES' | 'NO' | 'ABSTAIN', rationale: string) =>
+    request<DvResult>(`/proposals/${id}/dv-vote`, {
+      method: 'POST',
+      body: JSON.stringify({ choice, rationale }),
+    }),
 };
