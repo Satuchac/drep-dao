@@ -68,6 +68,15 @@ export const VoteChoice = {
 } as const;
 export type VoteChoice = (typeof VoteChoice)[keyof typeof VoteChoice];
 
+/** Discriminates which phase a vote belongs to (one proposal spans several). */
+export const VotePhase = {
+  FILTERING: 'FILTERING',
+  DEBATE_VOTE: 'DEBATE_VOTE',
+  MILESTONE: 'MILESTONE',
+  QUICK_POLL: 'QUICK_POLL',
+} as const;
+export type VotePhase = (typeof VotePhase)[keyof typeof VotePhase];
+
 /** §3.4 internal-specific */
 export const InternalType = {
   INSTRUCTIVE: 'INSTRUCTIVE',

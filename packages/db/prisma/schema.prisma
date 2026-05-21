@@ -396,6 +396,7 @@ model Vote {
   proposalId   String   @map("proposal_id") @db.Uuid
   drepId       String   @map("drep_id") @db.Uuid
   milestoneId  String?  @map("milestone_id") @db.Uuid
+  phase        String? // FILTERING, DEBATE_VOTE, MILESTONE — disambiguates phases on one proposal
   choice       String // YES, NO, ABSTAIN
   rationale    String?
   castAt       DateTime @default(now()) @map("cast_at") @db.Timestamptz(6)

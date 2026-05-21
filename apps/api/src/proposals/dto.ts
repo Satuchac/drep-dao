@@ -3,6 +3,7 @@ import {
   ArrayMinSize,
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -54,4 +55,9 @@ export class UpdateProposalDto {
 
 export class SubmitProposalDto {
   @IsString() @IsNotEmpty() @MaxLength(120) submissionFeeTxHash!: string;
+}
+
+export class FilterVoteDto {
+  @IsIn(['YES', 'NO', 'ABSTAIN']) choice!: 'YES' | 'NO' | 'ABSTAIN';
+  @IsOptional() @IsString() @MaxLength(5000) rationale?: string;
 }

@@ -5,6 +5,7 @@ import { DrepApplicationForm } from './drep-application-form';
 import { MyDrepStatus } from './my-drep-status';
 import { BoardReviewPanel } from './board-review-panel';
 import { ProposalSubmit } from './proposal-submit';
+import { FilteringPanel } from './filtering-panel';
 
 const card =
   'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
@@ -37,6 +38,8 @@ export function MemberArea() {
           <DrepApplicationForm />
         </section>
       ) : null}
+
+      <FilteringPanel />
 
       <ProposalSubmit />
     </div>

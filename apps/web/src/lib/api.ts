@@ -197,3 +197,36 @@ export const proposalsApi = {
       body: JSON.stringify({ submissionFeeTxHash }),
     }),
 };
+
+export interface FilterAssignment {
+  proposalId: string;
+  title: string;
+  myVote: string | null;
+}
+export interface FilterResult {
+  reviewers: number;
+  yes: number;
+  no: number;
+  abstain: number;
+  threshold: number;
+  status: string;
+  stage: string | null;
+}
+
+export const filteringApi = {
+  myAssignments: () => request<FilterAssignment[]>('/me/assignments/filter'),
+  result: (proposalId: string) => request<FilterResult>(`/proposals/${proposalId}/filter-result`),
+  vote: (proposalId: string, choice: 'YES' | 'NO' | 'ABSTAIN', rationale?: string) =>
+    request<FilterResult>(`/proposals/${proposalId}/filter-vote`, {
+      method: 'POST',
+      body: JSON.stringify({ choice, rationale }),
+    }),
+};
+
+// Board: draw filtering reviewers / confirm fee.
+export const boardProposalsApi = {
+  confirmFee: (id: string) =>
+    request<ProposalDetail>(`/admin/proposals/${id}/confirm-fee`, { method: 'POST' }),
+  drawReviewers: (id: string) =>
+    request<FilterResult>(`/admin/proposals/${id}/draw-reviewers`, { method: 'POST' }),
+};
