@@ -21,6 +21,7 @@ next-env.d.ts
 *.vkey
 *.addr
 wallet.json
+tools/test-wallets.json
 
 # prisma
 packages/db/prisma/*.db

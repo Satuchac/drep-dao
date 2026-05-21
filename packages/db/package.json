@@ -19,8 +19,9 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^6.2.1",
-    "@drep-dao/shared": "workspace:*"
+    "@drep-dao/cardano": "workspace:^",
+    "@drep-dao/shared": "workspace:*",
+    "@prisma/client": "^6.2.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
