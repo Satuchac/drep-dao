@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { DrepModule } from './drep/drep.module';
 import { AdminModule } from './admin/admin.module';
+import { RoundsModule } from './rounds/rounds.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AdminModule } from './admin/admin.module';
     AuthModule,
     DrepModule,
     AdminModule,
+    RoundsModule,
   ],
 })
 export class AppModule {}

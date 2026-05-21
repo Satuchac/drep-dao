@@ -2,12 +2,14 @@ import { PLATFORM_CONFIG_DEFAULTS, DEFAULT_SUBCATEGORIES } from '@drep-dao/share
 import { HealthBadge } from './health-badge';
 import { ConnectWallet } from '@/components/connect-wallet';
 import { MemberArea } from '@/components/member-area';
+import { RoundsSection } from '@/components/rounds-section';
 
 const PHASES = [
   { name: 'Scaffold', detail: 'monorepo, DB schema, health — running skeleton', done: true },
   { name: 'Auth slice', detail: 'CIP-30/CIP-8 wallet login → JWT session', done: true },
   { name: 'DRep admission', detail: 'application form → board review', done: true },
-  { name: 'Rounds admin', detail: 'create/configure rounds (§6)', done: false },
+  { name: 'Admin layer', detail: '/sysadmin: genesis, admins (§18)', done: true },
+  { name: 'Rounds admin', detail: 'create/configure rounds (§6)', done: true },
 ];
 
 export default function Home() {
@@ -33,6 +35,8 @@ export default function Home() {
       </div>
 
       <MemberArea />
+
+      <RoundsSection />
 
       <h2 className="mt-10 text-lg font-semibold">Delivery path (§27 / §28.5)</h2>
       <ol className="mt-3 space-y-2">

@@ -97,3 +97,59 @@ export const boardApi = {
       { method: 'POST', body: JSON.stringify(body) },
     ),
 };
+
+export interface RoundCategoryInput {
+  name: string;
+  allocatedAda: number;
+  minAda?: number;
+  maxAda?: number;
+  description?: string;
+}
+export interface RoundScheduleInput {
+  stageKey: string;
+  startsAt: string;
+  endsAt: string;
+}
+export interface CreateRoundInput {
+  name?: string;
+  budgetAda: number;
+  rewardsPoolAda: number;
+  categories: RoundCategoryInput[];
+  schedule?: RoundScheduleInput[];
+}
+export interface RoundSummary {
+  id: string;
+  number: number;
+  name: string | null;
+  status: string;
+  budgetAda: number;
+  rewardsPoolAda: number;
+  categoryCount: number;
+  eligibleCount: number;
+  proposalCount: number;
+}
+export interface RoundDetail extends RoundSummary {
+  multisigAddress: string;
+  categories: {
+    id: string;
+    name: string;
+    type: string;
+    allocatedAda: number;
+    minAda: number | null;
+    maxAda: number | null;
+    description: string | null;
+  }[];
+  schedule: { stageKey: string; startsAt: string; endsAt: string }[];
+}
+
+export const roundsApi = {
+  list: () => request<RoundSummary[]>('/rounds'),
+  get: (id: string) => request<RoundDetail>(`/rounds/${id}`),
+};
+
+export const boardRoundsApi = {
+  create: (input: CreateRoundInput) =>
+    request<RoundDetail>('/admin/rounds', { method: 'POST', body: JSON.stringify(input) }),
+  startStage: (id: string, stage: string) =>
+    request<RoundDetail>(`/admin/rounds/${id}/start-stage/${stage}`, { method: 'POST' }),
+};
