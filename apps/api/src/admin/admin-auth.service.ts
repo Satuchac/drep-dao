@@ -1,10 +1,13 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as QRCode from 'qrcode';
 import { AdminStatus } from '@drep-dao/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -75,6 +78,82 @@ export class AdminAuthService {
     });
 
     return { adminId: admin.id, totpUri: totp.uri, totpBase32: totp.base32, recoveryCodes };
+  }
+
+  /** §18.5 — invite a new admin. Returns a one-time token (24h). */
+  async createInvitation(createdById: string, username: string, email: string) {
+    const active = await this.prisma.adminUser.count({ where: { status: AdminStatus.ACTIVE } });
+    if (active >= MAX_ADMINS) {
+      throw new ConflictException(`admin cap reached (${MAX_ADMINS}); remove one first`);
+    }
+    const existing = await this.prisma.adminUser.findUnique({ where: { username } });
+    if (existing && existing.status !== AdminStatus.REMOVED) {
+      throw new ConflictException('username already in use');
+    }
+    const token = randomBytes(24).toString('hex');
+    const expiresAt = new Date(Date.now() + 24 * 3600 * 1000);
+    await this.prisma.adminInvitation.create({
+      data: { username, email, tokenHash: this.sha256(token), createdById, expiresAt },
+    });
+    return { token, expiresAt };
+  }
+
+  /** §18.5 — consume an invitation: set password, enroll 2FA. No auth (invitee). */
+  async acceptInvitation(token: string, password: string) {
+    const invite = await this.prisma.adminInvitation.findFirst({
+      where: { tokenHash: this.sha256(token), consumedAt: null, expiresAt: { gt: new Date() } },
+    });
+    if (!invite) throw new UnauthorizedException('invalid or expired invitation');
+
+    const created = await this.createAdmin({
+      username: invite.username,
+      email: invite.email,
+      password,
+      createdById: invite.createdById,
+    });
+    await this.prisma.adminInvitation.update({
+      where: { id: invite.id },
+      data: { consumedAt: new Date() },
+    });
+    const totpQrDataUrl = await QRCode.toDataURL(created.totpUri);
+    return { ...created, totpQrDataUrl };
+  }
+
+  /** §18.5 — remove an admin (status REMOVED, sessions revoked). Refuses to leave 0 active. */
+  async removeAdmin(targetId: string): Promise<void> {
+    const target = await this.prisma.adminUser.findUnique({ where: { id: targetId } });
+    if (!target) throw new NotFoundException('admin not found');
+    if (target.status === AdminStatus.ACTIVE) {
+      const active = await this.prisma.adminUser.count({ where: { status: AdminStatus.ACTIVE } });
+      if (active <= 1) throw new BadRequestException('cannot remove the last active admin');
+    }
+    await this.prisma.adminUser.update({
+      where: { id: targetId },
+      data: { status: AdminStatus.REMOVED, removedAt: new Date() },
+    });
+    await this.revokeAllSessions(targetId);
+  }
+
+  async disableAdmin(targetId: string): Promise<void> {
+    const target = await this.prisma.adminUser.findUnique({ where: { id: targetId } });
+    if (!target) throw new NotFoundException('admin not found');
+    if (target.status === AdminStatus.ACTIVE) {
+      const active = await this.prisma.adminUser.count({ where: { status: AdminStatus.ACTIVE } });
+      if (active <= 1) throw new BadRequestException('cannot disable the last active admin');
+    }
+    await this.prisma.adminUser.update({ where: { id: targetId }, data: { status: AdminStatus.DISABLED } });
+    await this.revokeAllSessions(targetId);
+  }
+
+  private async revokeAllSessions(adminId: string): Promise<void> {
+    await this.prisma.adminSession.updateMany({
+      where: { adminId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  private sha256(s: string): string {
+    return createHash('sha256').update(s).digest('hex');
   }
 
   /** Step 1: username + password. Returns a session, or a 2FA challenge. */

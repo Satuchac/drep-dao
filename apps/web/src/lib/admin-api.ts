@@ -86,6 +86,23 @@ export const adminApi = {
   health: () => request<AdminHealth>('/health'),
   admins: () => request<AdminRow[]>('/admins'),
   auditLog: () => request<AuditRow[]>('/audit-log'),
+  accounts: {
+    invite: (username: string, email: string) =>
+      request<{ token: string; expiresAt: string }>('/admins/invite', {
+        method: 'POST',
+        body: JSON.stringify({ username, email }),
+      }),
+    accept: (token: string, password: string) =>
+      request<{
+        adminId: string;
+        totpUri: string;
+        totpBase32: string;
+        totpQrDataUrl: string;
+        recoveryCodes: string[];
+      }>('/admins/accept-invite', { method: 'POST', body: JSON.stringify({ token, password }) }),
+    remove: (id: string) => request<{ ok: boolean }>(`/admins/${id}/remove`, { method: 'POST' }),
+    disable: (id: string) => request<{ ok: boolean }>(`/admins/${id}/disable`, { method: 'POST' }),
+  },
   genesis: {
     state: () => request<GenesisState>('/genesis'),
     upload: (genesis: unknown) =>

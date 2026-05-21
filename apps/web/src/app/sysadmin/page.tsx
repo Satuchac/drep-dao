@@ -3,14 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAdminAuth } from '@/lib/admin-auth-context';
-import { adminApi, type AdminHealth, type AdminRow, type AuditRow } from '@/lib/admin-api';
+import { adminApi, type AdminHealth, type AuditRow } from '@/lib/admin-api';
 import { AdminGenesis } from '@/components/admin/admin-genesis';
+import { AdminsPanel } from '@/components/admin/admins-panel';
 
 export default function AdminDashboard() {
   const { admin, loading, logout } = useAdminAuth();
   const router = useRouter();
   const [health, setHealth] = useState<AdminHealth | null>(null);
-  const [admins, setAdmins] = useState<AdminRow[]>([]);
   const [audit, setAudit] = useState<AuditRow[]>([]);
 
   useEffect(() => {
@@ -20,7 +20,6 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (!admin) return;
     adminApi.health().then(setHealth).catch(() => undefined);
-    adminApi.admins().then(setAdmins).catch(() => undefined);
     adminApi.auditLog().then(setAudit).catch(() => undefined);
   }, [admin]);
 
@@ -65,23 +64,7 @@ export default function AdminDashboard() {
 
       <AdminGenesis />
 
-      <section className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
-        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">
-          Admins ({admins.length})
-        </h2>
-        <ul className="space-y-1 text-sm">
-          {admins.map((a) => (
-            <li key={a.id} className="flex justify-between rounded border border-slate-800 px-3 py-1.5">
-              <span>
-                {a.username} <span className="text-slate-500">· {a.email}</span>
-              </span>
-              <span className={a.status === 'ACTIVE' ? 'text-emerald-400' : 'text-slate-500'}>
-                {a.status}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </section>
+      <AdminsPanel currentAdminId={admin.adminId} />
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">Audit log</h2>

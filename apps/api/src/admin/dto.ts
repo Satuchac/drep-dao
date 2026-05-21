@@ -15,3 +15,13 @@ export class GenesisUploadDto {
   @IsObject()
   genesis!: Record<string, unknown>;
 }
+
+export class AdminInviteDto {
+  @IsString() @IsNotEmpty() @MaxLength(100) username!: string;
+  @IsString() @IsNotEmpty() @MaxLength(200) email!: string;
+}
+
+export class AcceptInviteDto {
+  @IsString() @IsNotEmpty() @MaxLength(200) token!: string;
+  @IsString() @IsNotEmpty() @MaxLength(200) password!: string;
+}

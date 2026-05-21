@@ -7,9 +7,15 @@ import { AdminGuard } from './admin.guard';
 import { SysadminAuthController } from './sysadmin-auth.controller';
 import { SysadminGenesisController } from './sysadmin-genesis.controller';
 import { SysadminOpsController } from './sysadmin-ops.controller';
+import { SysadminAdminsController } from './sysadmin-admins.controller';
 
 @Module({
-  controllers: [SysadminAuthController, SysadminGenesisController, SysadminOpsController],
+  controllers: [
+    SysadminAuthController,
+    SysadminGenesisController,
+    SysadminOpsController,
+    SysadminAdminsController,
+  ],
   providers: [AdminAuthService, AdminAuditService, AdminService, GenesisService, AdminGuard],
   exports: [AdminAuthService],
 })
