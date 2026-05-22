@@ -106,6 +106,22 @@ export const daoApi = {
   experts: () => request<DaoExpert[]>('/dao/experts'),
 };
 
+export interface GovParam {
+  key: string;
+  value: number | string;
+  default: number | string;
+  type: string;
+}
+
+export const governanceApi = {
+  list: () => request<GovParam[]>('/admin/governance'),
+  update: (key: string, value: number | string) =>
+    request<{ key: string; value: number | string }>('/admin/governance', {
+      method: 'PATCH',
+      body: JSON.stringify({ key, value }),
+    }),
+};
+
 export interface PendingApplication {
   drepId: string;
   drepIdOnchain: string;

@@ -25,6 +25,7 @@ const SUITES = [
   ['test-dao', 'DAO membership: board auto-member, join + 3-of-5 admission'],
   ['test-overview', 'DAO overview voting power + Expert apply/approve'],
   ['test-removal', 'Removal: propose + 3-of-5 vote → REMOVED, re-apply'],
+  ['test-rounds', 'Rounds: stage transitions gate submission + governance params'],
 ];
 
 const failed = [];

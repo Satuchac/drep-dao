@@ -6,13 +6,15 @@ import { ConnectWallet } from './connect-wallet';
 import { MemberArea } from './member-area';
 import { RoundsSection } from './rounds-section';
 import { DaoOverview } from './dao-overview';
+import { GovernanceSetup } from './governance-setup';
 import { HealthBadge } from '@/app/health-badge';
 
-type View = 'overview' | 'me' | 'rounds';
-const NAV: { key: View; label: string }[] = [
+type View = 'overview' | 'me' | 'rounds' | 'setup';
+const NAV: { key: View; label: string; boardOnly?: boolean }[] = [
   { key: 'overview', label: 'DAO Member overview' },
   { key: 'me', label: 'My area' },
   { key: 'rounds', label: 'Rounds' },
+  { key: 'setup', label: 'Platform setup', boardOnly: true },
 ];
 
 export function HomeShell() {
@@ -37,9 +39,11 @@ export function HomeShell() {
     );
   }
 
+  const isBoard = profile.roles.includes('BOARD');
+  const nav = NAV.filter((n) => !n.boardOnly || isBoard);
   const canJoin =
     profile.onchainDrep.registered &&
-    !profile.roles.includes('BOARD') &&
+    !isBoard &&
     !profile.roles.includes('DAO_MEMBER') &&
     profile.daoMembership?.status !== 'PENDING_ADMISSION';
 
@@ -49,7 +53,7 @@ export function HomeShell() {
       <aside className="lg:w-56 lg:shrink-0">
         <h1 className="mb-4 text-xl font-bold tracking-tight">DRep DAO</h1>
         <nav className="space-y-1">
-          {NAV.map((n) => (
+          {nav.map((n) => (
             <button
               key={n.key}
               onClick={() => setView(n.key)}
@@ -73,6 +77,7 @@ export function HomeShell() {
         {view === 'overview' ? <DaoOverview /> : null}
         {view === 'me' ? <MemberArea /> : null}
         {view === 'rounds' ? <RoundsSection /> : null}
+        {view === 'setup' && isBoard ? <GovernanceSetup /> : null}
       </main>
 
       {/* Right: login box (+ JOIN DAO). */}

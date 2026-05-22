@@ -164,7 +164,7 @@ function ApplyOptions({
         >
           <div className="font-medium">Apply as an Expert</div>
           <div className="text-xs text-neutral-500">
-            For ADA holders with subject-matter knowledge. Board approves; you review milestones.
+            For ADA holders with subject-matter knowledge. Board approves; you provide your expertise.
           </div>
         </button>
       </div>

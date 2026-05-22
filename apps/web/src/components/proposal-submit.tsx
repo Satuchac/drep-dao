@@ -28,7 +28,8 @@ export function ProposalSubmit() {
 
   const loadMine = () => proposalsApi.mine().then(setMine).catch(() => undefined);
   useEffect(() => {
-    roundsApi.list().then((r) => setRounds(r.filter((x) => x.status !== 'CLOSED'))).catch(() => undefined);
+    // §3/§19 — proposals can only be created while a round's Submission stage is open.
+    roundsApi.list().then((r) => setRounds(r.filter((x) => x.status === 'SUBMISSION'))).catch(() => undefined);
     loadMine();
   }, []);
 
@@ -84,7 +85,14 @@ export function ProposalSubmit() {
 
       {msg ? <div className="mt-2 text-sm text-emerald-600">{msg}</div> : null}
 
-      {open ? (
+      {open && rounds.length === 0 ? (
+        <p className="mt-3 text-sm text-neutral-500">
+          No round is currently open for submissions. Proposals can only be submitted while a board
+          member has a round in the <strong>Submission</strong> stage.
+        </p>
+      ) : null}
+
+      {open && rounds.length > 0 ? (
         <form onSubmit={submit} className="mt-3 space-y-2">
           <div className="flex flex-wrap gap-2">
             <select className={field} value={roundId} onChange={(e) => setRoundId(e.target.value)} required>

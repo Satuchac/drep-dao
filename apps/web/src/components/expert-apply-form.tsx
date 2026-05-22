@@ -52,7 +52,9 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
       <div className="space-y-1 text-sm">
         <h3 className="text-base font-semibold">Expert</h3>
         <div className="text-emerald-600">You are an approved Expert ✅</div>
-        <p className="text-neutral-500">You can be assigned to milestone reviews.</p>
+        <p className="text-neutral-500">
+          You can provide your expertise — milestone reviews and feedback in the Debate &amp; Vote stage.
+        </p>
       </div>
     );
   }
@@ -61,7 +63,8 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
     <form onSubmit={submit} className="space-y-3">
       <h3 className="text-base font-semibold">Apply to be an Expert</h3>
       <p className="text-sm text-neutral-500">
-        Experts are non-DRep ADA holders approved by the board for milestone review.
+        Experts are non-DRep ADA holders approved by the board to provide their expertise — milestone
+        reviews and feedback in the Debate &amp; Vote stage.
         {mine ? ' Your application is under board review — you can update it below.' : ''}
       </p>
       <label className="block space-y-1">

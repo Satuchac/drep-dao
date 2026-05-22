@@ -9,6 +9,7 @@ import { DrepModule } from './drep/drep.module';
 import { AdminModule } from './admin/admin.module';
 import { RoundsModule } from './rounds/rounds.module';
 import { ProposalsModule } from './proposals/proposals.module';
+import { GovernanceModule } from './governance/governance.module';
 import { CardanoModule } from './cardano/cardano.module';
 
 @Module({
@@ -28,6 +29,7 @@ import { CardanoModule } from './cardano/cardano.module';
     AdminModule,
     RoundsModule,
     ProposalsModule,
+    GovernanceModule,
   ],
 })
 export class AppModule {}

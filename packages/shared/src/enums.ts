@@ -115,7 +115,8 @@ export type PledgeReturnMethod = (typeof PledgeReturnMethod)[keyof typeof Pledge
 
 /** §24.3 round status */
 export const RoundStatus = {
-  PREPARATION: 'PREPARATION',
+  PREPARATION: 'PREPARATION', // §6 board configures the round
+  SUBMISSION: 'SUBMISSION', // submission window open — proposals accepted (§3/§19)
   FILTERING: 'FILTERING',
   DV: 'DV',
   FUNDING: 'FUNDING',

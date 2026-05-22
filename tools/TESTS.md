@@ -27,5 +27,6 @@ registered on-chain (see `docs/ACTORS.md`; `gen-cast` → `fund-cast` →
 | `test-dao` | Board members are DAO members automatically; a non-board DRep joins via the §14.2 **3-of-5 admission vote** (rationale required); applicant sees votes + rationales; overview voting power. |
 | `test-overview` | DAO overview **voting power** = log10(on-chain DRep vote-delegation stake) × (1 + merit/200) with delegator counts; **Expert** apply → board approve → listed. |
 | `test-removal` | §14.4 board **removal**: propose → 3-of-5 vote → `REMOVED`; removed member can re-apply. |
+| `test-rounds` | §6/§3 **round lifecycle**: board creates a round and moves it stage to stage; proposals submit **only** in the `SUBMISSION` stage (blocked in PREPARATION/FILTERING). Board-editable **governance parameters** (get/update/validate). Cleans up the test round + proposal. |
 
 Individual suites can be run directly, e.g. `node tools/test-genesis.cjs`.

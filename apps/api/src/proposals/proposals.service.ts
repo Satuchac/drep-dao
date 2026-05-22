@@ -10,6 +10,7 @@ import {
   ProposalStatus,
   ProposalStage,
   ProposalType,
+  RoundStatus,
   VotingType,
 } from '@drep-dao/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,6 +25,16 @@ export class ProposalsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async createDraft(userId: string, dto: CreateProposalDto) {
+    // §3/§19 — proposals can only be submitted while the round's submission
+    // window is open (a board member moves the round into the SUBMISSION stage).
+    const round = await this.prisma.round.findUnique({ where: { id: dto.roundId } });
+    if (!round) throw new BadRequestException('round not found');
+    if (round.status !== RoundStatus.SUBMISSION) {
+      throw new BadRequestException(
+        `round #${round.number} is not accepting submissions (current stage: ${round.status}). ` +
+          'A board member must open the Submission stage first.',
+      );
+    }
     const category = await this.prisma.roundCategory.findUnique({ where: { id: dto.categoryId } });
     if (!category || category.roundId !== dto.roundId) {
       throw new BadRequestException('category does not belong to that round');

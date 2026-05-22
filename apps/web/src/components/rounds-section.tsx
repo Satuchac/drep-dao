@@ -16,9 +16,17 @@ const STAGE_DEFS = [
   { key: 'debate_vote', label: 'Debate & Vote' },
   { key: 'funding', label: 'Funding' },
 ];
-const NEXT_STAGES = ['FILTERING', 'DV', 'FUNDING', 'CLOSED'];
+// Stage transitions a board member can trigger, with friendly labels.
+const STAGE_BUTTONS: { status: string; label: string }[] = [
+  { status: 'SUBMISSION', label: 'Open submission' },
+  { status: 'FILTERING', label: 'Start filtering' },
+  { status: 'DV', label: 'Debate & Vote' },
+  { status: 'FUNDING', label: 'Funding' },
+  { status: 'CLOSED', label: 'Close' },
+];
 const STATUS_CLS: Record<string, string> = {
   PREPARATION: 'bg-neutral-200 dark:bg-neutral-700',
+  SUBMISSION: 'bg-amber-200 text-amber-900',
   FILTERING: 'bg-blue-200 text-blue-900',
   DV: 'bg-indigo-200 text-indigo-900',
   FUNDING: 'bg-emerald-200 text-emerald-900',
@@ -89,14 +97,14 @@ export function RoundsSection() {
               </div>
               {isBoard ? (
                 <div className="mt-2 flex flex-wrap gap-1">
-                  {NEXT_STAGES.map((s) => (
+                  {STAGE_BUTTONS.map((s) => (
                     <button
-                      key={s}
-                      onClick={() => startStage(r.id, s)}
-                      disabled={r.status === s}
+                      key={s.status}
+                      onClick={() => startStage(r.id, s.status)}
+                      disabled={r.status === s.status}
                       className="rounded border border-neutral-300 px-2 py-0.5 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
                     >
-                      → {s}
+                      {s.label}
                     </button>
                   ))}
                 </div>
