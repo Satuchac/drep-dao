@@ -9,9 +9,10 @@ import {
   MaxLength,
 } from 'class-validator';
 
-export class ApproveExpertDto {
-  @IsString() @IsNotEmpty() @MaxLength(200) stakeAddress!: string;
-  @IsOptional() @IsString() @MaxLength(100) displayName?: string;
+// §2/§14 — an ADA holder applies to become an Expert; the board then approves.
+export class ExpertApplicationDto {
+  @IsString() @IsNotEmpty() @MaxLength(100) displayName!: string;
+  @IsOptional() @IsString() @MaxLength(5000) bio?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) subcategoryIds?: string[];
 }
 

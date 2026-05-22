@@ -12,11 +12,11 @@ import {
   clampMerit,
   meritMultiplier,
 } from '@drep-dao/shared';
-import { drepIdFromKeyHashHex, isStakeAddress, stakeKeyHashFromBech32 } from '@drep-dao/cardano';
+import { drepIdFromKeyHashHex } from '@drep-dao/cardano';
 import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
-import { AdmissionVoteDto, DrepApplicationDto, UpdateDrepDto } from './dto';
+import { AdmissionVoteDto, DrepApplicationDto, ExpertApplicationDto, UpdateDrepDto } from './dto';
 
 @Injectable()
 export class DrepService {
@@ -35,12 +35,12 @@ export class DrepService {
     const boardKeys = new Set(seats.map((s) => s.drepKeyHash));
     const admitted = await this.prisma.drep.findMany({
       where: { status: DRepStatus.ADMITTED },
-      include: { user: { select: { displayName: true, drepKeyHash: true, drepRegistered: true } } },
+      include: { user: { select: { displayName: true, drepKeyHash: true, drepRegistered: true, stakeAddress: true } } },
     });
 
     // Union: every board seat is a member (even before first login → no Drep row
     // yet), plus admitted DReps still registered on-chain. Keyed by drep id.
-    interface Row { drepId: string; displayName: string; isBoard: boolean; drepRowId?: string }
+    interface Row { drepId: string; displayName: string; isBoard: boolean; drepRowId?: string; stakeAddress?: string }
     const byId = new Map<string, Row>();
     for (const s of seats) byId.set(s.drepId, { drepId: s.drepId, displayName: s.displayName, isBoard: true });
     for (const d of admitted) {
@@ -49,6 +49,7 @@ export class DrepService {
       const existing = byId.get(d.drepIdOnchain);
       if (existing) {
         existing.drepRowId = d.id;
+        existing.stakeAddress = d.user.stakeAddress;
         if (d.user.displayName) existing.displayName = d.user.displayName; // prefer self-set name
       } else {
         byId.set(d.drepIdOnchain, {
@@ -56,30 +57,37 @@ export class DrepService {
           displayName: d.user.displayName ?? 'DRep',
           isBoard,
           drepRowId: d.id,
+          stakeAddress: d.user.stakeAddress,
         });
       }
     }
     const rows = [...byId.values()];
 
-    // On-chain voting power, best-effort (don't fail the dashboard if Koios hiccups).
-    let statuses = new Map<string, { amountLovelace: bigint }>();
+    // §4 stake basis: the DRep's delegated voting power (Koios drep_info.amount)
+    // once it lands at the epoch boundary; until then, the controlled/self-
+    // delegated stake (account_info.total_balance) — both real, both on-chain.
+    let amounts = new Map<string, { amountLovelace: bigint }>();
     try {
-      statuses = await this.cardano.verifyDReps(rows.map((r) => r.drepId));
+      amounts = await this.cardano.verifyDReps(rows.map((r) => r.drepId));
     } catch {
       /* leave amounts at 0 */
     }
+    const stakeAddrs = rows.map((r) => r.stakeAddress).filter((a): a is string => !!a);
+    const controlled = await this.cardano.accountStake(stakeAddrs);
 
     const members = await Promise.all(
       rows.map(async (r) => {
         const merit = r.drepRowId ? await this.currentMerit(r.drepRowId) : 0;
-        const amount = statuses.get(r.drepId)?.amountLovelace ?? 0n;
-        const base = basePower(amount);
+        const votingPowerLovelace = amounts.get(r.drepId)?.amountLovelace ?? 0n;
+        const ownStake = r.stakeAddress ? controlled.get(r.stakeAddress) ?? 0n : 0n;
+        const stake = votingPowerLovelace > 0n ? votingPowerLovelace : ownStake;
+        const base = basePower(stake);
         const mult = meritMultiplier(merit);
         return {
           drepId: r.drepId,
           displayName: r.displayName,
           isBoard: r.isBoard,
-          stakeAda: Number(amount) / 1_000_000,
+          stakeAda: Math.round(Number(stake) / 1_000_000),
           merit,
           basePower: round(base),
           meritMultiplier: round(mult),
@@ -97,49 +105,65 @@ export class DrepService {
     return clampMerit(agg._sum.delta ? Number(agg._sum.delta) : 0);
   }
 
-  /** §2/§25.5 — board approves an Expert (a non-DRep ADA holder) by stake address. */
-  async approveExpert(stakeAddress: string, displayName?: string, subcategoryIds?: string[]) {
-    if (!isStakeAddress(stakeAddress)) {
-      throw new BadRequestException('stakeAddress must be a bech32 stake address');
-    }
-    const stakeKeyHash = stakeKeyHashFromBech32(stakeAddress);
-    const user = await this.prisma.appUser.upsert({
-      where: { stakeKeyHash },
-      update: { stakeAddress },
-      create: { stakeKeyHash, stakeAddress },
-    });
-    const existing = await this.prisma.expert.findFirst({ where: { userId: user.id } });
-    if (existing) {
-      return this.prisma.expert.update({
-        where: { id: existing.id },
-        data: {
-          approvedByBoard: true,
-          ...(displayName ? { displayName } : {}),
-          ...(subcategoryIds ? { subcategoryIds } : {}),
-        },
-      });
-    }
-    return this.prisma.expert.create({
-      data: {
-        userId: user.id,
-        displayName: displayName ?? 'Expert',
-        subcategoryIds: subcategoryIds ?? [],
-        approvedByBoard: true,
-      },
-    });
+  /** §2/§14 — an ADA holder applies to become an Expert (board then approves). */
+  async applyExpert(userId: string, dto: ExpertApplicationDto) {
+    const existing = await this.prisma.expert.findFirst({ where: { userId } });
+    if (existing?.approvedByBoard) throw new ConflictException('you are already an approved Expert');
+    const data = {
+      displayName: dto.displayName,
+      bio: dto.bio ?? null,
+      subcategoryIds: dto.subcategoryIds ?? [],
+      approvedByBoard: false,
+    };
+    if (existing) return this.prisma.expert.update({ where: { id: existing.id }, data });
+    return this.prisma.expert.create({ data: { userId, ...data } });
   }
 
-  async listExperts() {
+  /** The user's own Expert record (application or approval), if any. */
+  async getMyExpert(userId: string) {
+    return this.prisma.expert.findFirst({ where: { userId } });
+  }
+
+  /** Board view — pending Expert applications awaiting approval. */
+  async listExpertApplications() {
     const experts = await this.prisma.expert.findMany({
-      include: { user: { select: { stakeAddress: true } } },
+      where: { approvedByBoard: false },
+      include: { user: { select: { stakeAddress: true, displayName: true } } },
       orderBy: { displayName: 'asc' },
     });
     return experts.map((e) => ({
       id: e.id,
       displayName: e.displayName,
+      bio: e.bio,
       stakeAddress: e.user.stakeAddress,
       subcategoryIds: e.subcategoryIds,
-      approvedByBoard: e.approvedByBoard,
+    }));
+  }
+
+  /** Board approves a pending Expert application. */
+  async approveExpertById(id: string) {
+    const expert = await this.prisma.expert.findUnique({ where: { id } });
+    if (!expert) throw new NotFoundException('expert application not found');
+    return this.prisma.expert.update({ where: { id }, data: { approvedByBoard: true } });
+  }
+
+  /** Board rejects (removes) a pending Expert application. */
+  async rejectExpertById(id: string) {
+    await this.prisma.expert.delete({ where: { id } }).catch(() => undefined);
+    return { ok: true };
+  }
+
+  /** Approved Experts — listed in the DAO dashboard (§2). */
+  async listApprovedExperts() {
+    const experts = await this.prisma.expert.findMany({
+      where: { approvedByBoard: true },
+      orderBy: { displayName: 'asc' },
+    });
+    return experts.map((e) => ({
+      id: e.id,
+      displayName: e.displayName,
+      bio: e.bio,
+      subcategoryIds: e.subcategoryIds,
     }));
   }
 

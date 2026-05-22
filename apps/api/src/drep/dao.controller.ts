@@ -12,4 +12,9 @@ export class DaoController {
   members() {
     return this.drep.listDaoMembers();
   }
+
+  @Get('experts')
+  experts() {
+    return this.drep.listApprovedExperts();
+  }
 }

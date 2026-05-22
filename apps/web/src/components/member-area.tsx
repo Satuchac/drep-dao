@@ -5,7 +5,8 @@ import { useAuth } from '@/lib/auth-context';
 import { DrepForm } from './drep-form';
 import { MyDrepStatus } from './my-drep-status';
 import { BoardReviewPanel } from './board-review-panel';
-import { ExpertsPanel } from './experts-panel';
+import { ExpertReviewPanel } from './expert-review-panel';
+import { ExpertApplyForm } from './expert-apply-form';
 import { ProposalSubmit } from './proposal-submit';
 import { FilteringPanel } from './filtering-panel';
 import { VotingPanel } from './voting-panel';
@@ -13,7 +14,7 @@ import { VotingPanel } from './voting-panel';
 const card =
   'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
 
-/** Authenticated member area: board review, DAO membership (join or profile), participation. */
+/** Authenticated member area. Order: your status/DRep ID first, then pending requests (board). */
 export function MemberArea() {
   const { profile, loading } = useAuth();
   if (loading || !profile) return null;
@@ -26,55 +27,49 @@ export function MemberArea() {
   const canJoin = isRegisteredDRep && !isBoard && !isMember && !pending;
 
   return (
-    <div className="mt-6 space-y-6">
-      {isBoard ? (
-        <section className={card}>
-          <BoardReviewPanel />
-        </section>
-      ) : null}
-
-      {isBoard ? <ExpertsPanel /> : null}
-
-      {/* DAO member (board or admitted): status + editable profile — no "join" prompt. */}
-      {isMember ? (
-        <>
-          <section className={card}>
-            <MyDrepStatus />
-          </section>
-          <section className={card}>
-            <h3 className="text-base font-semibold">Your DRep profile</h3>
-            <p className="mb-3 text-sm text-neutral-500">
-              {isBoard ? 'As a board member you are a DAO member.' : 'You are a DAO member.'} Keep your
-              details up to date.
-            </p>
-            <DrepForm mode="profile" />
-          </section>
-        </>
-      ) : null}
-
-      {/* Pending applicant: show progress (approvals + board rationales). */}
-      {pending ? (
+    <div className="space-y-6">
+      {/* 1) Your status + DRep ID — the first, upper info. */}
+      {isMember || pending ? (
         <section className={card}>
           <MyDrepStatus />
         </section>
       ) : null}
 
-      {/* Registered DRep, not a member yet: invite to join. */}
+      {/* Your editable DRep profile (members only). */}
+      {isMember ? (
+        <section className={card}>
+          <h3 className="text-base font-semibold">Your DRep profile</h3>
+          <p className="mb-3 text-sm text-neutral-500">
+            {isBoard ? 'As a board member you are a DAO member.' : 'You are a DAO member.'} Keep your
+            details up to date.
+          </p>
+          <DrepForm mode="profile" />
+        </section>
+      ) : null}
+
+      {/* Registered DRep, not a member yet → JOIN DAO. */}
       {canJoin ? (
         <section className={card}>
           <JoinDao previouslyRejected={status === 'REJECTED' || status === 'REMOVED'} />
         </section>
       ) : null}
 
-      {/* Not a registered on-chain DRep → plain ADA holder. */}
+      {/* Non-DRep ADA holder → may apply to be an Expert. */}
       {!isRegisteredDRep && !isBoard ? (
         <section className={card}>
-          <h3 className="text-base font-semibold">ADA holder</h3>
-          <p className="mt-1 text-sm text-neutral-500">
-            Your wallet is not a registered on-chain DRep, so you can browse and submit proposals, but
-            can&apos;t join the DAO as a voting member. To become a DRep, register your DRep key on-chain
-            (e.g. Eternl → Governance → Register as a DRep), then sign in again.
-          </p>
+          <ExpertApplyForm />
+        </section>
+      ) : null}
+
+      {/* 2) Pending requests the board acts on — below the personal info. */}
+      {isBoard ? (
+        <section className={card}>
+          <BoardReviewPanel />
+        </section>
+      ) : null}
+      {isBoard ? (
+        <section className={card}>
+          <ExpertReviewPanel />
         </section>
       ) : null}
 

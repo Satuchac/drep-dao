@@ -5,51 +5,28 @@ import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
 import type { Cip30WalletEntry } from '@/lib/cip30';
 
-const ROLE_LABEL: Record<string, string> = {
-  VIEWER: 'Viewer',
-  SUBMITTER: 'Submitter',
-  DREP: 'DRep',
-  DAO_MEMBER: 'DAO member',
-  BOARD: 'Board member',
-  EXPERT: 'Expert',
-};
-
-/** Primary login — Cardano wallet. Recognizes the stake key and shows the role. */
+/** Primary login — Cardano wallet. Recognizes the wallet and shows the role. */
 export function ConnectWallet() {
   const { profile, loading, wallets, login, logout, refreshWallets } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (profile) {
-    const top =
-      profile.roles.includes('BOARD')
-        ? 'Board member'
-        : profile.roles.includes('DAO_MEMBER')
-          ? 'DAO member'
-          : profile.roles.includes('DREP')
-            ? 'DRep (not a member yet)'
-            : profile.roles.includes('EXPERT')
-              ? 'Expert (ADA holder)'
-              : 'ADA holder (Viewer)';
+    // §2 — show a single status: Board member, DAO member, else Viewer.
+    const status = profile.roles.includes('BOARD')
+      ? 'Board member'
+      : profile.roles.includes('DAO_MEMBER')
+        ? 'DAO member'
+        : 'Viewer';
     return (
-      <div className="space-y-2 text-sm">
+      <div className="space-y-1.5 text-sm">
         <div className="flex items-center gap-2">
           <span className="text-emerald-600 dark:text-emerald-400">●</span>
-          <span className="font-medium">Signed in — {top}</span>
+          <span className="font-medium">Signed in — {status}</span>
         </div>
-        <div className="break-all font-mono text-xs text-neutral-500">{profile.user.stakeAddress}</div>
-        <div className="flex flex-wrap gap-1">
-          {profile.roles.map((r) => (
-            <span key={r} className="rounded bg-neutral-200 px-2 py-0.5 text-xs dark:bg-neutral-800">
-              {ROLE_LABEL[r] ?? r}
-            </span>
-          ))}
-        </div>
-        <div className="text-xs text-neutral-500">
-          {profile.onchainDrep.registered
-            ? `Registered on-chain DRep${profile.daoMembership ? ` · DAO: ${profile.daoMembership.status}` : ' · not yet a DAO member'}`
-            : 'Not a registered on-chain DRep — ADA holder'}
-        </div>
+        {profile.onchainDrep.drepId ? (
+          <div className="break-all font-mono text-xs text-neutral-500">{profile.onchainDrep.drepId}</div>
+        ) : null}
         <button
           onClick={() => logout()}
           className="mt-1 rounded-md border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"

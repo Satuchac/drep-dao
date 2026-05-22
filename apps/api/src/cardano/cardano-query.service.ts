@@ -26,6 +26,41 @@ export class CardanoQueryService {
           : 'https://preprod.koios.rest/api/v1';
   }
 
+  /**
+   * Controlled on-chain stake (Lovelace) per stake address, via Koios
+   * /account_info `total_balance`. For a self-delegated DRep this equals their
+   * voting power, and it's available immediately (no epoch lag). Best-effort:
+   * returns 0 for unknown / on any Koios error (used for the dashboard).
+   */
+  async accountStake(stakeAddresses: string[]): Promise<Map<string, bigint>> {
+    const out = new Map<string, bigint>(stakeAddresses.map((a) => [a, 0n]));
+    if (stakeAddresses.length === 0) return out;
+    try {
+      const res = await fetch(`${this.base}/account_info`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _stake_addresses: stakeAddresses }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) {
+        this.logger.warn(`Koios /account_info ${res.status}`);
+        return out;
+      }
+      const rows = (await res.json()) as { stake_address: string; total_balance: string | null }[];
+      for (const r of rows) {
+        if (!out.has(r.stake_address)) continue;
+        try {
+          out.set(r.stake_address, r.total_balance ? BigInt(r.total_balance) : 0n);
+        } catch {
+          /* non-numeric — leave 0 */
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`Koios account_info unreachable: ${e instanceof Error ? e.message : e}`);
+    }
+    return out;
+  }
+
   /** For each bech32 drep id: is it a registered on-chain DRep, and its key hash. */
   async verifyDReps(drepIds: string[]): Promise<Map<string, DRepStatus>> {
     const out = new Map<string, DRepStatus>(

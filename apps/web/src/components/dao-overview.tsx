@@ -1,11 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { daoApi, type DaoMember } from '@/lib/api';
+import { daoApi, type DaoMember, type DaoExpert } from '@/lib/api';
 
 /** §4 — all DAO members with balanced voting power: log10(stake) × (1 + merit/200). */
 export function DaoOverview() {
   const [members, setMembers] = useState<DaoMember[] | null>(null);
+  const [experts, setExperts] = useState<DaoExpert[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -13,6 +14,7 @@ export function DaoOverview() {
       .members()
       .then(setMembers)
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
+    daoApi.experts().then(setExperts).catch(() => undefined);
   }, []);
 
   return (
@@ -54,7 +56,6 @@ export function DaoOverview() {
                         </span>
                       ) : null}
                     </div>
-                    <div className="break-all font-mono text-[11px] text-neutral-400">{m.drepId}</div>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{m.stakeAda.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{m.basePower.toFixed(2)}</td>
@@ -77,10 +78,32 @@ export function DaoOverview() {
 
       {members && members.some((m) => m.stakeAda === 0) ? (
         <p className="text-xs text-neutral-400">
-          A 0 ADA stake (hence 0 base power) means no live on-chain delegation to that DRep yet — Koios
-          voting power updates at epoch boundaries.
+          Stake is the DRep&apos;s on-chain voting power (self-delegated/controlled stake). 0 means no
+          on-chain stake delegated to that DRep yet.
         </p>
       ) : null}
+
+      <div className="pt-2">
+        <h3 className="text-base font-semibold">Experts</h3>
+        <p className="text-sm text-neutral-500">Non-DRep ADA holders approved by the board for milestone review.</p>
+        {experts.length === 0 ? (
+          <p className="mt-1 text-sm text-neutral-500">No approved experts yet.</p>
+        ) : (
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {experts.map((x) => (
+              <li
+                key={x.id}
+                className="rounded-lg border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-800"
+              >
+                <span className="font-medium">{x.displayName}</span>
+                {x.subcategoryIds.length ? (
+                  <span className="ml-2 text-xs text-neutral-500">{x.subcategoryIds.join(', ')}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

@@ -101,6 +101,7 @@ export interface DaoMember {
 
 export const daoApi = {
   members: () => request<DaoMember[]>('/dao/members'),
+  experts: () => request<DaoExpert[]>('/dao/experts'),
 };
 
 export interface PendingApplication {
@@ -132,21 +133,42 @@ export const boardApi = {
     ),
 };
 
-export interface ExpertRow {
+export interface ExpertApplicationInput {
+  displayName: string;
+  bio?: string;
+  subcategoryIds?: string[];
+}
+export interface MyExpert {
   id: string;
   displayName: string;
-  stakeAddress: string;
+  bio: string | null;
   subcategoryIds: string[];
   approvedByBoard: boolean;
 }
+export interface ExpertApplication {
+  id: string;
+  displayName: string;
+  bio: string | null;
+  stakeAddress: string;
+  subcategoryIds: string[];
+}
+export interface DaoExpert {
+  id: string;
+  displayName: string;
+  bio: string | null;
+  subcategoryIds: string[];
+}
+
+export const expertApi = {
+  mine: () => request<MyExpert | null>('/me/expert'),
+  apply: (input: ExpertApplicationInput) =>
+    request<MyExpert>('/me/expert-application', { method: 'POST', body: JSON.stringify(input) }),
+};
 
 export const boardExpertsApi = {
-  list: () => request<ExpertRow[]>('/admin/experts'),
-  approve: (stakeAddress: string, displayName?: string) =>
-    request<ExpertRow>('/admin/experts', {
-      method: 'POST',
-      body: JSON.stringify({ stakeAddress, displayName }),
-    }),
+  applications: () => request<ExpertApplication[]>('/admin/experts/applications'),
+  approve: (id: string) => request<MyExpert>(`/admin/experts/${id}/approve`, { method: 'POST' }),
+  reject: (id: string) => request<{ ok: boolean }>(`/admin/experts/${id}/reject`, { method: 'POST' }),
 };
 
 export interface RoundCategoryInput {
