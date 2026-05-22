@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type GenesisState } from '@/lib/admin-api';
+import { parseGenesisFile } from '@/lib/parse-genesis';
 
 const EXAMPLE = `[
   { "name": "Alice", "drep_id": "drep1..." },
@@ -37,7 +38,7 @@ export function AdminGenesis() {
 
   const onFile = (file: File) =>
     wrap(async () => {
-      const genesis = JSON.parse(await file.text());
+      const genesis = parseGenesisFile(await file.text());
       const res = await adminApi.genesis.upload(genesis);
       setMsg(`Verified ✓ — ${res.proposedBoard.length} member(s) are registered DReps on-chain. Review, then Approve & install.`);
       load();
@@ -65,12 +66,16 @@ export function AdminGenesis() {
       setAddId('');
     });
 
-  const removeOne = (drepId: string, name: string) =>
-    wrap(async () => {
+  const removeOne = (drepId: string, name: string) => {
+    if (!window.confirm(`Remove ${name} from the founding board?\n\nThey will lose Board access the next time they sign in. You can re-add them later via the form or a genesis file.`)) {
+      return;
+    }
+    return wrap(async () => {
       const next = await adminApi.genesis.removeMember(drepId);
       setState(next);
       setMsg(`Removed ${name} — board now ${next.boardCount}/${next.maxBoard}.`);
     });
+  };
 
   if (!state) return <Section title="Genesis">…</Section>;
 
