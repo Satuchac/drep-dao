@@ -90,12 +90,14 @@ async function loginAndProfile(users, persona) {
   } catch (e) {
     check('5-member genesis verifies on-chain', false, e.message);
   }
-  try {
-    await genesis.upload(admin.id, { founding_board: [{ name: 'Fake', drep_id: 'drep1ytwhq9236d0v0m4xq7nrw6xeqptpk6wchyukwrpk5xmsn2sa3jf6y' }] });
-    check('rejects an unregistered DRep', false, 'unexpectedly accepted');
-  } catch (e) {
-    check('rejects an unregistered DRep', /not registered DReps on-chain/i.test(e.message));
-  }
+  // Partial load: an unregistered DRep is reported as invalid, not seated.
+  const bad = await genesis.upload(admin.id, {
+    founding_board: [{ name: 'Fake', drep_id: 'drep1ytwhq9236d0v0m4xq7nrw6xeqptpk6wchyukwrpk5xmsn2sa3jf6y' }],
+  });
+  check(
+    'unregistered DRep excluded (0 valid, reported invalid)',
+    bad.proposedBoard.length === 0 && bad.invalid.some((m) => /registered/i.test(m.reason)),
+  );
   await redis.client.del('admin:genesis:proposed'); // clear the stash; do NOT approve
 
   const seats = await prisma.boardSeat.count();

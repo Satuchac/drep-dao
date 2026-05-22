@@ -13,6 +13,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:e2e": "node tools/test-all.cjs",
     "db:generate": "pnpm --filter @drep-dao/db generate",
     "db:migrate": "pnpm --filter @drep-dao/db migrate",
     "db:seed": "pnpm --filter @drep-dao/db seed",

@@ -1,0 +1,42 @@
+/**
+ * Runs the whole DRep DAO service-level test suite, in order, against the dev DB
+ * + live Koios (Preprod). Each suite cleans up after itself; the dev DB is left
+ * with the 5-member board seated and no leftover test applicants.
+ *
+ * Prereqs: infra up (pnpm infra:up), an admin (pnpm admin:create), the cast
+ * seeded/registered, and the built dist (the dev server keeps it fresh; otherwise
+ * run `pnpm build`).
+ *
+ *   node tools/test-all.cjs   (or: pnpm test:e2e)
+ */
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+
+if (!fs.existsSync(path.join(__dirname, '..', 'apps/api/dist/drep/drep.service.js'))) {
+  console.error('apps/api/dist is missing — run `pnpm build` (or start `pnpm dev`) first.');
+  process.exit(1);
+}
+
+// Order matters: genesis leaves the 5-board seated; the rest build on it.
+const SUITES = [
+  ['test-genesis', 'Genesis: JSON load, partial load, add/remove, incremental'],
+  ['test-cast', 'Cast roles: board / voting DRep / ADA holder + genesis verify'],
+  ['test-dao', 'DAO membership: board auto-member, join + 3-of-5 admission'],
+  ['test-overview', 'DAO overview voting power + Expert apply/approve'],
+  ['test-removal', 'Removal: propose + 3-of-5 vote → REMOVED, re-apply'],
+];
+
+const failed = [];
+for (const [file, desc] of SUITES) {
+  console.log(`\n████ ${file} — ${desc} ████`);
+  const r = spawnSync(process.execPath, [path.join(__dirname, `${file}.cjs`)], { stdio: 'inherit' });
+  if (r.status !== 0) failed.push(file);
+}
+
+console.log('\n==================== SUMMARY ====================');
+for (const [file, desc] of SUITES) {
+  console.log(`  ${failed.includes(file) ? '❌ FAIL' : '✅ PASS'}  ${file.padEnd(14)} ${desc}`);
+}
+console.log(failed.length ? `\n❌ ${failed.length} suite(s) failed.` : '\n✅ All suites passed.');
+process.exit(failed.length ? 1 : 0);
