@@ -98,6 +98,7 @@ export interface DaoMember {
   basePower: number;
   meritMultiplier: number;
   adjustedPower: number; // log10(votingPowerAda) × (1 + merit/200)
+  since: string | null; // board install date (board) or board-approval date (DAO member)
 }
 
 export const daoApi = {

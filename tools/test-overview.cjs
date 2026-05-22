@@ -53,6 +53,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   ok('5 board members listed', members.filter((m) => m.isBoard).length === 5, `${members.filter((m) => m.isBoard).length} board`);
   ok('Alice voting power > 0 (real on-chain stake)', alice && alice.adjustedPower > 0, alice ? `power=${alice.adjustedPower}` : 'missing');
   ok('Alice base ≈ log10(stake)', alice && Math.abs(alice.basePower - Math.log10(alice.votingPowerAda)) < 0.05);
+  ok('every member has a "since" date', members.every((m) => !!m.since), alice ? new Date(alice.since).toISOString().slice(0, 10) : '');
 
   console.log('\n=== Expert apply → board approve (Carol = ADA holder) ===');
   const carol = await login('holder');

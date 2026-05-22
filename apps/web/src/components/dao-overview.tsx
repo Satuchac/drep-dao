@@ -38,6 +38,7 @@ export function DaoOverview() {
             <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
               <tr>
                 <th className="px-3 py-2">Member</th>
+                <th className="px-3 py-2">Member since</th>
                 <th className="px-3 py-2 text-right">Voting power (ADA)</th>
                 <th className="px-3 py-2 text-right">Delegators</th>
                 <th className="px-3 py-2 text-right">Base (log₁₀)</th>
@@ -58,6 +59,15 @@ export function DaoOverview() {
                         </span>
                       ) : null}
                     </div>
+                  </td>
+                  <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
+                    {m.since ? (
+                      <span title={m.isBoard ? 'Installed on the board' : 'Approved by the board'}>
+                        {new Date(m.since).toLocaleDateString()}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{m.votingPowerAda.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{m.delegators}</td>

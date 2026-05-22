@@ -40,9 +40,11 @@ export class DrepService {
 
     // Union: every board seat is a member (even before first login → no Drep row
     // yet), plus admitted DReps still registered on-chain. Keyed by drep id.
-    interface Row { drepId: string; displayName: string; isBoard: boolean; drepRowId?: string; stakeAddress?: string }
+    // `since` = when they became a member: board install date (board_seat.addedAt)
+    // for board members, board-approval date (drep.admittedAt) for admitted DReps.
+    interface Row { drepId: string; displayName: string; isBoard: boolean; drepRowId?: string; stakeAddress?: string; since: Date | null }
     const byId = new Map<string, Row>();
-    for (const s of seats) byId.set(s.drepId, { drepId: s.drepId, displayName: s.displayName, isBoard: true });
+    for (const s of seats) byId.set(s.drepId, { drepId: s.drepId, displayName: s.displayName, isBoard: true, since: s.addedAt });
     for (const d of admitted) {
       const isBoard = d.user.drepKeyHash ? boardKeys.has(d.user.drepKeyHash) : false;
       if (!isBoard && !d.user.drepRegistered) continue; // skip lapsed non-board members
@@ -51,6 +53,7 @@ export class DrepService {
         existing.drepRowId = d.id;
         existing.stakeAddress = d.user.stakeAddress;
         if (d.user.displayName) existing.displayName = d.user.displayName; // prefer self-set name
+        // keep the board-install date for board members
       } else {
         byId.set(d.drepIdOnchain, {
           drepId: d.drepIdOnchain,
@@ -58,6 +61,7 @@ export class DrepService {
           isBoard,
           drepRowId: d.id,
           stakeAddress: d.user.stakeAddress,
+          since: d.admittedAt,
         });
       }
     }
@@ -83,6 +87,7 @@ export class DrepService {
           basePower: round(base),
           meritMultiplier: round(mult),
           adjustedPower: round(base * mult),
+          since: r.since ? r.since.toISOString() : null,
         };
       }),
     );
