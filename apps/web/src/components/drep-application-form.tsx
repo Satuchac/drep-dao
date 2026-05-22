@@ -1,14 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { useAuth } from '@/lib/auth-context';
 import { drepApi } from '@/lib/api';
 
 export function DrepApplicationForm() {
-  const { detectDRepId, refresh } = useAuth();
-  const [drepId, setDrepId] = useState('');
-  const [autoDetected, setAutoDetected] = useState(false);
+  const { profile, refresh } = useAuth();
   const [displayName, setDisplayName] = useState('');
   const [bio, setBio] = useState('');
   const [telegram, setTelegram] = useState('');
@@ -17,15 +15,8 @@ export function DrepApplicationForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // CIP-95 auto-detect on mount (best-effort; editable).
-  useEffect(() => {
-    void detectDRepId().then((id) => {
-      if (id) {
-        setDrepId(id);
-        setAutoDetected(true);
-      }
-    });
-  }, [detectDRepId]);
+  // The DRep ID is the wallet's verified on-chain identity (not user input).
+  const drepId = profile?.onchainDrep.drepId ?? null;
 
   const toggleSub = (id: string) =>
     setSubs((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -36,7 +27,6 @@ export function DrepApplicationForm() {
     setBusy(true);
     try {
       await drepApi.apply({
-        drepIdOnchain: drepId.trim(),
         displayName: displayName.trim() || undefined,
         bio: bio.trim() || undefined,
         subcategoryIds: subs,
@@ -57,26 +47,18 @@ export function DrepApplicationForm() {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <h3 className="text-base font-semibold">Apply to become a DRep</h3>
+      <h3 className="text-base font-semibold">Request to join the DAO</h3>
+      <p className="text-sm text-neutral-500">
+        Your wallet is a registered on-chain DRep. Submit this request and the board will review it
+        for DAO membership.
+      </p>
 
-      <label className="block space-y-1">
-        <span className="text-sm font-medium">DRep ID</span>
-        <input
-          className={field}
-          placeholder="drep1..."
-          value={drepId}
-          onChange={(e) => {
-            setDrepId(e.target.value);
-            setAutoDetected(false);
-          }}
-          required
-        />
-        <span className="text-xs text-neutral-500">
-          {autoDetected
-            ? 'Auto-detected from your wallet (CIP-95) — edit if it differs from your wallet.'
-            : 'Paste your drep1… ID, or it will be auto-filled if your wallet supports CIP-95.'}
-        </span>
-      </label>
+      <div className="block space-y-1">
+        <span className="text-sm font-medium">Your DRep ID (verified on-chain)</span>
+        <div className="break-all rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 font-mono text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400">
+          {drepId ?? '—'}
+        </div>
+      </div>
 
       <label className="block space-y-1">
         <span className="text-sm font-medium">Display name</span>
@@ -123,10 +105,10 @@ export function DrepApplicationForm() {
 
       <button
         type="submit"
-        disabled={busy || !drepId.trim()}
+        disabled={busy || !drepId}
         className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
       >
-        {busy ? 'Submitting…' : 'Submit application'}
+        {busy ? 'Submitting…' : 'Submit request to join'}
       </button>
     </form>
   );

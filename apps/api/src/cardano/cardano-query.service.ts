@@ -45,10 +45,14 @@ export class CardanoQueryService {
       drep_id: string;
       hex: string | null;
       drep_status: string | null;
+      active: boolean | null;
     }[];
     for (const r of rows) {
       if (out.has(r.drep_id)) {
-        out.set(r.drep_id, { registered: r.drep_status === 'registered', keyHashHex: r.hex });
+        // §22.4 — a DRep counts as registered only if it exists on-chain AND is
+        // active (not retired, not expired). Koios omits unknown ids entirely.
+        const registered = r.drep_status === 'registered' && r.active === true;
+        out.set(r.drep_id, { registered, keyHashHex: r.hex });
       }
     }
     return out;

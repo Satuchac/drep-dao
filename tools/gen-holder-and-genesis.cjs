@@ -42,9 +42,13 @@ if (!personas.holder) {
 }
 
 // New format: name + drep_id only. drep_id is CIP-129 (matches Eternl). The
-// platform verifies it's a registered on-chain DRep before seating.
+// platform verifies it's a registered on-chain DRep before seating — so the
+// board seat must be a wallet that is actually registered on-chain. Only the
+// `regular` (library) persona is registered, so it is board seat #1 here.
 const genesis = {
-  founding_board: [{ name: 'Board DRep', drep_id: drepIdFromKeyHashHex(personas.board.drepKeyHash) }],
+  founding_board: [
+    { name: 'Alice (Founding Board)', drep_id: drepIdFromKeyHashHex(personas.regular.drepKeyHash) },
+  ],
 };
 fs.writeFileSync(path.join(__dirname, '..', 'genesis.json'), JSON.stringify(genesis, null, 2));
 

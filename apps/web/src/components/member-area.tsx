@@ -18,8 +18,12 @@ export function MemberArea() {
   if (loading || !profile) return null;
 
   const isBoard = profile.roles.includes('BOARD');
-  const status = profile.drep?.status ?? null;
-  const showForm = status === null || status === 'REJECTED' || status === 'REMOVED';
+  const isRegisteredDRep = profile.onchainDrep.registered;
+  const status = profile.daoMembership?.status ?? null;
+  // Only a registered on-chain DRep can request to join the DAO. ADA holders
+  // (not registered) can still view and submit proposals, but cannot join.
+  const showForm =
+    isRegisteredDRep && (status === null || status === 'REJECTED' || status === 'REMOVED');
 
   return (
     <div className="mt-6 space-y-6">
@@ -40,6 +44,17 @@ export function MemberArea() {
       {showForm ? (
         <section className={card}>
           <DrepApplicationForm />
+        </section>
+      ) : null}
+
+      {!isRegisteredDRep ? (
+        <section className={card}>
+          <h3 className="text-base font-semibold">ADA holder</h3>
+          <p className="mt-1 text-sm text-neutral-500">
+            Your wallet is not a registered on-chain DRep, so you can browse rounds and submit
+            proposals, but you can&apos;t join the DAO as a voting member. To become a DRep, register
+            your DRep key on-chain (e.g. Eternl → Governance → Register as a DRep), then sign in again.
+          </p>
         </section>
       ) : null}
 

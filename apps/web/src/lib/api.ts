@@ -11,7 +11,10 @@ export interface UserProfile {
     createdAt: string;
   };
   roles: string[];
-  drep: { status: string; admittedAt: string | null } | null;
+  /** On-chain DRep identity — source of truth for the DREP role (verified at login). */
+  onchainDrep: { registered: boolean; drepId: string | null };
+  /** DAO membership (admission) status — separate from on-chain registration. */
+  daoMembership: { status: string; admittedAt: string | null } | null;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -56,7 +59,8 @@ export const authApi = {
 };
 
 export interface DrepApplicationInput {
-  drepIdOnchain: string;
+  // drep_id is NOT supplied by the client — the backend derives it from the
+  // wallet's CIP-95 DRep key and verifies on-chain registration.
   displayName?: string;
   bio?: string;
   subcategoryIds?: string[];

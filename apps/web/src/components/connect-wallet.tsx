@@ -43,7 +43,9 @@ export function ConnectWallet() {
           ))}
         </div>
         <div className="text-xs text-neutral-500">
-          DRep status: {profile.drep ? profile.drep.status : 'not a DRep (apply below)'}
+          {profile.onchainDrep.registered
+            ? `Registered on-chain DRep${profile.daoMembership ? ` · DAO: ${profile.daoMembership.status}` : ' · not yet a DAO member'}`
+            : 'Not a registered on-chain DRep — ADA holder'}
         </div>
         <button
           onClick={() => logout()}

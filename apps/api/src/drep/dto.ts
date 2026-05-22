@@ -16,12 +16,8 @@ export class ApproveExpertDto {
 }
 
 export class DrepApplicationDto {
-  /** On-chain DRep ID (drep1...) — CIP-95 auto-detected or manually entered. */
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(200)
-  drepIdOnchain!: string;
-
+  // The on-chain DRep ID is NOT accepted from the client: it's derived from the
+  // wallet's CIP-95 DRep key (captured at login) and verified on-chain.
   @IsOptional() @IsString() @MaxLength(100) displayName?: string;
   @IsOptional() @IsString() @MaxLength(5000) bio?: string;
   @IsOptional() @IsObject() socials?: Record<string, unknown>;

@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DRepStatus, PLATFORM_CONFIG_DEFAULTS } from '@drep-dao/shared';
-import { isStakeAddress, stakeKeyHashFromBech32 } from '@drep-dao/cardano';
+import { drepIdFromKeyHashHex, isStakeAddress, stakeKeyHashFromBech32 } from '@drep-dao/cardano';
 import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdmissionVoteDto, DrepApplicationDto, UpdateDrepDto } from './dto';
@@ -68,8 +68,19 @@ export class DrepService {
     });
   }
 
-  /** §14.2 — submit (or re-submit, if previously rejected/removed) an application. */
+  /** §14.2 — a registered on-chain DRep requests to join the DAO (or re-applies
+   * after a previous rejection/removal). The DRep ID is taken from the wallet's
+   * verified CIP-95 key, never from client input. */
   async apply(userId: string, dto: DrepApplicationDto) {
+    const user = await this.prisma.appUser.findUnique({ where: { id: userId } });
+    if (!user) throw new NotFoundException('user not found');
+    if (!user.drepKeyHash || !user.drepRegistered) {
+      throw new ForbiddenException(
+        'only a registered on-chain DRep can join the DAO — register your DRep key on-chain, then sign in again',
+      );
+    }
+    const drepIdOnchain = drepIdFromKeyHashHex(user.drepKeyHash);
+
     const existing = await this.prisma.drep.findUnique({ where: { userId } });
     if (existing?.status === DRepStatus.ADMITTED) {
       throw new ConflictException('already an admitted DRep');
@@ -83,7 +94,7 @@ export class DrepService {
     }
 
     const data = {
-      drepIdOnchain: dto.drepIdOnchain,
+      drepIdOnchain,
       status: DRepStatus.PENDING_ADMISSION,
       bio: dto.bio ?? null,
       socials: (dto.socials ?? undefined) as Prisma.InputJsonValue | undefined,

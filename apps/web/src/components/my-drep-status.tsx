@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react';
 import { drepApi, type MyDrep } from '@/lib/api';
 
 const LABEL: Record<string, { text: string; cls: string }> = {
-  PENDING_ADMISSION: { text: 'Application under board review', cls: 'text-amber-600' },
-  ADMITTED: { text: 'You are an admitted DRep ✅', cls: 'text-emerald-600' },
-  REJECTED: { text: 'Application rejected', cls: 'text-red-600' },
-  REMOVED: { text: 'DRep status removed', cls: 'text-red-600' },
+  PENDING_ADMISSION: { text: 'Membership request under board review', cls: 'text-amber-600' },
+  ADMITTED: { text: 'You are a DAO member ✅', cls: 'text-emerald-600' },
+  REJECTED: { text: 'Membership request rejected', cls: 'text-red-600' },
+  REMOVED: { text: 'DAO membership removed', cls: 'text-red-600' },
 };
 
 export function MyDrepStatus() {
@@ -23,7 +23,7 @@ export function MyDrepStatus() {
 
   return (
     <div className="space-y-2 text-sm">
-      <h3 className="text-base font-semibold">DRep status</h3>
+      <h3 className="text-base font-semibold">DAO membership</h3>
       <div className={label.cls}>{label.text}</div>
       <div className="font-mono text-xs text-neutral-500 break-all">{drep.drepIdOnchain}</div>
 

@@ -1,6 +1,8 @@
-import { Injectable } from '@nestjs/common';
-import { Role, DRepStatus } from '@drep-dao/shared';
+import { Injectable, Logger } from '@nestjs/common';
+import { Role } from '@drep-dao/shared';
+import { drepIdFromKeyHashHex } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
+import { CardanoQueryService } from '../cardano/cardano-query.service';
 
 export interface UserProfile {
   user: {
@@ -11,22 +13,54 @@ export interface UserProfile {
     createdAt: Date;
   };
   roles: Role[];
-  drep: { status: string; admittedAt: Date | null } | null;
+  /** On-chain DRep identity — the source of truth for the DREP role (§22.4). */
+  onchainDrep: { registered: boolean; drepId: string | null };
+  /** DAO membership (admission) status — separate from on-chain registration. */
+  daoMembership: { status: string; admittedAt: Date | null } | null;
 }
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(UsersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cardano: CardanoQueryService,
+  ) {}
 
   /** §22.1 — auto-create (or refresh) a user keyed by stake key hash on login.
-   * Also records the wallet's CIP-95 DRep key hash (if provided) for role matching. */
+   * Records the wallet's CIP-95 DRep key hash (if provided) and, if present,
+   * checks on-chain whether that DRep is registered + active (§22.4). */
   async upsertByStakeKey(params: { stakeKeyHash: string; stakeAddress: string; drepKeyHash?: string }) {
     const drepKeyHash = params.drepKeyHash ?? undefined;
+    // undefined = couldn't determine (no key, or chain query failed) → preserve prior value.
+    const registered = drepKeyHash ? await this.checkOnchainRegistration(drepKeyHash) : undefined;
     return this.prisma.appUser.upsert({
       where: { stakeKeyHash: params.stakeKeyHash },
-      update: { stakeAddress: params.stakeAddress, ...(drepKeyHash ? { drepKeyHash } : {}) },
-      create: { stakeKeyHash: params.stakeKeyHash, stakeAddress: params.stakeAddress, drepKeyHash },
+      update: {
+        stakeAddress: params.stakeAddress,
+        ...(drepKeyHash ? { drepKeyHash } : {}),
+        ...(registered !== undefined ? { drepRegistered: registered } : {}),
+      },
+      create: {
+        stakeKeyHash: params.stakeKeyHash,
+        stakeAddress: params.stakeAddress,
+        drepKeyHash,
+        drepRegistered: registered ?? false,
+      },
     });
+  }
+
+  /** Is this CIP-95 DRep key a registered + active on-chain DRep? undefined if unknown. */
+  private async checkOnchainRegistration(drepKeyHash: string): Promise<boolean | undefined> {
+    try {
+      const drepId = drepIdFromKeyHashHex(drepKeyHash);
+      const statuses = await this.cardano.verifyDReps([drepId]);
+      return statuses.get(drepId)?.registered ?? false;
+    } catch (e) {
+      this.logger.warn(`on-chain DRep check failed for ${drepKeyHash}: ${e instanceof Error ? e.message : e}`);
+      return undefined;
+    }
   }
 
   /** Profile + derived roles (§2). Returns null if the user no longer exists. */
@@ -43,17 +77,20 @@ export class UsersService {
       ? (await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: user.drepKeyHash } })) !== null
       : false;
 
+    // §22.4 — DREP is an on-chain role: the wallet IS a registered+active DRep
+    // (verified via Koios at login), NOT a status we grant in our DB. Wallets
+    // that aren't registered on-chain are plain ADA holders (viewer/submitter).
+    const isRegisteredDRep = user.drepRegistered;
+
     const roles: Role[] = [Role.VIEWER, Role.SUBMITTER];
-    const drep = user.drep;
+    if (isRegisteredDRep || isBoard) roles.push(Role.DREP);
     if (isBoard) roles.push(Role.BOARD);
-    if (isBoard || (drep && drep.status === DRepStatus.ADMITTED)) {
-      roles.push(Role.DREP);
-    }
     // §2 Expert — a non-DRep approved by the board for milestone review.
     if (user.experts.some((e) => e.approvedByBoard)) {
       roles.push(Role.EXPERT);
     }
 
+    const drep = user.drep;
     return {
       user: {
         id: user.id,
@@ -63,7 +100,20 @@ export class UsersService {
         createdAt: user.createdAt,
       },
       roles,
-      drep: drep ? { status: drep.status, admittedAt: drep.admittedAt } : null,
+      onchainDrep: {
+        registered: isRegisteredDRep,
+        drepId: user.drepKeyHash ? safeDrepId(user.drepKeyHash) : null,
+      },
+      daoMembership: drep ? { status: drep.status, admittedAt: drep.admittedAt } : null,
     };
+  }
+}
+
+/** CIP-129 drep1… from a stored 28-byte DRep key hash; null on malformed input. */
+function safeDrepId(drepKeyHash: string): string | null {
+  try {
+    return drepIdFromKeyHashHex(drepKeyHash);
+  } catch {
+    return null;
   }
 }
