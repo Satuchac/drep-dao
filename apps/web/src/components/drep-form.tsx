@@ -71,9 +71,10 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
         ...(telegram.trim() ? { telegram: telegram.trim() } : {}),
         ...(email.trim() ? { email: email.trim() } : {}),
       },
-      kycOptin: kyc,
-      callsOptin: calls,
-      admissionCallOptin: admissionCall,
+      // Opt-ins are only captured on the JOIN request; profile edits leave them untouched.
+      ...(mode === 'join'
+        ? { kycOptin: kyc, callsOptin: calls, admissionCallOptin: admissionCall }
+        : {}),
     };
     try {
       if (mode === 'join') await drepApi.apply(input);
@@ -152,18 +153,21 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
         </label>
       </div>
 
-      <div className="space-y-1.5 text-sm">
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={kyc} onChange={(e) => setKyc(e.target.checked)} /> KYC opt-in
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={calls} onChange={(e) => setCalls(e.target.checked)} /> Calls opt-in
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={admissionCall} onChange={(e) => setAdmissionCall(e.target.checked)} />{' '}
-          Admission-call opt-in
-        </label>
-      </div>
+      {/* Opt-ins are part of the JOIN request only — not the ongoing profile. */}
+      {mode === 'join' ? (
+        <div className="space-y-1.5 text-sm">
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={kyc} onChange={(e) => setKyc(e.target.checked)} /> KYC opt-in
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={calls} onChange={(e) => setCalls(e.target.checked)} /> Calls opt-in
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="checkbox" checked={admissionCall} onChange={(e) => setAdmissionCall(e.target.checked)} />{' '}
+            Admission-call opt-in
+          </label>
+        </div>
+      ) : null}
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {saved ? (

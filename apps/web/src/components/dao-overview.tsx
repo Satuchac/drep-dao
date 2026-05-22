@@ -22,7 +22,8 @@ export function DaoOverview() {
       <div>
         <h2 className="text-lg font-semibold">DAO Member overview</h2>
         <p className="text-sm text-neutral-500">
-          Voting power (§4) = log₁₀(on-chain stake in ADA) × (1 + merit/200).
+          Adjusted power (§4) = log₁₀(on-chain DRep voting power in ADA) × (1 + merit/200). Voting power is
+          ADA delegated to the DRep (CIP-1694 vote delegation — not stake-pool delegation).
         </p>
       </div>
 
@@ -37,11 +38,12 @@ export function DaoOverview() {
             <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
               <tr>
                 <th className="px-3 py-2">Member</th>
-                <th className="px-3 py-2 text-right">Stake (ADA)</th>
+                <th className="px-3 py-2 text-right">Voting power (ADA)</th>
+                <th className="px-3 py-2 text-right">Delegators</th>
                 <th className="px-3 py-2 text-right">Base (log₁₀)</th>
                 <th className="px-3 py-2 text-right">Merit</th>
                 <th className="px-3 py-2 text-right">×Mult</th>
-                <th className="px-3 py-2 text-right">Voting power</th>
+                <th className="px-3 py-2 text-right">Adjusted power</th>
               </tr>
             </thead>
             <tbody>
@@ -57,7 +59,8 @@ export function DaoOverview() {
                       ) : null}
                     </div>
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{m.stakeAda.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{m.votingPowerAda.toLocaleString()}</td>
+                  <td className="px-3 py-2 text-right tabular-nums">{m.delegators}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{m.basePower.toFixed(2)}</td>
                   <td
                     className={`px-3 py-2 text-right tabular-nums ${
@@ -68,7 +71,7 @@ export function DaoOverview() {
                     {m.merit}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{m.meritMultiplier.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right font-semibold tabular-nums">{m.votingPower.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right font-semibold tabular-nums">{m.adjustedPower.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -76,10 +79,10 @@ export function DaoOverview() {
         </div>
       )}
 
-      {members && members.some((m) => m.stakeAda === 0) ? (
+      {members && members.some((m) => m.delegators === 0) ? (
         <p className="text-xs text-neutral-400">
-          Stake is the DRep&apos;s on-chain voting power (self-delegated/controlled stake). 0 means no
-          on-chain stake delegated to that DRep yet.
+          0 voting power / 0 delegators means no account has delegated its vote to that DRep yet (CIP-1694
+          vote delegation, separate from stake-pool delegation).
         </p>
       ) : null}
 

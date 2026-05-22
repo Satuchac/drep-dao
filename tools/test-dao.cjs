@@ -93,9 +93,9 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
 
   console.log('\n=== DAO members overview (voting power) ===');
   const members = await drep.listDaoMembers();
-  console.log('   members:', members.map((m) => `${m.displayName}${m.isBoard ? '*' : ''}=${m.votingPower}`).join(', '));
+  console.log('   members:', members.map((m) => `${m.displayName}${m.isBoard ? '*' : ''}=${m.adjustedPower}`).join(', '));
   ok('Heidi appears in overview', members.some((m) => m.drepId === personas.heidi && true || m.displayName === 'Heidi'));
-  ok('every member has voting-power fields', members.every((m) => typeof m.basePower === 'number' && typeof m.meritMultiplier === 'number' && typeof m.votingPower === 'number'));
+  ok('every member has voting-power fields', members.every((m) => typeof m.basePower === 'number' && typeof m.meritMultiplier === 'number' && typeof m.adjustedPower === 'number'));
   ok('board members flagged isBoard', members.some((m) => m.isBoard));
 
   console.log('\n=== Cleanup (remove Heidi so JOIN can be tested manually) ===');

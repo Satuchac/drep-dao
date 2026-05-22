@@ -61,6 +61,48 @@ export class CardanoQueryService {
     return out;
   }
 
+  /**
+   * §4 — a DRep's on-chain VOTING power (CIP-1694 vote delegation, NOT pool
+   * stake): the live sum of the controlled stake of every account that delegated
+   * its vote to the DRep, plus the delegator count. Computed live from
+   * /drep_delegators + /account_info so it reflects new delegations immediately
+   * (drep_info.amount only updates at the epoch boundary). Best-effort → 0.
+   */
+  async drepVotingPower(
+    drepIds: string[],
+  ): Promise<Map<string, { votingPowerLovelace: bigint; delegators: number }>> {
+    const out = new Map(drepIds.map((id) => [id, { votingPowerLovelace: 0n, delegators: 0 }]));
+    if (drepIds.length === 0) return out;
+
+    const addrsByDrep = new Map<string, string[]>();
+    const allAddrs = new Set<string>();
+    await Promise.all(
+      drepIds.map(async (id) => {
+        try {
+          const res = await fetch(`${this.base}/drep_delegators?_drep_id=${encodeURIComponent(id)}`, {
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!res.ok) return;
+          const rows = (await res.json()) as { stake_address: string }[];
+          const addrs = rows.map((r) => r.stake_address).filter(Boolean);
+          addrsByDrep.set(id, addrs);
+          addrs.forEach((a) => allAddrs.add(a));
+        } catch (e) {
+          this.logger.warn(`drep_delegators ${id}: ${e instanceof Error ? e.message : e}`);
+        }
+      }),
+    );
+
+    const stake = await this.accountStake([...allAddrs]);
+    for (const id of drepIds) {
+      const addrs = addrsByDrep.get(id) ?? [];
+      let sum = 0n;
+      for (const a of addrs) sum += stake.get(a) ?? 0n;
+      out.set(id, { votingPowerLovelace: sum, delegators: addrs.length });
+    }
+    return out;
+  }
+
   /** For each bech32 drep id: is it a registered on-chain DRep, and its key hash. */
   async verifyDReps(drepIds: string[]): Promise<Map<string, DRepStatus>> {
     const out = new Map<string, DRepStatus>(

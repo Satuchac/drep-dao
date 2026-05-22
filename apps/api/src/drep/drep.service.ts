@@ -63,39 +63,30 @@ export class DrepService {
     }
     const rows = [...byId.values()];
 
-    // §4 stake basis: the DRep's delegated voting power (Koios drep_info.amount)
-    // once it lands at the epoch boundary; until then, the controlled/self-
-    // delegated stake (account_info.total_balance) — both real, both on-chain.
-    let amounts = new Map<string, { amountLovelace: bigint }>();
-    try {
-      amounts = await this.cardano.verifyDReps(rows.map((r) => r.drepId));
-    } catch {
-      /* leave amounts at 0 */
-    }
-    const stakeAddrs = rows.map((r) => r.stakeAddress).filter((a): a is string => !!a);
-    const controlled = await this.cardano.accountStake(stakeAddrs);
+    // §4 — on-chain DRep VOTING power (CIP-1694 vote delegation), live, plus
+    // the count of accounts that delegated their vote to each DRep.
+    const vp = await this.cardano.drepVotingPower(rows.map((r) => r.drepId));
 
     const members = await Promise.all(
       rows.map(async (r) => {
         const merit = r.drepRowId ? await this.currentMerit(r.drepRowId) : 0;
-        const votingPowerLovelace = amounts.get(r.drepId)?.amountLovelace ?? 0n;
-        const ownStake = r.stakeAddress ? controlled.get(r.stakeAddress) ?? 0n : 0n;
-        const stake = votingPowerLovelace > 0n ? votingPowerLovelace : ownStake;
-        const base = basePower(stake);
+        const power = vp.get(r.drepId) ?? { votingPowerLovelace: 0n, delegators: 0 };
+        const base = basePower(power.votingPowerLovelace);
         const mult = meritMultiplier(merit);
         return {
           drepId: r.drepId,
           displayName: r.displayName,
           isBoard: r.isBoard,
-          stakeAda: Math.round(Number(stake) / 1_000_000),
+          votingPowerAda: Math.round(Number(power.votingPowerLovelace) / 1_000_000),
+          delegators: power.delegators,
           merit,
           basePower: round(base),
           meritMultiplier: round(mult),
-          votingPower: round(base * mult),
+          adjustedPower: round(base * mult),
         };
       }),
     );
-    members.sort((a, b) => b.votingPower - a.votingPower || (b.isBoard ? 1 : 0) - (a.isBoard ? 1 : 0));
+    members.sort((a, b) => b.adjustedPower - a.adjustedPower || (b.isBoard ? 1 : 0) - (a.isBoard ? 1 : 0));
     return members;
   }
 
@@ -285,8 +276,8 @@ export class DrepService {
     });
   }
 
-  /** §25.5 — board view of pending applications with each one's running tally. */
-  async listApplications() {
+  /** §25.5 — board view of pending applications + tally + this board member's own vote. */
+  async listApplications(boardUserId: string) {
     const dreps = await this.prisma.drep.findMany({
       where: { status: DRepStatus.PENDING_ADMISSION },
       include: {
@@ -296,19 +287,28 @@ export class DrepService {
       orderBy: { user: { createdAt: 'asc' } },
     });
     const threshold = await this.approvalThreshold();
-    return dreps.map((d) => ({
-      drepId: d.id,
-      drepIdOnchain: d.drepIdOnchain,
-      displayName: d.user.displayName,
-      stakeAddress: d.user.stakeAddress,
-      bio: d.bio,
-      subcategoryIds: d.subcategoryIds,
-      socials: d.socials,
-      contact: d.contact,
-      yes: d.admissionVotesReceived.filter((v) => v.choice === 'YES').length,
-      no: d.admissionVotesReceived.filter((v) => v.choice === 'NO').length,
-      threshold,
-    }));
+    // The reviewing board member's own DRep id (to surface "your vote").
+    const me = await this.prisma.drep.findUnique({ where: { userId: boardUserId }, select: { id: true } });
+    return dreps.map((d) => {
+      const myVote = me ? d.admissionVotesReceived.find((v) => v.boardDrepId === me.id) : undefined;
+      return {
+        drepId: d.id,
+        drepIdOnchain: d.drepIdOnchain,
+        displayName: d.user.displayName,
+        stakeAddress: d.user.stakeAddress,
+        bio: d.bio,
+        subcategoryIds: d.subcategoryIds,
+        socials: d.socials,
+        contact: d.contact,
+        kycOptin: d.kycOptin,
+        callsOptin: d.callsOptin,
+        admissionCallOptin: d.admissionCallOptin,
+        yes: d.admissionVotesReceived.filter((v) => v.choice === 'YES').length,
+        no: d.admissionVotesReceived.filter((v) => v.choice === 'NO').length,
+        threshold,
+        myVote: myVote ? { choice: myVote.choice, feedback: myVote.feedback } : null,
+      };
+    });
   }
 
   /** §14.2 — a board member votes on an application; admit/reject when decided. */

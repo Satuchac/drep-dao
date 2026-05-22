@@ -47,12 +47,12 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   console.log('\n=== DAO overview — voting power from on-chain stake ===');
   const members = await drep.listDaoMembers();
   for (const m of members) {
-    console.log(`   ${m.displayName}${m.isBoard ? '*' : ''}: stake=${m.stakeAda} ADA, base=${m.basePower}, merit=${m.merit}, ×${m.meritMultiplier} → power=${m.votingPower}`);
+    console.log(`   ${m.displayName}${m.isBoard ? '*' : ''}: stake=${m.votingPowerAda} ADA, base=${m.basePower}, merit=${m.merit}, ×${m.meritMultiplier} → power=${m.adjustedPower}`);
   }
   const alice = members.find((m) => /Alice/.test(m.displayName));
   ok('5 board members listed', members.filter((m) => m.isBoard).length === 5, `${members.filter((m) => m.isBoard).length} board`);
-  ok('Alice voting power > 0 (real on-chain stake)', alice && alice.votingPower > 0, alice ? `power=${alice.votingPower}` : 'missing');
-  ok('Alice base ≈ log10(stake)', alice && Math.abs(alice.basePower - Math.log10(alice.stakeAda)) < 0.05);
+  ok('Alice voting power > 0 (real on-chain stake)', alice && alice.adjustedPower > 0, alice ? `power=${alice.adjustedPower}` : 'missing');
+  ok('Alice base ≈ log10(stake)', alice && Math.abs(alice.basePower - Math.log10(alice.votingPowerAda)) < 0.05);
 
   console.log('\n=== Expert apply → board approve (Carol = ADA holder) ===');
   const carol = await login('holder');

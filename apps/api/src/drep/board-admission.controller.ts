@@ -12,8 +12,8 @@ export class BoardAdmissionController {
   constructor(private readonly drep: DrepService) {}
 
   @Get()
-  list() {
-    return this.drep.listApplications();
+  list(@CurrentUser() ctx: AuthContext) {
+    return this.drep.listApplications(ctx.userId);
   }
 
   @Post(':drepId/vote')

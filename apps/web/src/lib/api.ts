@@ -92,11 +92,12 @@ export interface DaoMember {
   drepId: string;
   displayName: string;
   isBoard: boolean;
-  stakeAda: number;
+  votingPowerAda: number; // on-chain DRep voting power (vote delegation), in ADA
+  delegators: number; // accounts that delegated their vote to this DRep
   merit: number;
   basePower: number;
   meritMultiplier: number;
-  votingPower: number;
+  adjustedPower: number; // log10(votingPowerAda) × (1 + merit/200)
 }
 
 export const daoApi = {
@@ -111,9 +112,14 @@ export interface PendingApplication {
   stakeAddress: string;
   bio: string | null;
   subcategoryIds: string[];
+  contact: Record<string, string> | null;
+  kycOptin: boolean;
+  callsOptin: boolean;
+  admissionCallOptin: boolean;
   yes: number;
   no: number;
   threshold: number;
+  myVote: { choice: string; feedback: string | null } | null;
 }
 
 export const drepApi = {

@@ -3,6 +3,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { boardApi, type PendingApplication } from '@/lib/api';
 
+const optins = (a: PendingApplication) =>
+  [
+    a.kycOptin ? 'KYC' : null,
+    a.callsOptin ? 'Calls' : null,
+    a.admissionCallOptin ? 'Admission call' : null,
+  ].filter(Boolean) as string[];
+
 export function BoardReviewPanel() {
   const [apps, setApps] = useState<PendingApplication[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,7 +21,11 @@ export function BoardReviewPanel() {
     setLoading(true);
     boardApi
       .listApplications()
-      .then(setApps)
+      .then((list) => {
+        setApps(list);
+        // Prefill each rationale box with this board member's saved rationale.
+        setRationale(Object.fromEntries(list.map((a) => [a.drepId, a.myVote?.feedback ?? ''])));
+      })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false));
   }, []);
@@ -31,7 +42,6 @@ export function BoardReviewPanel() {
     setBusy(drepId);
     try {
       await boardApi.vote(drepId, { choice, feedback });
-      setRationale((r) => ({ ...r, [drepId]: '' }));
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Vote failed');
@@ -53,51 +63,71 @@ export function BoardReviewPanel() {
         <p className="text-sm text-neutral-500">No pending applications.</p>
       ) : (
         <ul className="space-y-3">
-          {apps.map((a) => (
-            <li
-              key={a.drepId}
-              className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800"
-            >
-              <div className="font-medium">{a.displayName ?? '(no name)'}</div>
-              <div className="font-mono text-xs text-neutral-500 break-all">{a.drepIdOnchain}</div>
-              {a.bio ? <p className="mt-1 text-neutral-600 dark:text-neutral-400">{a.bio}</p> : null}
-              {a.subcategoryIds.length ? (
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {a.subcategoryIds.map((s) => (
-                    <span key={s} className="rounded bg-neutral-200 px-1.5 py-0.5 text-xs dark:bg-neutral-800">
-                      {s}
+          {apps.map((a) => {
+            const noRationale = !(rationale[a.drepId] ?? '').trim();
+            const contact = a.contact ?? {};
+            return (
+              <li key={a.drepId} className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{a.displayName ?? '(no name)'}</span>
+                  {a.myVote ? (
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                        a.myVote.choice === 'YES'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                          : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                      }`}
+                    >
+                      YOU VOTED {a.myVote.choice}
                     </span>
-                  ))}
+                  ) : null}
                 </div>
-              ) : null}
-              <div className="mt-2 text-xs text-neutral-500">
-                {a.yes}/{a.threshold} YES{a.no ? ` · ${a.no} NO` : ''}
-              </div>
-              <textarea
-                value={rationale[a.drepId] ?? ''}
-                onChange={(e) => setRationale((r) => ({ ...r, [a.drepId]: e.target.value }))}
-                placeholder="Rationale (required for YES and NO) — visible to the applicant"
-                rows={2}
-                className="mt-2 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-              />
-              <div className="mt-2 flex items-center gap-3">
-                <button
-                  disabled={busy === a.drepId}
-                  onClick={() => vote(a.drepId, 'YES')}
-                  className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950"
-                >
-                  Approve (YES)
-                </button>
-                <button
-                  disabled={busy === a.drepId}
-                  onClick={() => vote(a.drepId, 'NO')}
-                  className="rounded border border-red-400 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950"
-                >
-                  Reject (NO)
-                </button>
-              </div>
-            </li>
-          ))}
+                <div className="font-mono text-xs text-neutral-500 break-all">{a.drepIdOnchain}</div>
+                {a.bio ? <p className="mt-1 text-neutral-600 dark:text-neutral-400">{a.bio}</p> : null}
+                {a.subcategoryIds.length ? (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {a.subcategoryIds.map((s) => (
+                      <span key={s} className="rounded bg-neutral-200 px-1.5 py-0.5 text-xs dark:bg-neutral-800">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="mt-1 space-x-3 text-xs text-neutral-500">
+                  {contact.email ? <span>✉ {contact.email}</span> : null}
+                  {contact.telegram ? <span>✈ {contact.telegram}</span> : null}
+                  <span>Opt-ins: {optins(a).length ? optins(a).join(', ') : 'none'}</span>
+                </div>
+                <div className="mt-2 text-xs text-neutral-500">
+                  {a.yes}/{a.threshold} YES{a.no ? ` · ${a.no} NO` : ''}
+                </div>
+                <textarea
+                  value={rationale[a.drepId] ?? ''}
+                  onChange={(e) => setRationale((r) => ({ ...r, [a.drepId]: e.target.value }))}
+                  placeholder="Rationale (required for YES and NO) — visible to the applicant"
+                  rows={2}
+                  className="mt-2 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                />
+                <div className="mt-2 flex items-center gap-3">
+                  <button
+                    disabled={busy === a.drepId || noRationale}
+                    onClick={() => vote(a.drepId, 'YES')}
+                    className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                  >
+                    {a.myVote?.choice === 'YES' ? 'Update YES' : 'Approve (YES)'}
+                  </button>
+                  <button
+                    disabled={busy === a.drepId || noRationale}
+                    onClick={() => vote(a.drepId, 'NO')}
+                    className="rounded border border-red-400 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-300 dark:hover:bg-red-950"
+                  >
+                    {a.myVote?.choice === 'NO' ? 'Update NO' : 'Reject (NO)'}
+                  </button>
+                  {noRationale ? <span className="text-xs text-neutral-400">enter a rationale to vote</span> : null}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
