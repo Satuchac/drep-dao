@@ -21,6 +21,15 @@ export async function detectDRepId(api: Cip30Api): Promise<string | null> {
   }
 }
 
+/** Raw CIP-95 DRep public key hex (for the backend to match board/DRep status). */
+export async function getDRepKeyHex(api: Cip30Api): Promise<string | undefined> {
+  try {
+    return (await api.cip95?.getPubDRepKey()) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export interface Cip30WalletEntry {
   key: string; // window.cardano key, e.g. "eternl"
   name: string;

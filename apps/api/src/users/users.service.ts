@@ -18,12 +18,14 @@ export interface UserProfile {
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** §22.1 — auto-create (or refresh) a user keyed by stake key hash on login. */
-  async upsertByStakeKey(params: { stakeKeyHash: string; stakeAddress: string }) {
+  /** §22.1 — auto-create (or refresh) a user keyed by stake key hash on login.
+   * Also records the wallet's CIP-95 DRep key hash (if provided) for role matching. */
+  async upsertByStakeKey(params: { stakeKeyHash: string; stakeAddress: string; drepKeyHash?: string }) {
+    const drepKeyHash = params.drepKeyHash ?? undefined;
     return this.prisma.appUser.upsert({
       where: { stakeKeyHash: params.stakeKeyHash },
-      update: { stakeAddress: params.stakeAddress },
-      create: { stakeKeyHash: params.stakeKeyHash, stakeAddress: params.stakeAddress },
+      update: { stakeAddress: params.stakeAddress, ...(drepKeyHash ? { drepKeyHash } : {}) },
+      create: { stakeKeyHash: params.stakeKeyHash, stakeAddress: params.stakeAddress, drepKeyHash },
     });
   }
 
@@ -35,13 +37,17 @@ export class UsersService {
     });
     if (!user) return null;
 
+    // §17.5 — board membership is keyed by the wallet's on-chain DRep key hash
+    // matching a genesis board seat (NOT by stake address / a DB flag).
+    const isBoard = user.drepKeyHash
+      ? (await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: user.drepKeyHash } })) !== null
+      : false;
+
     const roles: Role[] = [Role.VIEWER, Role.SUBMITTER];
     const drep = user.drep;
-    if (drep && drep.status === DRepStatus.ADMITTED) {
+    if (isBoard) roles.push(Role.BOARD);
+    if (isBoard || (drep && drep.status === DRepStatus.ADMITTED)) {
       roles.push(Role.DREP);
-      if (drep.boardMemberships.some((m) => m.endedAt === null)) {
-        roles.push(Role.BOARD);
-      }
     }
     // §2 Expert — a non-DRep approved by the board for milestone review.
     if (user.experts.some((e) => e.approvedByBoard)) {

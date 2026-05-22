@@ -5,13 +5,12 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { DRepStatus } from '@drep-dao/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import type { AuthContext } from './current-user.decorator';
 
 /**
- * Authorizes board-only ("admin", §25.5) endpoints: the current user must be an
- * ADMITTED DRep with an active board_membership. Run AFTER JwtAuthGuard.
+ * Authorizes board-only endpoints (§25.5): the current user's CIP-95 DRep key
+ * hash must match a genesis board seat (§17.5). Run AFTER JwtAuthGuard.
  */
 @Injectable()
 export class BoardGuard implements CanActivate {
@@ -22,10 +21,16 @@ export class BoardGuard implements CanActivate {
     const userId = req.user?.userId;
     if (!userId) throw new UnauthorizedException('not authenticated');
 
-    const membership = await this.prisma.boardMembership.findFirst({
-      where: { endedAt: null, drep: { userId, status: DRepStatus.ADMITTED } },
+    const user = await this.prisma.appUser.findUnique({
+      where: { id: userId },
+      select: { drepKeyHash: true },
     });
-    if (!membership) throw new ForbiddenException('board members only');
+    if (!user?.drepKeyHash) throw new ForbiddenException('board members only');
+
+    const seat = await this.prisma.boardSeat.findUnique({
+      where: { drepKeyHash: user.drepKeyHash },
+    });
+    if (!seat) throw new ForbiddenException('board members only');
     return true;
   }
 }

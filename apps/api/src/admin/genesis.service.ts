@@ -3,25 +3,22 @@ import {
   ConflictException,
   Injectable,
 } from '@nestjs/common';
-import { DRepStatus } from '@drep-dao/shared';
-import { isStakeAddress, stakeKeyHashFromBech32 } from '@drep-dao/cardano';
+import { drepKeyHashFromId, isDRepId } from '@drep-dao/cardano';
 import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
+import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { AdminAuditService } from './admin-audit.service';
 
 const PROPOSED_KEY = 'admin:genesis:proposed';
+const MAX_BOARD = 5;
 
 interface FoundingMember {
-  display_name: string;
-  stake_address: string;
+  name: string;
   drep_id: string;
 }
 export interface GenesisFile {
-  deployment?: { name?: string; network?: string; deployed_at?: string };
   founding_board: FoundingMember[];
-  multisig_native_script?: unknown;
-  anchor_hot_wallet_pubkeyhash?: string;
 }
 
 @Injectable()
@@ -29,6 +26,7 @@ export class GenesisService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly cardano: CardanoQueryService,
     private readonly audit: AdminAuditService,
   ) {}
 
@@ -36,84 +34,84 @@ export class GenesisService {
     return this.prisma.platformState.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
   }
 
-  private validate(payload: unknown): GenesisFile {
-    const g = payload as GenesisFile;
-    if (!g || !Array.isArray(g.founding_board) || g.founding_board.length === 0) {
-      throw new BadRequestException('genesis.json must contain a non-empty founding_board[]');
+  /** Accept `[{name,drep_id}]` or `{founding_board:[{name,drep_id}]}`. Only name + drep_id. */
+  private parse(payload: unknown): FoundingMember[] {
+    const arr = Array.isArray(payload)
+      ? payload
+      : (payload as GenesisFile)?.founding_board;
+    if (!Array.isArray(arr) || arr.length === 0) {
+      throw new BadRequestException('file must contain founding_board entries ({ name, drep_id })');
     }
-    if (g.founding_board.length > 9) {
-      throw new BadRequestException('founding_board too large');
-    }
-    for (const m of g.founding_board) {
-      if (!m.stake_address || !isStakeAddress(m.stake_address)) {
-        throw new BadRequestException(`invalid stake_address: ${m.stake_address}`);
+    return arr.map((m) => {
+      const name = (m as FoundingMember)?.name;
+      const drepId = (m as FoundingMember)?.drep_id;
+      if (!name || typeof name !== 'string') throw new BadRequestException('each member needs a name');
+      if (!drepId || !isDRepId(drepId)) {
+        throw new BadRequestException(`invalid drep_id: ${drepId ?? '(missing)'} — must be drep1...`);
       }
-      if (!m.drep_id || typeof m.drep_id !== 'string') {
-        throw new BadRequestException(`missing drep_id for ${m.stake_address}`);
-      }
-    }
-    return g;
+      return { name, drep_id: drepId };
+    });
   }
 
-  /** Current genesis/platform state + any proposed (uploaded, not approved) file. */
+  /** Verify on-chain registration; throws if any drep_id is not a registered DRep. */
+  private async verifyOrThrow(members: FoundingMember[]) {
+    const statuses = await this.cardano.verifyDReps(members.map((m) => m.drep_id));
+    const invalid = members.filter((m) => !statuses.get(m.drep_id)?.registered);
+    if (invalid.length > 0) {
+      throw new BadRequestException(
+        `file invalid — not registered DReps on-chain: ${invalid.map((m) => m.drep_id).join(', ')}`,
+      );
+    }
+    return statuses;
+  }
+
   async getState() {
     const state = await this.ensureState();
+    const seats = await this.prisma.boardSeat.findMany({ orderBy: { addedAt: 'asc' } });
     const proposedRaw = await this.redis.client.get(PROPOSED_KEY);
-    const proposed = proposedRaw ? (JSON.parse(proposedRaw) as GenesisFile) : null;
+    const proposed = proposedRaw ? (JSON.parse(proposedRaw) as FoundingMember[]) : null;
     return {
-      genesisApproved: state.genesisApprovedAt !== null,
+      boardCount: seats.length,
+      maxBoard: MAX_BOARD,
+      canAddMore: seats.length < MAX_BOARD,
+      board: seats.map((s) => ({ displayName: s.displayName, drepId: s.drepId })),
       genesisApprovedAt: state.genesisApprovedAt,
-      genesisAvailable: state.genesisApprovedAt === null,
       maintenanceMode: state.maintenanceMode,
       paused: state.paused,
-      proposedBoard: proposed?.founding_board ?? null,
+      proposedBoard: proposed,
     };
   }
 
-  /** Upload a genesis.json for review (stored until approve/reject). */
+  /** Validate + verify on-chain + stash for review. Surfaces invalid files to the admin. */
   async upload(adminId: string, payload: unknown) {
-    const state = await this.ensureState();
-    if (state.genesisApprovedAt) throw new ConflictException('genesis already approved for this deployment');
-    const g = this.validate(payload);
-    await this.redis.client.set(PROPOSED_KEY, JSON.stringify(g), 'EX', 86400);
-    await this.audit.log({ adminId, action: 'GENESIS_UPLOADED', target: `${g.founding_board.length} members` });
-    return { proposedBoard: g.founding_board };
+    const members = this.parse(payload);
+    await this.verifyOrThrow(members); // throws BadRequest if any not registered
+    await this.redis.client.set(PROPOSED_KEY, JSON.stringify(members), 'EX', 86400);
+    await this.audit.log({ adminId, action: 'GENESIS_UPLOADED', target: `${members.length} members` });
+    return { proposedBoard: members, verified: true };
   }
 
-  /** Approve and install the founding board (one-time, irreversible). Idempotent on members. */
+  /** Seat the proposed members as board (keyed by on-chain DRep key hash). Incremental, cap 5. */
   async approve(adminId: string, ip?: string, userAgent?: string) {
-    const state = await this.ensureState();
-    if (state.genesisApprovedAt) throw new ConflictException('genesis already approved for this deployment');
-
+    await this.ensureState();
     const raw = await this.redis.client.get(PROPOSED_KEY);
-    if (!raw) throw new BadRequestException('no genesis.json uploaded — upload it first');
-    const g = this.validate(JSON.parse(raw));
+    if (!raw) throw new BadRequestException('no genesis file uploaded — upload it first');
+    const members = this.parse(JSON.parse(raw));
+    const statuses = await this.verifyOrThrow(members);
 
+    const current = await this.prisma.boardSeat.count();
     let seated = 0;
-    for (const m of g.founding_board) {
-      const stakeKeyHash = stakeKeyHashFromBech32(m.stake_address);
-      const user = await this.prisma.appUser.upsert({
-        where: { stakeKeyHash },
-        update: { stakeAddress: m.stake_address, displayName: m.display_name },
-        create: { stakeKeyHash, stakeAddress: m.stake_address, displayName: m.display_name },
-      });
-      const drep = await this.prisma.drep.upsert({
-        where: { userId: user.id },
-        update: { status: DRepStatus.ADMITTED, drepIdOnchain: m.drep_id, admittedAt: new Date() },
-        create: {
-          userId: user.id,
-          drepIdOnchain: m.drep_id,
-          status: DRepStatus.ADMITTED,
-          admittedAt: new Date(),
-        },
-      });
-      const active = await this.prisma.boardMembership.findFirst({
-        where: { drepId: drep.id, endedAt: null },
-      });
-      if (!active) {
-        await this.prisma.boardMembership.create({ data: { drepId: drep.id, startedAt: new Date() } });
-        seated++;
+    for (const m of members) {
+      const keyHash = statuses.get(m.drep_id)?.keyHashHex ?? drepKeyHashFromId(m.drep_id);
+      const exists = await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: keyHash } });
+      if (exists) continue; // incremental: skip already-seated
+      if (current + seated >= MAX_BOARD) {
+        throw new ConflictException(`board is capped at ${MAX_BOARD} members`);
       }
+      await this.prisma.boardSeat.create({
+        data: { drepKeyHash: keyHash, drepId: m.drep_id, displayName: m.name },
+      });
+      seated++;
     }
 
     await this.prisma.platformState.update({
@@ -121,21 +119,19 @@ export class GenesisService {
       data: {
         genesisApprovedAt: new Date(),
         genesisApprovedBy: adminId,
-        genesisPayload: g as unknown as Prisma.InputJsonValue,
+        genesisPayload: { founding_board: members } as unknown as Prisma.InputJsonValue,
       },
     });
     await this.redis.client.del(PROPOSED_KEY);
     await this.audit.log({
       adminId,
       action: 'GENESIS_APPROVED',
-      target: `${g.founding_board.length} members`,
-      payload: { founding_board: g.founding_board } as unknown as Prisma.InputJsonValue,
+      target: `+${seated} board (now ${current + seated})`,
+      payload: { founding_board: members } as unknown as Prisma.InputJsonValue,
       ip,
       userAgent,
     });
-
-    const boardCount = await this.prisma.boardMembership.count({ where: { endedAt: null } });
-    return { installed: g.founding_board.length, newlySeated: seated, boardCount };
+    return { seated, boardCount: current + seated, maxBoard: MAX_BOARD };
   }
 
   async reject(adminId: string) {

@@ -41,15 +41,10 @@ if (!personas.holder) {
   fs.writeFileSync(personaFile, JSON.stringify(personas, null, 2));
 }
 
+// New format: name + drep_id only. drep_id is CIP-129 (matches Eternl). The
+// platform verifies it's a registered on-chain DRep before seating.
 const genesis = {
-  deployment: { name: 'DRep DAO — Preprod test', network: 'Preprod', deployed_at: new Date().toISOString() },
-  founding_board: [
-    {
-      display_name: 'Board DRep',
-      stake_address: personas.board.stakeAddress,
-      drep_id: drepIdFromKeyHashHex(personas.board.drepKeyHash),
-    },
-  ],
+  founding_board: [{ name: 'Board DRep', drep_id: drepIdFromKeyHashHex(personas.board.drepKeyHash) }],
 };
 fs.writeFileSync(path.join(__dirname, '..', 'genesis.json'), JSON.stringify(genesis, null, 2));
 

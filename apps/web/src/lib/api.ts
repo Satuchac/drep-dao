@@ -47,7 +47,7 @@ export const authApi = {
       body: JSON.stringify({ stakeAddress }),
     }),
 
-  verify: (body: { stakeAddress: string; signature: string; key: string }) =>
+  verify: (body: { stakeAddress: string; signature: string; key: string; drepKeyHex?: string }) =>
     request<UserProfile>('/auth/verify', { method: 'POST', body: JSON.stringify(body) }),
 
   me: () => request<UserProfile>('/auth/me'),

@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, MaxLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class NonceRequestDto {
   @IsString()
@@ -24,4 +24,11 @@ export class VerifyRequestDto {
   @IsNotEmpty()
   @MaxLength(2000)
   key!: string;
+
+  /** CIP-95 DRep public key hex (if the wallet exposes one) — used to recognize
+   * board membership / DRep status by on-chain DRep key. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  drepKeyHex?: string;
 }

@@ -37,12 +37,14 @@ export interface AuditRow {
 }
 
 export interface GenesisState {
-  genesisApproved: boolean;
+  boardCount: number;
+  maxBoard: number;
+  canAddMore: boolean;
+  board: { displayName: string; drepId: string }[];
   genesisApprovedAt: string | null;
-  genesisAvailable: boolean;
   maintenanceMode: boolean;
   paused: boolean;
-  proposedBoard: { display_name: string; stake_address: string; drep_id: string }[] | null;
+  proposedBoard: { name: string; drep_id: string }[] | null;
 }
 
 export type LoginResult =
@@ -117,7 +119,7 @@ export const adminApi = {
         body: JSON.stringify({ genesis }),
       }),
     approve: () =>
-      request<{ installed: number; newlySeated: number; boardCount: number }>('/genesis/approve', {
+      request<{ seated: number; boardCount: number; maxBoard: number }>('/genesis/approve', {
         method: 'POST',
       }),
     reject: () => request<{ ok: boolean }>('/genesis/reject', { method: 'POST' }),

@@ -9,6 +9,7 @@ import { DrepModule } from './drep/drep.module';
 import { AdminModule } from './admin/admin.module';
 import { RoundsModule } from './rounds/rounds.module';
 import { ProposalsModule } from './proposals/proposals.module';
+import { CardanoModule } from './cardano/cardano.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { ProposalsModule } from './proposals/proposals.module';
     }),
     PrismaModule,
     RedisModule,
+    CardanoModule,
     HealthModule,
     UsersModule,
     AuthModule,

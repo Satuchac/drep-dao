@@ -174,17 +174,34 @@ export function isDRepId(bech: string): boolean {
   return /^drep1[0-9a-z]+$/i.test(bech.trim());
 }
 
-/**
- * DRep ID (bech32 'drep') from a CIP-95 DRep public key (hex). credential =
- * blake2b-224(pubkey), bech32 hrp 'drep' (CIP-105 short form). Best-effort
- * prefill for the application form; the user can override with their canonical id.
- */
-export function drepIdFromPubKeyHex(pubKeyHex: string): string {
-  const keyHash = blake2b(fromHex(pubKeyHex), undefined, 28); // 224-bit credential
-  return bech32Encode('drep', convertBits(Array.from(keyHash), 8, 5, true));
+/** CIP-129 header byte for a key-hash DRep credential. */
+const DREP_KEYHASH_HEADER = 0x22;
+
+/** 28-byte DRep key hash from a CIP-95 DRep public key (hex). */
+export function drepKeyHashFromPubKeyHex(pubKeyHex: string): string {
+  return toHex(blake2b(fromHex(pubKeyHex), undefined, 28));
 }
 
-/** DRep ID (bech32 'drep') directly from a 28-byte DRep key-hash hex. */
+/**
+ * 28-byte DRep key hash from a bech32 drep id, accepting both CIP-129
+ * ([header byte][28-byte hash], 29 bytes) and legacy CIP-105 (28 bytes).
+ * Used to match a wallet's DRep key against the genesis board, format-agnostically.
+ */
+export function drepKeyHashFromId(drepId: string): string {
+  if (!isDRepId(drepId)) throw new Error('not a bech32 drep id');
+  const bytes = addressBytes(drepId);
+  if (bytes.length === 29) return toHex(bytes.subarray(1)); // CIP-129: drop header
+  if (bytes.length === 28) return toHex(bytes); // CIP-105
+  throw new Error(`unexpected drep id length: ${bytes.length} bytes`);
+}
+
+/** DRep ID (bech32 'drep', CIP-129) from a 28-byte DRep key-hash hex. */
 export function drepIdFromKeyHashHex(keyHashHex: string): string {
-  return bech32Encode('drep', convertBits(Array.from(fromHex(keyHashHex)), 8, 5, true));
+  const bytes = [DREP_KEYHASH_HEADER, ...fromHex(keyHashHex)];
+  return bech32Encode('drep', convertBits(bytes, 8, 5, true));
+}
+
+/** DRep ID (bech32 'drep', CIP-129) from a CIP-95 DRep public key (hex). */
+export function drepIdFromPubKeyHex(pubKeyHex: string): string {
+  return drepIdFromKeyHashHex(drepKeyHashFromPubKeyHex(pubKeyHex));
 }

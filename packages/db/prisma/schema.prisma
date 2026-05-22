@@ -22,6 +22,7 @@ model AppUser {
   stakeKeyHash String   @unique @map("stake_key_hash")
   stakeAddress String   @map("stake_address")
   displayName  String?  @map("display_name")
+  drepKeyHash  String?  @map("drep_key_hash") // CIP-95 DRep key hash (on-chain DRep identity), if any
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   drep                   Drep?
@@ -771,6 +772,19 @@ model AdminLoginAttempt {
   @@index([username, attemptedAt])
   @@index([ip, attemptedAt])
   @@map("admin_login_attempt")
+}
+
+// §17.5 — founding board seats, keyed by on-chain DRep key hash (verified at
+// genesis). A wallet is a board member when its CIP-95 DRep key hash matches a
+// seat. Decoupled from app_user so seats exist before a member first logs in.
+model BoardSeat {
+  id          String   @id @default(uuid()) @db.Uuid
+  drepKeyHash String   @unique @map("drep_key_hash") // 28-byte DRep credential hex
+  drepId      String   @map("drep_id") // bech32 drep1... as provided
+  displayName String   @map("display_name")
+  addedAt     DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
+
+  @@map("board_seat")
 }
 
 // Singleton (id always 1) — platform-wide operational state.

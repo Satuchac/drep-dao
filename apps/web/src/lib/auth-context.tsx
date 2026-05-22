@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { authApi, type UserProfile } from './api';
 import {
   detectDRepId,
+  getDRepKeyHex,
   getStakeAddress,
   listInjectedWallets,
   utf8ToHex,
@@ -51,7 +52,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     walletApiRef.current = api; // keep for CIP-95 DRep detection
     const { message } = await authApi.nonce(stakeAddress);
     const sig = await api.signData(stakeHex, utf8ToHex(message));
-    setProfile(await authApi.verify({ stakeAddress, signature: sig.signature, key: sig.key }));
+    const drepKeyHex = await getDRepKeyHex(api); // CIP-95 → board/DRep recognition
+    setProfile(
+      await authApi.verify({ stakeAddress, signature: sig.signature, key: sig.key, drepKeyHex }),
+    );
   }, []);
 
   const logout = useCallback(async () => {

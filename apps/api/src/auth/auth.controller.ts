@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { isStakeAddress, stakeKeyHashFromBech32 } from '@drep-dao/cardano';
+import { drepKeyHashFromPubKeyHex, isStakeAddress, stakeKeyHashFromBech32 } from '@drep-dao/cardano';
 import { NonceService } from './nonce.service';
 import { AuthService, SESSION_COOKIE } from './auth.service';
 import { UsersService } from '../users/users.service';
@@ -55,7 +55,12 @@ export class AuthController {
     if (!ok) throw new UnauthorizedException('signature verification failed');
 
     const stakeKeyHash = stakeKeyHashFromBech32(dto.stakeAddress);
-    const user = await this.users.upsertByStakeKey({ stakeKeyHash, stakeAddress: dto.stakeAddress });
+    const drepKeyHash = dto.drepKeyHex ? safeDrepKeyHash(dto.drepKeyHex) : undefined;
+    const user = await this.users.upsertByStakeKey({
+      stakeKeyHash,
+      stakeAddress: dto.stakeAddress,
+      drepKeyHash,
+    });
 
     const token = await this.auth.issueSession(user);
     res.cookie(SESSION_COOKIE, token, this.auth.cookieOptions());
@@ -80,5 +85,14 @@ export class AuthController {
     await this.auth.revoke(ctx.payload);
     res.clearCookie(SESSION_COOKIE, { path: '/' });
     return { ok: true };
+  }
+}
+
+/** Derive the DRep key hash from a CIP-95 pubkey hex; ignore malformed input. */
+function safeDrepKeyHash(drepKeyHex: string): string | undefined {
+  try {
+    return drepKeyHashFromPubKeyHex(drepKeyHex);
+  } catch {
+    return undefined;
   }
 }
