@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAdminAuth } from '@/lib/admin-auth-context';
 import { adminApi, type AdminHealth, type AuditRow } from '@/lib/admin-api';
@@ -17,11 +17,15 @@ export default function AdminDashboard() {
     if (!loading && !admin) router.replace('/admin/login');
   }, [loading, admin, router]);
 
-  useEffect(() => {
-    if (!admin) return;
+  const refreshOverview = useCallback(() => {
     adminApi.health().then(setHealth).catch(() => undefined);
     adminApi.auditLog().then(setAudit).catch(() => undefined);
-  }, [admin]);
+  }, []);
+
+  useEffect(() => {
+    if (!admin) return;
+    refreshOverview();
+  }, [admin, refreshOverview]);
 
   if (loading || !admin) {
     return <p className="text-sm text-slate-400">Loading…</p>;
@@ -62,7 +66,7 @@ export default function AdminDashboard() {
         )}
       </section>
 
-      <AdminGenesis />
+      <AdminGenesis onBoardChange={refreshOverview} />
 
       <AdminsPanel currentAdminId={admin.adminId} />
 

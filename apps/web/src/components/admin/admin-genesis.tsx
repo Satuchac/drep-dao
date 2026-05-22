@@ -5,18 +5,26 @@ import { adminApi, type GenesisState } from '@/lib/admin-api';
 import { parseGenesisFile } from '@/lib/parse-genesis';
 
 const EXAMPLE = `[
-  { "name": "Alice", "drep_id": "drep1..." },
-  { "name": "Dave",  "drep_id": "drep1..." },
-  { "name": "Erin",  "drep_id": "drep1..." }
+  { "name": "Alice", "drep_id": "drep1y22…" },
+  { "name": "Dave",  "drep_id": "drep1y26…" },
+  { "name": "Erin",  "drep_id": "drep1ygn…" }
 ]`;
 
-export function AdminGenesis() {
+interface Confirm {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+}
+
+export function AdminGenesis({ onBoardChange }: { onBoardChange?: () => void }) {
   const [state, setState] = useState<GenesisState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [addName, setAddName] = useState('');
   const [addId, setAddId] = useState('');
+  const [confirm, setConfirm] = useState<Confirm | null>(null);
 
   const load = useCallback(() => {
     adminApi.genesis.state().then(setState).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
@@ -49,6 +57,7 @@ export function AdminGenesis() {
       const res = await adminApi.genesis.approve();
       setMsg(`Installed ${res.seated} new member(s) — board now ${res.boardCount}/${res.maxBoard}.`);
       load();
+      onBoardChange?.();
     });
 
   const reject = () =>
@@ -64,18 +73,37 @@ export function AdminGenesis() {
       setMsg(`Added ${addName.trim()} ✓ — board now ${next.boardCount}/${next.maxBoard}.`);
       setAddName('');
       setAddId('');
+      onBoardChange?.();
     });
 
-  const removeOne = (drepId: string, name: string) => {
-    if (!window.confirm(`Remove ${name} from the founding board?\n\nThey will lose Board access the next time they sign in. You can re-add them later via the form or a genesis file.`)) {
-      return;
-    }
-    return wrap(async () => {
-      const next = await adminApi.genesis.removeMember(drepId);
-      setState(next);
-      setMsg(`Removed ${name} — board now ${next.boardCount}/${next.maxBoard}.`);
+  // Remove a SEATED member (confirmed via the styled modal).
+  const removeSeated = (drepId: string, name: string) =>
+    setConfirm({
+      title: 'Remove board member',
+      body: `Remove ${name} from the founding board? They lose Board access on next sign-in. You can re-add them later via the form or a genesis file.`,
+      confirmLabel: 'Remove',
+      onConfirm: () =>
+        wrap(async () => {
+          const next = await adminApi.genesis.removeMember(drepId);
+          setState(next);
+          setMsg(`Removed ${name} — board now ${next.boardCount}/${next.maxBoard}.`);
+          onBoardChange?.();
+        }),
     });
-  };
+
+  // Drop one entry from the staged (verified, not-yet-installed) list.
+  const excludeStaged = (drepId: string) =>
+    wrap(async () => {
+      const remaining = (state?.proposedBoard ?? []).filter((m) => m.drep_id !== drepId);
+      if (remaining.length === 0) {
+        await adminApi.genesis.reject();
+        setMsg('Cleared the staged list.');
+      } else {
+        await adminApi.genesis.upload(remaining);
+        setMsg(`Staged list now has ${remaining.length} member(s).`);
+      }
+      load();
+    });
 
   if (!state) return <Section title="Genesis">…</Section>;
 
@@ -83,25 +111,30 @@ export function AdminGenesis() {
     <Section title={`Genesis — founding board (${state.boardCount}/${state.maxBoard})`}>
       {/* Seated members — each removable. */}
       {state.board.length > 0 ? (
-        <ul className="mb-3 space-y-1 text-xs">
-          {state.board.map((b) => (
-            <li key={b.drepId} className="flex items-center justify-between gap-2 rounded border border-slate-700 p-2">
-              <div className="min-w-0">
-                <span className="font-medium">{b.displayName}</span>
-                <span className="ml-2 break-all font-mono text-slate-400">{b.drepId}</span>
-              </div>
-              <button
-                onClick={() => removeOne(b.drepId, b.displayName)}
-                disabled={busy}
-                className="shrink-0 rounded border border-red-800 px-2 py-1 text-red-300 hover:bg-red-950 disabled:opacity-50"
-              >
-                Remove
-              </button>
-            </li>
-          ))}
-        </ul>
+        <>
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            Current board ({state.board.length})
+          </div>
+          <ul className="mb-4 space-y-1 text-xs">
+            {state.board.map((b) => (
+              <li key={b.drepId} className="flex items-center justify-between gap-2 rounded border border-slate-700 p-2">
+                <div className="min-w-0">
+                  <span className="font-medium">{b.displayName}</span>
+                  <span className="ml-2 break-all font-mono text-slate-400">{b.drepId}</span>
+                </div>
+                <button
+                  onClick={() => removeSeated(b.drepId, b.displayName)}
+                  disabled={busy}
+                  className="shrink-0 rounded border border-red-800 px-2 py-1 text-red-300 hover:bg-red-950 disabled:opacity-50"
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       ) : (
-        <p className="mb-3 text-sm text-slate-400">No board configured.</p>
+        <p className="mb-4 text-sm text-slate-400">No board configured.</p>
       )}
 
       {/* Manual insert — one at a time. */}
@@ -153,9 +186,19 @@ export function AdminGenesis() {
               <div className="text-sm font-medium">Verified — ready to install ({state.proposedBoard.length}):</div>
               <ul className="space-y-1 text-xs">
                 {state.proposedBoard.map((m) => (
-                  <li key={m.drep_id} className="rounded border border-slate-700 p-2">
-                    <span className="font-medium">{m.name}</span>
-                    <span className="ml-2 break-all font-mono text-slate-400">{m.drep_id}</span>
+                  <li key={m.drep_id} className="flex items-center justify-between gap-2 rounded border border-slate-700 p-2">
+                    <div className="min-w-0">
+                      <span className="font-medium">{m.name}</span>
+                      <span className="ml-2 break-all font-mono text-slate-400">{m.drep_id}</span>
+                    </div>
+                    <button
+                      onClick={() => excludeStaged(m.drep_id)}
+                      disabled={busy}
+                      title="Drop this entry before installing"
+                      className="shrink-0 rounded border border-slate-600 px-2 py-1 text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      ✕
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -164,7 +207,7 @@ export function AdminGenesis() {
                   {busy ? 'Installing…' : 'Approve & install'}
                 </button>
                 <button onClick={reject} disabled={busy} className="mt-2 rounded-md border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800 disabled:opacity-50">
-                  Discard
+                  Discard all
                 </button>
               </div>
             </div>
@@ -176,7 +219,51 @@ export function AdminGenesis() {
 
       {msg ? <div className="mt-2 text-sm text-emerald-400">{msg}</div> : null}
       {error ? <div className="mt-2 text-sm text-red-400">{error}</div> : null}
+
+      {confirm ? (
+        <ConfirmModal
+          confirm={confirm}
+          busy={busy}
+          onClose={() => setConfirm(null)}
+        />
+      ) : null}
     </Section>
+  );
+}
+
+function ConfirmModal({ confirm, busy, onClose }: { confirm: Confirm; busy: boolean; onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-sm rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="text-base font-semibold text-slate-100">{confirm.title}</h3>
+        <p className="mt-2 text-sm text-slate-400">{confirm.body}</p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => {
+              confirm.onConfirm();
+              onClose();
+            }}
+            disabled={busy}
+            className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-500 disabled:opacity-50"
+          >
+            {confirm.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

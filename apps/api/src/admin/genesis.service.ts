@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { drepKeyHashFromId, isDRepId } from '@drep-dao/cardano';
+import { drepKeyHashFromId } from '@drep-dao/cardano';
 import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { RedisService } from '../redis/redis.service';
@@ -55,13 +55,25 @@ export class GenesisService {
       const name = typeof m.name === 'string' ? m.name.trim() : '';
       const drepId = typeof m.drep_id === 'string' ? m.drep_id.trim() : '';
       if (!name) throw new BadRequestException('each member needs a name (string)');
-      if (!drepId || !isDRepId(drepId)) {
+      // Validate the bech32 structure here (not just the drep1 prefix) so a
+      // malformed id never reaches Koios — that would otherwise 500.
+      if (!drepId || !this.isValidDRepId(drepId)) {
         throw new BadRequestException(
-          `invalid drep_id for "${name}": ${drepId || '(missing)'} — must be a bech32 drep1… id`,
+          `invalid drep_id for "${name}": ${drepId || '(missing)'} — must be a valid bech32 drep1… id`,
         );
       }
       return { name, drep_id: drepId };
     });
+  }
+
+  /** True iff the string decodes as a real CIP-129/CIP-105 drep id (28/29 bytes). */
+  private isValidDRepId(drepId: string): boolean {
+    try {
+      drepKeyHashFromId(drepId);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   private normalize(payload: unknown): { name?: unknown; drep_id?: unknown }[] {
@@ -201,7 +213,7 @@ export class GenesisService {
 
   /** Remove a single board member by drep_id (frees a seat; the file can be re-loaded after). */
   async removeBoardMember(adminId: string, drepId: string, ip?: string, userAgent?: string) {
-    if (!isDRepId(drepId)) throw new BadRequestException('drep_id must be a bech32 drep1… id');
+    if (!this.isValidDRepId(drepId)) throw new BadRequestException('drep_id must be a valid bech32 drep1… id');
     const keyHash = drepKeyHashFromId(drepId);
     const seat = await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: keyHash } });
     if (!seat) throw new NotFoundException('not a current board member');

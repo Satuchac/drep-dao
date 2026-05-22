@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 export interface DRepStatus {
@@ -32,14 +32,24 @@ export class CardanoQueryService {
     );
     if (drepIds.length === 0) return out;
 
-    const res = await fetch(`${this.base}/drep_info`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ _drep_ids: drepIds }),
-      signal: AbortSignal.timeout(15000),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${this.base}/drep_info`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _drep_ids: drepIds }),
+        signal: AbortSignal.timeout(15000),
+      });
+    } catch (e) {
+      // network error / timeout — surface as a clean 503, never an unhandled 500.
+      this.logger.warn(`Koios unreachable: ${e instanceof Error ? e.message : e}`);
+      throw new ServiceUnavailableException('on-chain lookup failed (Koios unreachable) — please try again');
+    }
     if (!res.ok) {
-      throw new Error(`on-chain lookup failed (Koios ${res.status}); try again`);
+      // e.g. Koios 500 on a malformed bech32 id. Callers validate id structure
+      // first, so this is a transient/provider issue → 503, not a 500.
+      this.logger.warn(`Koios /drep_info ${res.status}: ${await res.text().catch(() => '')}`);
+      throw new ServiceUnavailableException(`on-chain lookup failed (Koios ${res.status}) — please try again`);
     }
     const rows = (await res.json()) as {
       drep_id: string;
