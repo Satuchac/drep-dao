@@ -114,12 +114,15 @@ export const adminApi = {
   genesis: {
     state: () => request<GenesisState>('/genesis'),
     upload: (genesis: unknown) =>
-      request<{ proposedBoard: unknown[] }>('/genesis/upload', {
+      request<{
+        proposedBoard: { name: string; drep_id: string }[];
+        invalid: { name: string; drep_id: string; reason: string }[];
+      }>('/genesis/upload', {
         method: 'POST',
         body: JSON.stringify({ genesis }),
       }),
     approve: () =>
-      request<{ seated: number; boardCount: number; maxBoard: number }>('/genesis/approve', {
+      request<{ seated: number; skippedFull: number; boardCount: number; maxBoard: number }>('/genesis/approve', {
         method: 'POST',
       }),
     reject: () => request<{ ok: boolean }>('/genesis/reject', { method: 'POST' }),

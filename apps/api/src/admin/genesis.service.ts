@@ -18,6 +18,11 @@ interface FoundingMember {
   name: string;
   drep_id: string;
 }
+interface InvalidEntry {
+  name: string;
+  drep_id: string;
+  reason: string;
+}
 export interface GenesisFile {
   founding_board: FoundingMember[];
 }
@@ -64,6 +69,31 @@ export class GenesisService {
       }
       return { name, drep_id: drepId };
     });
+  }
+
+  /** Split a payload into structurally-valid members and reported invalid entries. */
+  private partition(payload: unknown): { valid: FoundingMember[]; invalid: InvalidEntry[] } {
+    const raw = this.normalize(payload);
+    if (raw.length === 0) {
+      throw new BadRequestException(
+        'no board members found — use a JSON array of { "name": "...", "drep_id": "drep1..." }, ' +
+          'or a { "Name": "drep1..." } map.',
+      );
+    }
+    const valid: FoundingMember[] = [];
+    const invalid: InvalidEntry[] = [];
+    for (const m of raw) {
+      const name = typeof m.name === 'string' ? m.name.trim() : '';
+      const drepId = typeof m.drep_id === 'string' ? m.drep_id.trim() : '';
+      if (!name) {
+        invalid.push({ name: '(unnamed)', drep_id: drepId || '(missing)', reason: 'missing name' });
+      } else if (!drepId || !this.isValidDRepId(drepId)) {
+        invalid.push({ name, drep_id: drepId || '(missing)', reason: 'not a valid bech32 drep1… id' });
+      } else {
+        valid.push({ name, drep_id: drepId });
+      }
+    }
+    return { valid, invalid };
   }
 
   /** True iff the string decodes as a real CIP-129/CIP-105 drep id (28/29 bytes). */
@@ -126,31 +156,55 @@ export class GenesisService {
     };
   }
 
-  /** Validate + verify on-chain + stash for review. Surfaces invalid files to the admin. */
+  /**
+   * Validate + verify on-chain + stash the GOOD members for review. Partial by
+   * design: structurally-bad or not-registered entries are skipped and reported
+   * as `invalid` (with a reason) rather than rejecting the whole file.
+   */
   async upload(adminId: string, payload: unknown) {
-    const members = this.parse(payload);
-    await this.verifyOrThrow(members); // throws BadRequest if any not registered
-    await this.redis.client.set(PROPOSED_KEY, JSON.stringify(members), 'EX', 86400);
-    await this.audit.log({ adminId, action: 'GENESIS_UPLOADED', target: `${members.length} members` });
-    return { proposedBoard: members, verified: true };
+    const { valid, invalid } = this.partition(payload);
+
+    const statuses = valid.length ? await this.cardano.verifyDReps(valid.map((m) => m.drep_id)) : new Map();
+    const registered: FoundingMember[] = [];
+    for (const m of valid) {
+      if (statuses.get(m.drep_id)?.registered) registered.push(m);
+      else invalid.push({ name: m.name, drep_id: m.drep_id, reason: 'not a registered, active DRep on-chain' });
+    }
+
+    if (registered.length > 0) {
+      await this.redis.client.set(PROPOSED_KEY, JSON.stringify(registered), 'EX', 86400);
+    } else {
+      await this.redis.client.del(PROPOSED_KEY);
+    }
+    await this.audit.log({
+      adminId,
+      action: 'GENESIS_UPLOADED',
+      target: `${registered.length} valid, ${invalid.length} skipped`,
+    });
+    return { proposedBoard: registered, invalid, verified: true };
   }
 
-  /** Seat the proposed members as board (keyed by on-chain DRep key hash). Incremental, cap 5. */
+  /** Seat the stashed (verified) members as board. Incremental; seats up to the cap. */
   async approve(adminId: string, ip?: string, userAgent?: string) {
     await this.ensureState();
     const raw = await this.redis.client.get(PROPOSED_KEY);
-    if (!raw) throw new BadRequestException('no genesis file uploaded — upload it first');
-    const members = this.parse(JSON.parse(raw));
-    const statuses = await this.verifyOrThrow(members);
+    const members: FoundingMember[] = raw ? (JSON.parse(raw) as FoundingMember[]) : [];
+    if (members.length === 0) {
+      throw new BadRequestException('nothing to install — upload a file with at least one valid, registered DRep');
+    }
+    const statuses = await this.cardano.verifyDReps(members.map((m) => m.drep_id));
 
     const current = await this.prisma.boardSeat.count();
     let seated = 0;
+    let skippedFull = 0;
     for (const m of members) {
+      if (!statuses.get(m.drep_id)?.registered) continue; // defensively skip if it changed on-chain
       const keyHash = statuses.get(m.drep_id)?.keyHashHex ?? drepKeyHashFromId(m.drep_id);
       const exists = await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: keyHash } });
       if (exists) continue; // incremental: skip already-seated
       if (current + seated >= MAX_BOARD) {
-        throw new ConflictException(`board is capped at ${MAX_BOARD} members`);
+        skippedFull++;
+        continue; // board full — skip the rest rather than failing the whole op
       }
       await this.prisma.boardSeat.create({
         data: { drepKeyHash: keyHash, drepId: m.drep_id, displayName: m.name },
@@ -170,12 +224,12 @@ export class GenesisService {
     await this.audit.log({
       adminId,
       action: 'GENESIS_APPROVED',
-      target: `+${seated} board (now ${current + seated})`,
+      target: `+${seated} board (now ${current + seated})${skippedFull ? `, ${skippedFull} skipped (full)` : ''}`,
       payload: { founding_board: members } as unknown as Prisma.InputJsonValue,
       ip,
       userAgent,
     });
-    return { seated, boardCount: current + seated, maxBoard: MAX_BOARD };
+    return { seated, skippedFull, boardCount: current + seated, maxBoard: MAX_BOARD };
   }
 
   async reject(adminId: string) {

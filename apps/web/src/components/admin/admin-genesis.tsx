@@ -25,6 +25,7 @@ export function AdminGenesis({ onBoardChange }: { onBoardChange?: () => void }) 
   const [addName, setAddName] = useState('');
   const [addId, setAddId] = useState('');
   const [confirm, setConfirm] = useState<Confirm | null>(null);
+  const [invalid, setInvalid] = useState<{ name: string; drep_id: string; reason: string }[]>([]);
 
   const load = useCallback(() => {
     adminApi.genesis.state().then(setState).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
@@ -48,14 +49,24 @@ export function AdminGenesis({ onBoardChange }: { onBoardChange?: () => void }) 
     wrap(async () => {
       const genesis = parseGenesisFile(await file.text());
       const res = await adminApi.genesis.upload(genesis);
-      setMsg(`Verified ✓ — ${res.proposedBoard.length} member(s) are registered DReps on-chain. Review, then Approve & install.`);
+      setInvalid(res.invalid);
+      const ok = res.proposedBoard.length;
+      const bad = res.invalid.length;
+      setMsg(
+        bad === 0
+          ? `Verified ✓ — ${ok} member(s) ready to install.`
+          : `Verified ${ok} member(s); skipped ${bad} invalid entr${bad === 1 ? 'y' : 'ies'} (listed below).`,
+      );
       load();
     });
 
   const approve = () =>
     wrap(async () => {
       const res = await adminApi.genesis.approve();
-      setMsg(`Installed ${res.seated} new member(s) — board now ${res.boardCount}/${res.maxBoard}.`);
+      setInvalid([]);
+      setMsg(
+        `Installed ${res.seated} new member(s)${res.skippedFull ? `, skipped ${res.skippedFull} (board full)` : ''} — board now ${res.boardCount}/${res.maxBoard}.`,
+      );
       load();
       onBoardChange?.();
     });
@@ -63,6 +74,7 @@ export function AdminGenesis({ onBoardChange }: { onBoardChange?: () => void }) 
   const reject = () =>
     wrap(async () => {
       await adminApi.genesis.reject();
+      setInvalid([]);
       load();
     });
 
@@ -178,7 +190,11 @@ export function AdminGenesis({ onBoardChange }: { onBoardChange?: () => void }) 
           <input
             type="file"
             accept="application/json,.json"
-            onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = ''; // reset so re-selecting the SAME file fires onChange again
+              if (f) onFile(f);
+            }}
             className="text-sm"
           />
           {state.proposedBoard ? (
@@ -216,6 +232,22 @@ export function AdminGenesis({ onBoardChange }: { onBoardChange?: () => void }) 
       ) : (
         <p className="text-sm text-emerald-400">✓ Board is full ({state.maxBoard}/{state.maxBoard}). Remove a member to add another.</p>
       )}
+
+      {invalid.length > 0 ? (
+        <div className="mt-3 rounded border border-amber-800 bg-amber-950/40 p-2">
+          <div className="text-xs font-semibold text-amber-300">
+            Skipped {invalid.length} invalid entr{invalid.length === 1 ? 'y' : 'ies'} (not added):
+          </div>
+          <ul className="mt-1 space-y-1 text-xs">
+            {invalid.map((m, i) => (
+              <li key={`${m.drep_id}-${i}`} className="text-amber-200/90">
+                <span className="font-medium">{m.name}</span> — {m.reason}
+                <span className="ml-1 break-all font-mono text-amber-200/60">{m.drep_id}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {msg ? <div className="mt-2 text-sm text-emerald-400">{msg}</div> : null}
       {error ? <div className="mt-2 text-sm text-red-400">{error}</div> : null}
