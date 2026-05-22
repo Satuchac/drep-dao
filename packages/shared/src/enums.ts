@@ -9,6 +9,7 @@ export const Role = {
   VIEWER: 'VIEWER',
   SUBMITTER: 'SUBMITTER',
   DREP: 'DREP',
+  DAO_MEMBER: 'DAO_MEMBER', // admitted into the DAO (board member, or DRep admitted via 3-of-5 board vote)
   FILTER_REVIEWER: 'FILTER_REVIEWER',
   MILESTONE_REVIEWER: 'MILESTONE_REVIEWER',
   EXPERT: 'EXPERT',

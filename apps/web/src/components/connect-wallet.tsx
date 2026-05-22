@@ -9,6 +9,7 @@ const ROLE_LABEL: Record<string, string> = {
   VIEWER: 'Viewer',
   SUBMITTER: 'Submitter',
   DREP: 'DRep',
+  DAO_MEMBER: 'DAO member',
   BOARD: 'Board member',
   EXPERT: 'Expert',
 };
@@ -23,11 +24,13 @@ export function ConnectWallet() {
     const top =
       profile.roles.includes('BOARD')
         ? 'Board member'
-        : profile.roles.includes('DREP')
-          ? 'DRep'
-          : profile.roles.includes('EXPERT')
-            ? 'Expert (ADA holder)'
-            : 'ADA holder (Viewer)';
+        : profile.roles.includes('DAO_MEMBER')
+          ? 'DAO member'
+          : profile.roles.includes('DREP')
+            ? 'DRep (not a member yet)'
+            : profile.roles.includes('EXPERT')
+              ? 'Expert (ADA holder)'
+              : 'ADA holder (Viewer)';
     return (
       <div className="space-y-2 text-sm">
         <div className="flex items-center gap-2">

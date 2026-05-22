@@ -19,7 +19,7 @@ export function MyDrepStatus() {
 
   if (!drep) return null;
   const label = LABEL[drep.status] ?? { text: drep.status, cls: '' };
-  const noVotes = drep.admissionVotesReceived.filter((v) => v.choice === 'NO');
+  const pending = drep.status === 'PENDING_ADMISSION';
 
   return (
     <div className="space-y-2 text-sm">
@@ -27,22 +27,34 @@ export function MyDrepStatus() {
       <div className={label.cls}>{label.text}</div>
       <div className="font-mono text-xs text-neutral-500 break-all">{drep.drepIdOnchain}</div>
 
-      {drep.status === 'PENDING_ADMISSION' ? (
-        <div className="text-xs text-neutral-500">
-          Board votes so far: {drep.admissionVotesReceived.filter((v) => v.choice === 'YES').length} YES
-          {noVotes.length ? `, ${noVotes.length} NO` : ''}.
+      {pending ? (
+        <div className="text-sm">
+          <span className="font-medium text-emerald-600">{drep.yes}</span> of{' '}
+          <span className="font-medium">{drep.threshold}</span> required YES votes
+          {drep.no ? <span className="text-red-600"> · {drep.no} NO</span> : null}
         </div>
       ) : null}
 
-      {(drep.status === 'REJECTED' || drep.status === 'REMOVED') && noVotes.length > 0 ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-2 text-xs dark:border-red-900 dark:bg-red-950">
-          <div className="font-medium">Board feedback:</div>
-          <ul className="ml-4 list-disc">
-            {noVotes.map((v, i) => (
-              <li key={i}>{v.feedback}</li>
+      {drep.admissionVotesReceived.length > 0 ? (
+        <div className="space-y-1">
+          <div className="text-xs font-medium text-neutral-500">Board votes</div>
+          <ul className="space-y-1">
+            {drep.admissionVotesReceived.map((v, i) => (
+              <li
+                key={i}
+                className="rounded-md border border-neutral-200 p-2 text-xs dark:border-neutral-800"
+              >
+                <span className={v.choice === 'YES' ? 'font-medium text-emerald-600' : 'font-medium text-red-600'}>
+                  {v.choice}
+                </span>{' '}
+                <span className="text-neutral-500">— {v.voterName}</span>
+                {v.feedback ? <div className="mt-0.5 text-neutral-600 dark:text-neutral-400">{v.feedback}</div> : null}
+              </li>
             ))}
           </ul>
         </div>
+      ) : pending ? (
+        <p className="text-xs text-neutral-500">No board votes cast yet.</p>
       ) : null}
     </div>
   );

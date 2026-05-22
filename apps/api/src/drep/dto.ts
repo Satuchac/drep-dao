@@ -43,6 +43,6 @@ export class AdmissionVoteDto {
   @IsIn(['YES', 'NO'])
   choice!: 'YES' | 'NO';
 
-  /** Required for NO (§14.2). */
-  @IsOptional() @IsString() @MaxLength(2000) feedback?: string;
+  /** Written rationale — required for BOTH YES and NO (board accountability). */
+  @IsString() @IsNotEmpty() @MaxLength(2000) feedback!: string;
 }

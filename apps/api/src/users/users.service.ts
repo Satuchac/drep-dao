@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Role } from '@drep-dao/shared';
+import { Role, DRepStatus } from '@drep-dao/shared';
 import { drepIdFromKeyHashHex } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
@@ -51,6 +51,26 @@ export class UsersService {
     });
   }
 
+  /** Board members are admitted DAO members by definition — give them a profile row. */
+  private async ensureBoardMembershipRow(userId: string, drepKeyHash: string) {
+    const drepId = safeDrepId(drepKeyHash);
+    if (!drepId) return null;
+    try {
+      return await this.prisma.drep.create({
+        data: {
+          userId,
+          drepIdOnchain: drepId,
+          status: DRepStatus.ADMITTED,
+          admittedAt: new Date(),
+          subcategoryIds: [],
+        },
+      });
+    } catch {
+      // race / unique conflict — re-fetch whatever exists now.
+      return this.prisma.drep.findUnique({ where: { userId } });
+    }
+  }
+
   /** Is this CIP-95 DRep key a registered + active on-chain DRep? undefined if unknown. */
   private async checkOnchainRegistration(drepKeyHash: string): Promise<boolean | undefined> {
     try {
@@ -82,15 +102,27 @@ export class UsersService {
     // that aren't registered on-chain are plain ADA holders (viewer/submitter).
     const isRegisteredDRep = user.drepRegistered;
 
+    // §2/§14 — board members are DAO members by definition; they don't apply.
+    // Ensure they have a profile row (ADMITTED) so they can edit bio/etc. and
+    // appear in the members overview.
+    let drep: { status: string; admittedAt: Date | null } | null = user.drep;
+    if (isBoard && !drep && user.drepKeyHash) {
+      drep = await this.ensureBoardMembershipRow(user.id, user.drepKeyHash);
+    }
+
+    // A non-board DAO member must still be a registered on-chain DRep; if their
+    // registration lapses they fall back to ADA holder (board seats are exempt).
+    const isDaoMember = isBoard || (drep?.status === DRepStatus.ADMITTED && isRegisteredDRep);
+
     const roles: Role[] = [Role.VIEWER, Role.SUBMITTER];
     if (isRegisteredDRep || isBoard) roles.push(Role.DREP);
+    if (isDaoMember) roles.push(Role.DAO_MEMBER);
     if (isBoard) roles.push(Role.BOARD);
     // §2 Expert — a non-DRep approved by the board for milestone review.
     if (user.experts.some((e) => e.approvedByBoard)) {
       roles.push(Role.EXPERT);
     }
 
-    const drep = user.drep;
     return {
       user: {
         id: user.id,

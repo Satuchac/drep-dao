@@ -5,15 +5,97 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { DRepStatus, PLATFORM_CONFIG_DEFAULTS } from '@drep-dao/shared';
+import {
+  DRepStatus,
+  PLATFORM_CONFIG_DEFAULTS,
+  basePower,
+  clampMerit,
+  meritMultiplier,
+} from '@drep-dao/shared';
 import { drepIdFromKeyHashHex, isStakeAddress, stakeKeyHashFromBech32 } from '@drep-dao/cardano';
 import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
+import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { AdmissionVoteDto, DrepApplicationDto, UpdateDrepDto } from './dto';
 
 @Injectable()
 export class DrepService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cardano: CardanoQueryService,
+  ) {}
+
+  /**
+   * §2/§4 — all DAO members (board + admitted DReps) with balanced voting power.
+   * VotingPower = log10(stake_ADA) × (1 + merit/200). Stake is the DRep's
+   * on-chain voting power (Koios `amount`); merit is the clamped ledger sum.
+   */
+  async listDaoMembers() {
+    const seats = await this.prisma.boardSeat.findMany({ orderBy: { addedAt: 'asc' } });
+    const boardKeys = new Set(seats.map((s) => s.drepKeyHash));
+    const admitted = await this.prisma.drep.findMany({
+      where: { status: DRepStatus.ADMITTED },
+      include: { user: { select: { displayName: true, drepKeyHash: true, drepRegistered: true } } },
+    });
+
+    // Union: every board seat is a member (even before first login → no Drep row
+    // yet), plus admitted DReps still registered on-chain. Keyed by drep id.
+    interface Row { drepId: string; displayName: string; isBoard: boolean; drepRowId?: string }
+    const byId = new Map<string, Row>();
+    for (const s of seats) byId.set(s.drepId, { drepId: s.drepId, displayName: s.displayName, isBoard: true });
+    for (const d of admitted) {
+      const isBoard = d.user.drepKeyHash ? boardKeys.has(d.user.drepKeyHash) : false;
+      if (!isBoard && !d.user.drepRegistered) continue; // skip lapsed non-board members
+      const existing = byId.get(d.drepIdOnchain);
+      if (existing) {
+        existing.drepRowId = d.id;
+        if (d.user.displayName) existing.displayName = d.user.displayName; // prefer self-set name
+      } else {
+        byId.set(d.drepIdOnchain, {
+          drepId: d.drepIdOnchain,
+          displayName: d.user.displayName ?? 'DRep',
+          isBoard,
+          drepRowId: d.id,
+        });
+      }
+    }
+    const rows = [...byId.values()];
+
+    // On-chain voting power, best-effort (don't fail the dashboard if Koios hiccups).
+    let statuses = new Map<string, { amountLovelace: bigint }>();
+    try {
+      statuses = await this.cardano.verifyDReps(rows.map((r) => r.drepId));
+    } catch {
+      /* leave amounts at 0 */
+    }
+
+    const members = await Promise.all(
+      rows.map(async (r) => {
+        const merit = r.drepRowId ? await this.currentMerit(r.drepRowId) : 0;
+        const amount = statuses.get(r.drepId)?.amountLovelace ?? 0n;
+        const base = basePower(amount);
+        const mult = meritMultiplier(merit);
+        return {
+          drepId: r.drepId,
+          displayName: r.displayName,
+          isBoard: r.isBoard,
+          stakeAda: Number(amount) / 1_000_000,
+          merit,
+          basePower: round(base),
+          meritMultiplier: round(mult),
+          votingPower: round(base * mult),
+        };
+      }),
+    );
+    members.sort((a, b) => b.votingPower - a.votingPower || (b.isBoard ? 1 : 0) - (a.isBoard ? 1 : 0));
+    return members;
+  }
+
+  /** Current merit = clamped sum of the DRep's merit-ledger deltas (§13). */
+  private async currentMerit(drepId: string): Promise<number> {
+    const agg = await this.prisma.meritLedger.aggregate({ where: { drepId }, _sum: { delta: true } });
+    return clampMerit(agg._sum.delta ? Number(agg._sum.delta) : 0);
+  }
 
   /** §2/§25.5 — board approves an Expert (a non-DRep ADA holder) by stake address. */
   async approveExpert(stakeAddress: string, displayName?: string, subcategoryIds?: string[]) {
@@ -61,11 +143,47 @@ export class DrepService {
     }));
   }
 
+  /** The user's own DRep profile + admission progress (votes, rationales, tally). */
   async getMine(userId: string) {
-    return this.prisma.drep.findUnique({
+    const drep = await this.prisma.drep.findUnique({
       where: { userId },
-      include: { admissionVotesReceived: true },
+      include: {
+        admissionVotesReceived: {
+          include: { voter: { include: { user: { select: { displayName: true, drepKeyHash: true } } } } },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
     });
+    if (!drep) return null;
+    const threshold = await this.approvalThreshold();
+    const votes = drep.admissionVotesReceived;
+    // Fall back to the board-seat name when a board member hasn't set a display name.
+    const seats = await this.prisma.boardSeat.findMany();
+    const seatName = new Map(seats.map((s) => [s.drepKeyHash, s.displayName]));
+    const voterLabel = (v: (typeof votes)[number]) =>
+      v.voter.user.displayName ??
+      (v.voter.user.drepKeyHash && seatName.get(v.voter.user.drepKeyHash)) ??
+      'Board member';
+    return {
+      id: drep.id,
+      status: drep.status,
+      drepIdOnchain: drep.drepIdOnchain,
+      bio: drep.bio,
+      socials: drep.socials,
+      contact: drep.contact,
+      subcategoryIds: drep.subcategoryIds,
+      kycOptin: drep.kycOptin,
+      callsOptin: drep.callsOptin,
+      admissionCallOptin: drep.admissionCallOptin,
+      yes: votes.filter((v) => v.choice === 'YES').length,
+      no: votes.filter((v) => v.choice === 'NO').length,
+      threshold,
+      admissionVotesReceived: votes.map((v) => ({
+        choice: v.choice,
+        feedback: v.feedback,
+        voterName: voterLabel(v),
+      })),
+    };
   }
 
   /** §14.2 — a registered on-chain DRep requests to join the DAO (or re-applies
@@ -171,8 +289,8 @@ export class DrepService {
 
   /** §14.2 — a board member votes on an application; admit/reject when decided. */
   async voteOnApplication(boardUserId: string, applicantDrepId: string, dto: AdmissionVoteDto) {
-    if (dto.choice === 'NO' && !dto.feedback?.trim()) {
-      throw new BadRequestException('written feedback is required for a NO vote');
+    if (!dto.feedback?.trim()) {
+      throw new BadRequestException('a written rationale is required for every vote (YES or NO)');
     }
 
     const applicant = await this.prisma.drep.findUnique({ where: { id: applicantDrepId } });
@@ -181,9 +299,17 @@ export class DrepService {
       throw new ConflictException('this application is not pending');
     }
 
-    const board = await this.prisma.drep.findUnique({ where: { userId: boardUserId } });
+    const board = await this.prisma.drep.findUnique({
+      where: { userId: boardUserId },
+      include: { user: { select: { drepKeyHash: true } } },
+    });
     if (!board) throw new ForbiddenException('board members only');
     if (board.id === applicant.id) throw new BadRequestException('cannot vote on your own application');
+    // Enforce board-only here too (defence in depth beyond the controller guard).
+    const seat = board.user.drepKeyHash
+      ? await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: board.user.drepKeyHash } })
+      : null;
+    if (!seat) throw new ForbiddenException('only seated board members can vote on admissions');
 
     await this.prisma.admissionVote.upsert({
       where: { drepId_boardDrepId: { drepId: applicant.id, boardDrepId: board.id } },
@@ -200,7 +326,7 @@ export class DrepService {
     const yes = votes.filter((v) => v.choice === 'YES').length;
     const no = votes.filter((v) => v.choice === 'NO').length;
     const threshold = await this.approvalThreshold();
-    const boardCount = await this.prisma.boardMembership.count({ where: { endedAt: null } });
+    const boardCount = await this.prisma.boardSeat.count();
 
     let status: string = applicant.status;
     if (yes >= threshold) {
@@ -227,4 +353,9 @@ export class DrepService {
     const v = row?.value;
     return typeof v === 'number' ? v : PLATFORM_CONFIG_DEFAULTS.ADMISSION_APPROVAL_VOTES;
   }
+}
+
+/** Round to 2 decimals for display. */
+function round(n: number): number {
+  return Math.round(n * 100) / 100;
 }

@@ -8,6 +8,7 @@ export function BoardReviewPanel() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [rationale, setRationale] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
     setLoading(true);
@@ -22,14 +23,15 @@ export function BoardReviewPanel() {
 
   const vote = async (drepId: string, choice: 'YES' | 'NO') => {
     setError(null);
-    let feedback: string | undefined;
-    if (choice === 'NO') {
-      feedback = window.prompt('Feedback (required for a NO vote):') ?? undefined;
-      if (!feedback?.trim()) return;
+    const feedback = (rationale[drepId] ?? '').trim();
+    if (!feedback) {
+      setError('A written rationale is required for every vote (YES or NO).');
+      return;
     }
     setBusy(drepId);
     try {
       await boardApi.vote(drepId, { choice, feedback });
+      setRationale((r) => ({ ...r, [drepId]: '' }));
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Vote failed');
@@ -68,23 +70,30 @@ export function BoardReviewPanel() {
                   ))}
                 </div>
               ) : null}
+              <div className="mt-2 text-xs text-neutral-500">
+                {a.yes}/{a.threshold} YES{a.no ? ` · ${a.no} NO` : ''}
+              </div>
+              <textarea
+                value={rationale[a.drepId] ?? ''}
+                onChange={(e) => setRationale((r) => ({ ...r, [a.drepId]: e.target.value }))}
+                placeholder="Rationale (required for YES and NO) — visible to the applicant"
+                rows={2}
+                className="mt-2 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+              />
               <div className="mt-2 flex items-center gap-3">
-                <span className="text-xs text-neutral-500">
-                  {a.yes}/{a.threshold} YES{a.no ? ` · ${a.no} NO` : ''}
-                </span>
                 <button
                   disabled={busy === a.drepId}
                   onClick={() => vote(a.drepId, 'YES')}
                   className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950"
                 >
-                  Approve
+                  Approve (YES)
                 </button>
                 <button
                   disabled={busy === a.drepId}
                   onClick={() => vote(a.drepId, 'NO')}
                   className="rounded border border-red-400 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950"
                 >
-                  Reject
+                  Reject (NO)
                 </button>
               </div>
             </li>

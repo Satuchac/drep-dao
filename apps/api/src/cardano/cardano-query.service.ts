@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 export interface DRepStatus {
   registered: boolean;
   keyHashHex: string | null; // 28-byte DRep credential, from chain
+  amountLovelace: bigint; // on-chain voting power (total delegated stake), 0 if none/unknown
 }
 
 /**
@@ -28,7 +29,7 @@ export class CardanoQueryService {
   /** For each bech32 drep id: is it a registered on-chain DRep, and its key hash. */
   async verifyDReps(drepIds: string[]): Promise<Map<string, DRepStatus>> {
     const out = new Map<string, DRepStatus>(
-      drepIds.map((id) => [id, { registered: false, keyHashHex: null }]),
+      drepIds.map((id) => [id, { registered: false, keyHashHex: null, amountLovelace: 0n }]),
     );
     if (drepIds.length === 0) return out;
 
@@ -56,13 +57,20 @@ export class CardanoQueryService {
       hex: string | null;
       drep_status: string | null;
       active: boolean | null;
+      amount: string | null;
     }[];
     for (const r of rows) {
       if (out.has(r.drep_id)) {
         // §22.4 — a DRep counts as registered only if it exists on-chain AND is
         // active (not retired, not expired). Koios omits unknown ids entirely.
         const registered = r.drep_status === 'registered' && r.active === true;
-        out.set(r.drep_id, { registered, keyHashHex: r.hex });
+        let amountLovelace = 0n;
+        try {
+          amountLovelace = r.amount ? BigInt(r.amount) : 0n;
+        } catch {
+          /* non-numeric — leave 0 */
+        }
+        out.set(r.drep_id, { registered, keyHashHex: r.hex, amountLovelace });
       }
     }
     return out;

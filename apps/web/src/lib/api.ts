@@ -76,9 +76,32 @@ export interface MyDrep {
   status: string;
   drepIdOnchain: string;
   bio: string | null;
+  socials: Record<string, string> | null;
+  contact: Record<string, string> | null;
   subcategoryIds: string[];
-  admissionVotesReceived: { choice: string; feedback: string | null }[];
+  kycOptin: boolean;
+  callsOptin: boolean;
+  admissionCallOptin: boolean;
+  yes: number;
+  no: number;
+  threshold: number;
+  admissionVotesReceived: { choice: string; feedback: string | null; voterName: string }[];
 }
+
+export interface DaoMember {
+  drepId: string;
+  displayName: string;
+  isBoard: boolean;
+  stakeAda: number;
+  merit: number;
+  basePower: number;
+  meritMultiplier: number;
+  votingPower: number;
+}
+
+export const daoApi = {
+  members: () => request<DaoMember[]>('/dao/members'),
+};
 
 export interface PendingApplication {
   drepId: string;
