@@ -23,7 +23,7 @@ export function AdminsPanel({ currentAdminId }: { currentAdminId: string }) {
     setBusy(true);
     try {
       const { token } = await adminApi.accounts.invite(username.trim(), email.trim());
-      setInviteUrl(`${window.location.origin}/sysadmin/accept-invite?token=${token}`);
+      setInviteUrl(`${window.location.origin}/admin/accept-invite?token=${token}`);
       setUsername('');
       setEmail('');
       load();

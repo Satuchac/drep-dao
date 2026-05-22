@@ -14,7 +14,7 @@ export default function AdminDashboard() {
   const [audit, setAudit] = useState<AuditRow[]>([]);
 
   useEffect(() => {
-    if (!loading && !admin) router.replace('/sysadmin/login');
+    if (!loading && !admin) router.replace('/admin/login');
   }, [loading, admin, router]);
 
   useEffect(() => {
@@ -39,7 +39,7 @@ export default function AdminDashboard() {
           </p>
         </div>
         <button
-          onClick={() => logout().then(() => router.replace('/sysadmin/login'))}
+          onClick={() => logout().then(() => router.replace('/admin/login'))}
           className="rounded-md border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800"
         >
           Log out

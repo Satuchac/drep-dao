@@ -54,7 +54,7 @@ function AcceptInviteInner() {
             ))}
           </ul>
         </div>
-        <Link href="/sysadmin/login" className="inline-block rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-black hover:bg-amber-500">
+        <Link href="/admin/login" className="inline-block rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-black hover:bg-amber-500">
           Go to login
         </Link>
       </div>

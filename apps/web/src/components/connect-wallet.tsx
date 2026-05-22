@@ -107,7 +107,7 @@ export function ConnectWallet() {
 
       <div className="pt-1 text-xs text-neutral-400">
         Platform operator?{' '}
-        <Link href="/sysadmin/login" className="underline hover:text-neutral-600">
+        <Link href="/admin/login" className="underline hover:text-neutral-600">
           Admin login
         </Link>
       </div>

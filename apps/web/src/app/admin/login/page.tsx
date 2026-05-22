@@ -15,7 +15,7 @@ export default function AdminLoginPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!loading && admin) router.replace('/sysadmin');
+    if (!loading && admin) router.replace('/admin');
   }, [loading, admin, router]);
 
   const field =
@@ -28,7 +28,7 @@ export default function AdminLoginPage() {
     try {
       const res = await login(username.trim(), password);
       if (res.status === '2fa_required') setPendingToken(res.pendingToken);
-      else router.replace('/sysadmin');
+      else router.replace('/admin');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
@@ -42,7 +42,7 @@ export default function AdminLoginPage() {
     setBusy(true);
     try {
       await login2fa(pendingToken!, code.trim());
-      router.replace('/sysadmin');
+      router.replace('/admin');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid code');
     } finally {

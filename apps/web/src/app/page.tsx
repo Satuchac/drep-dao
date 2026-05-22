@@ -8,7 +8,7 @@ const PHASES = [
   { name: 'Scaffold', detail: 'monorepo, DB schema, health — running skeleton', done: true },
   { name: 'Auth slice', detail: 'CIP-30/CIP-8 wallet login → JWT session', done: true },
   { name: 'DRep admission', detail: 'application form → board review', done: true },
-  { name: 'Admin layer', detail: '/sysadmin: genesis, admins (§18)', done: true },
+  { name: 'Admin layer', detail: '/admin: genesis, admins (§18)', done: true },
   { name: 'Rounds admin', detail: 'create/configure rounds (§6)', done: true },
 ];
 
