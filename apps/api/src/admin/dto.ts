@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsObject, IsString, MaxLength } from 'class-validator';
+import { Allow, IsNotEmpty, IsString, MaxLength } from 'class-validator';
 
 export class AdminLoginDto {
   @IsString() @IsNotEmpty() @MaxLength(100) username!: string;
@@ -11,9 +11,18 @@ export class Admin2faDto {
 }
 
 export class GenesisUploadDto {
-  /** Parsed genesis.json contents. Validated structurally in GenesisService. */
-  @IsObject()
-  genesis!: Record<string, unknown>;
+  /** Parsed genesis.json — array OR object. Validated structurally in GenesisService. */
+  @Allow()
+  genesis!: unknown;
+}
+
+export class GenesisBoardMemberDto {
+  @IsString() @IsNotEmpty() @MaxLength(100) name!: string;
+  @IsString() @IsNotEmpty() @MaxLength(200) drep_id!: string;
+}
+
+export class GenesisRemoveDto {
+  @IsString() @IsNotEmpty() @MaxLength(200) drep_id!: string;
 }
 
 export class AdminInviteDto {

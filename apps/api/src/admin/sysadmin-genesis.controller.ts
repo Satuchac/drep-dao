@@ -4,7 +4,7 @@ import { AdminGuard } from './admin.guard';
 import { CurrentAdmin } from './current-admin.decorator';
 import type { AdminIdentity } from './admin-auth.service';
 import { GenesisService } from './genesis.service';
-import { GenesisUploadDto } from './dto';
+import { GenesisBoardMemberDto, GenesisRemoveDto, GenesisUploadDto } from './dto';
 
 // §18.7 / §26.6 — genesis approval (board bootstrap). Admin-only.
 @Controller('sysadmin/genesis')
@@ -31,5 +31,19 @@ export class SysadminGenesisController {
   @Post('reject')
   reject(@CurrentAdmin() admin: AdminIdentity) {
     return this.genesis.reject(admin.adminId);
+  }
+
+  // Manual insert — one board member at a time (name + drep_id), verified on-chain.
+  @Post('board')
+  addMember(@CurrentAdmin() admin: AdminIdentity, @Body() dto: GenesisBoardMemberDto, @Req() req: Request) {
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip;
+    return this.genesis.addBoardMember(admin.adminId, dto.name, dto.drep_id, ip, req.headers['user-agent']);
+  }
+
+  // Remove a single board member by drep_id (frees a seat; file can be re-loaded after).
+  @Post('board/remove')
+  removeMember(@CurrentAdmin() admin: AdminIdentity, @Body() dto: GenesisRemoveDto, @Req() req: Request) {
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip;
+    return this.genesis.removeBoardMember(admin.adminId, dto.drep_id, ip, req.headers['user-agent']);
   }
 }

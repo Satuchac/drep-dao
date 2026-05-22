@@ -3,79 +3,145 @@
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type GenesisState } from '@/lib/admin-api';
 
+const EXAMPLE = `[
+  { "name": "Alice", "drep_id": "drep1..." },
+  { "name": "Dave",  "drep_id": "drep1..." },
+  { "name": "Erin",  "drep_id": "drep1..." }
+]`;
+
 export function AdminGenesis() {
   const [state, setState] = useState<GenesisState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [addName, setAddName] = useState('');
+  const [addId, setAddId] = useState('');
 
   const load = useCallback(() => {
     adminApi.genesis.state().then(setState).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
   }, []);
   useEffect(load, [load]);
 
-  const onFile = async (file: File) => {
+  const wrap = async (fn: () => Promise<void>) => {
     setError(null);
     setMsg(null);
-    try {
-      const genesis = JSON.parse(await file.text());
-      const res = await adminApi.genesis.upload(genesis);
-      setMsg(`Verified ✓ — ${res.proposedBoard.length} member(s) are registered DReps on-chain.`);
-      load();
-    } catch (e) {
-      // includes "file invalid — not registered DReps on-chain: drep1…"
-      setError(e instanceof Error ? e.message : 'invalid genesis file');
-    }
-  };
-
-  const approve = async () => {
     setBusy(true);
-    setError(null);
     try {
-      const res = await adminApi.genesis.approve();
-      setMsg(`Installed ${res.seated} board member(s) — board now ${res.boardCount}/${res.maxBoard}.`);
-      load();
+      await fn();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'approve failed');
+      setError(e instanceof Error ? e.message : 'failed');
     } finally {
       setBusy(false);
     }
   };
 
-  const reject = async () => {
-    await adminApi.genesis.reject().catch(() => undefined);
-    setMsg(null);
-    load();
-  };
+  const onFile = (file: File) =>
+    wrap(async () => {
+      const genesis = JSON.parse(await file.text());
+      const res = await adminApi.genesis.upload(genesis);
+      setMsg(`Verified ✓ — ${res.proposedBoard.length} member(s) are registered DReps on-chain. Review, then Approve & install.`);
+      load();
+    });
+
+  const approve = () =>
+    wrap(async () => {
+      const res = await adminApi.genesis.approve();
+      setMsg(`Installed ${res.seated} new member(s) — board now ${res.boardCount}/${res.maxBoard}.`);
+      load();
+    });
+
+  const reject = () =>
+    wrap(async () => {
+      await adminApi.genesis.reject();
+      load();
+    });
+
+  const addOne = () =>
+    wrap(async () => {
+      const next = await adminApi.genesis.addMember(addName.trim(), addId.trim());
+      setState(next);
+      setMsg(`Added ${addName.trim()} ✓ — board now ${next.boardCount}/${next.maxBoard}.`);
+      setAddName('');
+      setAddId('');
+    });
+
+  const removeOne = (drepId: string, name: string) =>
+    wrap(async () => {
+      const next = await adminApi.genesis.removeMember(drepId);
+      setState(next);
+      setMsg(`Removed ${name} — board now ${next.boardCount}/${next.maxBoard}.`);
+    });
 
   if (!state) return <Section title="Genesis">…</Section>;
 
   return (
     <Section title={`Genesis — founding board (${state.boardCount}/${state.maxBoard})`}>
+      {/* Seated members — each removable. */}
       {state.board.length > 0 ? (
         <ul className="mb-3 space-y-1 text-xs">
           {state.board.map((b) => (
-            <li key={b.drepId} className="rounded border border-slate-700 p-2">
-              <span className="font-medium">{b.displayName}</span>
-              <span className="ml-2 break-all font-mono text-slate-400">{b.drepId}</span>
+            <li key={b.drepId} className="flex items-center justify-between gap-2 rounded border border-slate-700 p-2">
+              <div className="min-w-0">
+                <span className="font-medium">{b.displayName}</span>
+                <span className="ml-2 break-all font-mono text-slate-400">{b.drepId}</span>
+              </div>
+              <button
+                onClick={() => removeOne(b.drepId, b.displayName)}
+                disabled={busy}
+                className="shrink-0 rounded border border-red-800 px-2 py-1 text-red-300 hover:bg-red-950 disabled:opacity-50"
+              >
+                Remove
+              </button>
             </li>
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-slate-400">No board configured.</p>
+        <p className="mb-3 text-sm text-slate-400">No board configured.</p>
       )}
 
+      {/* Manual insert — one at a time. */}
+      <div className="mb-4 rounded border border-slate-800 p-3">
+        <div className="mb-2 text-sm font-medium">Add a board member</div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={addName}
+            onChange={(e) => setAddName(e.target.value)}
+            placeholder="Name (e.g. Alice)"
+            className="rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm sm:w-40"
+          />
+          <input
+            value={addId}
+            onChange={(e) => setAddId(e.target.value)}
+            placeholder="drep1…"
+            className="flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 font-mono text-xs"
+          />
+          <button
+            onClick={addOne}
+            disabled={busy || !addName.trim() || !addId.trim() || !state.canAddMore}
+            className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50"
+          >
+            {busy ? 'Verifying…' : 'Add'}
+          </button>
+        </div>
+        <p className="mt-1 text-xs text-slate-500">
+          Verified on-chain — only a registered, active DRep can be added.
+        </p>
+      </div>
+
+      {/* File upload — bulk, incremental. */}
       {state.canAddMore ? (
         <>
-          <p className="mt-1 text-sm text-slate-400">
-            Upload a genesis file — JSON array of <code>{'{ name, drep_id }'}</code> (each must be a
-            registered on-chain DRep). You can add up to {state.maxBoard} board members across files.
+          <p className="text-sm text-slate-400">
+            Or upload a genesis file — a JSON array of <code>{'{ "name", "drep_id" }'}</code> objects (or a{' '}
+            <code>{'{ "Name": "drep1…" }'}</code> map). Re-uploading is incremental: only new DReps are added,
+            up to {state.maxBoard} total.
           </p>
+          <pre className="my-2 overflow-x-auto rounded border border-slate-800 bg-slate-950 p-2 text-[11px] text-slate-400">{EXAMPLE}</pre>
           <input
             type="file"
             accept="application/json,.json"
             onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])}
-            className="mt-2 text-sm"
+            className="text-sm"
           />
           {state.proposedBoard ? (
             <div className="mt-3 space-y-1">
@@ -92,7 +158,7 @@ export function AdminGenesis() {
                 <button onClick={approve} disabled={busy} className="mt-2 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50">
                   {busy ? 'Installing…' : 'Approve & install'}
                 </button>
-                <button onClick={reject} className="mt-2 rounded-md border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800">
+                <button onClick={reject} disabled={busy} className="mt-2 rounded-md border border-slate-700 px-3 py-1.5 text-sm hover:bg-slate-800 disabled:opacity-50">
                   Discard
                 </button>
               </div>
@@ -100,7 +166,7 @@ export function AdminGenesis() {
           ) : null}
         </>
       ) : (
-        <p className="mt-1 text-sm text-emerald-400">✓ Board is full ({state.maxBoard}/{state.maxBoard}).</p>
+        <p className="text-sm text-emerald-400">✓ Board is full ({state.maxBoard}/{state.maxBoard}). Remove a member to add another.</p>
       )}
 
       {msg ? <div className="mt-2 text-sm text-emerald-400">{msg}</div> : null}

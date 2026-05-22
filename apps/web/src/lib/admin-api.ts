@@ -123,5 +123,15 @@ export const adminApi = {
         method: 'POST',
       }),
     reject: () => request<{ ok: boolean }>('/genesis/reject', { method: 'POST' }),
+    addMember: (name: string, drepId: string) =>
+      request<GenesisState>('/genesis/board', {
+        method: 'POST',
+        body: JSON.stringify({ name, drep_id: drepId }),
+      }),
+    removeMember: (drepId: string) =>
+      request<GenesisState>('/genesis/board/remove', {
+        method: 'POST',
+        body: JSON.stringify({ drep_id: drepId }),
+      }),
   },
 };

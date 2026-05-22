@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { drepKeyHashFromId, isDRepId } from '@drep-dao/cardano';
 import { Prisma } from '@drep-dao/db';
@@ -34,23 +35,54 @@ export class GenesisService {
     return this.prisma.platformState.upsert({ where: { id: 1 }, update: {}, create: { id: 1 } });
   }
 
-  /** Accept `[{name,drep_id}]` or `{founding_board:[{name,drep_id}]}`. Only name + drep_id. */
+  /**
+   * Forgiving parser — every member is just a name + drep_id. Accepts:
+   *   • { "founding_board": [ { "name": "Alice", "drep_id": "drep1..." }, ... ] }
+   *   • [ { "name": "Alice", "drep_id": "drep1..." }, ... ]
+   *   • { "Alice": "drep1...", "Dave": "drep1..." }            (name → id map)
+   *   • [ ["Alice", "drep1..."], ... ]                          (name/id pairs)
+   * (drep_id also accepted as drepId / drep / id; name also as Name.)
+   */
   private parse(payload: unknown): FoundingMember[] {
-    const arr = Array.isArray(payload)
-      ? payload
-      : (payload as GenesisFile)?.founding_board;
-    if (!Array.isArray(arr) || arr.length === 0) {
-      throw new BadRequestException('file must contain founding_board entries ({ name, drep_id })');
+    const raw = this.normalize(payload);
+    if (raw.length === 0) {
+      throw new BadRequestException(
+        'no board members found — use a JSON array of { "name": "...", "drep_id": "drep1..." }, ' +
+          'or a { "Name": "drep1..." } map.',
+      );
     }
-    return arr.map((m) => {
-      const name = (m as FoundingMember)?.name;
-      const drepId = (m as FoundingMember)?.drep_id;
-      if (!name || typeof name !== 'string') throw new BadRequestException('each member needs a name');
+    return raw.map((m) => {
+      const name = typeof m.name === 'string' ? m.name.trim() : '';
+      const drepId = typeof m.drep_id === 'string' ? m.drep_id.trim() : '';
+      if (!name) throw new BadRequestException('each member needs a name (string)');
       if (!drepId || !isDRepId(drepId)) {
-        throw new BadRequestException(`invalid drep_id: ${drepId ?? '(missing)'} — must be drep1...`);
+        throw new BadRequestException(
+          `invalid drep_id for "${name}": ${drepId || '(missing)'} — must be a bech32 drep1… id`,
+        );
       }
       return { name, drep_id: drepId };
     });
+  }
+
+  private normalize(payload: unknown): { name?: unknown; drep_id?: unknown }[] {
+    if (payload && typeof payload === 'object' && !Array.isArray(payload) && 'founding_board' in payload) {
+      return this.normalize((payload as GenesisFile).founding_board);
+    }
+    if (Array.isArray(payload)) return payload.map((e) => this.coerceMember(e));
+    if (payload && typeof payload === 'object') {
+      // plain object → treat keys as names, values as drep ids
+      return Object.entries(payload as Record<string, unknown>).map(([name, drep_id]) => ({ name, drep_id }));
+    }
+    throw new BadRequestException('unrecognized genesis format — expected a JSON array or object of name + drep_id');
+  }
+
+  private coerceMember(e: unknown): { name?: unknown; drep_id?: unknown } {
+    if (Array.isArray(e)) return { name: e[0], drep_id: e[1] };
+    if (e && typeof e === 'object') {
+      const o = e as Record<string, unknown>;
+      return { name: o.name ?? o.Name, drep_id: o.drep_id ?? o.drepId ?? o.drep ?? o.id };
+    }
+    return {};
   }
 
   /** Verify on-chain registration; throws if any drep_id is not a registered DRep. */
@@ -138,5 +170,61 @@ export class GenesisService {
     await this.redis.client.del(PROPOSED_KEY);
     await this.audit.log({ adminId, action: 'GENESIS_REJECTED' });
     return { ok: true };
+  }
+
+  /** Add a single board member by name + drep_id, verified on-chain. */
+  async addBoardMember(adminId: string, name: string, drepId: string, ip?: string, userAgent?: string) {
+    const [member] = this.parse([{ name, drep_id: drepId }]); // validates shape + isDRepId
+    const statuses = await this.verifyOrThrow([member]); // registered + active on-chain, else 400
+    const keyHash = statuses.get(member.drep_id)?.keyHashHex ?? drepKeyHashFromId(member.drep_id);
+
+    if (await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: keyHash } })) {
+      throw new ConflictException(`${member.drep_id} is already a board member`);
+    }
+    if ((await this.prisma.boardSeat.count()) >= MAX_BOARD) {
+      throw new ConflictException(`board is capped at ${MAX_BOARD} members — remove one first`);
+    }
+
+    await this.prisma.boardSeat.create({
+      data: { drepKeyHash: keyHash, drepId: member.drep_id, displayName: member.name },
+    });
+    await this.markGenesisApproved(adminId);
+    await this.audit.log({
+      adminId,
+      action: 'BOARD_MEMBER_ADDED',
+      target: `${member.name} (${member.drep_id})`,
+      ip,
+      userAgent,
+    });
+    return this.getState();
+  }
+
+  /** Remove a single board member by drep_id (frees a seat; the file can be re-loaded after). */
+  async removeBoardMember(adminId: string, drepId: string, ip?: string, userAgent?: string) {
+    if (!isDRepId(drepId)) throw new BadRequestException('drep_id must be a bech32 drep1… id');
+    const keyHash = drepKeyHashFromId(drepId);
+    const seat = await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: keyHash } });
+    if (!seat) throw new NotFoundException('not a current board member');
+
+    await this.prisma.boardSeat.delete({ where: { drepKeyHash: keyHash } });
+    await this.audit.log({
+      adminId,
+      action: 'BOARD_MEMBER_REMOVED',
+      target: `${seat.displayName} (${seat.drepId})`,
+      ip,
+      userAgent,
+    });
+    return this.getState();
+  }
+
+  /** Stamp the platform as genesis-bootstrapped on the first seated member. */
+  private async markGenesisApproved(adminId: string) {
+    const state = await this.ensureState();
+    if (!state.genesisApprovedAt) {
+      await this.prisma.platformState.update({
+        where: { id: 1 },
+        data: { genesisApprovedAt: new Date(), genesisApprovedBy: adminId },
+      });
+    }
   }
 }
