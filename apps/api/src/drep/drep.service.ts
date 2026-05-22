@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { DRepStatus, PLATFORM_CONFIG_DEFAULTS } from '@drep-dao/shared';
+import { isStakeAddress, stakeKeyHashFromBech32 } from '@drep-dao/cardano';
 import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdmissionVoteDto, DrepApplicationDto, UpdateDrepDto } from './dto';
@@ -13,6 +14,52 @@ import { AdmissionVoteDto, DrepApplicationDto, UpdateDrepDto } from './dto';
 @Injectable()
 export class DrepService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** §2/§25.5 — board approves an Expert (a non-DRep ADA holder) by stake address. */
+  async approveExpert(stakeAddress: string, displayName?: string, subcategoryIds?: string[]) {
+    if (!isStakeAddress(stakeAddress)) {
+      throw new BadRequestException('stakeAddress must be a bech32 stake address');
+    }
+    const stakeKeyHash = stakeKeyHashFromBech32(stakeAddress);
+    const user = await this.prisma.appUser.upsert({
+      where: { stakeKeyHash },
+      update: { stakeAddress },
+      create: { stakeKeyHash, stakeAddress },
+    });
+    const existing = await this.prisma.expert.findFirst({ where: { userId: user.id } });
+    if (existing) {
+      return this.prisma.expert.update({
+        where: { id: existing.id },
+        data: {
+          approvedByBoard: true,
+          ...(displayName ? { displayName } : {}),
+          ...(subcategoryIds ? { subcategoryIds } : {}),
+        },
+      });
+    }
+    return this.prisma.expert.create({
+      data: {
+        userId: user.id,
+        displayName: displayName ?? 'Expert',
+        subcategoryIds: subcategoryIds ?? [],
+        approvedByBoard: true,
+      },
+    });
+  }
+
+  async listExperts() {
+    const experts = await this.prisma.expert.findMany({
+      include: { user: { select: { stakeAddress: true } } },
+      orderBy: { displayName: 'asc' },
+    });
+    return experts.map((e) => ({
+      id: e.id,
+      displayName: e.displayName,
+      stakeAddress: e.user.stakeAddress,
+      subcategoryIds: e.subcategoryIds,
+      approvedByBoard: e.approvedByBoard,
+    }));
+  }
 
   async getMine(userId: string) {
     return this.prisma.drep.findUnique({

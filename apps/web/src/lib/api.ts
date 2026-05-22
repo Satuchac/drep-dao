@@ -105,6 +105,23 @@ export const boardApi = {
     ),
 };
 
+export interface ExpertRow {
+  id: string;
+  displayName: string;
+  stakeAddress: string;
+  subcategoryIds: string[];
+  approvedByBoard: boolean;
+}
+
+export const boardExpertsApi = {
+  list: () => request<ExpertRow[]>('/admin/experts'),
+  approve: (stakeAddress: string, displayName?: string) =>
+    request<ExpertRow>('/admin/experts', {
+      method: 'POST',
+      body: JSON.stringify({ stakeAddress, displayName }),
+    }),
+};
+
 export interface RoundCategoryInput {
   name: string;
   allocatedAda: number;

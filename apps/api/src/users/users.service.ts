@@ -31,7 +31,7 @@ export class UsersService {
   async getProfile(userId: string): Promise<UserProfile | null> {
     const user = await this.prisma.appUser.findUnique({
       where: { id: userId },
-      include: { drep: { include: { boardMemberships: true } } },
+      include: { drep: { include: { boardMemberships: true } }, experts: true },
     });
     if (!user) return null;
 
@@ -42,6 +42,10 @@ export class UsersService {
       if (drep.boardMemberships.some((m) => m.endedAt === null)) {
         roles.push(Role.BOARD);
       }
+    }
+    // §2 Expert — a non-DRep approved by the board for milestone review.
+    if (user.experts.some((e) => e.approvedByBoard)) {
+      roles.push(Role.EXPERT);
     }
 
     return {

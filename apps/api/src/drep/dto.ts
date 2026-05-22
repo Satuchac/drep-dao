@@ -9,6 +9,12 @@ import {
   MaxLength,
 } from 'class-validator';
 
+export class ApproveExpertDto {
+  @IsString() @IsNotEmpty() @MaxLength(200) stakeAddress!: string;
+  @IsOptional() @IsString() @MaxLength(100) displayName?: string;
+  @IsOptional() @IsArray() @IsString({ each: true }) subcategoryIds?: string[];
+}
+
 export class DrepApplicationDto {
   /** On-chain DRep ID (drep1...) — CIP-95 auto-detected or manually entered. */
   @IsString()

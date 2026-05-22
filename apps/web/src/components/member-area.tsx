@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth-context';
 import { DrepApplicationForm } from './drep-application-form';
 import { MyDrepStatus } from './my-drep-status';
 import { BoardReviewPanel } from './board-review-panel';
+import { ExpertsPanel } from './experts-panel';
 import { ProposalSubmit } from './proposal-submit';
 import { FilteringPanel } from './filtering-panel';
 import { VotingPanel } from './voting-panel';
@@ -27,6 +28,8 @@ export function MemberArea() {
           <BoardReviewPanel />
         </section>
       ) : null}
+
+      {isBoard ? <ExpertsPanel /> : null}
 
       {status !== null ? (
         <section className={card}>

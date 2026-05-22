@@ -22,6 +22,7 @@ next-env.d.ts
 *.addr
 wallet.json
 tools/test-wallets.json
+tools/persona-wallets.json
 
 # prisma
 packages/db/prisma/*.db

@@ -10,6 +10,7 @@ const ROLE_LABEL: Record<string, string> = {
   SUBMITTER: 'Submitter',
   DREP: 'DRep',
   BOARD: 'Board member',
+  EXPERT: 'Expert',
 };
 
 /** Primary login — Cardano wallet. Recognizes the stake key and shows the role. */
@@ -24,7 +25,9 @@ export function ConnectWallet() {
         ? 'Board member'
         : profile.roles.includes('DREP')
           ? 'DRep'
-          : 'ADA holder (Viewer)';
+          : profile.roles.includes('EXPERT')
+            ? 'Expert (ADA holder)'
+            : 'ADA holder (Viewer)';
     return (
       <div className="space-y-2 text-sm">
         <div className="flex items-center gap-2">
