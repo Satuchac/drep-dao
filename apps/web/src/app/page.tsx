@@ -19,18 +19,11 @@ export default function Home() {
     <main className="mx-auto max-w-2xl px-6 py-16">
       <h1 className="text-3xl font-bold tracking-tight">DRep DAO</h1>
       <p className="mt-2 text-neutral-600 dark:text-neutral-400">
-        Cardano governance platform — running skeleton.
+        Cardano governance platform (Preprod).
       </p>
 
-      <div className="mt-6 rounded-lg border border-neutral-200 bg-white p-4 text-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <HealthBadge />
-        <div className="mt-1 text-neutral-500">
-          Shared package wired: {configCount} platform parameters,{' '}
-          {DEFAULT_SUBCATEGORIES.length} default subcategories.
-        </div>
-      </div>
-
-      <div className="mt-6 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+      {/* Login — primary call to action */}
+      <div className="mt-6 rounded-xl border border-neutral-300 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
         <ConnectWallet />
       </div>
 
@@ -53,6 +46,10 @@ export default function Home() {
           </li>
         ))}
       </ol>
+
+      <div className="mt-8 border-t border-neutral-200 pt-3 text-xs text-neutral-400 dark:border-neutral-800">
+        <HealthBadge /> · {configCount} params · {DEFAULT_SUBCATEGORIES.length} subcategories
+      </div>
     </main>
   );
 }

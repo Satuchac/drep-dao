@@ -15,11 +15,18 @@ export interface UserProfile {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: 'include', // send/receive the session cookie
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      credentials: 'include', // send/receive the session cookie
+      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      // Never hang forever (e.g. API unreachable) — fail fast so the UI can recover.
+      signal: init?.signal ?? AbortSignal.timeout(10000),
+    });
+  } catch {
+    throw new Error(`Cannot reach the API at ${API_BASE}. Is it running?`);
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try {

@@ -17,6 +17,7 @@
     "db:migrate": "pnpm --filter @drep-dao/db migrate",
     "db:seed": "pnpm --filter @drep-dao/db seed",
     "bootstrap:board": "pnpm --filter @drep-dao/db exec tsx prisma/bootstrap-board.ts",
+    "seed:personas": "pnpm --filter @drep-dao/db exec tsx prisma/seed-personas.ts",
     "admin:create": "pnpm --filter @drep-dao/api exec tsx scripts/admin-create.ts",
     "infra:up": "docker compose -f infra/docker-compose.yml up -d",
     "infra:down": "docker compose -f infra/docker-compose.yml down"

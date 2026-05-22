@@ -50,11 +50,17 @@ export type LoginResult =
   | { status: '2fa_required'; pendingToken: string };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      signal: init?.signal ?? AbortSignal.timeout(10000),
+    });
+  } catch {
+    throw new Error(`Cannot reach the admin API at ${API_BASE}.`);
+  }
   if (!res.ok) {
     let detail = res.statusText;
     try {
