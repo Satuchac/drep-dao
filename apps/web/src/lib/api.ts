@@ -122,12 +122,53 @@ export interface PendingApplication {
   myVote: { choice: string; feedback: string | null } | null;
 }
 
+export interface RemovalVoteView {
+  choice: string;
+  rationale: string | null;
+  voterName: string;
+}
+export interface MyRemoval {
+  reason: string | null;
+  proposedByName: string;
+  yes: number;
+  no: number;
+  threshold: number;
+  votes: RemovalVoteView[];
+}
+export interface ActiveRemoval extends MyRemoval {
+  id: string;
+  targetDrepId: string;
+  targetName: string;
+  myVote: string | null;
+}
+export interface RemovableMember {
+  drepId: string;
+  displayName: string;
+  drepIdOnchain: string;
+}
+
 export const drepApi = {
   mine: () => request<MyDrep | null>('/me/drep'),
   apply: (input: DrepApplicationInput) =>
     request<MyDrep>('/me/drep-application', { method: 'POST', body: JSON.stringify(input) }),
   update: (input: Partial<DrepApplicationInput>) =>
     request<MyDrep>('/me/drep', { method: 'PATCH', body: JSON.stringify(input) }),
+  myRemoval: () => request<MyRemoval | null>('/me/removal'),
+};
+
+export const removalApi = {
+  list: () => request<ActiveRemoval[]>('/admin/removals'),
+  removableMembers: () => request<RemovableMember[]>('/admin/removals/removable-members'),
+  propose: (targetDrepId: string, reason?: string) =>
+    request<{ id: string }>('/admin/removals', {
+      method: 'POST',
+      body: JSON.stringify({ targetDrepId, reason }),
+    }),
+  vote: (id: string, choice: 'YES' | 'NO', rationale: string) =>
+    request<{ status: string; yes: number; no: number; threshold: number }>(`/admin/removals/${id}/vote`, {
+      method: 'POST',
+      body: JSON.stringify({ choice, rationale }),
+    }),
 };
 
 export const boardApi = {

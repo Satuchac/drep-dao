@@ -47,3 +47,16 @@ export class AdmissionVoteDto {
   /** Written rationale — required for BOTH YES and NO (board accountability). */
   @IsString() @IsNotEmpty() @MaxLength(2000) feedback!: string;
 }
+
+// §14.4 — board proposes / votes to remove a DAO member.
+export class ProposeRemovalDto {
+  @IsString() @IsNotEmpty() @MaxLength(100) targetDrepId!: string;
+  @IsOptional() @IsString() @MaxLength(2000) reason?: string;
+}
+
+export class RemovalVoteDto {
+  @IsIn(['YES', 'NO'])
+  choice!: 'YES' | 'NO';
+
+  @IsString() @IsNotEmpty() @MaxLength(2000) rationale!: string;
+}

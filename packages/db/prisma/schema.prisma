@@ -92,6 +92,36 @@ model AdmissionVote {
   @@map("admission_vote")
 }
 
+// §14.4 — board-initiated removal of a DAO member (DRep). One board member
+// proposes; all board members vote; 3-of-5 YES removes. Loose refs to drep.
+model DrepRemoval {
+  id           String    @id @default(uuid()) @db.Uuid
+  targetDrepId String    @map("target_drep_id") @db.Uuid // the DAO member being removed
+  proposedBy   String    @map("proposed_by") @db.Uuid // proposing board member's drep id
+  reason       String?
+  status       String // PENDING, APPROVED (removed), REJECTED (kept)
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  resolvedAt   DateTime? @map("resolved_at") @db.Timestamptz(6)
+
+  votes DrepRemovalVote[]
+
+  @@index([targetDrepId, status])
+  @@map("drep_removal")
+}
+
+model DrepRemovalVote {
+  removalId   String   @map("removal_id") @db.Uuid
+  boardDrepId String   @map("board_drep_id") @db.Uuid
+  choice      String // YES (remove), NO (keep)
+  rationale   String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  removal DrepRemoval @relation(fields: [removalId], references: [id])
+
+  @@id([removalId, boardDrepId])
+  @@map("drep_removal_vote")
+}
+
 model BoardMembership {
   id        String    @id @default(uuid()) @db.Uuid
   drepId    String    @map("drep_id") @db.Uuid

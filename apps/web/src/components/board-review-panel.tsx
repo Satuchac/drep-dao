@@ -3,6 +3,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { boardApi, type PendingApplication } from '@/lib/api';
 
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex gap-2">
+      <dt className="w-24 shrink-0 font-medium text-neutral-500">{label}</dt>
+      <dd className="min-w-0 flex-1 text-neutral-700 dark:text-neutral-300">{children}</dd>
+    </div>
+  );
+}
+
 const optins = (a: PendingApplication) =>
   [
     a.kycOptin ? 'KYC' : null,
@@ -82,25 +91,32 @@ export function BoardReviewPanel() {
                     </span>
                   ) : null}
                 </div>
-                <div className="font-mono text-xs text-neutral-500 break-all">{a.drepIdOnchain}</div>
-                {a.bio ? <p className="mt-1 text-neutral-600 dark:text-neutral-400">{a.bio}</p> : null}
-                {a.subcategoryIds.length ? (
-                  <div className="mt-1 flex flex-wrap gap-1">
-                    {a.subcategoryIds.map((s) => (
-                      <span key={s} className="rounded bg-neutral-200 px-1.5 py-0.5 text-xs dark:bg-neutral-800">
-                        {s}
+                <dl className="mt-1 space-y-1 text-xs">
+                  <Row label="DRep ID">
+                    <span className="break-all font-mono text-neutral-500">{a.drepIdOnchain}</span>
+                  </Row>
+                  {a.bio ? <Row label="Motivation">{a.bio}</Row> : null}
+                  {a.subcategoryIds.length ? (
+                    <Row label="Categories">
+                      <span className="flex flex-wrap gap-1">
+                        {a.subcategoryIds.map((s) => (
+                          <span key={s} className="rounded bg-neutral-200 px-1.5 py-0.5 dark:bg-neutral-800">
+                            {s}
+                          </span>
+                        ))}
                       </span>
-                    ))}
-                  </div>
-                ) : null}
-                <div className="mt-1 space-x-3 text-xs text-neutral-500">
-                  {contact.email ? <span>✉ {contact.email}</span> : null}
-                  {contact.telegram ? <span>✈ {contact.telegram}</span> : null}
-                  <span>Opt-ins: {optins(a).length ? optins(a).join(', ') : 'none'}</span>
-                </div>
-                <div className="mt-2 text-xs text-neutral-500">
-                  {a.yes}/{a.threshold} YES{a.no ? ` · ${a.no} NO` : ''}
-                </div>
+                    </Row>
+                  ) : null}
+                  {contact.email || contact.telegram ? (
+                    <Row label="Contact">
+                      {[contact.email, contact.telegram].filter(Boolean).join(' · ')}
+                    </Row>
+                  ) : null}
+                  <Row label="Opt-ins">{optins(a).length ? optins(a).join(', ') : 'none'}</Row>
+                  <Row label="Board votes">
+                    {a.yes}/{a.threshold} YES{a.no ? ` · ${a.no} NO` : ''}
+                  </Row>
+                </dl>
                 <textarea
                   value={rationale[a.drepId] ?? ''}
                   onChange={(e) => setRationale((r) => ({ ...r, [a.drepId]: e.target.value }))}

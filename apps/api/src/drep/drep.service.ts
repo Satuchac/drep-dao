@@ -370,6 +370,154 @@ export class DrepService {
     return { applicantDrepId: applicant.id, yes, no, threshold, boardCount, status };
   }
 
+  // ── §14.4 Removal of a DAO member (3-of-5 board vote) ──────────────────────
+
+  /** A board member proposes removing a DAO member. */
+  async proposeRemoval(boardUserId: string, targetDrepId: string, reason?: string) {
+    const board = await this.requireBoardDrep(boardUserId);
+    const target = await this.prisma.drep.findUnique({
+      where: { id: targetDrepId },
+      include: { user: { select: { drepKeyHash: true } } },
+    });
+    if (!target || target.status !== DRepStatus.ADMITTED) {
+      throw new NotFoundException('target is not an active DAO member');
+    }
+    if (target.id === board.id) throw new BadRequestException('cannot propose your own removal');
+    const targetIsBoard = target.user.drepKeyHash
+      ? (await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: target.user.drepKeyHash } })) !== null
+      : false;
+    if (targetIsBoard) throw new BadRequestException('board members are managed via genesis, not removal votes');
+    const open = await this.prisma.drepRemoval.findFirst({ where: { targetDrepId, status: 'PENDING' } });
+    if (open) throw new ConflictException('a removal is already pending for this member');
+    return this.prisma.drepRemoval.create({
+      data: { targetDrepId, proposedBy: board.id, reason: reason ?? null, status: 'PENDING' },
+    });
+  }
+
+  /** A board member votes on a removal; 3-of-5 YES removes the member. */
+  async voteRemoval(boardUserId: string, removalId: string, choice: 'YES' | 'NO', rationale?: string) {
+    if (!rationale?.trim()) throw new BadRequestException('a written rationale is required for every vote');
+    const board = await this.requireBoardDrep(boardUserId);
+    const removal = await this.prisma.drepRemoval.findUnique({ where: { id: removalId } });
+    if (!removal || removal.status !== 'PENDING') throw new ConflictException('this removal is not pending');
+
+    await this.prisma.drepRemovalVote.upsert({
+      where: { removalId_boardDrepId: { removalId, boardDrepId: board.id } },
+      update: { choice, rationale },
+      create: { removalId, boardDrepId: board.id, choice, rationale },
+    });
+
+    const votes = await this.prisma.drepRemovalVote.findMany({ where: { removalId } });
+    const yes = votes.filter((v) => v.choice === 'YES').length;
+    const no = votes.filter((v) => v.choice === 'NO').length;
+    const threshold = await this.approvalThreshold();
+    const boardCount = await this.prisma.boardSeat.count();
+
+    let status = 'PENDING';
+    if (yes >= threshold) status = 'APPROVED';
+    else if (no > boardCount - threshold) status = 'REJECTED';
+
+    if (status !== 'PENDING') {
+      await this.prisma.drepRemoval.update({ where: { id: removalId }, data: { status, resolvedAt: new Date() } });
+      if (status === 'APPROVED') {
+        await this.prisma.drep.update({
+          where: { id: removal.targetDrepId },
+          data: { status: DRepStatus.REMOVED, removedAt: new Date() },
+        });
+      }
+    }
+    return { status, yes, no, threshold };
+  }
+
+  /** Board view of pending removals (with this board member's own vote). */
+  async listActiveRemovals(boardUserId: string) {
+    const me = await this.prisma.drep.findUnique({ where: { userId: boardUserId }, select: { id: true } });
+    const removals = await this.prisma.drepRemoval.findMany({
+      where: { status: 'PENDING' },
+      include: { votes: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    const threshold = await this.approvalThreshold();
+    const names = await this.drepNames(removals.flatMap((r) => [r.targetDrepId, r.proposedBy, ...r.votes.map((v) => v.boardDrepId)]));
+    return removals.map((r) => ({
+      id: r.id,
+      reason: r.reason,
+      targetDrepId: r.targetDrepId,
+      targetName: names.get(r.targetDrepId) ?? '?',
+      proposedByName: names.get(r.proposedBy) ?? '?',
+      yes: r.votes.filter((v) => v.choice === 'YES').length,
+      no: r.votes.filter((v) => v.choice === 'NO').length,
+      threshold,
+      myVote: me ? r.votes.find((v) => v.boardDrepId === me.id)?.choice ?? null : null,
+      votes: r.votes.map((v) => ({ choice: v.choice, rationale: v.rationale, voterName: names.get(v.boardDrepId) ?? 'Board member' })),
+    }));
+  }
+
+  /** The pending removal targeting this user (so My area can warn them). */
+  async getMyActiveRemoval(userId: string) {
+    const me = await this.prisma.drep.findUnique({ where: { userId }, select: { id: true } });
+    if (!me) return null;
+    const r = await this.prisma.drepRemoval.findFirst({
+      where: { targetDrepId: me.id, status: 'PENDING' },
+      include: { votes: true },
+    });
+    if (!r) return null;
+    const threshold = await this.approvalThreshold();
+    const names = await this.drepNames([r.proposedBy, ...r.votes.map((v) => v.boardDrepId)]);
+    return {
+      reason: r.reason,
+      proposedByName: names.get(r.proposedBy) ?? '?',
+      yes: r.votes.filter((v) => v.choice === 'YES').length,
+      no: r.votes.filter((v) => v.choice === 'NO').length,
+      threshold,
+      votes: r.votes.map((v) => ({ choice: v.choice, rationale: v.rationale, voterName: names.get(v.boardDrepId) ?? 'Board member' })),
+    };
+  }
+
+  /** Admitted non-board DReps that the board may propose to remove. */
+  async listRemovableMembers() {
+    const seats = await this.prisma.boardSeat.findMany();
+    const boardKeys = new Set(seats.map((s) => s.drepKeyHash));
+    const dreps = await this.prisma.drep.findMany({
+      where: { status: DRepStatus.ADMITTED },
+      include: { user: { select: { displayName: true, drepKeyHash: true } } },
+    });
+    return dreps
+      .filter((d) => !(d.user.drepKeyHash && boardKeys.has(d.user.drepKeyHash)))
+      .map((d) => ({ drepId: d.id, displayName: d.user.displayName ?? d.drepIdOnchain, drepIdOnchain: d.drepIdOnchain }));
+  }
+
+  /** Resolve drep ids → display names (self-set, else board-seat name, else short id). */
+  private async drepNames(ids: string[]): Promise<Map<string, string>> {
+    const unique = [...new Set(ids)];
+    const dreps = await this.prisma.drep.findMany({
+      where: { id: { in: unique } },
+      include: { user: { select: { displayName: true, drepKeyHash: true } } },
+    });
+    const seats = await this.prisma.boardSeat.findMany();
+    const seatName = new Map(seats.map((s) => [s.drepKeyHash, s.displayName]));
+    const out = new Map<string, string>();
+    for (const d of dreps) {
+      out.set(
+        d.id,
+        d.user.displayName ?? (d.user.drepKeyHash && seatName.get(d.user.drepKeyHash)) ?? `${d.drepIdOnchain.slice(0, 12)}…`,
+      );
+    }
+    return out;
+  }
+
+  /** Resolve + verify a seated board member by their wallet user id. */
+  private async requireBoardDrep(boardUserId: string): Promise<{ id: string; drepKeyHash: string }> {
+    const d = await this.prisma.drep.findUnique({
+      where: { userId: boardUserId },
+      include: { user: { select: { drepKeyHash: true } } },
+    });
+    if (!d || !d.user.drepKeyHash) throw new ForbiddenException('board members only');
+    const seat = await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: d.user.drepKeyHash } });
+    if (!seat) throw new ForbiddenException('only seated board members');
+    return { id: d.id, drepKeyHash: d.user.drepKeyHash };
+  }
+
   private async approvalThreshold(): Promise<number> {
     const row = await this.prisma.platformConfig.findUnique({
       where: { key: 'ADMISSION_APPROVAL_VOTES' },

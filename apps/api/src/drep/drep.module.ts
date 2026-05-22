@@ -6,6 +6,7 @@ import { MeDrepController } from './me-drep.controller';
 import { MeExpertController } from './me-expert.controller';
 import { BoardAdmissionController } from './board-admission.controller';
 import { BoardExpertsController } from './board-experts.controller';
+import { BoardRemovalController } from './board-removal.controller';
 import { DaoController } from './dao.controller';
 
 @Module({
@@ -15,6 +16,7 @@ import { DaoController } from './dao.controller';
     MeExpertController,
     BoardAdmissionController,
     BoardExpertsController,
+    BoardRemovalController,
     DaoController,
   ],
   providers: [DrepService, BoardGuard],

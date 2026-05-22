@@ -8,7 +8,7 @@ const field =
   'w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900';
 
 /** §2 — a non-DRep ADA holder applies to be an Expert (milestone reviewer); board approves. */
-export function ExpertApplyForm() {
+export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
   const [mine, setMine] = useState<MyExpert | null>(null);
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
@@ -39,6 +39,7 @@ export function ExpertApplyForm() {
     try {
       await expertApi.apply({ displayName: name.trim(), bio: bio.trim() || undefined, subcategoryIds: subs });
       await load();
+      onChange?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
     } finally {

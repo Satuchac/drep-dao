@@ -20,6 +20,12 @@ export class MeDrepController {
     return this.drep.getMine(ctx.userId);
   }
 
+  // §14.4 — a pending board removal vote targeting me (null if none).
+  @Get('removal')
+  myRemoval(@CurrentUser() ctx: AuthContext) {
+    return this.drep.getMyActiveRemoval(ctx.userId);
+  }
+
   @Patch('drep')
   update(@CurrentUser() ctx: AuthContext, @Body() dto: UpdateDrepDto) {
     return this.drep.updateMine(ctx.userId, dto);
