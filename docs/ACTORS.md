@@ -1,38 +1,37 @@
 # Test actors (Preprod) — FIXED
 
-This is the **stable** set of test identities. Do not regenerate. Seeds are in
-`tools/persona-wallets.json` (gitignored, local only). Import each 24-word seed as
-a **separate** wallet in Lace/Eternl (choose **24-word** recovery), network = **Preprod**.
+The **stable** test cast. Do not regenerate. Seeds live in `tools/persona-wallets.json`
+(gitignored). Import each 24-word seed as a **separate** wallet in Lace/Eternl
+(choose **24-word** recovery), network = **Preprod**.
 
-| Actor | Platform role | Login |
-|---|---|---|
-| **Admin** | Platform Admin (operational) | `/admin/login` · username `satucha` (dev password set via `pnpm admin:create`) |
-| **Board DRep** | DRep + Board member | wallet (seeded into genesis) |
-| **Regular DRep** | DRep | wallet (admitted by board) |
-| **ADA holder** | Viewer + Submitter | wallet |
+DREP is an **on-chain role**: a wallet is a DRep only if its DRep key is
+registered + active on-chain (verified at login via Koios). Board members are
+registered DReps seated through the admin-confirmed `genesis.json`. ADA holders
+are wallets with no on-chain DRep registration (viewer + submitter only).
 
-## Addresses
+| Actor | Intended role | Stake address | DRep ID (CIP-129) |
+|---|---|---|---|
+| **Alice (Founding Board)** | BOARD | `stake_test1upn85fz4mdst939ymhfrgtppgc74tfr9mhwyp8u6vpxa7pgrtye29` | `drep1y22y7e70anzrjy8dker0k8q7350gu49dtrd3gpwgc5f84zq80yv0z` |
+| **Dave (Founding Board)** | BOARD | `stake_test1upcs88jsuhpgqnccat827rjcxjq7efau9rurtj5nlr6lc3s8g4q0z` | `drep1y26xrktxrqqsd7yqs8tfpgvraynw29hsvzrkl5mgqnqffwsv8dyvz` |
+| **Erin (Founding Board)** | BOARD | `stake_test1urc0amea4df7yyppxkhhr3hvqzfqzv742sykteglpuhdynse2h3zl` | `drep1ygne46zv9vp2utuw50c6xex5dtr2mcqetjc6wp0djrke4ys0slh40` |
+| **Frank (Founding Board)** | BOARD | `stake_test1ur2ktqsmpkh00r8nrktu3afg9w4s7mdsrzsz737l27s728qv9ss26` | `drep1ygeace557eucst8legz7d8q28wk9047ua2u45zn6026yn0chzncke` |
+| **Grace (Founding Board)** | BOARD | `stake_test1uqyze98kz9gycnafxv74prx6k93r20hqdwdtfnu5e7jm34cgjqypp` | `drep1yg8flsxc8lj7dw60wg4mcfsg6s9k59esgcdnrjtgvp76wys2dfqpj` |
+| **Heidi (Voting DRep)** | DREP | `stake_test1urqnffpu3rcz983hssdglx4t7whrg2f7raklq6kl3erpwsq26d76v` | `drep1yf449phu0hf3cdtw3jenx70kz9w983hw7z7qutf7rfya4qqcx7kae` |
+| **Ivan (Voting DRep)** | DREP | `stake_test1uqdqtxrr0nz8hcdjxzlds90834y5hlgspjwj6yv55f09zgcrzk58r` | `drep1ytkhgyn89pw5tervr5gyxsc2defuxznfruta4fkmlzn6rhgt5rn2t` |
+| **Judy (Voting DRep)** | DREP | `stake_test1uq80gf28ywccc9yvrg4rdcmrw2ewenvqe0a63l84qtly02g2tdw4r` | `drep1yfshmj2hkjlsq6tmju5z38rqna30nca6j0c2nhe67xzj07cr63pa3` |
+| **Bob (ADA holder / funder)** | HOLDER | `stake_test1urqn2e07tp6qa556rjc2pskxdlh7xhwxsushx5ug53xjevsan47jx` | `drep1ytwhq9236d0v0m4xq7nrw6xeqptpk6wchyukwrpk5xmsn2sa3jf6y` |
+| **Carol (ADA holder)** | HOLDER | `stake_test1urqw60ntj3v8pwxr7veg7wnncn4anjlzx0geg9dl3536khg6j0ttd` | — |
 
-**Board DRep**
-- stake: `stake_test1urqn2e07tp6qa556rjc2pskxdlh7xhwxsushx5ug53xjevsan47jx`
-- payment (fund here): `addr_test1qpdx47kyzpk5hxydx96mw2mf3zcpehx7rzq827yfsj0e66xpx4jlukr5pmff589s5rpvvml0udwudpepwdfc3fzd9jeqpxgc66`
-- drep_id (derived): `drep1m4cp25wntmr7afs85cmk3kgq2cdknk9e89nscd4pkuy6523mw7m`
+**Admin** (separate auth): Platform Admin at `/admin/login`, username `satucha`
+(dev password via `pnpm admin:create`).
 
-**Regular DRep**
-- stake: `stake_test1upn85fz4mdst939ymhfrgtppgc74tfr9mhwyp8u6vpxa7pgrtye29`
-- payment (fund here): `addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3`
-- drep_id (derived): `drep1j38k0nlvcsu3pmdkgma3c85dr689ft2cmv2qtjx9zfags524kuf`
+## Cast composition
+- **5 board members** (registered DReps, seated in genesis): Alice, Dave, Erin, Frank, Grace
+- **3 voting DReps** (registered, non-board): Heidi, Ivan, Judy
+- **2 ADA holders** (not registered): Bob (also the funding source), Carol
 
-**ADA holder** (no DRep, no funding needed)
-- stake: `stake_test1urqw60ntj3v8pwxr7veg7wnncn4anjlzx0geg9dl3536khg6j0ttd`
-- payment: `addr_test1qrzrxcfefv7wyrrxch2gfrvu3lvcz65r04c7fzdqpt8s8nxqa5lxh9zcwzuv8uej3ua8838tm897yv73js2mlrfr4dws47c726`
-
-## On-chain DRep registration (optional)
-
-The platform grants DRep status through admin-confirmed genesis (Board DRep) and
-board admission (Regular DRep) — keyed to the **stake key**. On-chain DRep
-registration (500 tADA refundable deposit) makes them *real Cardano DReps* and is
-required only for future Blockfrost verification. To register: fund the two DRep
-**payment** addresses from the Preprod faucet, then either register in
-Eternl/Lace (Governance → Register as a DRep) or have the registration certs
-submitted from the seeds.
+## On-chain setup (programmatic)
+1. `node tools/gen-cast.cjs` — generate the fixed wallets (this file).
+2. `node tools/fund-cast.cjs` — Bob funds the 7 new wallets (~600 tADA each).
+3. `node tools/register-dreps.cjs` — each of the 7 self-registers as a DRep on-chain (500 tADA deposit).
+4. `node tools/seat-board.cjs` — write `genesis.json` (5 board) + verify + seat.
