@@ -20,6 +20,7 @@ import {
 import { GovSubject, VotingStyle } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnchorService } from '../cardano/anchor.service';
+import { CardanoQueryService } from '../cardano/cardano-query.service';
 
 const LOVELACE = 1_000_000n;
 
@@ -29,13 +30,15 @@ export class DvService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly anchor: AnchorService,
+    private readonly cardano: CardanoQueryService,
   ) {}
 
   /**
    * §4.3 — take the voting-power snapshot and open D&V voting. Idempotent.
-   * NOTE: on-chain stake isn't wired yet (no Blockfrost), so each eligible DRep
-   * is snapshotted with a nominal stake (DV_SNAPSHOT_STAKE_ADA, default 1,000,000)
-   * and their real merit. The balanced-tally machinery (§4) is fully real.
+   * Each voter's power = log10(their REAL on-chain CIP-1694 voting power in ADA) ×
+   * merit multiplier — the SAME computation as the members overview, so the numbers
+   * match. If a DRep has no on-chain delegation yet, their stake falls back to a
+   * nominal value (DV_SNAPSHOT_STAKE_ADA) so they aren't powerless in the demo.
    */
   async openVoting(proposalId: string) {
     const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
@@ -51,7 +54,7 @@ export class DvService {
     // who only vote on funding proposals if they explicitly opted in for this proposal.
     const eligible = await this.prisma.roundDrepEligibility.findMany({
       where: { roundId: proposal.roundId ?? undefined, drep: { status: 'ADMITTED' } },
-      select: { drepId: true, drep: { select: { user: { select: { drepKeyHash: true } } } } },
+      select: { drepId: true, drep: { select: { drepIdOnchain: true, user: { select: { drepKeyHash: true } } } } },
     });
     const boardHashes = new Set((await this.prisma.boardSeat.findMany({ select: { drepKeyHash: true } })).map((s) => s.drepKeyHash));
     const optedIn = new Set(
@@ -63,8 +66,9 @@ export class DvService {
       return !isBoard || optedIn.has(e.drepId);
     });
 
+    const power = await this.realVotingPower(voters.map((v) => v.drep.drepIdOnchain));
     const snapshot = await this.prisma.voteSnapshot.create({ data: { proposalId } });
-    for (const { drepId } of voters) await this.addSnapshotEntry(snapshot.id, drepId);
+    for (const v of voters) await this.addSnapshotEntry(snapshot.id, v.drepId, power.get(v.drep.drepIdOnchain) ?? 0n);
     await this.prisma.proposal.update({ where: { id: proposalId }, data: { votingStartAt: new Date() } });
     return this.result(proposalId);
   }
@@ -87,18 +91,36 @@ export class DvService {
     const snapshot = await this.prisma.voteSnapshot.findFirst({ where: { proposalId } });
     if (snapshot) {
       const has = await this.prisma.voteSnapshotEntry.findUnique({ where: { snapshotId_drepId: { snapshotId: snapshot.id, drepId: drep.id } } });
-      if (!has) await this.addSnapshotEntry(snapshot.id, drep.id);
+      if (!has) {
+        const power = await this.realVotingPower([drep.drepIdOnchain]);
+        await this.addSnapshotEntry(snapshot.id, drep.id, power.get(drep.drepIdOnchain) ?? 0n);
+      }
     }
     return this.result(proposalId);
   }
 
-  private async addSnapshotEntry(snapshotId: string, drepId: string) {
-    const nominalStake = toLovelaceAda(Number(this.config.get('DV_SNAPSHOT_STAKE_ADA') ?? 1_000_000));
+  /** Real on-chain CIP-1694 voting power (lovelace) per DRep id; falls back to a nominal stake if 0. */
+  private async realVotingPower(drepIds: string[]): Promise<Map<string, bigint>> {
+    const fallback = toLovelaceAda(Number(this.config.get('DV_SNAPSHOT_STAKE_ADA') ?? 1_000_000));
+    const out = new Map<string, bigint>();
+    try {
+      const vp = await this.cardano.drepVotingPower(drepIds);
+      for (const id of drepIds) {
+        const lovelace = vp.get(id)?.votingPowerLovelace ?? 0n;
+        out.set(id, lovelace > 0n ? lovelace : fallback);
+      }
+    } catch {
+      for (const id of drepIds) out.set(id, fallback); // Koios hiccup → nominal so voting still works
+    }
+    return out;
+  }
+
+  private async addSnapshotEntry(snapshotId: string, drepId: string, stakeLovelace: bigint) {
     const merit = await this.currentMerit(drepId);
-    const bp = basePower(nominalStake);
+    const bp = basePower(stakeLovelace);
     const mm = meritMultiplier(merit);
     await this.prisma.voteSnapshotEntry.create({
-      data: { snapshotId, drepId, stakeLovelace: nominalStake, meritPoints: merit, basePower: bp, meritMultiplier: mm, finalPower: bp * mm },
+      data: { snapshotId, drepId, stakeLovelace, meritPoints: merit, basePower: bp, meritMultiplier: mm, finalPower: bp * mm },
     });
   }
 
@@ -202,7 +224,7 @@ export class DvService {
     try {
       const proposal = await this.prisma.proposal.findUnique({
         where: { id: proposalId },
-        include: { round: { select: { number: true, id: true } } },
+        include: { round: { select: { number: true, id: true, name: true } } },
       });
       const voteList = await this.dvVoteList(proposalId);
       const noPower = Math.max(0, (r.totalPower ?? 0) - (r.yesPower ?? 0) - (r.abstainPower ?? 0));
@@ -210,7 +232,7 @@ export class DvService {
         kind: 'dv',
         subject: GovSubject.DV,
         style: VotingStyle.BALANCED,
-        ref: `${proposal?.title ?? 'proposal'} · round #${proposal?.round?.number ?? '?'}`,
+        ref: `${proposal?.title ?? 'proposal'} · ${proposal?.round?.name ?? `Round #${proposal?.round?.number ?? '?'}`}`,
         proposalId,
         roundId: proposal?.round?.id ?? proposal?.roundId ?? null,
         votes: voteList.map((v) => ({ drep: v.drep, vote: v.choice, power: v.weight })),

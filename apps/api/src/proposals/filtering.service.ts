@@ -121,7 +121,7 @@ export class FilteringService {
   private async maybeDecide(proposalId: string) {
     const proposal = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
-      include: { round: { select: { number: true, id: true, filterApprovalVotes: true, dvApprovalThresholdPct: true } } },
+      include: { round: { select: { number: true, id: true, name: true, filterApprovalVotes: true, dvApprovalThresholdPct: true } } },
     });
     // Only decide once: skip if no longer an active filtering proposal.
     if (!proposal || proposal.status !== ProposalStatus.ACTIVE || proposal.stage !== ProposalStage.FILTERING) return;
@@ -157,7 +157,7 @@ export class FilteringService {
         kind: 'filtering',
         subject: GovSubject.FILTERING,
         style: VotingStyle.ONE_PERSON_ONE_VOTE,
-        ref: `${proposal.title} · round #${proposal.round?.number ?? '?'}`,
+        ref: `${proposal.title} · ${proposal.round?.name ?? `Round #${proposal.round?.number ?? '?'}`}`,
         proposalId,
         roundId: proposal.round?.id ?? proposal.roundId ?? null,
         votes: voteList.map((v) => ({ drep: v.drep, vote: v.choice })),

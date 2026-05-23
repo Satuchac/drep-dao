@@ -184,7 +184,7 @@ export class MilestonesService {
   private async maybeDecide(milestoneId: string) {
     const m = await this.prisma.milestone.findUnique({
       where: { id: milestoneId },
-      include: { proposal: { select: { id: true, title: true, roundId: true, round: { select: { number: true, milestoneApprovalVotes: true } } } } },
+      include: { proposal: { select: { id: true, title: true, roundId: true, round: { select: { number: true, name: true, milestoneApprovalVotes: true } } } } },
     });
     if (!m || m.status !== 'POA_SUBMITTED') return;
     const threshold = m.proposal.round?.milestoneApprovalVotes ?? (await this.cfg('MILESTONE_APPROVAL_VOTES'));
@@ -206,7 +206,7 @@ export class MilestonesService {
         kind: 'milestone',
         subject: GovSubject.MILESTONE,
         style: VotingStyle.ONE_PERSON_ONE_VOTE,
-        ref: `${m.proposal.title} · milestone #${m.idx + 1}`,
+        ref: `${m.proposal.title} · ${m.proposal.round?.name ?? `Round #${m.proposal.round?.number ?? '?'}`} · milestone #${m.idx + 1}`,
         proposalId: m.proposal.id,
         roundId: m.proposal.roundId,
         votes: votes.map((v) => ({ drep: v.drep, vote: v.choice })),

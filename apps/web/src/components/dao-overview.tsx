@@ -1,7 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { daoApi, type DaoMember, type DaoExpert } from '@/lib/api';
+
+const SUBCAT_LABEL: Record<string, string> = Object.fromEntries(DEFAULT_SUBCATEGORIES.map((s) => [s.id, s.label]));
 
 /** On-chain DRep image (CIP-119) if present, else a generic initials avatar. */
 function Avatar({ name, image }: { name: string; image: string | null }) {
@@ -117,16 +120,28 @@ export function DaoOverview() {
         {experts.length === 0 ? (
           <p className="mt-1 text-sm text-neutral-500">No approved experts yet.</p>
         ) : (
-          <ul className="mt-2 flex flex-wrap gap-2">
+          <ul className="mt-2 grid gap-2 sm:grid-cols-2">
             {experts.map((x) => (
               <li
                 key={x.id}
-                className="rounded-lg border border-neutral-200 px-3 py-2 text-sm dark:border-neutral-800"
+                className="rounded-lg border border-amber-300 bg-amber-50/40 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/20"
               >
-                <span className="font-medium">{x.displayName}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{x.displayName}</span>
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">Expert</span>
+                </div>
+                {x.bio ? <div className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">{x.bio}</div> : null}
                 {x.subcategoryIds.length ? (
-                  <span className="ml-2 text-xs text-neutral-500">{x.subcategoryIds.join(', ')}</span>
-                ) : null}
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {x.subcategoryIds.map((id) => (
+                      <span key={id} className="rounded-full border border-neutral-300 px-2 py-0.5 text-[11px] text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
+                        {SUBCAT_LABEL[id] ?? id}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-0.5 text-xs text-neutral-400">no expertise areas listed</div>
+                )}
               </li>
             ))}
           </ul>

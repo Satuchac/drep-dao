@@ -9,8 +9,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-neutral-50 text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100">
+    <html lang="en" suppressHydrationWarning>
+      {/* suppressHydrationWarning: browser extensions (Grammarly, etc.) inject
+          attributes on <body> before React hydrates — harmless, not our markup. */}
+      <body
+        suppressHydrationWarning
+        className="min-h-screen bg-neutral-50 text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100"
+      >
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

@@ -41,7 +41,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const rounds = new RoundsService(prisma, config);
   const proposals = new ProposalsService(prisma);
   const filtering = new FilteringService(prisma, anchor);
-  const dv = new DvService(prisma, config, anchor);
+  const dv = new DvService(prisma, config, anchor, cardano);
   const milestones = new MilestonesService(prisma, anchor);
   const comments = new CommentsService(prisma);
 

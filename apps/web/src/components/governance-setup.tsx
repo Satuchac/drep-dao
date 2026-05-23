@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { governanceApi, type GovParam, type WalletStatus } from '@/lib/api';
+import { invalidateConfig } from '@/lib/explorer';
+
+const EXPLORER_OPTIONS = ['cardanoscan', 'cexplorer', 'adastat', 'custom'];
 
 /** §6/§28 — board edits platform governance parameters. */
 export function GovernanceSetup() {
@@ -34,6 +37,8 @@ export function GovernanceSetup() {
       const value = p.type === 'number' ? Number(raw) : raw;
       await governanceApi.update(p.key, value);
       setMsg(`Saved ${p.key}.`);
+      // Explorer change → re-resolve all on-chain links live (no refresh needed).
+      if (p.key.startsWith('CARDANO_EXPLORER')) invalidateConfig();
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'failed');
@@ -96,12 +101,24 @@ export function GovernanceSetup() {
                       ) : null}
                     </td>
                     <td className="px-3 py-1.5">
-                      <input
-                        value={edits[p.key] ?? ''}
-                        onChange={(e) => setEdits((s) => ({ ...s, [p.key]: e.target.value }))}
-                        inputMode={p.type === 'number' ? 'decimal' : 'text'}
-                        className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-                      />
+                      {p.key === 'CARDANO_EXPLORER' ? (
+                        <select
+                          value={edits[p.key] ?? ''}
+                          onChange={(e) => setEdits((s) => ({ ...s, [p.key]: e.target.value }))}
+                          className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        >
+                          {EXPLORER_OPTIONS.map((o) => (
+                            <option key={o} value={o}>{o}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          value={edits[p.key] ?? ''}
+                          onChange={(e) => setEdits((s) => ({ ...s, [p.key]: e.target.value }))}
+                          inputMode={p.type === 'number' ? 'decimal' : 'text'}
+                          className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        />
+                      )}
                     </td>
                     <td className="px-3 py-1.5 text-xs text-neutral-500">{String(p.default)}</td>
                     <td className="px-3 py-1.5">

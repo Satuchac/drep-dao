@@ -6,6 +6,9 @@ import { configApi, meApi, type PublicConfig } from './api';
 
 let cached: PublicConfig | null = null;
 let inflight: Promise<PublicConfig> | null = null;
+// Subscribers (useExplorer instances) re-fetch when the config is invalidated, so
+// changing the explorer applies live everywhere without a page refresh.
+const listeners = new Set<() => void>();
 
 /**
  * The effective config = the public platform config, with the logged-in member's
@@ -31,10 +34,11 @@ export function loadConfig(): Promise<PublicConfig> {
   return inflight;
 }
 
-/** Drop the cached config so the next read reflects a just-saved preference. */
+/** Drop the cache and notify every useExplorer so links re-resolve immediately. */
 export function invalidateConfig() {
   cached = null;
   inflight = null;
+  listeners.forEach((l) => l());
 }
 
 const fill = (tpl: string, hash: string, address = '') => tpl.replace('{hash}', hash).replace('{address}', address);
@@ -54,9 +58,12 @@ export function useExplorer() {
   const [cfg, setCfg] = useState<PublicConfig | null>(cached);
   useEffect(() => {
     let alive = true;
-    loadConfig().then((c) => alive && setCfg(c)).catch(() => undefined);
+    const reload = () => loadConfig().then((c) => alive && setCfg(c)).catch(() => undefined);
+    reload();
+    listeners.add(reload); // re-fetch when invalidateConfig() fires (explorer changed)
     return () => {
       alive = false;
+      listeners.delete(reload);
     };
   }, []);
   return {
