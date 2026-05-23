@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { governanceApi, type GovParam, type WalletStatus } from '@/lib/api';
 import { invalidateConfig } from '@/lib/explorer';
 
-const EXPLORER_OPTIONS = ['cardanoscan', 'cexplorer', 'adastat', 'custom'];
+const EXPLORER_OPTIONS = ['cardanoscan', 'cexplorer', 'adastat'];
 
 /** §6/§28 — board edits platform governance parameters. */
 export function GovernanceSetup() {

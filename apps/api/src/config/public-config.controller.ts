@@ -17,16 +17,11 @@ export class PublicConfigController {
 
   @Get()
   async get() {
-    const rows = await this.prisma.platformConfig.findMany({
-      where: { key: { in: ['CARDANO_EXPLORER', 'CARDANO_EXPLORER_CUSTOM_TX_URL'] } },
-    });
-    const override = new Map(rows.map((r) => [r.key, r.value]));
-    const val = (k: 'CARDANO_EXPLORER' | 'CARDANO_EXPLORER_CUSTOM_TX_URL') =>
-      String(override.get(k) ?? PLATFORM_CONFIG_DEFAULTS[k]);
+    const row = await this.prisma.platformConfig.findUnique({ where: { key: 'CARDANO_EXPLORER' } });
+    const explorer = String(row?.value ?? PLATFORM_CONFIG_DEFAULTS.CARDANO_EXPLORER);
     return {
       network: this.config.get<string>('CARDANO_NETWORK') ?? 'Preprod',
-      explorer: val('CARDANO_EXPLORER'),
-      explorerCustomTxUrl: val('CARDANO_EXPLORER_CUSTOM_TX_URL'),
+      explorer,
       submissionFeeAddress: this.config.get<string>('SUBMISSION_FEE_ADDRESS') || null,
       anchorMetadataLabel: 80808081,
     };

@@ -45,21 +45,41 @@ export class FilteringService {
     });
     if (existing.length > 0) return this.result(proposalId);
 
+    // §7.1 — eligible admitted DReps in the round, with their declared subcategories.
     const eligible = await this.prisma.roundDrepEligibility.findMany({
       where: { roundId: proposal.roundId ?? undefined, drep: { status: 'ADMITTED' } },
-      select: { drepId: true },
+      select: { drepId: true, drep: { select: { subcategoryIds: true } } },
     });
-    let pool = eligible.map((e) => e.drepId).filter((id) => id !== proposal.submitterDrepId);
-    if (pool.length === 0) throw new BadRequestException('no eligible reviewers in this round');
+    const cands = eligible.filter((e) => e.drepId !== proposal.submitterDrepId);
+    if (cands.length === 0) throw new BadRequestException('no eligible reviewers in this round');
 
+    // §7.1 equal-participation: how many times each DRep has been drawn this round.
+    const roundProposals = await this.prisma.proposal.findMany({
+      where: { roundId: proposal.roundId ?? undefined },
+      select: { id: true },
+    });
+    const counts = await this.prisma.filterAssignment.groupBy({
+      by: ['drepId'],
+      where: { proposalId: { in: roundProposals.map((p) => p.id) } },
+      _count: { _all: true },
+    });
+    const drawnCount = new Map(counts.map((c) => [c.drepId, c._count._all]));
+
+    // §7.1 — prefer DReps whose subcategories overlap the proposal's; within a tier
+    // prefer the least-drawn so far (equal participation), breaking ties randomly.
+    const propSubs = new Set(proposal.subcategoryIds ?? []);
+    const expertiseMatch = (subs: string[]) => propSubs.size > 0 && subs.some((s) => propSubs.has(s));
+    const ranked = cands
+      .map((e) => ({
+        drepId: e.drepId,
+        tier: expertiseMatch(e.drep.subcategoryIds) ? 0 : 1, // 0 = expertise match first
+        drawn: drawnCount.get(e.drepId) ?? 0,
+        rnd: randomInt(1_000_000),
+      }))
+      .sort((a, b) => a.tier - b.tier || a.drawn - b.drawn || a.rnd - b.rnd);
     // §6 — per-round override of the reviewer count, else the platform default.
-    const count = Math.min(proposal.round?.filterReviewerCount ?? (await this.cfg('FILTER_REVIEWER_COUNT')), pool.length);
-    const chosen: string[] = [];
-    for (let i = 0; i < count; i++) {
-      const j = randomInt(pool.length);
-      chosen.push(pool[j]!);
-      pool = pool.filter((_, k) => k !== j);
-    }
+    const count = Math.min(proposal.round?.filterReviewerCount ?? (await this.cfg('FILTER_REVIEWER_COUNT')), ranked.length);
+    const chosen = ranked.slice(0, count).map((r) => r.drepId);
 
     await this.prisma.filterAssignment.createMany({
       data: chosen.map((drepId) => ({ proposalId, drepId, acceptedAt: new Date() })),
@@ -189,18 +209,32 @@ export class FilteringService {
 
   async result(proposalId: string) {
     const [assignments, votes, proposal, voteList, anchor] = await Promise.all([
-      this.prisma.filterAssignment.count({ where: { proposalId, releasedAt: null } }),
+      this.prisma.filterAssignment.findMany({
+        where: { proposalId, releasedAt: null },
+        include: { drep: { select: { drepIdOnchain: true, subcategoryIds: true, user: { select: { displayName: true } } } } },
+      }),
       this.prisma.vote.findMany({ where: { proposalId, phase: VotePhase.FILTERING } }),
       this.prisma.proposal.findUnique({
         where: { id: proposalId },
-        select: { status: true, stage: true, round: { select: { filterApprovalVotes: true } } },
+        select: { status: true, stage: true, subcategoryIds: true, round: { select: { filterApprovalVotes: true } } },
       }),
       this.anchorVoteList(proposalId),
       this.prisma.anchor.findFirst({ where: { proposalId, kind: 'filtering' }, orderBy: { createdAt: 'desc' } }),
     ]);
     const threshold = proposal?.round?.filterApprovalVotes ?? (await this.cfg('FILTER_APPROVAL_VOTES'));
+    const choiceByDrep = new Map(votes.map((v) => [v.drepId, v.choice]));
+    const propSubs = new Set(proposal?.subcategoryIds ?? []);
+    // §7.1 — who is assigned, whether they've voted yet, and if they matched the expertise.
+    const assigned = assignments.map((a) => ({
+      drep: a.drep.drepIdOnchain,
+      displayName: a.drep.user?.displayName ?? null,
+      voted: choiceByDrep.has(a.drepId),
+      choice: choiceByDrep.get(a.drepId) ?? null,
+      expertiseMatch: propSubs.size > 0 && a.drep.subcategoryIds.some((s) => propSubs.has(s)),
+    }));
     return {
-      reviewers: assignments,
+      reviewers: assignments.length,
+      assigned,
       yes: votes.filter((v) => v.choice === VoteChoice.YES).length,
       no: votes.filter((v) => v.choice === VoteChoice.NO).length,
       abstain: votes.filter((v) => v.choice === VoteChoice.ABSTAIN).length,

@@ -137,9 +137,32 @@ function FilteringSection({ id }: { id: string }) {
         <AnchorLink txHash={r.anchorTxHash} />
       </div>
       <div className="mt-1 text-xs text-neutral-500">
-        {r.reviewers} reviewers · {r.yes} YES / {r.no} NO / {r.abstain} abstain · need {r.threshold} to decide
+        {r.reviewers} reviewers assigned · {r.yes} YES / {r.no} NO / {r.abstain} abstain · need {r.threshold} to decide
       </div>
-      <div className="mt-2"><Votes votes={r.votes} /></div>
+      {/* §7.1 — the assigned reviewers and whether each has voted yet. */}
+      {r.assigned && r.assigned.length > 0 ? (
+        <ul className="mt-2 space-y-1">
+          {r.assigned.map((a, i) => (
+            <li key={i} className="flex items-center justify-between rounded border border-neutral-200 px-2 py-1 text-xs dark:border-neutral-800">
+              <span className="flex items-center gap-1.5">
+                <span className="font-medium">{a.displayName ?? (a.drep ? `${a.drep.slice(0, 16)}…` : 'DRep')}</span>
+                {a.expertiseMatch ? (
+                  <span className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title="matched the proposal's expertise areas">expertise</span>
+                ) : null}
+              </span>
+              {a.voted ? (
+                <span className={`font-semibold ${choiceCls[a.choice ?? ''] ?? ''}`}>{a.choice}</span>
+              ) : (
+                <span className="text-amber-600">pending</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="mt-2 text-xs text-neutral-400">No reviewers drawn yet.</div>
+      )}
+      {/* Rationales (NO requires one). */}
+      {r.votes.some((v) => v.rationale) ? <div className="mt-2"><Votes votes={r.votes.filter((v) => v.rationale)} /></div> : null}
     </section>
   );
 }

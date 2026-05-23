@@ -36,12 +36,8 @@ export const PLATFORM_CONFIG_DEFAULTS = {
   MERIT_POINT_MAX: 200,
   BOARD_REWARD_DEADLINE_DAYS: 30,
   ANCHOR_SCHEDULE_CRON: '0 2 * * *',
-  // Block explorer used for all on-chain links (tx + address). One of the known
-  // keys below, or 'custom' to use CARDANO_EXPLORER_CUSTOM_TX_URL.
-  CARDANO_EXPLORER: 'cardanoscan', // cardanoscan | cexplorer | adastat | custom
-  // Used only when CARDANO_EXPLORER='custom'. A URL template with '{hash}' (and
-  // optionally '{address}') placeholders, e.g. https://my-explorer/tx/{hash}
-  CARDANO_EXPLORER_CUSTOM_TX_URL: '',
+  // Block explorer used for all on-chain links (tx + address).
+  CARDANO_EXPLORER: 'cardanoscan', // cardanoscan | cexplorer | adastat
 } as const;
 
 export type PlatformConfigKey = keyof typeof PLATFORM_CONFIG_DEFAULTS;
@@ -87,8 +83,7 @@ export const PLATFORM_CONFIG_META: Record<PlatformConfigKey, string> = {
   MERIT_POINT_MAX: "Cap on a DRep's merit score (also bounds the voting-power multiplier).",
   BOARD_REWARD_DEADLINE_DAYS: 'Days the board has to distribute rewards after a round before a penalty applies.',
   ANCHOR_SCHEDULE_CRON: 'Cron schedule for the daily on-chain anchoring job (informational).',
-  CARDANO_EXPLORER: 'Block explorer for on-chain links: cardanoscan, cexplorer, adastat, or custom.',
-  CARDANO_EXPLORER_CUSTOM_TX_URL: "Custom explorer tx URL template (used when explorer is 'custom'); use {hash} as the placeholder.",
+  CARDANO_EXPLORER: 'Block explorer for on-chain links: cardanoscan, cexplorer, or adastat.',
 };
 
 /** Known block explorers → tx/address URL templates per network ({hash}/{address} placeholders). */

@@ -5,7 +5,7 @@ import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { UsersService } from './users.service';
 
 export class PreferencesDto {
-  @IsOptional() @IsIn(['cardanoscan', 'cexplorer', 'adastat', 'custom', '']) explorer?: string;
+  @IsOptional() @IsIn(['cardanoscan', 'cexplorer', 'adastat', '']) explorer?: string;
   @IsOptional() @IsString() @MaxLength(300) explorerCustomTxUrl?: string;
 }
 

@@ -61,7 +61,8 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   });
 
   console.log('\n=== Round + submission (commercial fee 3%) ===');
-  const round = await rounds.create({ name: 'Flow round', budgetAda: 1_000_000, rewardsPoolAda: 50_000, categories: [{ name: 'Tooling', type: 'GRANT', allocatedAda: 1_000_000 }] });
+  // Scope eligibility to the board so the test is isolated from other admitted DReps.
+  const round = await rounds.create({ name: 'Flow round', budgetAda: 1_000_000, rewardsPoolAda: 50_000, categories: [{ name: 'Tooling', type: 'GRANT', allocatedAda: 1_000_000 }], eligibleDrepIds: boardDreps.map((d) => d.id) });
   await rounds.startStage(round.id, 'SUBMISSION');
   const draft = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: round.categories[0].id, title: 'Build a tool',

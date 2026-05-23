@@ -23,7 +23,7 @@ export function loadConfig(): Promise<PublicConfig> {
       let merged = base;
       try {
         const pref = await meApi.preferences(); // 401 when logged out → keep platform default
-        if (pref?.explorer) merged = { ...base, explorer: pref.explorer, explorerCustomTxUrl: pref.explorerCustomTxUrl ?? base.explorerCustomTxUrl };
+        if (pref?.explorer) merged = { ...base, explorer: pref.explorer };
       } catch {
         /* not logged in / no preference → platform default */
       }
@@ -44,7 +44,6 @@ export function invalidateConfig() {
 const fill = (tpl: string, hash: string, address = '') => tpl.replace('{hash}', hash).replace('{address}', address);
 
 export function txUrl(cfg: PublicConfig, hash: string): string {
-  if (cfg.explorer === 'custom' && cfg.explorerCustomTxUrl) return fill(cfg.explorerCustomTxUrl, hash);
   const ex = EXPLORERS[cfg.explorer] ?? EXPLORERS.cardanoscan;
   return fill(ex.tx[cfg.network] ?? ex.tx.Preprod, hash);
 }

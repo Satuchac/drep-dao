@@ -457,8 +457,16 @@ export interface VoteRationale {
   rationale: string | null;
   weight?: number;
 }
+export interface FilterAssignee {
+  drep: string | null;
+  displayName: string | null;
+  voted: boolean;
+  choice: string | null;
+  expertiseMatch: boolean;
+}
 export interface FilterResult {
   reviewers: number;
+  assigned: FilterAssignee[];
   yes: number;
   no: number;
   abstain: number;
@@ -524,7 +532,6 @@ export const dvApi = {
 export interface PublicConfig {
   network: string;
   explorer: string;
-  explorerCustomTxUrl: string;
   submissionFeeAddress: string | null;
   anchorMetadataLabel: number;
 }
