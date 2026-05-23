@@ -1,4 +1,4 @@
-import { Controller, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { ProposalsService } from './proposals.service';
@@ -14,6 +14,12 @@ export class AdminProposalsController {
     private readonly filtering: FilteringService,
     private readonly dv: DvService,
   ) {}
+
+  // §16 — proposals awaiting fee confirmation (board verifies the tx via explorer, then confirms).
+  @Get('pending-fee')
+  pendingFee() {
+    return this.proposals.listPendingFee();
+  }
 
   @Post(':id/confirm-fee')
   confirmFee(@Param('id', ParseUUIDPipe) id: string) {

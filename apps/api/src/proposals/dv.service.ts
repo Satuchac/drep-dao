@@ -17,7 +17,9 @@ import {
   VoteChoice,
   VotePhase,
 } from '@drep-dao/shared';
+import { GovSubject, VotingStyle } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
+import { AnchorService } from '../cardano/anchor.service';
 
 const LOVELACE = 1_000_000n;
 
@@ -26,6 +28,7 @@ export class DvService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly anchor: AnchorService,
   ) {}
 
   /**
@@ -136,6 +139,7 @@ export class DvService {
       : Number(this.config.get('DV_APPROVAL_THRESHOLD_PCT') ?? 67);
     const tally = { yesPower, totalPower, abstainPower, thresholdPct };
 
+    const anchor = await this.prisma.anchor.findFirst({ where: { proposalId, kind: 'dv' }, orderBy: { createdAt: 'desc' } });
     return {
       open: true,
       eligible: snapshot.entries.length,
@@ -149,10 +153,13 @@ export class DvService {
       approved: isApproved(tally),
       status: proposal?.status,
       stage: proposal?.stage,
+      votes: await this.dvVoteList(proposalId), // §8 public rationale + weight per voter
+      anchorTxHash: anchor?.txHash ?? null,
+      anchorHash: anchor?.hash ?? null,
     };
   }
 
-  /** §9.3 — board finalizes: APPROVED if threshold met, else REJECTED. */
+  /** §9.3 — board finalizes (publishes): APPROVED if threshold met, else REJECTED. Anchors the result. */
   async finalize(proposalId: string) {
     const r = await this.result(proposalId);
     if (!('open' in r) || !r.open) throw new BadRequestException('voting has not opened');
@@ -162,7 +169,51 @@ export class DvService {
       where: { id: proposalId },
       data: { status, stage, resultFinalizedAt: new Date() },
     });
+
+    // §9.3 — the publish action anchors the final tally on-chain.
+    try {
+      const proposal = await this.prisma.proposal.findUnique({
+        where: { id: proposalId },
+        include: { round: { select: { number: true, id: true } } },
+      });
+      const voteList = await this.dvVoteList(proposalId);
+      const noPower = Math.max(0, (r.totalPower ?? 0) - (r.yesPower ?? 0) - (r.abstainPower ?? 0));
+      await this.anchor.anchorResult({
+        kind: 'dv',
+        subject: GovSubject.DV,
+        style: VotingStyle.BALANCED,
+        ref: `${proposal?.title ?? 'proposal'} · round #${proposal?.round?.number ?? '?'}`,
+        proposalId,
+        roundId: proposal?.round?.id ?? proposal?.roundId ?? null,
+        votes: voteList.map((v) => ({ drep: v.drep, vote: v.choice })),
+        preimageVotes: voteList,
+        outcome: status,
+        yes: round2(r.yesPower ?? 0),
+        no: round2(noPower),
+        threshold: r.thresholdPct ?? 0,
+      });
+    } catch {
+      // anchoring failure must not undo the published result (recorded for retry).
+    }
     return { ...r, status, stage, finalized: true };
+  }
+
+  /** D&V votes with on-chain DRep id, choice, weight (final power) and rationale. */
+  private async dvVoteList(proposalId: string) {
+    const snapshot = await this.prisma.voteSnapshot.findFirst({ where: { proposalId }, include: { entries: true } });
+    const powerByDrep = new Map((snapshot?.entries ?? []).map((e) => [e.drepId, Number(e.finalPower ?? 0)]));
+    const votes = await this.prisma.vote.findMany({
+      where: { proposalId, phase: VotePhase.DEBATE_VOTE },
+      include: { drep: { select: { drepIdOnchain: true, user: { select: { displayName: true } } } } },
+      orderBy: { castAt: 'asc' },
+    });
+    return votes.map((v) => ({
+      drep: v.drep.drepIdOnchain,
+      displayName: v.drep.user?.displayName ?? null,
+      choice: v.choice,
+      weight: round2(powerByDrep.get(v.drepId) ?? 0),
+      rationale: v.rationale ?? null,
+    }));
   }
 
   private async currentMerit(drepId: string): Promise<number> {

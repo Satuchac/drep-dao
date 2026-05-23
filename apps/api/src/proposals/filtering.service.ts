@@ -14,11 +14,16 @@ import {
   VotePhase,
   VotingType,
 } from '@drep-dao/shared';
+import { GovSubject, VotingStyle } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
+import { AnchorService } from '../cardano/anchor.service';
 
 @Injectable()
 export class FilteringService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly anchor: AnchorService,
+  ) {}
 
   /**
    * §7.1 — draw reviewers for a proposal in FILTERING. MVP: random draw from the
@@ -108,12 +113,21 @@ export class FilteringService {
     return this.result(proposalId);
   }
 
-  /** Apply §7.2 result: ≥ threshold YES → DEBATE_VOTE; ≥ threshold NO → REJECTED. */
+  /** Apply §7.2 result: ≥ threshold YES → DEBATE_VOTE; ≥ threshold NO → REJECTED. Anchors the decision. */
   private async maybeDecide(proposalId: string) {
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      include: { round: { select: { number: true, id: true } } },
+    });
+    // Only decide once: skip if no longer an active filtering proposal.
+    if (!proposal || proposal.status !== ProposalStatus.ACTIVE || proposal.stage !== ProposalStage.FILTERING) return;
+
     const threshold = await this.cfg('FILTER_APPROVAL_VOTES');
     const votes = await this.prisma.vote.findMany({ where: { proposalId, phase: VotePhase.FILTERING } });
     const yes = votes.filter((v) => v.choice === VoteChoice.YES).length;
     const no = votes.filter((v) => v.choice === VoteChoice.NO).length;
+
+    let outcome: 'ACCEPTED' | 'REJECTED' | null = null;
     if (yes >= threshold) {
       await this.prisma.proposal.update({
         where: { id: proposalId },
@@ -123,17 +137,58 @@ export class FilteringService {
           approvalThresholdPct: await this.cfg('DV_APPROVAL_THRESHOLD_PCT'),
         },
       });
+      outcome = 'ACCEPTED';
     } else if (no >= threshold) {
       await this.prisma.proposal.update({ where: { id: proposalId }, data: { status: ProposalStatus.REJECTED } });
+      outcome = 'REJECTED';
+    }
+    if (!outcome) return;
+
+    // §C — anchor the filtering decision on-chain (subject + every reviewer's vote + tally).
+    try {
+      const voteList = await this.anchorVoteList(proposalId);
+      await this.anchor.anchorResult({
+        kind: 'filtering',
+        subject: GovSubject.FILTERING,
+        style: VotingStyle.ONE_PERSON_ONE_VOTE,
+        ref: `${proposal.title} · round #${proposal.round?.number ?? '?'}`,
+        proposalId,
+        roundId: proposal.round?.id ?? proposal.roundId ?? null,
+        votes: voteList.map((v) => ({ drep: v.drep, vote: v.choice })),
+        preimageVotes: voteList,
+        outcome,
+        yes,
+        no,
+        threshold,
+      });
+    } catch (e) {
+      // Anchoring must never undo the decision; it's recorded for retry by AnchorService.
     }
   }
 
+  /** Reviewer votes with on-chain DRep id + rationale, latest per reviewer (for anchor + public view). */
+  private async anchorVoteList(proposalId: string) {
+    const votes = await this.prisma.vote.findMany({
+      where: { proposalId, phase: VotePhase.FILTERING },
+      include: { drep: { select: { drepIdOnchain: true, user: { select: { displayName: true } } } } },
+      orderBy: { castAt: 'asc' },
+    });
+    return votes.map((v) => ({
+      drep: v.drep.drepIdOnchain,
+      displayName: v.drep.user?.displayName ?? null,
+      choice: v.choice,
+      rationale: v.rationale ?? null,
+    }));
+  }
+
   async result(proposalId: string) {
-    const [assignments, votes, threshold, proposal] = await Promise.all([
+    const [assignments, votes, threshold, proposal, voteList, anchor] = await Promise.all([
       this.prisma.filterAssignment.count({ where: { proposalId, releasedAt: null } }),
       this.prisma.vote.findMany({ where: { proposalId, phase: VotePhase.FILTERING } }),
       this.cfg('FILTER_APPROVAL_VOTES'),
       this.prisma.proposal.findUnique({ where: { id: proposalId }, select: { status: true, stage: true } }),
+      this.anchorVoteList(proposalId),
+      this.prisma.anchor.findFirst({ where: { proposalId, kind: 'filtering' }, orderBy: { createdAt: 'desc' } }),
     ]);
     return {
       reviewers: assignments,
@@ -143,6 +198,9 @@ export class FilteringService {
       threshold,
       status: proposal?.status,
       stage: proposal?.stage,
+      votes: voteList, // §7 public rationale: drep id, display name, choice, rationale
+      anchorTxHash: anchor?.txHash ?? null,
+      anchorHash: anchor?.hash ?? null,
     };
   }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { drepApi, type MyDrep } from '@/lib/api';
+import { useExplorer } from '@/lib/explorer';
 
 const LABEL: Record<string, { text: string; cls: string }> = {
   PENDING_ADMISSION: { text: 'Membership request under board review', cls: 'text-amber-600' },
@@ -11,6 +12,7 @@ const LABEL: Record<string, { text: string; cls: string }> = {
 };
 
 export function MyDrepStatus() {
+  const { txUrl } = useExplorer();
   const [drep, setDrep] = useState<MyDrep | null>(null);
 
   useEffect(() => {
@@ -30,7 +32,7 @@ export function MyDrepStatus() {
         <div className="text-xs text-neutral-500">
           Decision anchored on-chain ✓{' '}
           <a
-            href={`https://preprod.cardanoscan.io/transaction/${drep.anchorTxHash}`}
+            href={txUrl(drep.anchorTxHash)}
             target="_blank"
             rel="noreferrer"
             className="underline"

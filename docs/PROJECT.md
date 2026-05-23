@@ -5,11 +5,13 @@
 > changes, update the relevant section here in the same change. `DESIGN.md` is the
 > full spec (the "what we intend"); this file is the "what is built".
 >
-> **Last updated:** 2026-05-23 — funding-round lifecycle: budget/schedule
-> validation, board-confirmed stage transitions (auto-start or manual launch,
-> delay-preserving), a Rounds list and an Active-proposals browser; plus Treasury
-> overview, board actions (platform-prepared multisig top-ups), and the login
-> notification badge.
+> **Last updated:** 2026-05-23 — full proposal lifecycle: Filtering & Debate&Vote
+> decisions **anchored on-chain**, proposal **editing during Filtering/D&V with
+> versioned diffs**, **comments** (§20.1), the **milestone fund-distribution flow**
+> (§11, decisions anchored; payout deferred to the on-chain multisig), a dedicated
+> **submission-fee address** with board confirmation, and a **configurable block
+> explorer**. Plus the earlier funding-round lifecycle, Treasury, board actions,
+> and notification badge.
 
 ---
 
@@ -89,6 +91,40 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
 - **Proposals** move DRAFT → PENDING → ACTIVE → (FILTERING/DEBATE_VOTE) →
   APPROVED/REJECTED → FUNDING/COMPLETE/FAILED. The Rounds list shows per-status
   counts per round; DRAFTs stay private.
+
+## 4b. Proposal lifecycle — fees, filtering, D&V, editing, milestones (§7/§8/§11/§12/§16/§20)
+
+- **Submission fee (§12/§16).** Commercial **3%** / open-source **1%** of the
+  requested amount (capped, configurable). The submitter pays it on-chain to the
+  dedicated `SUBMISSION_FEE_ADDRESS` and provides the tx hash; a **board member
+  verifies it via the explorer and confirms** (My area → "Submission fees to
+  confirm", which also drives the notification badge). Confirmation moves the
+  proposal PENDING → ACTIVE in Filtering.
+- **Filtering (§7).** Reviewers are drawn from the round's admitted DReps; each
+  casts 1p1v (NO needs rationale). ≥`FILTER_APPROVAL_VOTES` YES → Debate & Vote,
+  ≥ that many NO → REJECTED. **The decision is anchored on-chain** (subject
+  `filtering`, with every reviewer's choice + rationale).
+- **Debate & Vote (§8).** Balanced voting power (snapshot at open), rationale
+  mandatory (≥200 chars), threshold default 67%. The board's **publish/finalize
+  anchors the final tally on-chain** (subject `dv`).
+- **Editing & versions (§7/§8).** The submitter can edit during Filtering and
+  during Debate & Vote *before voting opens*. Each edit snapshots the prior
+  content into `ProposalVersion`; the proposal detail shows an **original-vs-updated
+  line diff**. No edits during the D&V voting phase or after a decision.
+- **Milestone funding (§11).** After D&V approval the board draws + confirms
+  reviewers; the submitter posts a Proof of Achievement per milestone; reviewers
+  vote 1p1v (2-of-3 closes; NO needs feedback; resubmission re-opens review).
+  **Each milestone decision is anchored on-chain**; when all milestones are
+  approved the proposal is COMPLETE; the board can terminate → FAILED. Real ADA
+  disbursement is deferred to the on-chain treasury multisig.
+- **Comments (§20.1).** Public, one level of replies, 5-minute edit window,
+  tombstone delete; attributed by display name + DRep ID.
+- **On-chain links** everywhere route through a **configurable explorer**
+  (`CARDANO_EXPLORER`: cardanoscan / cexplorer / adastat / custom), served to the
+  frontend via the public `GET /config` endpoint.
+- **Proposal detail view** shows it all: content, the version diff, Filtering and
+  D&V results with **public rationales** + on-chain proof links, milestones (with
+  POA + reviewer voting), and comments.
 
 ## 5. Voting model
 

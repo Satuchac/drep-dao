@@ -8,8 +8,10 @@ import {
   type ProposalSummary,
   type RoundSummary,
 } from '@/lib/api';
+import { useExplorer } from '@/lib/explorer';
 
 export function ProposalSubmit() {
+  const { cfg } = useExplorer();
   const [open, setOpen] = useState(false);
   const [rounds, setRounds] = useState<RoundSummary[]>([]);
   const [mine, setMine] = useState<ProposalSummary[]>([]);
@@ -124,7 +126,18 @@ export function ProposalSubmit() {
             ))}
             <button type="button" className="mt-1 text-xs underline" onClick={() => setMs((p) => [...p, { description: '', amountAda: 0 }])}>+ add milestone</button>
           </div>
-          <input className={`${field} w-full`} placeholder="Submission fee TX hash (optional in dev)" value={fee} onChange={(e) => setFee(e.target.value)} />
+          {/* §12/§16 — the team pays the submission fee on-chain to the dedicated address. */}
+          <div className="rounded border border-neutral-200 p-2 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
+            <div>
+              Submission fee: <strong>{commercial ? '3% (commercial)' : '1% (open-source)'}</strong> of the requested
+              amount ≈ <strong>{Math.round(Math.min((amount * (commercial ? 3 : 1)) / 100, commercial ? 5000 : 1000)).toLocaleString()} ₳</strong>.
+              Pay it to the address below, then paste the transaction hash. A board member verifies and confirms it.
+            </div>
+            {cfg?.submissionFeeAddress ? (
+              <div className="mt-1 break-all font-mono text-[11px] text-neutral-500">{cfg.submissionFeeAddress}</div>
+            ) : null}
+          </div>
+          <input className={`${field} w-full`} placeholder="Submission fee TX hash" value={fee} onChange={(e) => setFee(e.target.value)} />
           {error ? <div className="text-sm text-red-600">{error}</div> : null}
           <button type="submit" disabled={busy || !roundId} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
             {busy ? 'Submitting…' : 'Submit (creates draft + submits)'}

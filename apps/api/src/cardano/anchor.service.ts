@@ -78,33 +78,40 @@ export class AnchorService {
   }
 
   /**
-   * Commit an admission decision on-chain. `votes` carry each board member's
-   * CIP-30 signature, so the published preimage is independently verifiable.
+   * Commit any voting decision on-chain (admission, filtering, D&V, milestone, …).
+   * Posts ONE metadata tx with a self-describing result (title + each voter's
+   * choice + tally) and a `proofHash` over the off-chain preimage, and records an
+   * Anchor row. Degrades gracefully (txHash null) when ANCHOR_MNEMONIC is unset.
    */
-  async anchorAdmissionResult(params: {
-    applicantDrepRowId: string;
-    applicantDrepId: string;
-    votes: (GovVoteEvent & { signature?: string | null; signingKey?: string | null })[];
-    outcome: 'ADMITTED' | 'REJECTED';
+  async anchorResult(params: {
+    kind: string; // Anchor.kind: 'admission' | 'filtering' | 'dv' | 'milestone' | 'removal'
+    subject: GovSubject;
+    style: VotingStyle;
+    ref: string; // readable subject reference, shown as "applicant" in the JSON
+    proposalId?: string | null; // Anchor.proposalId (proposal row or applicant drep row)
+    roundId?: string | null;
+    votes: { drep: string; vote: string }[];
+    outcome: string;
     yes: number;
     no: number;
     threshold: number;
+    preimageVotes?: unknown; // richer votes (rationale/signature) for the off-chain preimage
   }): Promise<AnchorResult> {
     const preimage = {
-      subject: GovSubject.ADMISSION,
-      style: VotingStyle.ONE_PERSON_ONE_VOTE,
-      applicant: params.applicantDrepId,
-      votes: params.votes,
+      subject: params.subject,
+      style: params.style,
+      ref: params.ref,
+      votes: params.preimageVotes ?? params.votes,
       result: { outcome: params.outcome, yes: params.yes, no: params.no, threshold: params.threshold },
     };
     const hash = sha256hex(JSON.stringify(preimage));
 
     // §3 — self-describing on-chain JSON: title + every voter's choice + tally.
     const metadata = buildResultMetadata({
-      subject: GovSubject.ADMISSION,
-      style: VotingStyle.ONE_PERSON_ONE_VOTE,
-      applicant: params.applicantDrepId,
-      votes: params.votes.map((v) => ({ drep: v.voter, vote: v.choice })),
+      subject: params.subject,
+      style: params.style,
+      applicant: params.ref,
+      votes: params.votes,
       yes: params.yes,
       no: params.no,
       threshold: params.threshold,
@@ -121,8 +128,9 @@ export class AnchorService {
 
     await this.prisma.anchor.create({
       data: {
-        kind: 'admission',
-        proposalId: params.applicantDrepRowId,
+        kind: params.kind,
+        proposalId: params.proposalId ?? null,
+        roundId: params.roundId ?? null,
         hash,
         preimage: preimage as unknown as object,
         metadataLabel: GOVERNANCE_METADATA_LABEL,
@@ -131,6 +139,31 @@ export class AnchorService {
       },
     });
     return { hash, txHash, submitted: !!txHash };
+  }
+
+  /** Admission decision (1P1V). `votes` carry each board member's CIP-30 signature. */
+  async anchorAdmissionResult(params: {
+    applicantDrepRowId: string;
+    applicantDrepId: string;
+    votes: (GovVoteEvent & { signature?: string | null; signingKey?: string | null })[];
+    outcome: 'ADMITTED' | 'REJECTED';
+    yes: number;
+    no: number;
+    threshold: number;
+  }): Promise<AnchorResult> {
+    return this.anchorResult({
+      kind: 'admission',
+      subject: GovSubject.ADMISSION,
+      style: VotingStyle.ONE_PERSON_ONE_VOTE,
+      ref: params.applicantDrepId,
+      proposalId: params.applicantDrepRowId,
+      votes: params.votes.map((v) => ({ drep: v.voter, vote: v.choice })),
+      preimageVotes: params.votes,
+      outcome: params.outcome,
+      yes: params.yes,
+      no: params.no,
+      threshold: params.threshold,
+    });
   }
 
   /** Build + sign + submit a single tx carrying `event` as metadata, from the anchor wallet. */

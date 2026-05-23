@@ -15,6 +15,7 @@ import { FilteringPanel } from './filtering-panel';
 import { VotingPanel } from './voting-panel';
 import { BoardActions } from './board-actions';
 import { RoundStageControls } from './round-stage-controls';
+import { FeeConfirmations } from './fee-confirmations';
 
 const card =
   'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
@@ -88,6 +89,8 @@ export function MemberArea() {
         <>
           {/* Treasury/hot-wallet actions the platform prepared, awaiting 3-of-5 (self-hides if none). */}
           <BoardActions />
+          {/* §16 — submission fees awaiting board confirmation (self-hides if none). */}
+          <FeeConfirmations />
           {/* §8 — confirm/launch round stage transitions (self-hides when no round is open). */}
           <RoundStageControls />
           <section className={card}>

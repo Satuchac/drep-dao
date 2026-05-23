@@ -4,9 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { admissionVoteMessage } from '@drep-dao/cardano';
 import { boardApi, type PendingApplication } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { useExplorer } from '@/lib/explorer';
 import { VotingStyleBadge } from './voting-style-badge';
-
-const SCAN = 'https://preprod.cardanoscan.io/transaction/';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -26,6 +25,7 @@ const optins = (a: PendingApplication) =>
 
 export function BoardReviewPanel() {
   const { profile, signMessage } = useAuth();
+  const { txUrl } = useExplorer();
   const [apps, setApps] = useState<PendingApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -103,7 +103,7 @@ export function BoardReviewPanel() {
           {anchorTx ? (
             <>
               {' '}
-              <a href={SCAN + anchorTx} target="_blank" rel="noreferrer" className="underline">
+              <a href={txUrl(anchorTx)} target="_blank" rel="noreferrer" className="underline">
                 view tx
               </a>
             </>

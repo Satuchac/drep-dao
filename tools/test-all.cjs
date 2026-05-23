@@ -27,6 +27,7 @@ const SUITES = [
   ['test-removal', 'Removal: propose + 3-of-5 vote → REMOVED, re-apply'],
   ['test-rounds', 'Rounds: stage transitions gate submission + governance params'],
   ['test-stage-flow', 'Stage flow: budget/schedule validation, confirm/launch/auto-start/close, proposal counts'],
+  ['test-proposal-flow', 'Proposal lifecycle: fee, edit/version, filtering+D&V+milestone anchored, comments'],
 ];
 
 const failed = [];

@@ -71,13 +71,28 @@ export class ProposalsService {
     return this.get(proposal.id, userId);
   }
 
+  /**
+   * Edit a proposal. Allowed while DRAFT, or — per §7/§8 — by the submitter during
+   * the FILTERING stage and the DEBATE_VOTE stage *before voting opens*. Every edit
+   * after submission snapshots the prior content into ProposalVersion (audit + diff)
+   * and bumps `version`. Milestones can only be (re)structured while still a DRAFT.
+   */
   async updateDraft(userId: string, id: string, dto: UpdateProposalDto) {
-    const p = await this.ownDraft(userId, id);
+    const { proposal: p, postSubmission } = await this.ownEditable(userId, id);
     if (dto.milestones) {
+      if (postSubmission) {
+        throw new ConflictException('milestones cannot be restructured after submission');
+      }
       const total = dto.requestedAmountAda ?? toAda(p.requestedAmountAda);
       this.assertMilestonesSum(dto.milestones, total);
     }
     await this.prisma.$transaction(async (tx) => {
+      if (postSubmission) {
+        // Snapshot the version being replaced so reviewers can see what changed.
+        await tx.proposalVersion.create({
+          data: { proposalId: id, version: p.version, contentMd: p.contentMd, editedBy: userId },
+        });
+      }
       await tx.proposal.update({
         where: { id },
         data: {
@@ -87,10 +102,11 @@ export class ProposalsService {
           ...(dto.requestedAmountAda !== undefined ? { requestedAmountAda: toLovelace(dto.requestedAmountAda) } : {}),
           ...(dto.subcategoryIds !== undefined ? { subcategoryIds: dto.subcategoryIds } : {}),
           ...(dto.costBreakdownMd !== undefined ? { costBreakdownMd: dto.costBreakdownMd } : {}),
+          ...(postSubmission ? { version: { increment: 1 } } : {}),
           updatedAt: new Date(),
         },
       });
-      if (dto.milestones) {
+      if (dto.milestones && !postSubmission) {
         await tx.milestone.deleteMany({ where: { proposalId: id } });
         await tx.milestone.createMany({
           data: dto.milestones.map((m, idx) => ({
@@ -104,6 +120,29 @@ export class ProposalsService {
       }
     });
     return this.get(id, userId);
+  }
+
+  /** Content version history (snapshots + the current head) for the diff view. */
+  async versions(id: string) {
+    const p = await this.prisma.proposal.findUnique({
+      where: { id },
+      select: { version: true, contentMd: true, updatedAt: true, status: true, submitterUserId: true },
+    });
+    if (!p || p.status === ProposalStatus.DRAFT) return [];
+    const snapshots = await this.prisma.proposalVersion.findMany({
+      where: { proposalId: id },
+      orderBy: { version: 'asc' },
+      include: { editor: { select: { displayName: true } } },
+    });
+    const history = snapshots.map((s) => ({
+      version: s.version,
+      contentMd: s.contentMd,
+      editedAt: s.editedAt,
+      editor: s.editor?.displayName ?? null,
+      current: false,
+    }));
+    history.push({ version: p.version, contentMd: p.contentMd, editedAt: p.updatedAt, editor: null, current: true });
+    return history;
   }
 
   /** §3.3 — submit: compute fee, move DRAFT → PENDING (awaiting fee confirmation). */
@@ -145,6 +184,31 @@ export class ProposalsService {
       include: { category: { select: { name: true } } },
     });
     return proposals.map((p) => this.summary(p));
+  }
+
+  /** §16 — proposals awaiting board fee confirmation (drives the board notification + My-area list). */
+  async listPendingFee() {
+    const rows = await this.prisma.proposal.findMany({
+      where: { status: ProposalStatus.PENDING },
+      orderBy: { submittedAt: 'asc' },
+      include: {
+        submitterUser: { select: { displayName: true } },
+        category: { select: { name: true } },
+        round: { select: { number: true } },
+      },
+    });
+    return rows.map((p) => ({
+      id: p.id,
+      title: p.title,
+      roundNumber: p.round?.number ?? null,
+      categoryName: p.category?.name ?? null,
+      isCommercial: p.isCommercial,
+      requestedAmountAda: toAda(p.requestedAmountAda),
+      submissionFeeAda: toAda(p.submissionFeeAda),
+      submissionFeeTxHash: p.submissionFeeTxHash,
+      submitter: p.submitterUser?.displayName ?? null,
+      submittedAt: p.submittedAt,
+    }));
   }
 
   async listMine(userId: string) {
@@ -218,6 +282,27 @@ export class ProposalsService {
       throw new ConflictException('proposal can only be edited while in DRAFT');
     }
     return p;
+  }
+
+  /**
+   * §7/§8 editing windows. Returns the proposal and whether this is a
+   * post-submission edit (which must be versioned). Editable while:
+   *  - DRAFT, or
+   *  - FILTERING stage (status ACTIVE) — submitter revises during the feedback rounds, or
+   *  - DEBATE_VOTE stage *before voting opens* (votingStartAt null) — the editing sub-phase.
+   * No edits during the D&V voting phase or after a final decision.
+   */
+  private async ownEditable(userId: string, id: string) {
+    const p = await this.prisma.proposal.findUnique({ where: { id } });
+    if (!p) throw new NotFoundException('proposal not found');
+    if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
+    if (p.status === ProposalStatus.DRAFT) return { proposal: p, postSubmission: false };
+    const inFiltering = p.stage === ProposalStage.FILTERING && p.status === ProposalStatus.ACTIVE;
+    const inDvEditing = p.stage === ProposalStage.DEBATE_VOTE && p.votingStartAt == null;
+    if (inFiltering || inDvEditing) return { proposal: p, postSubmission: true };
+    throw new ConflictException(
+      'editing is closed: proposals can be edited while in DRAFT, during Filtering, or during Debate & Vote before voting opens',
+    );
   }
 
   private assertMilestonesSum(milestones: MilestoneInput[], requestedAda: number) {

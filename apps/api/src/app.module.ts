@@ -11,6 +11,9 @@ import { RoundsModule } from './rounds/rounds.module';
 import { ProposalsModule } from './proposals/proposals.module';
 import { GovernanceModule } from './governance/governance.module';
 import { TreasuryModule } from './treasury/treasury.module';
+import { PublicConfigModule } from './config/config.module';
+import { CommentsModule } from './comments/comments.module';
+import { MilestonesModule } from './milestones/milestones.module';
 import { CardanoModule } from './cardano/cardano.module';
 
 @Module({
@@ -32,6 +35,9 @@ import { CardanoModule } from './cardano/cardano.module';
     ProposalsModule,
     GovernanceModule,
     TreasuryModule,
+    PublicConfigModule,
+    CommentsModule,
+    MilestonesModule,
   ],
 })
 export class AppModule {}

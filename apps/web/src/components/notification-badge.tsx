@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { treasuryApi } from '@/lib/api';
+import { boardFeeApi, treasuryApi } from '@/lib/api';
 
 /**
  * §15.3 — notifications in the login rectangle. A standard red circle with the
@@ -13,10 +13,16 @@ export function NotificationBadge({ onClick }: { onClick: () => void }) {
 
   useEffect(() => {
     let alive = true;
+    // Board to-dos awaiting this member: treasury/multisig actions + submission fees to confirm.
     const poll = () =>
-      treasuryApi
-        .boardActions()
-        .then((r) => alive && setCount(r.count))
+      Promise.allSettled([treasuryApi.boardActions(), boardFeeApi.pending()])
+        .then(([actions, fees]) => {
+          if (!alive) return;
+          const n =
+            (actions.status === 'fulfilled' ? actions.value.count : 0) +
+            (fees.status === 'fulfilled' ? fees.value.length : 0);
+          setCount(n);
+        })
         .catch(() => alive && setCount(0));
     poll();
     const id = setInterval(poll, 30_000); // light polling; actions are rare

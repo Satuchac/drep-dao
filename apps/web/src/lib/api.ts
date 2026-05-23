@@ -435,6 +435,14 @@ export interface FilterAssignment {
   title: string;
   myVote: string | null;
 }
+/** A vote with its public rationale (filtering / D&V / milestone). */
+export interface VoteRationale {
+  drep: string | null;
+  displayName: string | null;
+  choice: string;
+  rationale: string | null;
+  weight?: number;
+}
 export interface FilterResult {
   reviewers: number;
   yes: number;
@@ -443,6 +451,9 @@ export interface FilterResult {
   threshold: number;
   status: string;
   stage: string | null;
+  votes: VoteRationale[];
+  anchorTxHash: string | null;
+  anchorHash: string | null;
 }
 
 export const filteringApi = {
@@ -480,6 +491,9 @@ export interface DvResult {
   approved?: boolean;
   status?: string;
   stage?: string | null;
+  votes?: VoteRationale[];
+  anchorTxHash?: string | null;
+  anchorHash?: string | null;
 }
 
 export const dvApi = {
@@ -489,4 +503,101 @@ export const dvApi = {
       method: 'POST',
       body: JSON.stringify({ choice, rationale }),
     }),
+};
+
+// -------- Public platform config (explorer, network, fee address) --------
+export interface PublicConfig {
+  network: string;
+  explorer: string;
+  explorerCustomTxUrl: string;
+  submissionFeeAddress: string | null;
+  anchorMetadataLabel: number;
+}
+export const configApi = { get: () => request<PublicConfig>('/config') };
+
+// -------- Proposal version history (diff view) --------
+export interface ProposalVersionEntry {
+  version: number;
+  contentMd: string;
+  editedAt: string;
+  editor: string | null;
+  current: boolean;
+}
+export const proposalVersionsApi = {
+  list: (id: string) => request<ProposalVersionEntry[]>(`/proposals/${id}/versions`),
+};
+export const proposalEditApi = {
+  update: (id: string, patch: { title?: string; contentMd?: string; requestedAmountAda?: number; costBreakdownMd?: string }) =>
+    request<ProposalDetail>(`/proposals/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+};
+
+// -------- Comments (§20.1) --------
+export interface CommentNode {
+  id: string;
+  parentId: string | null;
+  author: { displayName: string | null; drepId: string | null };
+  contentMd: string | null;
+  deleted: boolean;
+  createdAt: string;
+  replies?: CommentNode[];
+}
+export const commentsApi = {
+  list: (proposalId: string) => request<CommentNode[]>(`/proposals/${proposalId}/comments`),
+  create: (proposalId: string, contentMd: string, parentId?: string) =>
+    request<{ id: string }>(`/proposals/${proposalId}/comments`, { method: 'POST', body: JSON.stringify({ contentMd, parentId }) }),
+  edit: (id: string, contentMd: string) =>
+    request<{ ok: boolean }>(`/comments/${id}`, { method: 'PATCH', body: JSON.stringify({ contentMd }) }),
+  remove: (id: string) => request<{ ok: boolean }>(`/comments/${id}`, { method: 'DELETE' }),
+};
+
+// -------- Milestones (§11) --------
+export interface MilestoneView {
+  id: string;
+  idx: number;
+  description: string | null;
+  amountAda: number;
+  status: string;
+  reviewers: (string | null)[];
+  latestPoa: { contentMd: string | null; submittedAt: string; attempt: number } | null;
+  yes: number;
+  no: number;
+  threshold: number;
+  votes: VoteRationale[];
+  anchorTxHash: string | null;
+}
+export interface MilestoneAssignmentView {
+  milestoneId: string;
+  proposalId: string;
+  proposalTitle: string;
+  milestoneIdx: number;
+  myVote: string | null;
+}
+export const milestonesApi = {
+  forProposal: (proposalId: string) => request<MilestoneView[]>(`/proposals/${proposalId}/milestones`),
+  myAssignments: () => request<MilestoneAssignmentView[]>('/me/assignments/milestone'),
+  submitPoa: (milestoneId: string, contentMd: string) =>
+    request<unknown>(`/milestones/${milestoneId}/poa`, { method: 'POST', body: JSON.stringify({ contentMd }) }),
+  vote: (milestoneId: string, choice: 'YES' | 'NO', rationale?: string) =>
+    request<unknown>(`/milestones/${milestoneId}/vote`, { method: 'POST', body: JSON.stringify({ choice, rationale }) }),
+};
+
+// -------- Board: submission-fee confirmations (§16) + milestone admin --------
+export interface PendingFee {
+  id: string;
+  title: string;
+  roundNumber: number | null;
+  categoryName: string | null;
+  isCommercial: boolean | null;
+  requestedAmountAda: number;
+  submissionFeeAda: number;
+  submissionFeeTxHash: string | null;
+  submitter: string | null;
+  submittedAt: string;
+}
+export const boardFeeApi = {
+  pending: () => request<PendingFee[]>('/admin/proposals/pending-fee'),
+};
+export const boardMilestoneApi = {
+  drawReviewers: (proposalId: string) => request<MilestoneView[]>(`/admin/proposals/${proposalId}/draw-milestone-reviewers`, { method: 'POST' }),
+  terminate: (proposalId: string) => request<{ status: string }>(`/admin/proposals/${proposalId}/terminate`, { method: 'POST' }),
 };

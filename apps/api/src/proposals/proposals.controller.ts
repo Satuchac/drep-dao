@@ -29,6 +29,12 @@ export class ProposalsController {
     return this.proposals.get(id);
   }
 
+  // §7/§8 — content version history (snapshots + current) for the diff view.
+  @Get('proposals/:id/versions')
+  versions(@Param('id', ParseUUIDPipe) id: string) {
+    return this.proposals.versions(id);
+  }
+
   // ---- submitter (§26.3) ----
   @UseGuards(JwtAuthGuard)
   @Get('me/proposals')

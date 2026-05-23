@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { daoApi, type OnChainProof } from '@/lib/api';
-
-const SCAN = 'https://preprod.cardanoscan.io/transaction/';
+import { useExplorer } from '@/lib/explorer';
 
 /** Everything the platform has anchored on-chain — human-readable + verifiable. */
 export function OnChainProofs() {
+  const { txUrl } = useExplorer();
   const [proofs, setProofs] = useState<OnChainProof[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,8 +40,8 @@ export function OnChainProofs() {
               <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
                 <span>metadata label {p.label}</span>
                 {p.txHash ? (
-                  <a href={SCAN + p.txHash} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">
-                    view on Cardanoscan ↗
+                  <a href={txUrl(p.txHash)} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">
+                    view on explorer ↗
                   </a>
                 ) : (
                   <span className="text-amber-600">anchor pending (not yet submitted)</span>
