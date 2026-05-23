@@ -125,6 +125,44 @@ export interface WalletStatus {
   treasury: { address: string | null; balanceAda: number; configured: boolean };
 }
 
+export interface TreasuryBucket {
+  key: string;
+  name: string;
+  allocatedAda: number;
+  spentAda: number;
+  remainingAda: number;
+  address: string | null;
+}
+export interface TreasuryOverview {
+  treasury: { address: string | null; balanceAda: number; configured: boolean };
+  hotWallet: { address: string | null; balanceAda: number; minAda: number };
+  buckets: TreasuryBucket[];
+  totalAllocatedAda: number;
+  totalSpentAda: number;
+}
+export interface BoardAction {
+  id: string;
+  kind: string;
+  description: string | null;
+  amountAda: number | null;
+  approvals: number;
+  threshold: number;
+  mineApproved: boolean;
+  createdAt: string;
+}
+
+export const treasuryApi = {
+  overview: () => request<TreasuryOverview>('/dao/treasury'),
+  boardActions: () => request<{ count: number; actions: BoardAction[] }>('/me/board-actions'),
+  prepareTopUp: (amountAda: number) =>
+    request<{ id: string }>('/admin/treasury/prepare-topup', { method: 'POST', body: JSON.stringify({ amountAda }) }),
+  approveAction: (id: string, body: { signature?: string; signingKey?: string; ts?: string }) =>
+    request<{ approvals: number; threshold: number; status: string }>(`/admin/board-actions/${id}/approve`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+};
+
 export interface GovParam {
   key: string;
   value: number | string;

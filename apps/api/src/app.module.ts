@@ -10,6 +10,7 @@ import { AdminModule } from './admin/admin.module';
 import { RoundsModule } from './rounds/rounds.module';
 import { ProposalsModule } from './proposals/proposals.module';
 import { GovernanceModule } from './governance/governance.module';
+import { TreasuryModule } from './treasury/treasury.module';
 import { CardanoModule } from './cardano/cardano.module';
 
 @Module({
@@ -30,6 +31,7 @@ import { CardanoModule } from './cardano/cardano.module';
     RoundsModule,
     ProposalsModule,
     GovernanceModule,
+    TreasuryModule,
   ],
 })
 export class AppModule {}

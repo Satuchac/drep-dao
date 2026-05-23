@@ -237,6 +237,24 @@ export function admissionVoteMessage(p: {
   ].join('\n');
 }
 
+/** Canonical message a board member signs (CIP-30, free) to approve a treasury/board action. */
+export function boardActionMessage(p: {
+  actionId: string;
+  kind: string;
+  amountAda: number;
+  voterStakeAddress: string;
+  ts: string;
+}): string {
+  return [
+    'DRep DAO — board action approval v1',
+    `action: ${p.actionId}`,
+    `kind: ${p.kind}`,
+    `amount: ${p.amountAda} ADA`,
+    `by: ${p.voterStakeAddress}`,
+    `ts: ${p.ts}`,
+  ].join('\n');
+}
+
 /** A voter may re-vote; keep only their last vote (metadata is append-only). */
 function dedupeLatestByVoter(votes: GovVoteEvent[]): GovVoteEvent[] {
   const byVoter = new Map<string, GovVoteEvent>();

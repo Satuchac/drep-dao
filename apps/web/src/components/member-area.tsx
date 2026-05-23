@@ -13,6 +13,7 @@ import { RemovalBanner } from './removal-banner';
 import { ProposalSubmit } from './proposal-submit';
 import { FilteringPanel } from './filtering-panel';
 import { VotingPanel } from './voting-panel';
+import { BoardActions } from './board-actions';
 
 const card =
   'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
@@ -84,6 +85,8 @@ export function MemberArea() {
       {/* Board pending requests — below the personal info. */}
       {isBoard ? (
         <>
+          {/* Treasury/hot-wallet actions the platform prepared, awaiting 3-of-5 (self-hides if none). */}
+          <BoardActions />
           <section className={card}>
             <BoardReviewPanel />
           </section>

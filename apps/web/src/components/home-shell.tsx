@@ -8,14 +8,17 @@ import { RoundsSection } from './rounds-section';
 import { DaoOverview } from './dao-overview';
 import { GovernanceSetup } from './governance-setup';
 import { OnChainProofs } from './on-chain-proofs';
+import { TreasuryOverview } from './treasury-overview';
+import { NotificationBadge } from './notification-badge';
 import { HealthBadge } from '@/app/health-badge';
 
-type View = 'overview' | 'me' | 'rounds' | 'proofs' | 'setup';
+type View = 'overview' | 'me' | 'rounds' | 'proofs' | 'treasury' | 'setup';
 const NAV: { key: View; label: string; boardOnly?: boolean }[] = [
   { key: 'overview', label: 'DAO Member overview' },
   { key: 'me', label: 'My area' },
   { key: 'rounds', label: 'Rounds' },
   { key: 'proofs', label: 'On-chain proofs' },
+  { key: 'treasury', label: 'Treasury' },
   { key: 'setup', label: 'Platform setup', boardOnly: true },
 ];
 
@@ -80,16 +83,18 @@ export function HomeShell() {
         {view === 'me' ? <MemberArea /> : null}
         {view === 'rounds' ? <RoundsSection /> : null}
         {view === 'proofs' ? <OnChainProofs /> : null}
+        {view === 'treasury' ? <TreasuryOverview /> : null}
         {view === 'setup' && isBoard ? <GovernanceSetup /> : null}
       </main>
 
       {/* Right: login box (+ JOIN DAO). */}
       <div className="space-y-2 lg:w-72 lg:shrink-0">
-        <div className="rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="space-y-2 rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
           <ConnectWallet />
+          <NotificationBadge onClick={() => setView('me')} />
           <button
             onClick={() => setView('me')}
-            className="mt-2 text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+            className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
           >
             View profile →
           </button>
