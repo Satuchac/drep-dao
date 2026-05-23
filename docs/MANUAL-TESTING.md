@@ -105,6 +105,25 @@ Admin (separate): `/admin/login`, user `satucha`.
       **voting power**, YES/NO are in **power**, threshold is a **%**, and **totalPower** is
       included.
 
+### Round 3 review fixes (verify these specifically)
+- [ ] **My area loads** with no console hydration error (the Grammarly/extension warning is
+      suppressed).
+- [ ] **Voting power matches**: a DRep's **adjusted power** in the members overview equals the
+      power used in **new** Debate & Vote rounds (both = log₁₀(real on-chain voting power) ×
+      merit). Note: the *existing* Round Alpha D&V was snapshotted earlier with the old flat
+      value (historical, frozen) — the fix applies to **new** D&V rounds.
+- [ ] **Non-board voters**: the members overview now lists **Heidi** and **Judy** (admitted,
+      non-board) alongside the board. Regular admitted DReps are the default voter base; only
+      board members who opt in vote on funding (and in practice only a few will).
+- [ ] **Experts overview** shows each expert's **expertise areas** (chips) + **bio** (Ivan:
+      infrastructure, libraries). The apply form has the expertise picker.
+- [ ] **Explorer combobox**: in *Platform setup*, **CARDANO_EXPLORER** is now a dropdown
+      (cardanoscan/cexplorer/adastat/custom). Change it (or your personal one in My area →
+      Preferences), Save, then click an on-chain link — it opens in the chosen explorer
+      **without a page refresh**.
+- [ ] **Round name in JSON**: an on-chain proof's `applicant`/subject reference includes the
+      **round name** (e.g. "… · Round Alpha (demo)"), not just "round #N".
+
 ## 4. Known limitations / deferred (by design, for now)
 - **Real ADA payouts** (milestone disbursement, treasury top-ups) are recorded +
   the multisig action collects 3-of-5 approvals, but the actual native-multisig
