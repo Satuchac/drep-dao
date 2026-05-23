@@ -92,6 +92,7 @@ export interface MyDrep {
 export interface DaoMember {
   drepId: string;
   displayName: string;
+  image: string | null; // CIP-119 on-chain DRep image, else null (generic avatar)
   isBoard: boolean;
   votingPowerAda: number; // on-chain DRep voting power (vote delegation), in ADA
   delegators: number; // accounts that delegated their vote to this DRep
@@ -102,10 +103,27 @@ export interface DaoMember {
   since: string | null; // board install date (board) or board-approval date (DAO member)
 }
 
+export interface OnChainProof {
+  id: string;
+  title: string;
+  detail: string;
+  kind: string;
+  label: number;
+  hash: string;
+  txHash: string | null;
+  createdAt: string;
+}
+
 export const daoApi = {
   members: () => request<DaoMember[]>('/dao/members'),
   experts: () => request<DaoExpert[]>('/dao/experts'),
+  proofs: () => request<OnChainProof[]>('/dao/proofs'),
 };
+
+export interface WalletStatus {
+  hotWallet: { address: string | null; balanceAda: number; configured: boolean };
+  treasury: { address: string | null; balanceAda: number; configured: boolean };
+}
 
 export interface GovParam {
   key: string;
@@ -121,6 +139,7 @@ export const governanceApi = {
       method: 'PATCH',
       body: JSON.stringify({ key, value }),
     }),
+  wallets: () => request<WalletStatus>('/admin/governance/wallets'),
 };
 
 export interface PendingApplication {

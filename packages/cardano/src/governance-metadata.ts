@@ -74,6 +74,65 @@ export interface GovResultEvent extends BaseEvent {
 
 export type GovEvent = GovApplicationEvent | GovVoteEvent | GovResultEvent;
 
+/** Human-readable titles so the on-chain JSON is understandable on its own. */
+export const SUBJECT_TITLE: Record<GovSubject, string> = {
+  admission: 'Admission of new DAO member',
+  removal: 'Removal of a DAO member',
+  filtering: 'Proposal filtering review',
+  milestone: 'Milestone review',
+  dv: 'Debate & Vote (funding)',
+  internal: 'Internal proposal',
+};
+export const STYLE_LABEL: Record<VotingStyle, string> = {
+  '1P1V': '1 member, 1 vote',
+  BAL: 'Balanced voting power',
+};
+
+/**
+ * The self-describing on-chain result anchor — readable by anyone parsing the
+ * JSON: a clear title, the full list of voters + how each voted, the tally, and
+ * the outcome. `proofHash` commits to the off-chain preimage (full signed votes).
+ */
+export interface AnchorResultMetadata {
+  title: string;
+  subject: GovSubject;
+  voting: string; // human-readable voting style
+  applicant: string; // subject DRep id
+  votes: { drep: string; vote: string }[];
+  tally: { yes: number; no: number; threshold: number };
+  outcome: string;
+  decidedAt: string;
+  proofHash?: string;
+  verify?: string;
+}
+
+export function buildResultMetadata(p: {
+  subject: GovSubject;
+  style: VotingStyle;
+  applicant: string;
+  votes: { drep: string; vote: string }[];
+  yes: number;
+  no: number;
+  threshold: number;
+  outcome: string;
+  proofHash?: string;
+  verify?: string;
+}): Record<string, AnchorResultMetadata> {
+  const meta: AnchorResultMetadata = {
+    title: SUBJECT_TITLE[p.subject],
+    subject: p.subject,
+    voting: STYLE_LABEL[p.style],
+    applicant: p.applicant,
+    votes: p.votes,
+    tally: { yes: p.yes, no: p.no, threshold: p.threshold },
+    outcome: p.outcome,
+    decidedAt: new Date().toISOString(),
+    ...(p.proofHash ? { proofHash: p.proofHash } : {}),
+    ...(p.verify ? { verify: p.verify } : {}),
+  };
+  return { [GOVERNANCE_METADATA_LABEL]: meta };
+}
+
 const MAX_STR = 64;
 /** UTF-8 byte length, dependency-free (no Buffer/TextEncoder) so the lib stays isomorphic. */
 function utf8Len(s: string): number {

@@ -74,16 +74,20 @@ export class DrepService {
     // §4 — on-chain DRep VOTING power (CIP-1694 vote delegation), live, plus
     // the count of accounts that delegated their vote to each DRep.
     const vp = await this.cardano.drepVotingPower(rows.map((r) => r.drepId));
+    // §CIP-119 — on-chain DRep name + image (else our stored name + a generic avatar).
+    const meta = await this.cardano.drepMetadata(rows.map((r) => r.drepId));
 
     const members = await Promise.all(
       rows.map(async (r) => {
         const merit = r.drepRowId ? await this.currentMerit(r.drepRowId) : 0;
         const power = vp.get(r.drepId) ?? { votingPowerLovelace: 0n, delegators: 0 };
+        const m = meta.get(r.drepId);
         const base = basePower(power.votingPowerLovelace);
         const mult = meritMultiplier(merit);
         return {
           drepId: r.drepId,
-          displayName: r.displayName,
+          displayName: m?.name ?? r.displayName,
+          image: m?.image ?? null,
           isBoard: r.isBoard,
           votingPowerAda: Math.round(Number(power.votingPowerLovelace) / 1_000_000),
           delegators: power.delegators,
@@ -97,6 +101,34 @@ export class DrepService {
     );
     members.sort((a, b) => b.adjustedPower - a.adjustedPower || (b.isBoard ? 1 : 0) - (a.isBoard ? 1 : 0));
     return members;
+  }
+
+  /** Everything the platform has anchored on-chain, newest first, human-readable. */
+  async listOnChainProofs() {
+    const anchors = await this.prisma.anchor.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
+    return anchors.map((a) => {
+      const p = (a.preimage ?? {}) as {
+        applicant?: string;
+        result?: { outcome?: string; yes?: number; no?: number; threshold?: number };
+      };
+      let title = 'On-chain record';
+      let detail = '';
+      if (a.kind === 'admission') {
+        title = 'Admission of a DAO member';
+        if (p.result) detail = `${p.result.outcome} — ${p.result.yes}/${p.result.threshold} YES`;
+        if (p.applicant) detail += `${detail ? ' · ' : ''}applicant ${p.applicant.slice(0, 18)}…`;
+      }
+      return {
+        id: a.id,
+        title,
+        detail,
+        kind: a.kind,
+        label: a.metadataLabel,
+        hash: a.hash,
+        txHash: a.txHash,
+        createdAt: a.createdAt,
+      };
+    });
   }
 
   /** Current merit = clamped sum of the DRep's merit-ledger deltas (§13). */

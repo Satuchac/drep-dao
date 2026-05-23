@@ -26,6 +26,57 @@ export class CardanoQueryService {
           : 'https://preprod.koios.rest/api/v1';
   }
 
+  /** §CIP-119 — on-chain DRep metadata (name + image) per drep id, via Koios. Best-effort. */
+  async drepMetadata(drepIds: string[]): Promise<Map<string, { name?: string; image?: string }>> {
+    const out = new Map<string, { name?: string; image?: string }>();
+    if (drepIds.length === 0) return out;
+    try {
+      const res = await fetch(`${this.base}/drep_metadata`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _drep_ids: drepIds }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) return out;
+      const rows = (await res.json()) as { drep_id: string; meta_json: unknown }[];
+      for (const r of rows) {
+        const body = (r.meta_json as { body?: Record<string, unknown> })?.body;
+        if (!body) continue;
+        out.set(r.drep_id, { name: cip119Name(body), image: normalizeImageUri(cip119Image(body)) });
+      }
+    } catch (e) {
+      this.logger.warn(`drep_metadata: ${e instanceof Error ? e.message : e}`);
+    }
+    return out;
+  }
+
+  /** Total controlled balance (Lovelace) per payment/base address, via Koios /address_info. */
+  async addressBalance(addresses: string[]): Promise<Map<string, bigint>> {
+    const out = new Map<string, bigint>(addresses.map((a) => [a, 0n]));
+    if (addresses.length === 0) return out;
+    try {
+      const res = await fetch(`${this.base}/address_info`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _addresses: addresses }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) return out;
+      const rows = (await res.json()) as { address: string; balance: string | null }[];
+      for (const r of rows) {
+        if (!out.has(r.address)) continue;
+        try {
+          out.set(r.address, r.balance ? BigInt(r.balance) : 0n);
+        } catch {
+          /* leave 0 */
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`address_info: ${e instanceof Error ? e.message : e}`);
+    }
+    return out;
+  }
+
   /**
    * Controlled on-chain stake (Lovelace) per stake address, via Koios
    * /account_info `total_balance`. For a self-delegated DRep this equals their
@@ -152,4 +203,29 @@ export class CardanoQueryService {
     }
     return out;
   }
+}
+
+/** CIP-119 fields can be a plain string or a `{ "@value": ... }` object. */
+function cip119Str(v: unknown): string | undefined {
+  if (typeof v === 'string') return v;
+  if (v && typeof v === 'object' && typeof (v as { '@value'?: unknown })['@value'] === 'string') {
+    return (v as { '@value': string })['@value'];
+  }
+  return undefined;
+}
+function cip119Name(body: Record<string, unknown>): string | undefined {
+  return cip119Str(body.givenName) ?? cip119Str(body.name);
+}
+function cip119Image(body: Record<string, unknown>): string | undefined {
+  const img = body.image;
+  if (typeof img === 'string') return img;
+  if (img && typeof img === 'object') return cip119Str((img as { contentUrl?: unknown }).contentUrl);
+  return undefined;
+}
+/** Only allow http(s)/ipfs images; map ipfs:// to a public gateway. */
+function normalizeImageUri(uri?: string): string | undefined {
+  if (!uri) return undefined;
+  if (uri.startsWith('ipfs://')) return `https://ipfs.io/ipfs/${uri.slice('ipfs://'.length)}`;
+  if (uri.startsWith('https://') || uri.startsWith('http://')) return uri;
+  return undefined;
 }

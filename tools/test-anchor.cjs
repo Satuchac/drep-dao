@@ -121,8 +121,10 @@ function signCip8(id, messageUtf8) {
     }
     console.log('');
     const meta = row && row.metadata[String(GOVERNANCE_METADATA_LABEL)];
-    ok('anchor metadata on-chain (result, ADMITTED)', meta && meta.t === 'result' && meta.outcome === 'ADMITTED');
-    ok('anchor commits to vote-set hash (h)', meta && typeof meta.h === 'string' && meta.h.length >= 32);
+    ok('readable metadata (title + ADMITTED)', meta && meta.title === 'Admission of new DAO member' && meta.outcome === 'ADMITTED');
+    ok('lists all voters + their vote', meta && Array.isArray(meta.votes) && meta.votes.length === 3 && meta.votes.every((v) => v.drep && (v.vote === 'YES' || v.vote === 'NO')));
+    ok('tally + commitment hash present', meta && meta.tally && meta.tally.yes === 3 && typeof meta.proofHash === 'string');
+    console.log('   on-chain JSON:', JSON.stringify(meta).slice(0, 220));
     console.log('  on-chain anchor: https://preprod.cardanoscan.io/transaction/' + res.anchorTxHash);
   }
 

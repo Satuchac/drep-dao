@@ -3,6 +3,20 @@
 import { useEffect, useState } from 'react';
 import { daoApi, type DaoMember, type DaoExpert } from '@/lib/api';
 
+/** On-chain DRep image (CIP-119) if present, else a generic initials avatar. */
+function Avatar({ name, image }: { name: string; image: string | null }) {
+  const initial = (name?.trim()?.[0] ?? '?').toUpperCase();
+  if (image) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={image} alt={name} className="h-7 w-7 shrink-0 rounded-full object-cover" />;
+  }
+  return (
+    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-neutral-200 text-xs font-semibold text-neutral-600 dark:bg-neutral-700 dark:text-neutral-200">
+      {initial}
+    </span>
+  );
+}
+
 /** §4 — all DAO members with balanced voting power: log10(stake) × (1 + merit/200). */
 export function DaoOverview() {
   const [members, setMembers] = useState<DaoMember[] | null>(null);
@@ -52,6 +66,7 @@ export function DaoOverview() {
                 <tr key={m.drepId} className="border-t border-neutral-200 dark:border-neutral-800">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
+                      <Avatar name={m.displayName} image={m.image} />
                       <span className="font-medium">{m.displayName}</span>
                       {m.isBoard ? (
                         <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">

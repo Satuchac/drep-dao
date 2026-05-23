@@ -7,13 +7,15 @@ import { MemberArea } from './member-area';
 import { RoundsSection } from './rounds-section';
 import { DaoOverview } from './dao-overview';
 import { GovernanceSetup } from './governance-setup';
+import { OnChainProofs } from './on-chain-proofs';
 import { HealthBadge } from '@/app/health-badge';
 
-type View = 'overview' | 'me' | 'rounds' | 'setup';
+type View = 'overview' | 'me' | 'rounds' | 'proofs' | 'setup';
 const NAV: { key: View; label: string; boardOnly?: boolean }[] = [
   { key: 'overview', label: 'DAO Member overview' },
   { key: 'me', label: 'My area' },
   { key: 'rounds', label: 'Rounds' },
+  { key: 'proofs', label: 'On-chain proofs' },
   { key: 'setup', label: 'Platform setup', boardOnly: true },
 ];
 
@@ -77,6 +79,7 @@ export function HomeShell() {
         {view === 'overview' ? <DaoOverview /> : null}
         {view === 'me' ? <MemberArea /> : null}
         {view === 'rounds' ? <RoundsSection /> : null}
+        {view === 'proofs' ? <OnChainProofs /> : null}
         {view === 'setup' && isBoard ? <GovernanceSetup /> : null}
       </main>
 

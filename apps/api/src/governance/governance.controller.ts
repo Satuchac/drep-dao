@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { GovernanceService } from './governance.service';
+import { AnchorService } from '../cardano/anchor.service';
 
 export class UpdateParamDto {
   @IsString() @IsNotEmpty() @MaxLength(80) key!: string;
@@ -14,11 +15,19 @@ export class UpdateParamDto {
 @Controller('admin/governance')
 @UseGuards(JwtAuthGuard, BoardGuard)
 export class GovernanceController {
-  constructor(private readonly gov: GovernanceService) {}
+  constructor(
+    private readonly gov: GovernanceService,
+    private readonly anchor: AnchorService,
+  ) {}
 
   @Get()
   list() {
     return this.gov.getParams();
+  }
+
+  @Get('wallets')
+  wallets() {
+    return this.anchor.walletStatus();
   }
 
   @Patch()

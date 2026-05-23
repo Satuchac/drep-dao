@@ -7,10 +7,12 @@ import {
   GOVERNANCE_METADATA_LABEL,
   GovSubject,
   VotingStyle,
-  type GovResultEvent,
+  buildResultMetadata,
+  type AnchorResultMetadata,
   type GovVoteEvent,
 } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
+import { CardanoQueryService } from './cardano-query.service';
 
 const harden = (n: number): number => n + 0x80000000;
 const sha256hex = (s: string): string => createHash('sha256').update(s).digest('hex');
@@ -33,8 +35,13 @@ export class AnchorService {
   private readonly base: string;
   private readonly networkId: number;
   private readonly mnemonic?: string;
+  private readonly treasuryAddress?: string;
 
-  constructor(config: ConfigService, private readonly prisma: PrismaService) {
+  constructor(
+    config: ConfigService,
+    private readonly prisma: PrismaService,
+    private readonly cardano: CardanoQueryService,
+  ) {
     const net = config.get<string>('CARDANO_NETWORK') ?? 'Preprod';
     this.networkId = net === 'Mainnet' ? 1 : 0;
     this.base =
@@ -44,6 +51,30 @@ export class AnchorService {
           ? 'https://preview.koios.rest/api/v1'
           : 'https://preprod.koios.rest/api/v1';
     this.mnemonic = config.get<string>('ANCHOR_MNEMONIC') || undefined;
+    this.treasuryAddress = config.get<string>('TREASURY_ADDRESS') || undefined;
+  }
+
+  /** Bech32 address of the configured anchor hot wallet (or null if unset). */
+  hotWalletAddress(): string | null {
+    return this.mnemonic ? this.anchorKeys(this.mnemonic).addr.to_bech32() : null;
+  }
+
+  /**
+   * Board view of the platform's on-chain wallets: the low-balance anchor HOT
+   * wallet (pays tx fees) and the TREASURY (3-of-5 multisig) that tops it up.
+   * The hot wallet's signing key is an operator secret (env/KMS), never exposed
+   * here — the board sees the address + balance for oversight.
+   */
+  async walletStatus() {
+    const hot = this.hotWalletAddress();
+    const treasury = this.treasuryAddress ?? null;
+    const addrs = [hot, treasury].filter((a): a is string => !!a);
+    const bal = await this.cardano.addressBalance(addrs);
+    const ada = (a: string | null) => (a ? Number(bal.get(a) ?? 0n) / 1_000_000 : 0);
+    return {
+      hotWallet: { address: hot, balanceAda: ada(hot), configured: !!this.mnemonic },
+      treasury: { address: treasury, balanceAda: ada(treasury), configured: !!treasury },
+    };
   }
 
   /**
@@ -68,23 +99,22 @@ export class AnchorService {
     };
     const hash = sha256hex(JSON.stringify(preimage));
 
-    const event: GovResultEvent = {
-      v: 1,
-      t: 'result',
+    // §3 — self-describing on-chain JSON: title + every voter's choice + tally.
+    const metadata = buildResultMetadata({
       subject: GovSubject.ADMISSION,
       style: VotingStyle.ONE_PERSON_ONE_VOTE,
-      ts: new Date().toISOString(),
-      ref: params.applicantDrepId,
-      outcome: params.outcome,
+      applicant: params.applicantDrepId,
+      votes: params.votes.map((v) => ({ drep: v.voter, vote: v.choice })),
       yes: params.yes,
       no: params.no,
       threshold: params.threshold,
-      h: hash,
-    };
+      outcome: params.outcome,
+      proofHash: hash,
+    })[GOVERNANCE_METADATA_LABEL];
 
     let txHash: string | null = null;
     try {
-      txHash = await this.submitMetadataTx(event);
+      txHash = await this.submitMetadataTx(metadata);
     } catch (e) {
       this.logger.warn(`anchor submit skipped/failed: ${e instanceof Error ? e.message : e}`);
     }
@@ -104,7 +134,7 @@ export class AnchorService {
   }
 
   /** Build + sign + submit a single tx carrying `event` as metadata, from the anchor wallet. */
-  private async submitMetadataTx(event: GovResultEvent): Promise<string> {
+  private async submitMetadataTx(event: AnchorResultMetadata): Promise<string> {
     if (!this.mnemonic) throw new Error('ANCHOR_MNEMONIC not configured (anchor recorded, not submitted)');
     const { prv, addr } = this.anchorKeys(this.mnemonic);
     const addrBech = addr.to_bech32();

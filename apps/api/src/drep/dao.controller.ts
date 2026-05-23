@@ -17,4 +17,9 @@ export class DaoController {
   experts() {
     return this.drep.listApprovedExperts();
   }
+
+  @Get('proofs')
+  proofs() {
+    return this.drep.listOnChainProofs();
+  }
 }
