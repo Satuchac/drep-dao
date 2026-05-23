@@ -116,8 +116,11 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
     { name: 'Ecosystem', type: 'GRANT', allocatedAda: 4_000_000, description: '' },
   ]);
   const [sched, setSched] = useState<Record<string, { startsAt: string; endsAt: string }>>({});
+  // §6 — optional per-round overrides of the platform defaults (blank = use default).
+  const [settings, setSettings] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const setSetting = (k: string, v: string) => setSettings((s) => ({ ...s, [k]: v }));
 
   const setCat = (i: number, patch: Partial<RoundCategoryInput>) =>
     setCats((cs) => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
@@ -162,6 +165,7 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
         if (!v?.startsAt || !v?.endsAt) return [];
         return [{ stageKey: s.key, startsAt: new Date(v.startsAt).toISOString(), endsAt: new Date(v.endsAt).toISOString() }];
       });
+      const num = (k: string) => (settings[k]?.trim() ? Number(settings[k]) : undefined);
       const input: CreateRoundInput = {
         name: name.trim() || undefined,
         budgetAda: Number(budget),
@@ -173,6 +177,11 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
           description: c.description?.trim() || undefined,
         })),
         schedule,
+        filterReviewerCount: num('filterReviewerCount'),
+        filterApprovalVotes: num('filterApprovalVotes'),
+        milestoneReviewerCount: num('milestoneReviewerCount'),
+        milestoneApprovalVotes: num('milestoneApprovalVotes'),
+        dvApprovalThresholdPct: num('dvApprovalThresholdPct'),
       };
       await boardRoundsApi.create(input);
       onDone();
@@ -225,6 +234,31 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
           ))}
         </div>
         <button type="button" onClick={() => setCats((cs) => [...cs, { name: '', type: 'GRANT', allocatedAda: 0, description: '' }])} className="mt-1 text-xs underline">+ add category</button>
+      </div>
+
+      <div>
+        <div className="mb-1 text-sm font-medium">Round settings (optional — override platform defaults)</div>
+        <div className="flex flex-wrap gap-2 text-sm">
+          {([
+            ['filterReviewerCount', 'Filtering reviewers'],
+            ['filterApprovalVotes', 'Filtering approvals'],
+            ['milestoneReviewerCount', 'Milestone reviewers'],
+            ['milestoneApprovalVotes', 'Milestone approvals'],
+            ['dvApprovalThresholdPct', 'D&V threshold %'],
+          ] as const).map(([k, label]) => (
+            <label key={k} className="text-xs text-neutral-500">
+              {label}
+              <input
+                type="number"
+                min={1}
+                value={settings[k] ?? ''}
+                onChange={(e) => setSetting(k, e.target.value)}
+                placeholder="default"
+                className={`${field} ml-1 w-20`}
+              />
+            </label>
+          ))}
+        </div>
       </div>
 
       <div>

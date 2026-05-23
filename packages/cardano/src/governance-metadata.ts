@@ -93,13 +93,21 @@ export const STYLE_LABEL: Record<VotingStyle, string> = {
  * JSON: a clear title, the full list of voters + how each voted, the tally, and
  * the outcome. `proofHash` commits to the off-chain preimage (full signed votes).
  */
+export interface AnchorVote {
+  drep: string;
+  vote: string;
+  power?: number; // balanced voting power this DRep's vote carried (BAL only)
+}
 export interface AnchorResultMetadata {
   title: string;
   subject: GovSubject;
   voting: string; // human-readable voting style
   applicant: string; // subject DRep id
-  votes: { drep: string; vote: string }[];
-  tally: { yes: number; no: number; threshold: number };
+  votes: AnchorVote[];
+  // For 1P1V: yes/no are vote counts, threshold is the count needed. For BAL:
+  // yes/no are summed voting power, threshold is the % of total power required,
+  // and totalPower is the snapshot's total eligible power.
+  tally: { yes: number; no: number; threshold: number; unit: 'votes' | 'power'; totalPower?: number };
   outcome: string;
   decidedAt: string;
   proofHash?: string;
@@ -110,21 +118,29 @@ export function buildResultMetadata(p: {
   subject: GovSubject;
   style: VotingStyle;
   applicant: string;
-  votes: { drep: string; vote: string }[];
+  votes: AnchorVote[];
   yes: number;
   no: number;
   threshold: number;
+  totalPower?: number;
   outcome: string;
   proofHash?: string;
   verify?: string;
 }): Record<string, AnchorResultMetadata> {
+  const balanced = p.style === VotingStyle.BALANCED;
   const meta: AnchorResultMetadata = {
     title: SUBJECT_TITLE[p.subject],
     subject: p.subject,
     voting: STYLE_LABEL[p.style],
     applicant: p.applicant,
     votes: p.votes,
-    tally: { yes: p.yes, no: p.no, threshold: p.threshold },
+    tally: {
+      yes: p.yes,
+      no: p.no,
+      threshold: p.threshold,
+      unit: balanced ? 'power' : 'votes',
+      ...(balanced && p.totalPower != null ? { totalPower: p.totalPower } : {}),
+    },
     outcome: p.outcome,
     decidedAt: new Date().toISOString(),
     ...(p.proofHash ? { proofHash: p.proofHash } : {}),

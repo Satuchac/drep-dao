@@ -192,6 +192,12 @@ model Round {
   rewardsPoolAda  BigInt    @map("rewards_pool_ada")
   multisigAddress String    @map("multisig_address")
   intersectTxHash String?   @map("intersect_tx_hash")
+  // §6 — per-round overrides of the platform defaults (null = use the global value).
+  filterReviewerCount    Int?     @map("filter_reviewer_count")
+  filterApprovalVotes    Int?     @map("filter_approval_votes")
+  milestoneReviewerCount Int?     @map("milestone_reviewer_count")
+  milestoneApprovalVotes Int?     @map("milestone_approval_votes")
+  dvApprovalThresholdPct Decimal? @map("dv_approval_threshold_pct") @db.Decimal(5, 2)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   endedAt         DateTime? @map("ended_at") @db.Timestamptz(6)
 
@@ -455,6 +461,18 @@ model Vote {
 
   @@index([proposalId, drepId])
   @@map("vote")
+}
+
+// §8.2 — board members do NOT vote on funding D&V by default; they must explicitly
+// opt in per proposal. Recorded here; openVoting includes opted-in board in the snapshot.
+model DvBoardOptIn {
+  id         String   @id @default(uuid()) @db.Uuid
+  proposalId String   @map("proposal_id") @db.Uuid
+  drepId     String   @map("drep_id") @db.Uuid
+  optedAt    DateTime @default(now()) @map("opted_at") @db.Timestamptz(6)
+
+  @@unique([proposalId, drepId])
+  @@map("dv_board_opt_in")
 }
 
 model QuickPoll {

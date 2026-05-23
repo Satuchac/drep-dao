@@ -76,7 +76,7 @@ export function ProposalDetail({ id, onBack }: { id: string; onBack: () => void 
 
       <VersionsSection id={id} />
       {showFiltering ? <FilteringSection id={id} /> : null}
-      {showDv ? <DvSection id={id} /> : null}
+      {showDv ? <DvSection id={id} isBoard={isBoard} /> : null}
       {showMilestones ? (
         <MilestonesSection id={id} isBoard={isBoard} isMine={mine} onChange={load} />
       ) : null}
@@ -144,12 +144,29 @@ function FilteringSection({ id }: { id: string }) {
   );
 }
 
-function DvSection({ id }: { id: string }) {
+function DvSection({ id, isBoard }: { id: string; isBoard: boolean }) {
   const [r, setR] = useState<DvResult | null>(null);
-  useEffect(() => {
-    dvApi.result(id).then(setR).catch(() => setR(null));
-  }, [id]);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const load = useCallback(() => dvApi.result(id).then(setR).catch(() => setR(null)), [id]);
+  useEffect(() => { load(); }, [load]);
   if (!r || !r.open) return null;
+
+  const total = r.totalPower ?? 0;
+  const yes = r.yesPower ?? 0;
+  const abstain = r.abstainPower ?? 0;
+  const no = Math.max(0, total - yes - abstain); // explicit + implicit NO
+  const denom = r.denominator ?? total - abstain;
+  // Threshold is a % of the denominator (total − abstain); place it on the total-power scale.
+  const thresholdPosPct = total > 0 ? ((((r.thresholdPct ?? 0) / 100) * denom) / total) * 100 : 0;
+
+  const optIn = async () => {
+    setBusy(true); setMsg(null);
+    try { await dvApi.optIn(id); setMsg('You opted in — you can now vote in My area.'); load(); }
+    catch (e) { setMsg(e instanceof Error ? e.message : 'opt-in failed'); }
+    finally { setBusy(false); }
+  };
+
   return (
     <section className={card}>
       <div className="flex items-center justify-between">
@@ -157,11 +174,43 @@ function DvSection({ id }: { id: string }) {
         <AnchorLink txHash={r.anchorTxHash} />
       </div>
       <div className="mt-1 text-xs text-neutral-500">
-        {r.cast}/{r.eligible} voted · YES {r.yesPower?.toLocaleString()} of {r.denominator?.toLocaleString()} power ·{' '}
-        {r.ratioPct}% (threshold {r.thresholdPct}%) · {r.approved ? 'passing' : 'not passing'}
+        {r.cast}/{r.eligible} eligible DReps voted · {r.approved ? 'passing' : 'not passing'} at {r.ratioPct}% (need {r.thresholdPct}% of participating power)
       </div>
-      <div className="mt-2"><Votes votes={r.votes ?? []} /></div>
+      <PowerBar yes={yes} no={no} abstain={abstain} total={total} thresholdPosPct={thresholdPosPct} thresholdPct={r.thresholdPct ?? 0} />
+      {isBoard ? (
+        <div className="mt-2 text-xs">
+          <button onClick={optIn} disabled={busy} className="rounded border border-neutral-400 px-2.5 py-1 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:hover:bg-neutral-800">
+            {busy ? 'Opting in…' : 'Opt in to vote on this funding proposal'}
+          </button>
+          <span className="ml-2 text-neutral-500">Board members only vote on funding proposals after opting in.</span>
+          {msg ? <div className="mt-1 text-emerald-600">{msg}</div> : null}
+        </div>
+      ) : null}
+      <div className="mt-3"><Votes votes={r.votes ?? []} /></div>
     </section>
+  );
+}
+
+/** §4.4 — YES / NO / abstain as balanced voting power, scaled to total power, with a threshold marker. */
+function PowerBar({ yes, no, abstain, total, thresholdPosPct, thresholdPct }: { yes: number; no: number; abstain: number; total: number; thresholdPosPct: number; thresholdPct: number }) {
+  const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0);
+  const fmt = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  return (
+    <div className="mt-2">
+      <div className="relative h-5 w-full overflow-hidden rounded bg-neutral-200 dark:bg-neutral-800">
+        <div className="absolute inset-y-0 left-0 bg-emerald-500" style={{ width: `${pct(yes)}%` }} />
+        <div className="absolute inset-y-0 bg-red-400" style={{ left: `${pct(yes)}%`, width: `${pct(no)}%` }} />
+        <div className="absolute inset-y-0 bg-neutral-400" style={{ left: `${pct(yes + no)}%`, width: `${pct(abstain)}%` }} />
+        {/* threshold marker */}
+        <div className="absolute inset-y-0 w-0.5 bg-neutral-900 dark:bg-white" style={{ left: `${Math.min(100, thresholdPosPct)}%` }} title={`threshold ${thresholdPct}%`} />
+      </div>
+      <div className="mt-1 flex flex-wrap gap-3 text-xs text-neutral-500">
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-emerald-500" />YES {fmt(yes)}</span>
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-red-400" />NO {fmt(no)}</span>
+        {abstain > 0 ? <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-neutral-400" />abstain {fmt(abstain)}</span> : null}
+        <span className="tabular-nums">total power {fmt(total)} · threshold {thresholdPct}%</span>
+      </div>
+    </div>
   );
 }
 
@@ -172,26 +221,57 @@ function VersionsSection({ id }: { id: string }) {
     proposalVersionsApi.list(id).then(setVersions).catch(() => setVersions([]));
   }, [id]);
   const [sel, setSel] = useState<number | null>(null);
-  if (versions.length < 2) return null; // nothing was edited → no diff to show
+  const [open, setOpen] = useState(false);
+  const [showFull, setShowFull] = useState(false);
+  if (versions.length < 2) return null; // nothing was edited → no history to show
   const current = versions[versions.length - 1];
   const prev = versions.find((v) => v.version === (sel ?? versions[versions.length - 2].version)) ?? versions[versions.length - 2];
+
+  if (!open) {
+    return (
+      <section className={card}>
+        <button onClick={() => setOpen(true)} className="flex w-full items-center justify-between text-left">
+          <span className="text-base font-semibold">Edit history</span>
+          <span className="text-xs text-neutral-500">{versions.length} versions · view changes ▸</span>
+        </button>
+      </section>
+    );
+  }
   return (
     <section className={card}>
-      <h3 className="text-base font-semibold">Edits — original vs updated</h3>
-      <div className="mt-1 flex items-center gap-2 text-xs text-neutral-500">
-        compare version
+      <button onClick={() => setOpen(false)} className="flex w-full items-center justify-between text-left">
+        <span className="text-base font-semibold">Edit history</span>
+        <span className="text-xs text-neutral-500">hide ▾</span>
+      </button>
+      {/* Pick any earlier version; compare it to (or view it next to) the current one. */}
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+        version
         <select
           className="rounded border border-neutral-300 px-1.5 py-0.5 dark:border-neutral-700 dark:bg-neutral-900"
           value={prev.version}
           onChange={(e) => setSel(Number(e.target.value))}
         >
           {versions.filter((v) => !v.current).map((v) => (
-            <option key={v.version} value={v.version}>v{v.version} ({fmtDateTime(v.editedAt)})</option>
+            <option key={v.version} value={v.version}>v{v.version} ({fmtDateTime(v.editedAt)}{v.editor ? ` · ${v.editor}` : ''})</option>
           ))}
         </select>
         → current (v{current.version})
+        <button onClick={() => setShowFull((s) => !s)} className="ml-2 underline">{showFull ? 'show diff' : 'show full versions'}</button>
       </div>
-      <Diff oldText={prev.contentMd} newText={current.contentMd} />
+      {showFull ? (
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <div>
+            <div className="mb-1 text-xs font-medium text-neutral-500">v{prev.version} (selected)</div>
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded border border-neutral-200 p-2 text-xs dark:border-neutral-800">{prev.contentMd}</pre>
+          </div>
+          <div>
+            <div className="mb-1 text-xs font-medium text-neutral-500">v{current.version} (latest)</div>
+            <pre className="overflow-x-auto whitespace-pre-wrap rounded border border-neutral-200 p-2 text-xs dark:border-neutral-800">{current.contentMd}</pre>
+          </div>
+        </div>
+      ) : (
+        <Diff oldText={prev.contentMd} newText={current.contentMd} />
+      )}
     </section>
   );
 }
@@ -401,14 +481,26 @@ function CommentsSection({ id, title, canPost }: { id: string; title: string; ca
   );
 }
 
+const ROLE_CLS: Record<string, string> = {
+  'Board member': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+  Expert: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200',
+  'DAO member': 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200',
+};
+function RoleBadge({ role }: { role: string | null }) {
+  if (!role) return null;
+  return <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium ${ROLE_CLS[role] ?? 'bg-neutral-100 text-neutral-600'}`}>{role}</span>;
+}
+const nameOf = (a: CommentNode['author']) => a.displayName ?? (a.drepId ? `${a.drepId.slice(0, 16)}…` : 'Anonymous');
+
 function CommentItem({ c, canPost, onReply }: { c: CommentNode; canPost: boolean; onReply: (t: string) => void }) {
   const [replying, setReplying] = useState(false);
   const [text, setText] = useState('');
-  const who = c.author.displayName ?? (c.author.drepId ? `${c.author.drepId.slice(0, 16)}…` : 'Anonymous');
+  // §4 — expert feedback is visually differentiated.
+  const expert = c.author.role === 'Expert';
   return (
-    <li className="rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">
+    <li className={`rounded border p-2 text-sm ${expert ? 'border-amber-300 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/30' : 'border-neutral-200 dark:border-neutral-800'}`}>
       <div className="flex items-center justify-between text-xs text-neutral-500">
-        <span className="font-medium text-neutral-700 dark:text-neutral-300">{who}</span>
+        <span className="font-medium text-neutral-700 dark:text-neutral-300">{nameOf(c.author)}<RoleBadge role={c.author.role} /></span>
         <span>{fmtDateTime(c.createdAt)}</span>
       </div>
       <div className={`mt-1 whitespace-pre-wrap ${c.deleted ? 'italic text-neutral-400' : ''}`}>{c.deleted ? '[deleted]' : c.contentMd}</div>
@@ -423,15 +515,18 @@ function CommentItem({ c, canPost, onReply }: { c: CommentNode; canPost: boolean
       ) : null}
       {c.replies && c.replies.length > 0 ? (
         <ul className="mt-2 space-y-2 border-l border-neutral-200 pl-3 dark:border-neutral-800">
-          {c.replies.map((r) => (
-            <li key={r.id} className="text-sm">
-              <div className="flex items-center justify-between text-xs text-neutral-500">
-                <span className="font-medium text-neutral-700 dark:text-neutral-300">{r.author.displayName ?? (r.author.drepId ? `${r.author.drepId.slice(0, 16)}…` : 'Anonymous')}</span>
-                <span>{fmtDateTime(r.createdAt)}</span>
-              </div>
-              <div className={`mt-0.5 whitespace-pre-wrap ${r.deleted ? 'italic text-neutral-400' : ''}`}>{r.deleted ? '[deleted]' : r.contentMd}</div>
-            </li>
-          ))}
+          {c.replies.map((r) => {
+            const rExpert = r.author.role === 'Expert';
+            return (
+              <li key={r.id} className={`rounded text-sm ${rExpert ? 'bg-amber-50/50 p-1.5 dark:bg-amber-950/30' : ''}`}>
+                <div className="flex items-center justify-between text-xs text-neutral-500">
+                  <span className="font-medium text-neutral-700 dark:text-neutral-300">{nameOf(r.author)}<RoleBadge role={r.author.role} /></span>
+                  <span>{fmtDateTime(r.createdAt)}</span>
+                </div>
+                <div className={`mt-0.5 whitespace-pre-wrap ${r.deleted ? 'italic text-neutral-400' : ''}`}>{r.deleted ? '[deleted]' : r.contentMd}</div>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </li>

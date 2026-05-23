@@ -47,31 +47,59 @@ export class DvService {
     const existing = await this.prisma.voteSnapshot.findFirst({ where: { proposalId } });
     if (existing) return this.result(proposalId);
 
+    // §8.2 — voters are admitted DReps eligible for the round, EXCEPT board members,
+    // who only vote on funding proposals if they explicitly opted in for this proposal.
     const eligible = await this.prisma.roundDrepEligibility.findMany({
       where: { roundId: proposal.roundId ?? undefined, drep: { status: 'ADMITTED' } },
-      select: { drepId: true },
+      select: { drepId: true, drep: { select: { user: { select: { drepKeyHash: true } } } } },
     });
-    const nominalStake = toLovelaceAda(Number(this.config.get('DV_SNAPSHOT_STAKE_ADA') ?? 1_000_000));
+    const boardHashes = new Set((await this.prisma.boardSeat.findMany({ select: { drepKeyHash: true } })).map((s) => s.drepKeyHash));
+    const optedIn = new Set(
+      (await this.prisma.dvBoardOptIn.findMany({ where: { proposalId }, select: { drepId: true } })).map((o) => o.drepId),
+    );
+    const voters = eligible.filter((e) => {
+      const kh = e.drep.user?.drepKeyHash;
+      const isBoard = kh ? boardHashes.has(kh) : false;
+      return !isBoard || optedIn.has(e.drepId);
+    });
 
     const snapshot = await this.prisma.voteSnapshot.create({ data: { proposalId } });
-    for (const { drepId } of eligible) {
-      const merit = await this.currentMerit(drepId);
-      const bp = basePower(nominalStake);
-      const mm = meritMultiplier(merit);
-      await this.prisma.voteSnapshotEntry.create({
-        data: {
-          snapshotId: snapshot.id,
-          drepId,
-          stakeLovelace: nominalStake,
-          meritPoints: merit,
-          basePower: bp,
-          meritMultiplier: mm,
-          finalPower: bp * mm,
-        },
-      });
-    }
+    for (const { drepId } of voters) await this.addSnapshotEntry(snapshot.id, drepId);
     await this.prisma.proposal.update({ where: { id: proposalId }, data: { votingStartAt: new Date() } });
     return this.result(proposalId);
+  }
+
+  /** §8.2 — a board member opts in to vote on this funding proposal (adds them to the snapshot if open). */
+  async optIn(userId: string, proposalId: string) {
+    const drep = await this.prisma.drep.findUnique({ where: { userId }, include: { user: { select: { drepKeyHash: true } } } });
+    if (!drep) throw new ForbiddenException('DReps only');
+    const seat = drep.user.drepKeyHash ? await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: drep.user.drepKeyHash } }) : null;
+    if (!seat) throw new ForbiddenException('only board members opt in; admitted DReps vote by default');
+    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    if (!proposal || proposal.stage !== ProposalStage.DEBATE_VOTE) throw new ConflictException('proposal is not in the DEBATE_VOTE stage');
+
+    await this.prisma.dvBoardOptIn.upsert({
+      where: { proposalId_drepId: { proposalId, drepId: drep.id } },
+      update: {},
+      create: { proposalId, drepId: drep.id },
+    });
+    // If voting already opened, add them to the live snapshot so they can vote now.
+    const snapshot = await this.prisma.voteSnapshot.findFirst({ where: { proposalId } });
+    if (snapshot) {
+      const has = await this.prisma.voteSnapshotEntry.findUnique({ where: { snapshotId_drepId: { snapshotId: snapshot.id, drepId: drep.id } } });
+      if (!has) await this.addSnapshotEntry(snapshot.id, drep.id);
+    }
+    return this.result(proposalId);
+  }
+
+  private async addSnapshotEntry(snapshotId: string, drepId: string) {
+    const nominalStake = toLovelaceAda(Number(this.config.get('DV_SNAPSHOT_STAKE_ADA') ?? 1_000_000));
+    const merit = await this.currentMerit(drepId);
+    const bp = basePower(nominalStake);
+    const mm = meritMultiplier(merit);
+    await this.prisma.voteSnapshotEntry.create({
+      data: { snapshotId, drepId, stakeLovelace: nominalStake, meritPoints: merit, basePower: bp, meritMultiplier: mm, finalPower: bp * mm },
+    });
   }
 
   /** §8.2 — eligible DRep casts/changes a balanced D&V vote (rationale mandatory). */
@@ -185,12 +213,13 @@ export class DvService {
         ref: `${proposal?.title ?? 'proposal'} · round #${proposal?.round?.number ?? '?'}`,
         proposalId,
         roundId: proposal?.round?.id ?? proposal?.roundId ?? null,
-        votes: voteList.map((v) => ({ drep: v.drep, vote: v.choice })),
+        votes: voteList.map((v) => ({ drep: v.drep, vote: v.choice, power: v.weight })),
         preimageVotes: voteList,
         outcome: status,
         yes: round2(r.yesPower ?? 0),
         no: round2(noPower),
         threshold: r.thresholdPct ?? 0,
+        totalPower: round2(r.totalPower ?? 0),
       });
     } catch {
       // anchoring failure must not undo the published result (recorded for retry).

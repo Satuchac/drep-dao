@@ -84,8 +84,26 @@ Admin (separate): `/admin/login`, user `satucha`.
 
 ### Eligibility (bug check)
 - [ ] Only **DAO members** (board + admitted DReps) can be drawn/vote. A registered but
-      **non-admitted** DRep (Heidi/Ivan/Judy) cannot vote — they aren't in the round's
-      eligibility and aren't drawn. Voters now display by **name** in the vote lists.
+      **non-admitted** DRep cannot vote — they aren't in the round's eligibility and
+      aren't drawn. Voters display by **name** in the vote lists.
+
+### Round 2 review fixes (verify these specifically)
+- [ ] **D&V power bar**: a proposal in Debate & Vote shows a YES/NO/abstain **bar scaled
+      to total voting power** with a **threshold marker** (not just "YES 6 power").
+- [ ] **Board opt-in (§8.2)**: board members do NOT auto-vote on funding proposals — the
+      D&V panel shows an **"Opt in to vote"** button for board; after opting in they
+      become eligible (and can vote in My area). Regular admitted DReps vote by default.
+- [ ] **Per-round settings**: when creating a round, the **Round settings** inputs override
+      the platform defaults (filtering reviewers/approvals, milestone reviewers/approvals,
+      D&V threshold %). Leave blank to use the global value.
+- [ ] **Edit history**: the proposal detail shows a collapsed **"Edit history"** — expand it
+      to compare any earlier version with the current one (diff or full side-by-side).
+- [ ] **Comment roles**: each comment shows a role badge — **Board member / DAO member /
+      Expert** — beside the name. **Expert** comments are highlighted (amber). The seeded
+      demo has an expert comment (Ivan) and a board comment (frank) on Round Beta proposals.
+- [ ] **On-chain JSON (D&V)**: open a D&V proof on the explorer — each vote shows the DRep's
+      **voting power**, YES/NO are in **power**, threshold is a **%**, and **totalPower** is
+      included.
 
 ## 4. Known limitations / deferred (by design, for now)
 - **Real ADA payouts** (milestone disbursement, treasury top-ups) are recorded +

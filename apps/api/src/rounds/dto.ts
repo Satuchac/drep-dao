@@ -9,11 +9,21 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Max,
   Min,
   MaxLength,
   ValidateNested,
 } from 'class-validator';
 import { CategoryType } from '@drep-dao/shared';
+
+/** §6 — per-round overrides of platform defaults (omit to use the global value). */
+export class RoundSettingsInput {
+  @IsOptional() @IsInt() @Min(1) filterReviewerCount?: number;
+  @IsOptional() @IsInt() @Min(1) filterApprovalVotes?: number;
+  @IsOptional() @IsInt() @Min(1) milestoneReviewerCount?: number;
+  @IsOptional() @IsInt() @Min(1) milestoneApprovalVotes?: number;
+  @IsOptional() @IsInt() @Min(1) @Max(100) dvApprovalThresholdPct?: number;
+}
 
 // MVP schedule uses coarse operational windows rather than the 9 fine-grained
 // sub-periods in §6. Categories may be GRANT or RFP (§5.2).
@@ -43,7 +53,7 @@ export class ScheduleInput {
   @IsDateString() endsAt!: string;
 }
 
-export class CreateRoundDto {
+export class CreateRoundDto extends RoundSettingsInput {
   @IsOptional() @IsString() @MaxLength(160) name?: string;
   @IsInt() @Min(0) budgetAda!: number; // ADA
   @IsInt() @Min(0) rewardsPoolAda!: number; // ADA
@@ -66,7 +76,7 @@ export class CreateRoundDto {
   @IsOptional() @IsArray() @IsString({ each: true }) eligibleDrepIds?: string[];
 }
 
-export class UpdateRoundDto {
+export class UpdateRoundDto extends RoundSettingsInput {
   @IsOptional() @IsString() @MaxLength(160) name?: string;
   @IsOptional() @IsInt() @Min(0) budgetAda?: number;
   @IsOptional() @IsInt() @Min(0) rewardsPoolAda?: number;

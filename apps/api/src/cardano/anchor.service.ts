@@ -90,11 +90,12 @@ export class AnchorService {
     ref: string; // readable subject reference, shown as "applicant" in the JSON
     proposalId?: string | null; // Anchor.proposalId (proposal row or applicant drep row)
     roundId?: string | null;
-    votes: { drep: string; vote: string }[];
+    votes: { drep: string; vote: string; power?: number }[];
     outcome: string;
     yes: number;
     no: number;
     threshold: number;
+    totalPower?: number; // BAL: total eligible voting power (for the on-chain tally)
     preimageVotes?: unknown; // richer votes (rationale/signature) for the off-chain preimage
   }): Promise<AnchorResult> {
     const preimage = {
@@ -115,6 +116,7 @@ export class AnchorService {
       yes: params.yes,
       no: params.no,
       threshold: params.threshold,
+      totalPower: params.totalPower,
       outcome: params.outcome,
       proofHash: hash,
     })[GOVERNANCE_METADATA_LABEL];

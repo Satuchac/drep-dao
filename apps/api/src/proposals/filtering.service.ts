@@ -31,7 +31,10 @@ export class FilteringService {
    * subcategory match, and verifiable block-hash seed are deferred.) Idempotent.
    */
   async drawReviewers(proposalId: string) {
-    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      include: { round: { select: { filterReviewerCount: true } } },
+    });
     if (!proposal) throw new NotFoundException('proposal not found');
     if (proposal.stage !== ProposalStage.FILTERING || proposal.status !== ProposalStatus.ACTIVE) {
       throw new ConflictException('proposal is not in the FILTERING stage');
@@ -49,7 +52,8 @@ export class FilteringService {
     let pool = eligible.map((e) => e.drepId).filter((id) => id !== proposal.submitterDrepId);
     if (pool.length === 0) throw new BadRequestException('no eligible reviewers in this round');
 
-    const count = Math.min(await this.cfg('FILTER_REVIEWER_COUNT'), pool.length);
+    // §6 — per-round override of the reviewer count, else the platform default.
+    const count = Math.min(proposal.round?.filterReviewerCount ?? (await this.cfg('FILTER_REVIEWER_COUNT')), pool.length);
     const chosen: string[] = [];
     for (let i = 0; i < count; i++) {
       const j = randomInt(pool.length);
@@ -117,12 +121,14 @@ export class FilteringService {
   private async maybeDecide(proposalId: string) {
     const proposal = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
-      include: { round: { select: { number: true, id: true } } },
+      include: { round: { select: { number: true, id: true, filterApprovalVotes: true, dvApprovalThresholdPct: true } } },
     });
     // Only decide once: skip if no longer an active filtering proposal.
     if (!proposal || proposal.status !== ProposalStatus.ACTIVE || proposal.stage !== ProposalStage.FILTERING) return;
 
-    const threshold = await this.cfg('FILTER_APPROVAL_VOTES');
+    // §6 — per-round overrides of the filtering approval count + D&V threshold.
+    const threshold = proposal.round?.filterApprovalVotes ?? (await this.cfg('FILTER_APPROVAL_VOTES'));
+    const dvThresholdPct = proposal.round?.dvApprovalThresholdPct ?? (await this.cfg('DV_APPROVAL_THRESHOLD_PCT'));
     const votes = await this.prisma.vote.findMany({ where: { proposalId, phase: VotePhase.FILTERING } });
     const yes = votes.filter((v) => v.choice === VoteChoice.YES).length;
     const no = votes.filter((v) => v.choice === VoteChoice.NO).length;
@@ -134,7 +140,7 @@ export class FilteringService {
         data: {
           stage: ProposalStage.DEBATE_VOTE,
           votingType: VotingType.BALANCED,
-          approvalThresholdPct: await this.cfg('DV_APPROVAL_THRESHOLD_PCT'),
+          approvalThresholdPct: dvThresholdPct,
         },
       });
       outcome = 'ACCEPTED';
@@ -182,14 +188,17 @@ export class FilteringService {
   }
 
   async result(proposalId: string) {
-    const [assignments, votes, threshold, proposal, voteList, anchor] = await Promise.all([
+    const [assignments, votes, proposal, voteList, anchor] = await Promise.all([
       this.prisma.filterAssignment.count({ where: { proposalId, releasedAt: null } }),
       this.prisma.vote.findMany({ where: { proposalId, phase: VotePhase.FILTERING } }),
-      this.cfg('FILTER_APPROVAL_VOTES'),
-      this.prisma.proposal.findUnique({ where: { id: proposalId }, select: { status: true, stage: true } }),
+      this.prisma.proposal.findUnique({
+        where: { id: proposalId },
+        select: { status: true, stage: true, round: { select: { filterApprovalVotes: true } } },
+      }),
       this.anchorVoteList(proposalId),
       this.prisma.anchor.findFirst({ where: { proposalId, kind: 'filtering' }, orderBy: { createdAt: 'desc' } }),
     ]);
+    const threshold = proposal?.round?.filterApprovalVotes ?? (await this.cfg('FILTER_APPROVAL_VOTES'));
     return {
       reviewers: assignments,
       yes: votes.filter((v) => v.choice === VoteChoice.YES).length,

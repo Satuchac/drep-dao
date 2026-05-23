@@ -96,8 +96,12 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const fres = await filtering.result(draft.id);
   ok('filtering exposes public rationale', fres.votes.some((v) => v.rationale === 'clear and well-scoped'));
 
-  console.log('\n=== §8 Debate & Vote: balanced, anchored ===');
-  await dv.openVoting(draft.id);
+  console.log('\n=== §8 Debate & Vote: balanced, anchored (board opt-in §8.2) ===');
+  // §8.2 — board members only vote on funding proposals after explicitly opting in.
+  await dv.openVoting(draft.id); // snapshot is empty here (only board are admitted, none opted in yet)
+  ok('board excluded from D&V until opt-in', (await dv.result(draft.id)).eligible === 0, `eligible=${(await dv.result(draft.id)).eligible}`);
+  for (const d of boardDreps) await dv.optIn(d.user.id, draft.id);
+  ok('board now eligible after opt-in', (await dv.result(draft.id)).eligible === boardDreps.length);
   const rationale = 'I support this proposal because '.padEnd(220, 'x');
   for (const d of boardDreps) await dv.vote(d.user.id, draft.id, 'YES', rationale);
   const fin = await dv.finalize(draft.id);
@@ -105,6 +109,9 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const dAnchor = await prisma.anchor.findFirst({ where: { proposalId: draft.id, kind: 'dv' } });
   ok('D&V result anchored', !!dAnchor);
   ok('D&V exposes rationale + weight', (fin.votes ?? []).some((v) => v.rationale && (v.weight ?? 0) > 0));
+  // §5 — the on-chain JSON shows per-DRep power + total power.
+  const dvVotes = (dAnchor?.preimage?.votes) ?? [];
+  ok('anchor preimage carries per-vote power + total', dvVotes.some((v) => (v.weight ?? 0) > 0) && (fin.totalPower ?? 0) > 0);
 
   console.log('\n=== §11 Milestones: POA + 2 YES each → COMPLETE ===');
   await milestones.drawReviewers(draft.id);

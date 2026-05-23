@@ -310,7 +310,14 @@ export interface RoundScheduleInput {
   startsAt: string;
   endsAt: string;
 }
-export interface CreateRoundInput {
+export interface RoundSettingsInput {
+  filterReviewerCount?: number;
+  filterApprovalVotes?: number;
+  milestoneReviewerCount?: number;
+  milestoneApprovalVotes?: number;
+  dvApprovalThresholdPct?: number;
+}
+export interface CreateRoundInput extends RoundSettingsInput {
   name?: string;
   budgetAda: number;
   rewardsPoolAda: number;
@@ -358,6 +365,13 @@ export interface RoundDetail extends RoundSummary {
     description: string | null;
   }[];
   schedule: RoundScheduleEntry[];
+  settings: {
+    filterReviewerCount: number | null;
+    filterApprovalVotes: number | null;
+    milestoneReviewerCount: number | null;
+    milestoneApprovalVotes: number | null;
+    dvApprovalThresholdPct: number | null;
+  };
   nextStage: RoundNextStage | null;
 }
 
@@ -503,6 +517,7 @@ export const dvApi = {
       method: 'POST',
       body: JSON.stringify({ choice, rationale }),
     }),
+  optIn: (id: string) => request<DvResult>(`/proposals/${id}/dv-opt-in`, { method: 'POST' }),
 };
 
 // -------- Public platform config (explorer, network, fee address) --------
@@ -546,7 +561,7 @@ export const proposalEditApi = {
 export interface CommentNode {
   id: string;
   parentId: string | null;
-  author: { displayName: string | null; drepId: string | null };
+  author: { displayName: string | null; drepId: string | null; role: string | null };
   contentMd: string | null;
   deleted: boolean;
   createdAt: string;

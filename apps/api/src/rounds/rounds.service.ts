@@ -68,6 +68,12 @@ export class RoundsService {
         rewardsPoolAda: toLovelace(dto.rewardsPoolAda),
         multisigAddress,
         intersectTxHash: dto.intersectTxHash ?? null,
+        // §6 — per-round overrides (null = use the platform default).
+        filterReviewerCount: dto.filterReviewerCount ?? null,
+        filterApprovalVotes: dto.filterApprovalVotes ?? null,
+        milestoneReviewerCount: dto.milestoneReviewerCount ?? null,
+        milestoneApprovalVotes: dto.milestoneApprovalVotes ?? null,
+        dvApprovalThresholdPct: dto.dvApprovalThresholdPct ?? null,
         categories: { create: dto.categories.map((c) => this.categoryData(c)) },
         schedule: { create: (dto.schedule ?? []).map((s) => this.scheduleData(s)) },
         eligibilities: { create: eligibleDrepIds.map((drepId) => ({ drepId })) },
@@ -165,6 +171,14 @@ export class RoundsService {
         maxAda: c.maxAda == null ? null : toAda(c.maxAda),
       })),
       schedule,
+      // §6 — per-round setting overrides (null = platform default).
+      settings: {
+        filterReviewerCount: r.filterReviewerCount,
+        filterApprovalVotes: r.filterApprovalVotes,
+        milestoneReviewerCount: r.milestoneReviewerCount,
+        milestoneApprovalVotes: r.milestoneApprovalVotes,
+        dvApprovalThresholdPct: r.dvApprovalThresholdPct == null ? null : Number(r.dvApprovalThresholdPct),
+      },
       // §8 — what the board must confirm/launch next (null once CLOSED).
       nextStage: this.computeNextStage(r.status, schedule),
       createdAt: r.createdAt,

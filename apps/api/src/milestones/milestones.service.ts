@@ -23,7 +23,10 @@ export class MilestonesService {
 
   /** §11.1 — board draws + confirms reviewers for the proposal's milestones (idempotent). */
   async drawReviewers(proposalId: string) {
-    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId }, include: { milestones: true } });
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      include: { milestones: true, round: { select: { milestoneReviewerCount: true } } },
+    });
     if (!proposal) throw new NotFoundException('proposal not found');
     if (proposal.status !== ProposalStatus.APPROVED || proposal.stage !== ProposalStage.FUNDING) {
       throw new ConflictException('proposal is not in the FUNDING stage');
@@ -39,7 +42,8 @@ export class MilestonesService {
     });
     let pool = eligible.map((e) => e.drepId).filter((id) => id !== proposal.submitterDrepId);
     if (pool.length === 0) throw new BadRequestException('no eligible reviewers in this round');
-    const count = Math.min(await this.cfg('MILESTONE_REVIEWER_COUNT'), pool.length);
+    // §6 — per-round override of the milestone reviewer count.
+    const count = Math.min(proposal.round?.milestoneReviewerCount ?? (await this.cfg('MILESTONE_REVIEWER_COUNT')), pool.length);
     const chosen: string[] = [];
     for (let i = 0; i < count; i++) {
       const j = randomInt(pool.length);
@@ -65,7 +69,7 @@ export class MilestonesService {
         poas: { orderBy: { attempt: 'desc' }, take: 1 },
       },
     });
-    const threshold = await this.cfg('MILESTONE_APPROVAL_VOTES');
+    const threshold = await this.milestoneThreshold(proposalId);
     return Promise.all(
       milestones.map(async (m) => {
         const votes = await this.voteList(m.id);
@@ -154,7 +158,7 @@ export class MilestonesService {
     const m = await this.prisma.milestone.findUnique({ where: { id: milestoneId } });
     if (!m) throw new NotFoundException('milestone not found');
     const votes = await this.voteList(milestoneId);
-    const threshold = await this.cfg('MILESTONE_APPROVAL_VOTES');
+    const threshold = await this.milestoneThreshold(m.proposalId);
     return {
       milestoneId,
       idx: m.idx,
@@ -180,10 +184,10 @@ export class MilestonesService {
   private async maybeDecide(milestoneId: string) {
     const m = await this.prisma.milestone.findUnique({
       where: { id: milestoneId },
-      include: { proposal: { select: { id: true, title: true, roundId: true, round: { select: { number: true } } } } },
+      include: { proposal: { select: { id: true, title: true, roundId: true, round: { select: { number: true, milestoneApprovalVotes: true } } } } },
     });
     if (!m || m.status !== 'POA_SUBMITTED') return;
-    const threshold = await this.cfg('MILESTONE_APPROVAL_VOTES');
+    const threshold = m.proposal.round?.milestoneApprovalVotes ?? (await this.cfg('MILESTONE_APPROVAL_VOTES'));
     const votes = await this.voteList(milestoneId);
     const yes = votes.filter((v) => v.choice === VoteChoice.YES).length;
     const no = votes.filter((v) => v.choice === VoteChoice.NO).length;
@@ -243,6 +247,12 @@ export class MilestonesService {
     const anchors = await this.prisma.anchor.findMany({ where: { proposalId, kind: 'milestone' }, orderBy: { createdAt: 'desc' } });
     const hit = anchors.find((a) => String((a.preimage as { ref?: string })?.ref ?? '').includes(`milestone #${idx + 1}`));
     return hit?.txHash ?? null;
+  }
+
+  /** §6 — per-round milestone approval threshold, else the platform default. */
+  private async milestoneThreshold(proposalId: string): Promise<number> {
+    const p = await this.prisma.proposal.findUnique({ where: { id: proposalId }, select: { round: { select: { milestoneApprovalVotes: true } } } });
+    return p?.round?.milestoneApprovalVotes ?? (await this.cfg('MILESTONE_APPROVAL_VOTES'));
   }
 
   private async cfg(key: keyof typeof PLATFORM_CONFIG_DEFAULTS): Promise<number> {

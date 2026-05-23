@@ -4,7 +4,13 @@ import { PrismaService } from '../prisma/prisma.service';
 const EDIT_WINDOW_MS = 5 * 60 * 1000; // §20.1 — editable for 5 minutes after posting
 
 const authorSelect = {
-  select: { id: true, displayName: true, drep: { select: { drepIdOnchain: true } } },
+  select: {
+    id: true,
+    displayName: true,
+    drepKeyHash: true,
+    drep: { select: { drepIdOnchain: true, status: true } },
+    experts: { select: { approvedByBoard: true } },
+  },
 } as const;
 
 /** §20.1 — public proposal comments: threaded one level, 5-min edit, tombstone delete. */
@@ -19,10 +25,20 @@ export class CommentsService {
       orderBy: { createdAt: 'asc' },
       include: { author: authorSelect },
     });
+    // §7/§20 — show each author's role (board / expert / DAO member) beside the name.
+    const boardHashes = new Set(
+      (await this.prisma.boardSeat.findMany({ select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
+    );
+    const roleOf = (a: (typeof rows)[number]['author']): string | null => {
+      if (a.drepKeyHash && boardHashes.has(a.drepKeyHash)) return 'Board member';
+      if (a.experts?.some((e) => e.approvedByBoard)) return 'Expert';
+      if (a.drep?.status === 'ADMITTED') return 'DAO member';
+      return null;
+    };
     const view = (c: (typeof rows)[number]) => ({
       id: c.id,
       parentId: c.parentId,
-      author: { displayName: c.author.displayName, drepId: c.author.drep?.drepIdOnchain ?? null },
+      author: { displayName: c.author.displayName, drepId: c.author.drep?.drepIdOnchain ?? null, role: roleOf(c.author) },
       contentMd: c.deletedAt ? null : c.contentMd,
       deleted: !!c.deletedAt,
       createdAt: c.createdAt,

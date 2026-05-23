@@ -18,4 +18,11 @@ export class DvController {
   vote(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: DvVoteDto) {
     return this.dv.vote(ctx.userId, id, dto.choice, dto.rationale);
   }
+
+  // §8.2 — a board member opts in to vote on this funding proposal.
+  @UseGuards(JwtAuthGuard)
+  @Post('proposals/:id/dv-opt-in')
+  optIn(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.dv.optIn(ctx.userId, id);
+  }
 }
