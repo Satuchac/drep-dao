@@ -30,3 +30,12 @@ registered on-chain (see `docs/ACTORS.md`; `gen-cast` → `fund-cast` →
 | `test-rounds` | §6/§3 **round lifecycle**: board creates a round and moves it stage to stage; proposals submit **only** in the `SUBMISSION` stage (blocked in PREPARATION/FILTERING). Board-editable **governance parameters** (get/update/validate). Cleans up the test round + proposal. |
 
 Individual suites can be run directly, e.g. `node tools/test-genesis.cjs`.
+
+## Manual on-chain PoC (not in `test-all`)
+
+`tools/gov-anchor-poc.cjs` — proof-of-concept for **on-chain governance voting via tx
+metadata** (WingRiders pattern, our `@drep-dao/cardano` `governance-metadata` module).
+Anchors a DRep admission (application + 3 board votes + result) on Preprod under label
+**80808081**, then reads it back from Koios and **re-tallies independently** (1-person-1-vote).
+Excluded from the automated suite because it submits real transactions and spends tADA.
+Run manually: `node tools/gov-anchor-poc.cjs`.
