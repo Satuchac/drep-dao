@@ -46,6 +46,11 @@ export class AdmissionVoteDto {
 
   /** Written rationale — required for BOTH YES and NO (board accountability). */
   @IsString() @IsNotEmpty() @MaxLength(2000) feedback!: string;
+
+  /** §C — CIP-30 signData over the canonical vote message (free, no tx). Optional. */
+  @IsOptional() @IsString() @MaxLength(8000) signature?: string;
+  @IsOptional() @IsString() @MaxLength(8000) signingKey?: string;
+  @IsOptional() @IsString() @MaxLength(40) ts?: string;
 }
 
 // §14.4 — board proposes / votes to remove a DAO member.

@@ -39,3 +39,11 @@ Anchors a DRep admission (application + 3 board votes + result) on Preprod under
 **80808081**, then reads it back from Koios and **re-tallies independently** (1-person-1-vote).
 Excluded from the automated suite because it submits real transactions and spends tADA.
 Run manually: `node tools/gov-anchor-poc.cjs`.
+
+`tools/test-anchor.cjs` — the **wired** §C flow on live admission: signed votes (CIP-30)
++ one on-chain anchor per decision. Verifies a bogus signature is rejected, a real
+CIP-8 signature is accepted/stored/re-verified, and the 3rd YES auto-anchors a Preprod
+tx (label 80808081) that Koios indexes with the ADMITTED result + vote-set hash. Needs
+`ANCHOR_MNEMONIC` in `.env` (a funded Preprod wallet). The automated suites delete
+`ANCHOR_MNEMONIC` at load so admission decisions there record a *pending* anchor without
+submitting. Run manually: `node tools/test-anchor.cjs`.

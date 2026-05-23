@@ -13,6 +13,7 @@ for (const line of fs.readFileSync(path.join(root, '.env'), 'utf8').split('\n'))
   const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*"?([^"\n]*)"?\s*$/);
   if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
 }
+delete process.env.ANCHOR_MNEMONIC; // automated suite must not submit on-chain anchor txs
 const { PrismaService } = require(root + '/apps/api/dist/prisma/prisma.service.js');
 const { CardanoQueryService } = require(root + '/apps/api/dist/cardano/cardano-query.service.js');
 const { UsersService } = require(root + '/apps/api/dist/users/users.service.js');
@@ -100,6 +101,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
 
   console.log('\n=== Cleanup (remove Heidi so JOIN can be tested manually) ===');
   await prisma.admissionVote.deleteMany({ where: { drepId: applied.id } });
+  await prisma.anchor.deleteMany({ where: { proposalId: applied.id } });
   await prisma.drep.delete({ where: { id: applied.id } });
   ok('Heidi reset to non-member', (await prisma.drep.findUnique({ where: { userId: heidi.userId } })) === null);
 

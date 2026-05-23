@@ -83,6 +83,11 @@ model AdmissionVote {
   boardDrepId String   @map("board_drep_id") @db.Uuid // the board member voting
   choice      String // YES, NO (NO requires feedback)
   feedback    String?
+  // §C anchoring — the voter's CIP-30 signData over the canonical vote message
+  // (free, no tx). Lets anyone verify the vote was authorized by the voter's key.
+  signature   String?  @map("signature") // COSE_Sign1 hex
+  signingKey  String?  @map("signing_key") // COSE_Key hex
+  signedAt    DateTime? @map("signed_at") @db.Timestamptz(6)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   applicant Drep @relation("AdmissionApplicant", fields: [drepId], references: [id])

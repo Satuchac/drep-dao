@@ -26,6 +26,19 @@ export function MyDrepStatus() {
       <h3 className="text-base font-semibold">DAO membership</h3>
       <div className={label.cls}>{label.text}</div>
       <div className="font-mono text-xs text-neutral-500 break-all">{drep.drepIdOnchain}</div>
+      {drep.anchorTxHash ? (
+        <div className="text-xs text-neutral-500">
+          Decision anchored on-chain ✓{' '}
+          <a
+            href={`https://preprod.cardanoscan.io/transaction/${drep.anchorTxHash}`}
+            target="_blank"
+            rel="noreferrer"
+            className="underline"
+          >
+            view tx
+          </a>
+        </div>
+      ) : null}
 
       {pending ? (
         <div className="text-sm">

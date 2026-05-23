@@ -7,6 +7,7 @@ import {
   getDRepKeyHex,
   getStakeAddress,
   listInjectedWallets,
+  signMessageWithStakeKey,
   utf8ToHex,
   type Cip30Api,
   type Cip30WalletEntry,
@@ -22,6 +23,8 @@ interface AuthState {
   refreshWallets: () => void;
   /** Best-effort DRep ID from the connected wallet (CIP-95); null if unavailable. */
   detectDRepId: () => Promise<string | null>;
+  /** Sign a message with the connected wallet's stake key (CIP-30 signData); null if unavailable. */
+  signMessage: (message: string) => Promise<{ signature: string; key: string } | null>;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -31,6 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [wallets, setWallets] = useState<Cip30WalletEntry[]>([]);
   const walletApiRef = useRef<Cip30Api | null>(null);
+  const walletKeyRef = useRef<string | null>(null);
 
   const refreshWallets = useCallback(() => setWallets(listInjectedWallets()), []);
 
@@ -50,6 +54,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = useCallback(async (entry: Cip30WalletEntry) => {
     const { api, stakeHex, stakeAddress } = await getStakeAddress(entry);
     walletApiRef.current = api; // keep for CIP-95 DRep detection
+    walletKeyRef.current = entry.key; // remember which wallet, to re-acquire for signing
     const { message } = await authApi.nonce(stakeAddress);
     const sig = await api.signData(stakeHex, utf8ToHex(message));
     const drepKeyHex = await getDRepKeyHex(api); // CIP-95 → board/DRep recognition
@@ -69,6 +74,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return detectDRepId(walletApiRef.current);
   }, []);
 
+  // Sign a message with the wallet's stake key. Re-acquires the wallet api if it
+  // was lost (e.g. after a reload), falling back to null so callers can degrade.
+  const signMessage = useCallback(async (message: string) => {
+    let api = walletApiRef.current;
+    if (!api) {
+      const key = walletKeyRef.current;
+      const entry = (key ? listInjectedWallets().find((w) => w.key === key) : null) ?? listInjectedWallets()[0];
+      if (!entry) return null;
+      try {
+        api = (await getStakeAddress(entry)).api;
+        walletApiRef.current = api;
+      } catch {
+        return null;
+      }
+    }
+    try {
+      return await signMessageWithStakeKey(api, message);
+    } catch {
+      return null;
+    }
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -80,6 +107,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refresh,
         refreshWallets,
         detectDRepId: detect,
+        signMessage,
       }}
     >
       {children}

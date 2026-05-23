@@ -99,6 +99,16 @@ export async function connectAndSign(
   return { api, stakeHex, stakeAddress, sign };
 }
 
+/** Sign an arbitrary message with the wallet's stake key (CIP-30 signData) — free, no tx. */
+export async function signMessageWithStakeKey(
+  api: Cip30Api,
+  message: string,
+): Promise<{ signature: string; key: string }> {
+  const stakeHex = (await api.getRewardAddresses())[0];
+  if (!stakeHex) throw new Error('Wallet returned no reward (stake) address.');
+  return api.signData(stakeHex, utf8ToHex(message));
+}
+
 /** Resolve the bech32 stake address only (used to request the nonce first). */
 export async function getStakeAddress(entry: Cip30WalletEntry): Promise<{ api: Cip30Api; stakeHex: string; stakeAddress: string }> {
   const api = await entry.enable();

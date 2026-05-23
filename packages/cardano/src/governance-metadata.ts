@@ -61,7 +61,7 @@ export interface GovVoteEvent extends BaseEvent {
   rh?: string; // rationale hash (hex), full rationale stays off-chain
 }
 
-/** Anchors the final, computed result. */
+/** Anchors the final, computed result + a commitment to the full vote set. */
 export interface GovResultEvent extends BaseEvent {
   t: 'result';
   ref: string;
@@ -69,6 +69,7 @@ export interface GovResultEvent extends BaseEvent {
   yes: number; // count (1P1V) or summed power (BAL)
   no: number;
   threshold: number; // votes needed (1P1V) or threshold % (BAL)
+  h?: string; // hash of the off-chain preimage (all signed votes) — recompute to verify
 }
 
 export type GovEvent = GovApplicationEvent | GovVoteEvent | GovResultEvent;
@@ -105,6 +106,7 @@ export function buildGovMetadata(e: GovEvent): Record<string, GovEvent> {
     assertShort('voter', e.voter);
     assertShort('rh', e.rh);
   }
+  if (e.t === 'result') assertShort('h', e.h);
   return { [GOVERNANCE_METADATA_LABEL]: e };
 }
 
@@ -150,6 +152,30 @@ export function tallyBalanced(
   const abstain = sum('ABSTAIN');
   const denom = totalPower - abstain;
   return { yes, no, passed: denom > 0 && yes / denom >= thresholdPct / 100 };
+}
+
+/**
+ * Canonical message a voter signs with CIP-30 `signData` (free, no tx) to
+ * authenticate a vote. The backend reconstructs the SAME string from stored
+ * fields and verifies the signature (CIP-8) against the voter's address — so
+ * anyone can confirm the vote was authorized by that key. Built identically on
+ * the frontend and backend to guarantee byte-for-byte agreement.
+ */
+export function admissionVoteMessage(p: {
+  applicantDrepId: string;
+  voterStakeAddress: string;
+  choice: Choice;
+  rationale: string;
+  ts: string;
+}): string {
+  return [
+    'DRep DAO — admission vote v1',
+    `applicant: ${p.applicantDrepId}`,
+    `voter: ${p.voterStakeAddress}`,
+    `choice: ${p.choice}`,
+    `rationale: ${p.rationale}`,
+    `ts: ${p.ts}`,
+  ].join('\n');
 }
 
 /** A voter may re-vote; keep only their last vote (metadata is append-only). */

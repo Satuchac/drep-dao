@@ -12,10 +12,13 @@ import {
   clampMerit,
   meritMultiplier,
 } from '@drep-dao/shared';
-import { drepIdFromKeyHashHex } from '@drep-dao/cardano';
+import { createHash } from 'node:crypto';
+import { drepIdFromKeyHashHex, admissionVoteMessage, GovSubject, VotingStyle } from '@drep-dao/cardano';
 import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
+import { AnchorService } from '../cardano/anchor.service';
+import { verifyCip30Signature } from '../auth/cip30';
 import { AdmissionVoteDto, DrepApplicationDto, ExpertApplicationDto, UpdateDrepDto } from './dto';
 
 @Injectable()
@@ -23,6 +26,7 @@ export class DrepService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cardano: CardanoQueryService,
+    private readonly anchor: AnchorService,
   ) {}
 
   /**
@@ -177,6 +181,12 @@ export class DrepService {
     if (!drep) return null;
     const threshold = await this.approvalThreshold();
     const votes = drep.admissionVotesReceived;
+    // §C — latest on-chain anchor of this applicant's admission decision, if any.
+    const anchor = await this.prisma.anchor.findFirst({
+      where: { kind: 'admission', proposalId: drep.id },
+      orderBy: { createdAt: 'desc' },
+      select: { txHash: true },
+    });
     // Fall back to the board-seat name when a board member hasn't set a display name.
     const seats = await this.prisma.boardSeat.findMany();
     const seatName = new Map(seats.map((s) => [s.drepKeyHash, s.displayName]));
@@ -203,6 +213,7 @@ export class DrepService {
         feedback: v.feedback,
         voterName: voterLabel(v),
       })),
+      anchorTxHash: anchor?.txHash ?? null,
     };
   }
 
@@ -330,7 +341,7 @@ export class DrepService {
 
     const board = await this.prisma.drep.findUnique({
       where: { userId: boardUserId },
-      include: { user: { select: { drepKeyHash: true } } },
+      include: { user: { select: { drepKeyHash: true, stakeAddress: true } } },
     });
     if (!board) throw new ForbiddenException('board members only');
     if (board.id === applicant.id) throw new BadRequestException('cannot vote on your own application');
@@ -340,14 +351,37 @@ export class DrepService {
       : null;
     if (!seat) throw new ForbiddenException('only seated board members can vote on admissions');
 
+    // §C — verify the voter's CIP-30 signData over the canonical vote message (free, no tx).
+    let signature: string | null = null;
+    let signingKey: string | null = null;
+    let signedAt: Date | null = null;
+    if (dto.signature && dto.signingKey && dto.ts) {
+      const message = admissionVoteMessage({
+        applicantDrepId: applicant.drepIdOnchain,
+        voterStakeAddress: board.user.stakeAddress,
+        choice: dto.choice,
+        rationale: dto.feedback,
+        ts: dto.ts,
+      });
+      if (!verifyCip30Signature(dto.signature, dto.signingKey, message, board.user.stakeAddress)) {
+        throw new BadRequestException('vote signature verification failed');
+      }
+      signature = dto.signature;
+      signingKey = dto.signingKey;
+      signedAt = new Date(dto.ts);
+    }
+
     await this.prisma.admissionVote.upsert({
       where: { drepId_boardDrepId: { drepId: applicant.id, boardDrepId: board.id } },
-      update: { choice: dto.choice, feedback: dto.feedback ?? null },
+      update: { choice: dto.choice, feedback: dto.feedback ?? null, signature, signingKey, signedAt },
       create: {
         drepId: applicant.id,
         boardDrepId: board.id,
         choice: dto.choice,
         feedback: dto.feedback ?? null,
+        signature,
+        signingKey,
+        signedAt,
       },
     });
 
@@ -365,14 +399,61 @@ export class DrepService {
       status = DRepStatus.REJECTED;
     }
 
+    let anchorTxHash: string | null = null;
     if (status !== applicant.status) {
       await this.prisma.drep.update({
         where: { id: applicant.id },
         data: { status, admittedAt: status === DRepStatus.ADMITTED ? new Date() : null },
       });
+      // §C — on a decision, anchor the full signed vote set + tally on-chain (one tx).
+      if (status === DRepStatus.ADMITTED || status === DRepStatus.REJECTED) {
+        anchorTxHash = await this.anchorAdmission(applicant.id, applicant.drepIdOnchain, status, yes, no, threshold);
+      }
     }
 
-    return { applicantDrepId: applicant.id, yes, no, threshold, boardCount, status };
+    return { applicantDrepId: applicant.id, yes, no, threshold, boardCount, status, anchorTxHash };
+  }
+
+  /** Build the signed-vote preimage and anchor the decision on-chain (best-effort). */
+  private async anchorAdmission(
+    applicantRowId: string,
+    applicantDrepId: string,
+    outcome: string,
+    yes: number,
+    no: number,
+    threshold: number,
+  ): Promise<string | null> {
+    try {
+      const all = await this.prisma.admissionVote.findMany({
+        where: { drepId: applicantRowId },
+        include: { voter: { select: { drepIdOnchain: true } } },
+      });
+      const voteEvents = all.map((v) => ({
+        v: 1 as const,
+        t: 'vote' as const,
+        subject: GovSubject.ADMISSION,
+        style: VotingStyle.ONE_PERSON_ONE_VOTE,
+        ts: (v.signedAt ?? v.createdAt).toISOString(),
+        ref: applicantDrepId,
+        voter: v.voter.drepIdOnchain,
+        choice: v.choice as 'YES' | 'NO',
+        rh: v.feedback ? createHash('sha256').update(v.feedback).digest('hex') : undefined,
+        signature: v.signature,
+        signingKey: v.signingKey,
+      }));
+      const res = await this.anchor.anchorAdmissionResult({
+        applicantDrepRowId: applicantRowId,
+        applicantDrepId,
+        votes: voteEvents,
+        outcome: outcome === DRepStatus.ADMITTED ? 'ADMITTED' : 'REJECTED',
+        yes,
+        no,
+        threshold,
+      });
+      return res.txHash;
+    } catch {
+      return null; // never fail the vote because anchoring hiccuped
+    }
   }
 
   // ── §14.4 Removal of a DAO member (3-of-5 board vote) ──────────────────────

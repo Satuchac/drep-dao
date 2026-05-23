@@ -1,7 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { admissionVoteMessage } from '@drep-dao/cardano';
 import { boardApi, type PendingApplication } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
+import { VotingStyleBadge } from './voting-style-badge';
+
+const SCAN = 'https://preprod.cardanoscan.io/transaction/';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -20,10 +25,13 @@ const optins = (a: PendingApplication) =>
   ].filter(Boolean) as string[];
 
 export function BoardReviewPanel() {
+  const { profile, signMessage } = useAuth();
   const [apps, setApps] = useState<PendingApplication[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [anchorTx, setAnchorTx] = useState<string | null>(null);
   const [rationale, setRationale] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
@@ -41,16 +49,38 @@ export function BoardReviewPanel() {
 
   useEffect(load, [load]);
 
-  const vote = async (drepId: string, choice: 'YES' | 'NO') => {
+  const vote = async (app: PendingApplication, choice: 'YES' | 'NO') => {
     setError(null);
-    const feedback = (rationale[drepId] ?? '').trim();
+    setMsg(null);
+    const feedback = (rationale[app.drepId] ?? '').trim();
     if (!feedback) {
       setError('A written rationale is required for every vote (YES or NO).');
       return;
     }
-    setBusy(drepId);
+    setBusy(app.drepId);
     try {
-      await boardApi.vote(drepId, { choice, feedback });
+      // §C — sign the vote with the wallet's stake key (free, no tx). Falls back
+      // to an unsigned (platform-attested) vote if the wallet can't sign.
+      let sig: { signature: string; signingKey: string; ts: string } | undefined;
+      const ts = new Date().toISOString();
+      if (profile) {
+        const message = admissionVoteMessage({
+          applicantDrepId: app.drepIdOnchain,
+          voterStakeAddress: profile.user.stakeAddress,
+          choice,
+          rationale: feedback,
+          ts,
+        });
+        const s = await signMessage(message);
+        if (s) sig = { signature: s.signature, signingKey: s.key, ts };
+      }
+      const res = await boardApi.vote(app.drepId, { choice, feedback, ...sig });
+      if (res.anchorTxHash) {
+        setAnchorTx(res.anchorTxHash);
+        setMsg(`Decision (${res.status}) anchored on-chain.`);
+      } else if (res.status === 'ADMITTED' || res.status === 'REJECTED') {
+        setMsg(`Decision: ${res.status} (anchor pending).`);
+      }
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Vote failed');
@@ -61,11 +91,25 @@ export function BoardReviewPanel() {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-base font-semibold">
+      <h3 className="flex flex-wrap items-center gap-2 text-base font-semibold">
         Board — DRep applications{' '}
         <span className="text-sm font-normal text-neutral-500">({apps.length} pending)</span>
+        <VotingStyleBadge style="1P1V" />
       </h3>
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
+      {msg ? (
+        <div className="text-sm text-emerald-600">
+          {msg}
+          {anchorTx ? (
+            <>
+              {' '}
+              <a href={SCAN + anchorTx} target="_blank" rel="noreferrer" className="underline">
+                view tx
+              </a>
+            </>
+          ) : null}
+        </div>
+      ) : null}
       {loading ? (
         <p className="text-sm text-neutral-500">Loading…</p>
       ) : apps.length === 0 ? (
@@ -127,14 +171,14 @@ export function BoardReviewPanel() {
                 <div className="mt-2 flex items-center gap-3">
                   <button
                     disabled={busy === a.drepId || noRationale}
-                    onClick={() => vote(a.drepId, 'YES')}
+                    onClick={() => vote(a, 'YES')}
                     className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
                   >
                     {a.myVote?.choice === 'YES' ? 'Update YES' : 'Approve (YES)'}
                   </button>
                   <button
                     disabled={busy === a.drepId || noRationale}
-                    onClick={() => vote(a.drepId, 'NO')}
+                    onClick={() => vote(a, 'NO')}
                     className="rounded border border-red-400 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-300 dark:hover:bg-red-950"
                   >
                     {a.myVote?.choice === 'NO' ? 'Update NO' : 'Reject (NO)'}

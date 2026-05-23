@@ -86,6 +86,7 @@ export interface MyDrep {
   no: number;
   threshold: number;
   admissionVotesReceived: { choice: string; feedback: string | null; voterName: string }[];
+  anchorTxHash: string | null; // on-chain anchor of the admission decision (§C)
 }
 
 export interface DaoMember {
@@ -190,8 +191,11 @@ export const removalApi = {
 
 export const boardApi = {
   listApplications: () => request<PendingApplication[]>('/admin/drep-applications'),
-  vote: (drepId: string, body: { choice: 'YES' | 'NO'; feedback?: string }) =>
-    request<{ status: string; yes: number; no: number; threshold: number }>(
+  vote: (
+    drepId: string,
+    body: { choice: 'YES' | 'NO'; feedback: string; signature?: string; signingKey?: string; ts?: string },
+  ) =>
+    request<{ status: string; yes: number; no: number; threshold: number; anchorTxHash: string | null }>(
       `/admin/drep-applications/${drepId}/vote`,
       { method: 'POST', body: JSON.stringify(body) },
     ),
