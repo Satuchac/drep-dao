@@ -5,8 +5,11 @@
 > changes, update the relevant section here in the same change. `DESIGN.md` is the
 > full spec (the "what we intend"); this file is the "what is built".
 >
-> **Last updated:** 2026-05-23 — added Treasury overview, board actions
-> (platform-prepared multisig top-ups), and the login notification badge.
+> **Last updated:** 2026-05-23 — funding-round lifecycle: budget/schedule
+> validation, board-confirmed stage transitions (auto-start or manual launch,
+> delay-preserving), a Rounds list and an Active-proposals browser; plus Treasury
+> overview, board actions (platform-prepared multisig top-ups), and the login
+> notification badge.
 
 ---
 
@@ -62,6 +65,30 @@ pnpm + Turborepo monorepo.
 - **Apply as Expert** (ADA holders without a DRep): board approves; expert
   provides subject-matter input. No on-chain DRep required.
 - **Removal**: a member can be voted out (RemovalPanel / RemovalBanner).
+
+## 4a. Funding rounds & stage flow (§5/§6/§8)
+
+A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → CLOSED**.
+
+- **Creation (board).** Categories are **GRANT** or **RFP**, each with a name,
+  allocation, and description. A round can only be created once its categories
+  **allocate the full budget** (P4), and any schedule windows must run **in order
+  and not overlap** (P7) — validated both client-side and in the API.
+- **Stage transitions are board-confirmed (single board member).** From *My area →
+  Round stage controls* a board member, for the next stage, checks the proposal
+  counts (readiness), confirms the date, and chooses **auto-start at the planned
+  time** or **launch now** (early). The final stage (Funding → CLOSED) is **always
+  closed manually** — delays are expected.
+- **Delays preserve duration.** When a stage starts off its planned time, its
+  window shifts to start now and keeps its planned length (the original start is
+  recorded in `prolongedFrom`).
+- **Auto-start scheduler.** A dependency-free interval (`RoundsSchedulerService`,
+  `setInterval`, disabled by `ROUNDS_SCHEDULER_DISABLED=1` in tests) advances any
+  round whose confirmed, auto-start next stage is due. The §5.1 single-Filtering
+  rule still holds (conflicts are retried/left for manual launch).
+- **Proposals** move DRAFT → PENDING → ACTIVE → (FILTERING/DEBATE_VOTE) →
+  APPROVED/REJECTED → FUNDING/COMPLETE/FAILED. The Rounds list shows per-status
+  counts per round; DRAFTs stay private.
 
 ## 5. Voting model
 
@@ -149,18 +176,22 @@ through *oversight* and *funding*:
 
 ## 9. Frontend views (`apps/web/src/components`)
 
-Left nav: **DAO Member overview · My area · Rounds · On-chain proofs · Treasury ·
-Platform setup** (board-only). Login card on the right with status + notification
-badge.
+Left nav: **DAO Member overview · My area · Rounds · Active proposals · On-chain
+proofs · Treasury · Platform setup** (board-only). Login card on the right shows
+the name (top) + role/status (below) + notification badge.
 
 | View / component | Purpose |
 |---|---|
 | `dao-overview` | DAO members with CIP-119 name/image, voting power, since. |
-| `member-area` | Personal area: profile, apply/join, board panels, **Actions to sign**, voting panels. |
+| `member-area` | Personal area: profile, apply/join, board panels, **Actions to sign**, **Round stage controls**, voting panels. |
+| `rounds-section` | Rounds list (status, active/complete, per-status proposal counts); click a round → its proposals. |
+| `active-proposals` | Active round's proposals with a horizontal round submenu to browse earlier rounds. |
+| `round-stage-controls` | Board-only: confirm/auto-start/launch each next stage + close the round. |
+| `proposal-list` / `round-ui` | Shared proposal list + status badges / count chips / date helpers. |
 | `treasury-overview` | Balances + per-bucket allocated/spent/remaining bars + totals. |
 | `board-actions` | Pending multisig actions; approve via `signData`. |
 | `on-chain-proofs` | Anchored decisions + Cardanoscan links. |
-| `governance-setup` | Board-only setup incl. Platform wallets. |
+| `governance-setup` | Board-only setup: per-parameter descriptions + Platform wallets. |
 | `notification-badge` | Red-circle count in the login card → My area. |
 | `voting-style-badge` | Shows 1P1V vs Balanced. |
 
@@ -196,7 +227,10 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
 - **Done:** wallet login + roles, admission with Model C anchoring (proven on
   Preprod), DAO/expert/removal flows, voting styles + badges, on-chain proofs,
   treasury overview, platform-prepared multisig top-ups + board approvals,
-  notification badge.
+  notification badge, **funding-round lifecycle** (budget/schedule validation,
+  board-confirmed stage transitions with auto-start/manual launch + delay shift,
+  auto-start scheduler, manual round close), **Rounds list** + **Active-proposals**
+  browser with per-status counts.
 - **Next on-chain step:** assemble + broadcast the **native-multisig tx** once an
   action reaches `READY` (currently the platform collects 3-of-5 signed approvals;
   building/signing/submitting the actual multisig payment needs the real on-chain

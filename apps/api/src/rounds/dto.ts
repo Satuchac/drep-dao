@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsIn,
   IsInt,
@@ -12,19 +13,28 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { CategoryType } from '@drep-dao/shared';
 
-// MVP: GRANT only (RFP deferred, §28.2). MVP schedule uses coarse operational
-// windows rather than the 9 fine-grained sub-periods in §6.
+// MVP schedule uses coarse operational windows rather than the 9 fine-grained
+// sub-periods in §6. Categories may be GRANT or RFP (§5.2).
 export const ROUND_STAGE_KEYS = ['submission', 'filtering', 'debate_vote', 'funding'] as const;
+const CATEGORY_TYPES = Object.values(CategoryType) as string[]; // ['GRANT','RFP']
 
 export class CategoryInput {
   @IsString() @IsNotEmpty() @MaxLength(120) name!: string;
-  @IsOptional() @IsIn(['GRANT']) type?: 'GRANT';
+  @IsOptional() @IsIn(CATEGORY_TYPES) type?: string;
   @IsOptional() @IsString() @MaxLength(2000) description?: string;
   @IsOptional() @IsString() @MaxLength(2000) conditions?: string;
   @IsInt() @Min(0) allocatedAda!: number; // ADA
   @IsOptional() @IsInt() @Min(0) minAda?: number;
   @IsOptional() @IsInt() @Min(0) maxAda?: number;
+}
+
+/** §8 — board confirms entering the next stage: auto at the date, or manual launch. */
+export class ConfirmStageDto {
+  @IsBoolean() autoStart!: boolean;
+  @IsOptional() @IsDateString() startsAt?: string;
+  @IsOptional() @IsDateString() endsAt?: string;
 }
 
 export class ScheduleInput {

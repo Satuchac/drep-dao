@@ -40,6 +40,49 @@ export const PLATFORM_CONFIG_DEFAULTS = {
 
 export type PlatformConfigKey = keyof typeof PLATFORM_CONFIG_DEFAULTS;
 
+/**
+ * §20 — one-line, human-readable description of each platform parameter, shown in
+ * the board's Platform setup so everyone understands what each setting controls.
+ * Keep a description for every key in PLATFORM_CONFIG_DEFAULTS.
+ */
+export const PLATFORM_CONFIG_META: Record<PlatformConfigKey, string> = {
+  NUMBER_OF_ROUNDS_PER_BUDGET: 'How many funding rounds a single budget allocation is split across.',
+  STAGES_REWARD_SPLIT_DV_PCT:
+    "Share of a round's reward pool paid for Debate & Vote participation (the rest funds milestone reviews).",
+  BONUS_SHARE_DV_PCT:
+    'Within the Debate & Vote reward slice, the portion paid as a performance bonus (the rest is a fixed share).',
+  FILTER_REVIEWER_COUNT: 'Number of DReps randomly drawn to review each proposal in the Filtering stage.',
+  FILTER_APPROVAL_VOTES:
+    'YES votes among the filter reviewers needed to advance a proposal to Debate & Vote (the same count of NO votes rejects it).',
+  MILESTONE_REVIEWER_COUNT: 'Number of DReps drawn to review each funded milestone delivery.',
+  MILESTONE_APPROVAL_VOTES: 'YES votes among milestone reviewers needed to approve a milestone payout.',
+  ADMISSION_APPROVAL_VOTES: 'Board YES votes needed to admit a new DAO member (3-of-5).',
+  DV_APPROVAL_THRESHOLD_PCT: 'Percentage of balanced voting power required to approve a proposal in Debate & Vote.',
+  INTERNAL_DEFAULT_THRESHOLD_PCT: 'Approval threshold (%) for ordinary internal proposals.',
+  INTERNAL_IMPORTANT_THRESHOLD_PCT: 'Approval threshold (%) for internal proposals flagged as important.',
+  QUICK_POLL_PARTICIPATION_PCT: 'Minimum participation (%) for a quick-poll result to be valid.',
+  QUICK_POLL_DURATION_HOURS: 'Default time a quick poll stays open, in hours.',
+  QUICK_POLL_MAX_EXTENSIONS: 'How many times a quick poll may be extended when participation is too low.',
+  FEE_COMMERCIAL_PCT: 'Submission fee for commercial proposals, as a percent of the requested amount.',
+  FEE_COMMERCIAL_CAP_ADA: 'Maximum submission fee for a commercial proposal (ADA).',
+  FEE_OSS_PCT: 'Submission fee for open-source / non-commercial proposals, as a percent of the requested amount.',
+  FEE_OSS_CAP_ADA: 'Maximum submission fee for an open-source proposal (ADA).',
+  FEE_CAP_PER_ROUND_ADA: 'Cap on total submission fees collected in a single round (ADA).',
+  MILESTONE_NOTIFICATION_DAYS_BEFORE_END: 'Days before a milestone deadline to notify the team.',
+  MILESTONE_AUTO_EXTENSION_DAYS: 'Automatic grace extension granted to a late milestone (days).',
+  MILESTONE_CHECK_PERIOD_DAYS: 'Window reviewers have to check a delivered milestone (days).',
+  MILESTONE_BOARD_EXTRA_EXTENSION_DAYS: 'Extra milestone extension the board may grant on request (days).',
+  PLEDGE_THRESHOLD_ADA: 'Requested amount above which a proposer must post a refundable pledge (ADA; 0 disables pledges).',
+  PLEDGE_GRACE_DAYS: 'Days a proposer has to post the required pledge.',
+  MIN_OWN_VOTING_POWER_ADA: 'Minimum own voting power a DRep needs to be eligible to vote (ADA).',
+  MIN_DELEGATORS: 'Minimum number of delegators a DRep needs to be eligible.',
+  MIN_DELEGATOR_STAKE_ADA: 'Minimum delegated stake a DRep needs to be eligible (ADA).',
+  AVOID_PERIOD_MAX_DAYS_PER_YEAR: 'Maximum days per year a DRep may mark themselves unavailable.',
+  MERIT_POINT_MAX: "Cap on a DRep's merit score (also bounds the voting-power multiplier).",
+  BOARD_REWARD_DEADLINE_DAYS: 'Days the board has to distribute rewards after a round before a penalty applies.',
+  ANCHOR_SCHEDULE_CRON: 'Cron schedule for the daily on-chain anchoring job (informational).',
+};
+
 /** §5.3 — default cross-cutting subcategories used to match proposals to reviewers. */
 export const DEFAULT_SUBCATEGORIES: { id: string; label: string }[] = [
   { id: 'governance', label: 'Governance' },

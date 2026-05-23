@@ -26,6 +26,7 @@ const SUITES = [
   ['test-overview', 'DAO overview voting power + Expert apply/approve'],
   ['test-removal', 'Removal: propose + 3-of-5 vote → REMOVED, re-apply'],
   ['test-rounds', 'Rounds: stage transitions gate submission + governance params'],
+  ['test-stage-flow', 'Stage flow: budget/schedule validation, confirm/launch/auto-start/close, proposal counts'],
 ];
 
 const failed = [];

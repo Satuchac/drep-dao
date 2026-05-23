@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { PLATFORM_CONFIG_DEFAULTS } from '@drep-dao/shared';
+import { PLATFORM_CONFIG_DEFAULTS, PLATFORM_CONFIG_META } from '@drep-dao/shared';
 import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -19,6 +19,7 @@ export class GovernanceService {
         value: overrides.has(key) ? overrides.get(key) : def,
         default: def,
         type: typeof def,
+        description: PLATFORM_CONFIG_META[key] ?? '',
       }),
     );
   }

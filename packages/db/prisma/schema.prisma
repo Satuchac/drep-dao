@@ -238,6 +238,11 @@ model RoundSchedule {
   startsAt      DateTime  @map("starts_at") @db.Timestamptz(6)
   endsAt        DateTime  @map("ends_at") @db.Timestamptz(6)
   prolongedFrom DateTime? @map("prolonged_from") @db.Timestamptz(6)
+  // §5.4/§8 — board confirms each stage transition. autoStart=true lets the
+  // scheduler advance at startsAt once confirmed; false waits for a manual launch.
+  autoStart   Boolean   @default(false) @map("auto_start")
+  confirmedAt DateTime? @map("confirmed_at") @db.Timestamptz(6)
+  confirmedBy String?   @map("confirmed_by") @db.Uuid
 
   round Round @relation(fields: [roundId], references: [id])
 

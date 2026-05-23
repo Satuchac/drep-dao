@@ -88,8 +88,13 @@ export function GovernanceSetup() {
               {params.map((p) => {
                 const dirty = edits[p.key] !== String(p.value);
                 return (
-                  <tr key={p.key} className="border-t border-neutral-200 dark:border-neutral-800">
-                    <td className="px-3 py-1.5 font-mono text-xs">{p.key}</td>
+                  <tr key={p.key} className="border-t border-neutral-200 align-top dark:border-neutral-800">
+                    <td className="px-3 py-1.5">
+                      <div className="font-mono text-xs">{p.key}</div>
+                      {p.description ? (
+                        <div className="mt-0.5 max-w-xs text-xs font-normal text-neutral-500">{p.description}</div>
+                      ) : null}
+                    </td>
                     <td className="px-3 py-1.5">
                       <input
                         value={edits[p.key] ?? ''}

@@ -20,12 +20,12 @@ export function ConnectWallet() {
         : 'Viewer';
     return (
       <div className="space-y-1.5 text-sm">
+        {/* §2 — name on top, role/status beneath. */}
         <div className="flex items-center gap-2">
           <span className="text-emerald-600 dark:text-emerald-400">●</span>
-          <span className="font-medium">
-            {profile.user.displayName ? `${profile.user.displayName} — ${status}` : `Signed in — ${status}`}
-          </span>
+          <span className="font-medium">{profile.user.displayName ?? 'Signed in'}</span>
         </div>
+        <div className="text-xs text-neutral-500">{status}</div>
         {profile.onchainDrep.drepId ? (
           <div className="break-all font-mono text-xs text-neutral-500">{profile.onchainDrep.drepId}</div>
         ) : null}

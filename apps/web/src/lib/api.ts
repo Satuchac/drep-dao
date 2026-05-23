@@ -168,6 +168,7 @@ export interface GovParam {
   value: number | string;
   default: number | string;
   type: string;
+  description: string;
 }
 
 export const governanceApi = {
@@ -298,6 +299,7 @@ export const boardExpertsApi = {
 
 export interface RoundCategoryInput {
   name: string;
+  type?: string; // GRANT | RFP
   allocatedAda: number;
   minAda?: number;
   maxAda?: number;
@@ -320,11 +322,29 @@ export interface RoundSummary {
   number: number;
   name: string | null;
   status: string;
+  active: boolean;
   budgetAda: number;
   rewardsPoolAda: number;
   categoryCount: number;
   eligibleCount: number;
   proposalCount: number;
+  proposalCounts: Record<string, number>;
+}
+export interface RoundScheduleEntry {
+  stageKey: string;
+  startsAt: string;
+  endsAt: string;
+  autoStart: boolean;
+  confirmedAt: string | null;
+  prolongedFrom: string | null;
+}
+export interface RoundNextStage {
+  status: string;
+  stageKey: string | null;
+  manualOnly: boolean;
+  planned: { startsAt: string; endsAt: string } | null;
+  autoStart: boolean;
+  confirmed: boolean;
 }
 export interface RoundDetail extends RoundSummary {
   multisigAddress: string;
@@ -337,19 +357,33 @@ export interface RoundDetail extends RoundSummary {
     maxAda: number | null;
     description: string | null;
   }[];
-  schedule: { stageKey: string; startsAt: string; endsAt: string }[];
+  schedule: RoundScheduleEntry[];
+  nextStage: RoundNextStage | null;
 }
 
 export const roundsApi = {
   list: () => request<RoundSummary[]>('/rounds'),
+  active: () => request<RoundDetail | null>('/rounds/active'),
   get: (id: string) => request<RoundDetail>(`/rounds/${id}`),
 };
 
+export interface ConfirmStageInput {
+  autoStart: boolean;
+  startsAt?: string;
+  endsAt?: string;
+}
 export const boardRoundsApi = {
   create: (input: CreateRoundInput) =>
     request<RoundDetail>('/admin/rounds', { method: 'POST', body: JSON.stringify(input) }),
   startStage: (id: string, stage: string) =>
     request<RoundDetail>(`/admin/rounds/${id}/start-stage/${stage}`, { method: 'POST' }),
+  confirmStage: (id: string, stageKey: string, input: ConfirmStageInput) =>
+    request<RoundDetail>(`/admin/rounds/${id}/stages/${stageKey}/confirm`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  launchNext: (id: string) => request<RoundDetail>(`/admin/rounds/${id}/launch-next`, { method: 'POST' }),
+  close: (id: string) => request<RoundDetail>(`/admin/rounds/${id}/close`, { method: 'POST' }),
 };
 
 export interface ProposalMilestoneInput {

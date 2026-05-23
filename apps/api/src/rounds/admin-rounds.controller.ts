@@ -1,8 +1,9 @@
 import { Body, Controller, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
+import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { RoundsService } from './rounds.service';
-import { CreateRoundDto, UpdateRoundDto } from './dto';
+import { CreateRoundDto, UpdateRoundDto, ConfirmStageDto } from './dto';
 
 // §26.5 — board-only round configuration (Round Preparation, §6).
 @Controller('admin/rounds')
@@ -23,5 +24,28 @@ export class AdminRoundsController {
   @Post(':id/start-stage/:stage')
   startStage(@Param('id', ParseUUIDPipe) id: string, @Param('stage') stage: string) {
     return this.rounds.startStage(id, stage);
+  }
+
+  // §8 — confirm the next stage (auto-start at the date, or manual launch).
+  @Post(':id/stages/:stageKey/confirm')
+  confirmStage(
+    @CurrentUser() ctx: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('stageKey') stageKey: string,
+    @Body() dto: ConfirmStageDto,
+  ) {
+    return this.rounds.confirmStage(id, stageKey, dto, ctx.userId);
+  }
+
+  // §8 — launch the next stage now (board member's explicit early/on-time action).
+  @Post(':id/launch-next')
+  launchNext(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.rounds.launchNextStage(id, ctx.userId);
+  }
+
+  // §8 — close the round (the funding stage end is confirmed manually).
+  @Post(':id/close')
+  close(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.rounds.closeRound(id, ctx.userId);
   }
 }

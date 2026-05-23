@@ -9,14 +9,16 @@ import { DaoOverview } from './dao-overview';
 import { GovernanceSetup } from './governance-setup';
 import { OnChainProofs } from './on-chain-proofs';
 import { TreasuryOverview } from './treasury-overview';
+import { ActiveProposals } from './active-proposals';
 import { NotificationBadge } from './notification-badge';
 import { HealthBadge } from '@/app/health-badge';
 
-type View = 'overview' | 'me' | 'rounds' | 'proofs' | 'treasury' | 'setup';
+type View = 'overview' | 'me' | 'rounds' | 'proposals' | 'proofs' | 'treasury' | 'setup';
 const NAV: { key: View; label: string; boardOnly?: boolean }[] = [
   { key: 'overview', label: 'DAO Member overview' },
   { key: 'me', label: 'My area' },
   { key: 'rounds', label: 'Rounds' },
+  { key: 'proposals', label: 'Active proposals' },
   { key: 'proofs', label: 'On-chain proofs' },
   { key: 'treasury', label: 'Treasury' },
   { key: 'setup', label: 'Platform setup', boardOnly: true },
@@ -82,6 +84,7 @@ export function HomeShell() {
         {view === 'overview' ? <DaoOverview /> : null}
         {view === 'me' ? <MemberArea /> : null}
         {view === 'rounds' ? <RoundsSection /> : null}
+        {view === 'proposals' ? <ActiveProposals /> : null}
         {view === 'proofs' ? <OnChainProofs /> : null}
         {view === 'treasury' ? <TreasuryOverview /> : null}
         {view === 'setup' && isBoard ? <GovernanceSetup /> : null}
