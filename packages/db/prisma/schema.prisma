@@ -24,6 +24,9 @@ model AppUser {
   displayName  String?  @map("display_name")
   drepKeyHash  String?  @map("drep_key_hash") // CIP-95 DRep key hash (on-chain DRep identity), if any
   drepRegistered Boolean @default(false) @map("drep_registered") // verified on-chain (registered + active) at last login
+  // §20 personal preferences: which block explorer this member's on-chain links use.
+  explorerPref       String? @map("explorer_pref") // cardanoscan | cexplorer | adastat | custom
+  explorerCustomTxUrl String? @map("explorer_custom_tx_url") // template with {hash} when explorerPref='custom'
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   drep                   Drep?

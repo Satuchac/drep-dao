@@ -119,9 +119,10 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   disbursement is deferred to the on-chain treasury multisig.
 - **Comments (§20.1).** Public, one level of replies, 5-minute edit window,
   tombstone delete; attributed by display name + DRep ID.
-- **On-chain links** everywhere route through a **configurable explorer**
-  (`CARDANO_EXPLORER`: cardanoscan / cexplorer / adastat / custom), served to the
-  frontend via the public `GET /config` endpoint.
+- **On-chain links** everywhere route through a configurable explorer. There's a
+  platform default (`CARDANO_EXPLORER`) **and a per-member preference** set in *My
+  area → Preferences* (`GET/PATCH /me/preferences`, stored on `AppUser`); the
+  frontend layers the member's choice over the public `GET /config` default.
 - **Proposal detail view** shows it all: content, the version diff, Filtering and
   D&V results with **public rationales** + on-chain proof links, milestones (with
   POA + reviewer voting), and comments.

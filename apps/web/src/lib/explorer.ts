@@ -2,16 +2,39 @@
 
 import { useEffect, useState } from 'react';
 import { EXPLORERS } from '@drep-dao/shared';
-import { configApi, type PublicConfig } from './api';
+import { configApi, meApi, type PublicConfig } from './api';
 
 let cached: PublicConfig | null = null;
 let inflight: Promise<PublicConfig> | null = null;
 
-/** Fetch the public config once (explorer, network, fee address) and cache it. */
+/**
+ * The effective config = the public platform config, with the logged-in member's
+ * personal explorer preference (§20) layered on top when set. Cached for the session;
+ * call invalidateConfig() after the user changes their preference.
+ */
 export function loadConfig(): Promise<PublicConfig> {
   if (cached) return Promise.resolve(cached);
-  if (!inflight) inflight = configApi.get().then((c) => ((cached = c), c));
+  if (!inflight) {
+    inflight = (async () => {
+      const base = await configApi.get();
+      let merged = base;
+      try {
+        const pref = await meApi.preferences(); // 401 when logged out → keep platform default
+        if (pref?.explorer) merged = { ...base, explorer: pref.explorer, explorerCustomTxUrl: pref.explorerCustomTxUrl ?? base.explorerCustomTxUrl };
+      } catch {
+        /* not logged in / no preference → platform default */
+      }
+      cached = merged;
+      return merged;
+    })();
+  }
   return inflight;
+}
+
+/** Drop the cached config so the next read reflects a just-saved preference. */
+export function invalidateConfig() {
+  cached = null;
+  inflight = null;
 }
 
 const fill = (tpl: string, hash: string, address = '') => tpl.replace('{hash}', hash).replace('{address}', address);

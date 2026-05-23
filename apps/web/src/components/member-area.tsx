@@ -16,6 +16,7 @@ import { VotingPanel } from './voting-panel';
 import { BoardActions } from './board-actions';
 import { RoundStageControls } from './round-stage-controls';
 import { FeeConfirmations } from './fee-confirmations';
+import { PreferencesPanel } from './preferences-panel';
 
 const card =
   'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
@@ -108,6 +109,8 @@ export function MemberArea() {
       <FilteringPanel />
       <VotingPanel />
       <ProposalSubmit />
+      {/* §20 — personal preferences (block explorer, …) for every signed-in member. */}
+      <PreferencesPanel />
     </div>
   );
 }

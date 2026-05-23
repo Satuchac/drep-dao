@@ -14,6 +14,7 @@ export function ProposalList({ roundId }: { roundId: string }) {
   useEffect(() => {
     let alive = true;
     setProposals(null);
+    setOpenId(null); // switching rounds returns to the list (don't keep another round's proposal open)
     proposalsApi
       .byRound(roundId)
       .then((p) => alive && setProposals(p))

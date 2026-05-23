@@ -5,6 +5,7 @@ import { RedisModule } from './redis/redis.module';
 import { HealthModule } from './health/health.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { PreferencesModule } from './users/preferences.module';
 import { DrepModule } from './drep/drep.module';
 import { AdminModule } from './admin/admin.module';
 import { RoundsModule } from './rounds/rounds.module';
@@ -38,6 +39,7 @@ import { CardanoModule } from './cardano/cardano.module';
     PublicConfigModule,
     CommentsModule,
     MilestonesModule,
+    PreferencesModule,
   ],
 })
 export class AppModule {}

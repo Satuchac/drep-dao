@@ -84,6 +84,26 @@ export class UsersService {
   }
 
   /** Profile + derived roles (§2). Returns null if the user no longer exists. */
+  /** §20 — this member's personal block-explorer preference (null = use the platform default). */
+  async getPreferences(userId: string) {
+    const u = await this.prisma.appUser.findUnique({
+      where: { id: userId },
+      select: { explorerPref: true, explorerCustomTxUrl: true },
+    });
+    return { explorer: u?.explorerPref ?? null, explorerCustomTxUrl: u?.explorerCustomTxUrl ?? null };
+  }
+
+  async setPreferences(userId: string, dto: { explorer?: string | null; explorerCustomTxUrl?: string | null }) {
+    await this.prisma.appUser.update({
+      where: { id: userId },
+      data: {
+        ...(dto.explorer !== undefined ? { explorerPref: dto.explorer || null } : {}),
+        ...(dto.explorerCustomTxUrl !== undefined ? { explorerCustomTxUrl: dto.explorerCustomTxUrl || null } : {}),
+      },
+    });
+    return this.getPreferences(userId);
+  }
+
   async getProfile(userId: string): Promise<UserProfile | null> {
     const user = await this.prisma.appUser.findUnique({
       where: { id: userId },
@@ -93,9 +113,18 @@ export class UsersService {
 
     // §17.5 — board membership is keyed by the wallet's on-chain DRep key hash
     // matching a genesis board seat (NOT by stake address / a DB flag).
-    const isBoard = user.drepKeyHash
-      ? (await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: user.drepKeyHash } })) !== null
-      : false;
+    const seat = user.drepKeyHash
+      ? await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: user.drepKeyHash } })
+      : null;
+    const isBoard = seat !== null;
+
+    // Board members get their seat name as a display name (so it shows in the
+    // login card, vote lists, and members overview) unless they've set their own.
+    let displayName = user.displayName;
+    if (seat && !displayName) {
+      displayName = seat.displayName;
+      await this.prisma.appUser.update({ where: { id: user.id }, data: { displayName } });
+    }
 
     // §22.4 — DREP is an on-chain role: the wallet IS a registered+active DRep
     // (verified via Koios at login), NOT a status we grant in our DB. Wallets
@@ -128,7 +157,7 @@ export class UsersService {
         id: user.id,
         stakeAddress: user.stakeAddress,
         stakeKeyHash: user.stakeKeyHash,
-        displayName: user.displayName,
+        displayName,
         createdAt: user.createdAt,
       },
       roles,

@@ -80,7 +80,7 @@ export function ProposalDetail({ id, onBack }: { id: string; onBack: () => void 
       {showMilestones ? (
         <MilestonesSection id={id} isBoard={isBoard} isMine={mine} onChange={load} />
       ) : null}
-      <CommentsSection id={id} canPost={!!profile} />
+      <CommentsSection id={id} title={p.title} canPost={!!profile} />
     </div>
   );
 }
@@ -368,7 +368,7 @@ function MilestoneRow({ m, isMine, onChange }: { m: MilestoneView; isMine: boole
   );
 }
 
-function CommentsSection({ id, canPost }: { id: string; canPost: boolean }) {
+function CommentsSection({ id, title, canPost }: { id: string; title: string; canPost: boolean }) {
   const [comments, setComments] = useState<CommentNode[]>([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -384,7 +384,7 @@ function CommentsSection({ id, canPost }: { id: string; canPost: boolean }) {
 
   return (
     <section className={card}>
-      <h3 className="text-base font-semibold">Comments</h3>
+      <h3 className="text-base font-semibold">Comments on “{title}”</h3>
       {canPost ? (
         <div className="mt-2 flex gap-2">
           <input className="flex-1 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" placeholder="Add a public comment…" value={text} onChange={(e) => setText(e.target.value)} />

@@ -515,6 +515,17 @@ export interface PublicConfig {
 }
 export const configApi = { get: () => request<PublicConfig>('/config') };
 
+// -------- Per-user preferences (§20): personal block explorer --------
+export interface UserPreferences {
+  explorer: string | null; // cardanoscan | cexplorer | adastat | custom | null (=platform default)
+  explorerCustomTxUrl: string | null;
+}
+export const meApi = {
+  preferences: () => request<UserPreferences>('/me/preferences'),
+  setPreferences: (p: { explorer?: string; explorerCustomTxUrl?: string }) =>
+    request<UserPreferences>('/me/preferences', { method: 'PATCH', body: JSON.stringify(p) }),
+};
+
 // -------- Proposal version history (diff view) --------
 export interface ProposalVersionEntry {
   version: number;

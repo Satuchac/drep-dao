@@ -1,0 +1,109 @@
+# Manual testing guide — DRep DAO (Monday)
+
+A walkthrough for hands-on testing on **Preprod**. The dev DB is pre-seeded with a
+completed round and an active round, both with **real on-chain proofs**.
+
+> Last updated: 2026-05-23.
+
+## 0. Start the stack
+
+```bash
+cd ~/projects/drep-dao
+pnpm infra:up                 # Postgres + Redis (if not already up)
+pnpm -C apps/api dev          # API on http://localhost:4000  (global prefix /api/v1)
+pnpm -C apps/web dev          # Web on http://localhost:3000
+```
+
+If a page ever shows *"Application error: a client-side exception"* after a package
+rebuild, it's a stale dev bundle — stop `next dev`, `rm -rf apps/web/.next`, restart,
+and hard-refresh (Ctrl+Shift+R).
+
+## 1. Personas (import in Eternl/Lace, **Preprod**, 24-word)
+
+Seeds in `tools/persona-wallets.json` (gitignored); see `docs/ACTORS.md`.
+
+| Use for testing | Persona | Role |
+|---|---|---|
+| Board actions, voting, stage control, fee confirmation | **Alice** (`regular`) and Dave/Erin/Frank/Grace | BOARD (5-of-5) |
+| Submitting proposals, paying fees | **Carol** (`holder`) | ADA holder / submitter |
+| A registered DRep that is **not** a DAO member | Heidi / Ivan / Judy | DREP (not admitted) |
+
+Admin (separate): `/admin/login`, user `satucha`.
+
+## 2. What's pre-seeded (to look at first)
+
+- **Rounds** → **Round Alpha (demo)** — `CLOSED`; its proposal *"Cardano wallet UX
+  toolkit"* is `COMPLETE` (it went fee → edit → filtering → D&V → milestone).
+- **Rounds** → **Round Beta (demo)** — `active`, in FILTERING, with two proposals
+  under review (*Open liquidity router*, *Managed Koios mirror (RFP)*).
+- **On-chain proofs** — filtering / D&V / milestone anchors for Round Alpha (plus
+  earlier admission anchors), each with an explorer link. Confirmed Preprod txs:
+  filtering `80d2a6d5…`, D&V `23f8ec68…`, milestone `88c870d0…`.
+
+## 3. Test checklist
+
+### Identity & preferences
+- [ ] Sign in with a board wallet → login card shows the **name** on top, role below.
+- [ ] **My area → Preferences** → switch the block explorer (Cardanoscan / Cexplorer /
+      AdaStat / Custom) → Save → open any on-chain link and confirm it uses your choice.
+
+### Rounds & proposals
+- [ ] **Rounds**: Alpha shows `complete`, Beta shows `active`, each with per-status
+      proposal-count chips. Click a round → see its proposals.
+- [ ] **Active proposals**: the round submenu switches between Round #2 (active) and
+      Round #1 — the proposal list updates each time (no stuck detail view).
+- [ ] Open a proposal → the detail shows: content, **filtering** result with each
+      reviewer's **public rationale** + an on-chain proof link, **D&V** result with
+      rationales + weights + proof link, **milestones**, and **comments on that proposal**.
+- [ ] For Alpha's proposal, the **"Edits — original vs updated"** diff is visible.
+- [ ] Post a **comment** and a **reply** (5-minute edit window applies).
+
+### Submission + fee (commercial 3% / OSS 1%)
+- [ ] As Carol, submit a proposal in Round Beta (open submission first if needed).
+      The form shows the computed fee + the **dedicated fee address**.
+- [ ] Pay the fee on-chain to that address, paste the tx hash, submit (status PENDING).
+- [ ] As a board member: **My area → "Submission fees to confirm"** shows it with an
+      explorer link + the **notification badge** count; verify the tx, confirm → the
+      proposal moves to FILTERING.
+
+### Filtering → D&V → milestones (a fresh proposal)
+- [ ] Board: draw filtering reviewers; assigned DReps vote (NO needs rationale);
+      ≥3 YES → advances to D&V and **anchors on-chain** (check On-chain proofs).
+- [ ] Submitter edits during filtering → a new version appears in the diff.
+- [ ] Board opens D&V; eligible DReps vote (rationale ≥200 chars); board finalizes →
+      APPROVED + **anchored**.
+- [ ] Board draws milestone reviewers; submitter posts a Proof of Achievement;
+      reviewers vote (2-of-3) → milestone APPROVED + **anchored**; all milestones
+      approved → proposal **COMPLETE**.
+
+### Rounds admin / treasury (board)
+- [ ] **My area → Round stage controls**: confirm a next stage (auto/at-date or launch
+      now); the final stage closes manually.
+- [ ] **Treasury**: balances + budget buckets; **Actions to sign** (multisig top-ups)
+      with signData approval.
+
+### Eligibility (bug check)
+- [ ] Only **DAO members** (board + admitted DReps) can be drawn/vote. A registered but
+      **non-admitted** DRep (Heidi/Ivan/Judy) cannot vote — they aren't in the round's
+      eligibility and aren't drawn. Voters now display by **name** in the vote lists.
+
+## 4. Known limitations / deferred (by design, for now)
+- **Real ADA payouts** (milestone disbursement, treasury top-ups) are recorded +
+  the multisig action collects 3-of-5 approvals, but the actual native-multisig
+  payment tx is **not broadcast yet** (waits for the on-chain 3-of-5 to be set up).
+- Filtering/D&V/milestone **votes are not individually CIP-30-signed** (only admission
+  is); the *decision* is anchored and authenticity is via the session. Can add per-vote
+  signatures later.
+- Filtering edge cases (two-round feedback, auto-replacement of absent reviewers,
+  quick-poll tie-breaks) are not yet implemented — single feedback round + manual draw.
+
+## 5. Running the automated suite
+`pnpm test:e2e` (= `node tools/test-all.cjs`) runs 8 service-level suites. **Note:** the
+demo's *Round Beta* occupies the single active-FILTERING slot (§5.1), which conflicts
+with the filtering-stage suites — run the suite on a clean DB, or remove the demo rounds
+first. Re-seed with `node tools/seed-demo-rounds.cjs` (idempotent).
+
+## 6. Next on-chain run (after Monday review)
+Generate **6 new DReps**, fund from Alice (~12,500 tADA available), register them
+on-chain, board admits all 6 (each admission anchored), then they participate in a
+fresh round (filtering + D&V + milestones, all anchored).

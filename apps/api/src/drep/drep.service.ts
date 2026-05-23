@@ -12,6 +12,7 @@ import {
   clampMerit,
   meritMultiplier,
 } from '@drep-dao/shared';
+import { SUBJECT_TITLE } from '@drep-dao/cardano';
 import { createHash } from 'node:crypto';
 import { drepIdFromKeyHashHex, admissionVoteMessage, GovSubject, VotingStyle } from '@drep-dao/cardano';
 import { Prisma } from '@drep-dao/db';
@@ -108,16 +109,24 @@ export class DrepService {
     const anchors = await this.prisma.anchor.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
     return anchors.map((a) => {
       const p = (a.preimage ?? {}) as {
+        subject?: string;
+        ref?: string;
         applicant?: string;
         result?: { outcome?: string; yes?: number; no?: number; threshold?: number };
       };
-      let title = 'On-chain record';
+      // Self-describing title/detail for every kind (admission, filtering, dv, milestone, …).
+      const subject = (p.subject ?? a.kind) as keyof typeof SUBJECT_TITLE;
+      const title = SUBJECT_TITLE[subject] ?? 'On-chain record';
+      const ref = p.ref ?? p.applicant;
       let detail = '';
-      if (a.kind === 'admission') {
-        title = 'Admission of a DAO member';
-        if (p.result) detail = `${p.result.outcome} — ${p.result.yes}/${p.result.threshold} YES`;
-        if (p.applicant) detail += `${detail ? ' · ' : ''}applicant ${p.applicant.slice(0, 18)}…`;
+      if (p.result) {
+        const r = p.result;
+        detail =
+          subject === 'dv'
+            ? `${r.outcome} — ${r.yes} power vs ${r.threshold}%`
+            : `${r.outcome} — ${r.yes}/${r.threshold} YES`;
       }
+      if (ref) detail += `${detail ? ' · ' : ''}${ref.length > 44 ? `${ref.slice(0, 40)}…` : ref}`;
       return {
         id: a.id,
         title,
