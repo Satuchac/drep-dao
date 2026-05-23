@@ -140,6 +140,14 @@ export class RoundsService {
       },
     });
     if (!r) throw new NotFoundException('round not found');
+    // §9 — per-status proposal counts (DRAFTs stay private), as in list().
+    const grouped = await this.prisma.proposal.groupBy({
+      by: ['status'],
+      where: { roundId: id, status: { not: ProposalStatus.DRAFT } },
+      _count: { _all: true },
+    });
+    const proposalCounts: Record<string, number> = {};
+    for (const g of grouped) proposalCounts[g.status] = g._count._all;
     const schedule = r.schedule.map((s) => ({
       stageKey: s.stageKey,
       startsAt: s.startsAt,
@@ -160,6 +168,7 @@ export class RoundsService {
       intersectTxHash: r.intersectTxHash,
       eligibleCount: r._count.eligibilities,
       proposalCount: r._count.proposals,
+      proposalCounts,
       categories: r.categories.map((c) => ({
         id: c.id,
         name: c.name,

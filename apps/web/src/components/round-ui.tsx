@@ -30,8 +30,9 @@ export function StatusBadge({ status, cls }: { status: string; cls?: Record<stri
 }
 
 /** Per-status proposal count chips, e.g. "2 ACTIVE · 1 APPROVED". */
-export function ProposalCounts({ counts }: { counts: Record<string, number> }) {
-  const entries = STATUS_ORDER.filter((s) => counts[s] > 0).map((s) => [s, counts[s]] as const);
+export function ProposalCounts({ counts }: { counts?: Record<string, number> }) {
+  const c = counts ?? {};
+  const entries = STATUS_ORDER.filter((s) => (c[s] ?? 0) > 0).map((s) => [s, c[s]] as const);
   if (entries.length === 0) return <span className="text-xs text-neutral-400">no proposals yet</span>;
   return (
     <div className="flex flex-wrap gap-1">
