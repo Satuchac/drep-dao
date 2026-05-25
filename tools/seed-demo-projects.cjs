@@ -127,10 +127,16 @@ const log = (...a) => console.log(...a);
   await filterDecide(c, 'NO');
   log('  Token airdrop blaster →', (await proposals.get(c)).status);
 
-  // Leave Gamma active in the FUNDING stage (it has an in-flight project). Set the
-  // round status directly to avoid the §5.1 single-active-FILTERING conflict with Beta.
+  // This round has an in-flight funded project, so leave it in FUNDING. Set the status
+  // directly to avoid the §5.1 single-active-reviewing-stage conflict with the filtering round.
   await prisma.round.update({ where: { id: gamma.id }, data: { status: 'FUNDING' } });
 
   await prisma.$disconnect();
-  log('\n✅ Seeded Round Gamma (demo): 1 COMPLETE, 1 ACTIVE, 1 REJECTED.');
+  log('\n✅ Seeded a funded round (demo): 1 COMPLETE, 1 ACTIVE, 1 REJECTED.');
+
+  // §5.1 — a later round must never be ahead of an earlier one. Normalize identity so
+  // the FUNDING round is the earlier #2 (Beta) and the live FILTERING round the newest
+  // #3 (Gamma). Idempotent; runs in its own process (own Prisma connection).
+  const { spawnSync } = require('node:child_process');
+  spawnSync(process.execPath, [path.join(__dirname, 'fix-round-order.cjs')], { stdio: 'inherit' });
 })().catch((e) => { console.error('crashed:', e); process.exit(1); });

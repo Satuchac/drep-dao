@@ -130,40 +130,48 @@ function FilteringSection({ id }: { id: string }) {
     filteringApi.result(id).then(setR).catch(() => setR(null));
   }, [id]);
   if (!r) return null;
+  // §7 — rationale belongs to the reviewer who wrote it; fold it into that reviewer's row
+  // (keyed by on-chain DRep id) so we render exactly the assigned jury, never a duplicate list.
+  const rationaleByDrep = new Map((r.votes ?? []).filter((v) => v.rationale).map((v) => [v.drep, v.rationale]));
+  const open = r.status === 'ACTIVE' && r.stage === 'FILTERING';
   return (
     <section className={card}>
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold">Filtering — 1 member · 1 vote</h3>
         <AnchorLink txHash={r.anchorTxHash} />
       </div>
+      {/* §7.1 — a fixed jury (FILTER_REVIEWER_COUNT) decides; no abstain in filtering. */}
       <div className="mt-1 text-xs text-neutral-500">
-        {r.reviewers} reviewers assigned · {r.yes} YES / {r.no} NO / {r.abstain} abstain · need {r.threshold} to decide
+        {r.reviewers} reviewers · {r.yes} YES / {r.no} NO · need {r.threshold} to decide
       </div>
-      {/* §7.1 — the assigned reviewers and whether each has voted yet. */}
       {r.assigned && r.assigned.length > 0 ? (
-        <ul className="mt-2 space-y-1">
-          {r.assigned.map((a, i) => (
-            <li key={i} className="flex items-center justify-between rounded border border-neutral-200 px-2 py-1 text-xs dark:border-neutral-800">
-              <span className="flex items-center gap-1.5">
-                <span className="font-medium">{a.displayName ?? (a.drep ? `${a.drep.slice(0, 16)}…` : 'DRep')}</span>
-                {a.expertiseMatch ? (
-                  <span className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title="matched the proposal's expertise areas">expertise</span>
-                ) : null}
-              </span>
-              {a.voted ? (
-                <span className={`font-semibold ${choiceCls[a.choice ?? ''] ?? ''}`}>{a.choice}</span>
-              ) : (
-                // §5 — "pending" only while filtering is open; otherwise the reviewer simply didn't vote.
-                <span className="text-amber-600">{r.status === 'ACTIVE' && r.stage === 'FILTERING' ? 'pending' : 'not voted'}</span>
-              )}
-            </li>
-          ))}
+        <ul className="mt-2 space-y-1.5">
+          {r.assigned.map((a, i) => {
+            const rationale = a.drep ? rationaleByDrep.get(a.drep) : null;
+            return (
+              <li key={i} className="rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span className="font-medium">{a.displayName ?? (a.drep ? `${a.drep.slice(0, 16)}…` : 'DRep')}</span>
+                    {a.expertiseMatch ? (
+                      <span className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title="matched the proposal's expertise areas">expertise</span>
+                    ) : null}
+                  </span>
+                  {a.voted ? (
+                    <span className={`font-semibold ${choiceCls[a.choice ?? ''] ?? ''}`}>{a.choice}</span>
+                  ) : (
+                    // §5 — "pending" only while filtering is open; otherwise the reviewer simply didn't vote.
+                    <span className="text-amber-600">{open ? 'pending' : 'not voted'}</span>
+                  )}
+                </div>
+                {rationale ? <div className="mt-1 whitespace-pre-wrap text-neutral-600 dark:text-neutral-400">{rationale}</div> : null}
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <div className="mt-2 text-xs text-neutral-400">No reviewers drawn yet.</div>
       )}
-      {/* Rationales (NO requires one). */}
-      {r.votes.some((v) => v.rationale) ? <div className="mt-2"><Votes votes={r.votes.filter((v) => v.rationale)} /></div> : null}
     </section>
   );
 }

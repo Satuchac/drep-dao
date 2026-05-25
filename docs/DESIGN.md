@@ -529,7 +529,7 @@ A **round** is the unit of operation. It bundles:
 - A sequence of stages: Preparation → Filtering → Debate & Vote → Voting Result → Funding (Milestones)
 - A roster of eligible DReps
 
-Multiple rounds can be active simultaneously, but **only one Filtering stage can be active at any time** (operational simplification — filtering DReps shouldn't be torn between two rounds).
+Multiple rounds can be active simultaneously, but **only one Filtering _or_ Debate & Vote stage can be active at any time** (operational simplification — reviewing DReps shouldn't be torn between two rounds, and a later round must never be further along than an earlier one).
 
 ### 5.2 Round structure (single round, time-wise)
 
@@ -620,7 +620,7 @@ Two categories may share a name if they have different types (e.g., "Ecosystem G
   <text x="100" y="240" text-anchor="middle" font-size="11">Year 1</text>
   <text x="450" y="240" text-anchor="middle" font-size="11">Year 2</text>
   <line x1="440" y1="215" x2="440" y2="225" stroke="#333"/>
-  <text x="50" y="260" font-size="11" fill="#666">Note: only ONE filtering stage is active at any given time across all rounds.</text>
+  <text x="50" y="260" font-size="11" fill="#666">Note: only ONE Filtering OR Debate &amp; Vote stage is active at any given time across all rounds.</text>
 </svg>
 ```
 

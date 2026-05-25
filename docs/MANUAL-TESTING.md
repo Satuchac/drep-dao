@@ -54,10 +54,14 @@ Admin (separate): `/admin/login`, user `satucha`.
       AdaStat / Custom) → Save → open any on-chain link and confirm it uses your choice.
 
 ### Rounds & proposals
-- [ ] **Rounds**: Alpha shows `complete`, Beta shows `active`, each with per-status
-      proposal-count chips. Click a round → see its proposals.
-- [ ] **Active proposals**: the round submenu switches between Round #2 (active) and
-      Round #1 — the proposal list updates each time (no stuck detail view).
+- [ ] **Rounds**: Alpha #1 `closed`, Beta #2 `funding` (older, in-flight project),
+      Gamma #3 `filtering` (newest) — a later round is never ahead of an earlier one,
+      and only one round is in Filtering/Debate & Vote at a time (§5.1). Per-status
+      proposal-count chips on each. Click a round → see its proposals.
+- [ ] **Proposals**: the round submenu switches between rounds — the proposal list
+      updates each time (no stuck detail view).
+- [ ] A FILTERING proposal lists exactly the assigned jury (FILTER_REVIEWER_COUNT = 5),
+      each with **YES / NO / not voted** (no abstain) and their rationale inline.
 - [ ] Open a proposal → the detail shows: content, **filtering** result with each
       reviewer's **public rationale** + an on-chain proof link, **D&V** result with
       rationales + weights + proof link, **milestones**, and **comments on that proposal**.
@@ -158,9 +162,12 @@ Admin (separate): `/admin/login`, user `satucha`.
 
 ## 5. Running the automated suite
 `pnpm test:e2e` (= `node tools/test-all.cjs`) runs 8 service-level suites. **Note:** the
-demo's *Round Beta* occupies the single active-FILTERING slot (§5.1), which conflicts
-with the filtering-stage suites — run the suite on a clean DB, or remove the demo rounds
-first. Re-seed with `node tools/seed-demo-rounds.cjs` (idempotent).
+demo's *Round Gamma* occupies the single active reviewing slot — only one round may be
+in Filtering **or** Debate & Vote at a time (§5.1) — which conflicts with the
+filtering/D&V-stage suites. Run the suite on a clean DB, or remove the demo rounds
+first. Re-seed with `node tools/seed-demo-rounds.cjs` (idempotent); after the full demo
+seed (`seed-demo-rounds` → `seed-demo-projects` → `seed-demo-round3`) the round order is
+normalized automatically (Beta #2 funding, Gamma #3 filtering).
 
 ## 6. Next on-chain run (after Monday review)
 Generate **6 new DReps**, fund from Alice (~12,500 tADA available), register them

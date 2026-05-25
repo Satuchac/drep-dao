@@ -86,8 +86,9 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   recorded in `prolongedFrom`).
 - **Auto-start scheduler.** A dependency-free interval (`RoundsSchedulerService`,
   `setInterval`, disabled by `ROUNDS_SCHEDULER_DISABLED=1` in tests) advances any
-  round whose confirmed, auto-start next stage is due. The §5.1 single-Filtering
-  rule still holds (conflicts are retried/left for manual launch).
+  round whose confirmed, auto-start next stage is due. The §5.1 single
+  reviewing-stage rule still holds — only one round may be in Filtering **or**
+  Debate & Vote at a time (conflicts are retried/left for manual launch).
 - **Proposals** move DRAFT → PENDING → ACTIVE → (FILTERING/DEBATE_VOTE) →
   APPROVED/REJECTED → FUNDING/COMPLETE/FAILED. The Rounds list shows per-status
   counts per round; DRAFTs stay private.
@@ -213,7 +214,7 @@ through *oversight* and *funding*:
 
 ## 9. Frontend views (`apps/web/src/components`)
 
-Left nav: **DAO Member overview · My area · Rounds · Active proposals · On-chain
+Left nav: **DAO Member overview · My area · Rounds · Proposals · On-chain
 proofs · Treasury · Platform setup** (board-only). Login card on the right shows
 the name (top) + role/status (below) + notification badge.
 

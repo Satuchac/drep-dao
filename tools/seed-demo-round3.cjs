@@ -47,17 +47,18 @@ const cfg = { get: (k) => process.env[k] };
   const heidi = await admit('heidi', 'Heidi', ['defi', 'liquidity'], 'DeFi engineer; liquidity & AMM design.');
   const judy = await admit('judy', 'Judy', ['governance', 'tooling'], 'Governance researcher and tooling maintainer.');
 
-  // Add them to Round Beta (demo) eligibility so they can participate there.
-  const beta = await prisma.round.findFirst({ where: { name: 'Round Beta (demo)' } });
-  if (beta) {
+  // Add them to the active FILTERING round's eligibility (by status, not name — names
+  // get normalized so the newest round is the one filtering) so they can be drawn.
+  const filtering = await prisma.round.findFirst({ where: { status: 'FILTERING', name: { contains: 'demo' } } });
+  if (filtering) {
     for (const d of [heidi, judy]) {
       await prisma.roundDrepEligibility.upsert({
-        where: { roundId_drepId: { roundId: beta.id, drepId: d.id } },
+        where: { roundId_drepId: { roundId: filtering.id, drepId: d.id } },
         update: {},
-        create: { roundId: beta.id, drepId: d.id },
+        create: { roundId: filtering.id, drepId: d.id },
       });
     }
-    console.log('added Heidi + Judy to Round Beta eligibility');
+    console.log(`added Heidi + Judy to ${filtering.name} (filtering) eligibility`);
   }
 
   // Ivan (the demo Expert) — expertise areas + bio for the overview.

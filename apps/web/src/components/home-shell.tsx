@@ -18,7 +18,7 @@ const NAV: { key: View; label: string; boardOnly?: boolean }[] = [
   { key: 'overview', label: 'DAO Member overview' },
   { key: 'me', label: 'My area' },
   { key: 'rounds', label: 'Rounds' },
-  { key: 'proposals', label: 'Active proposals' },
+  { key: 'proposals', label: 'Proposals' },
   { key: 'proofs', label: 'On-chain proofs' },
   { key: 'treasury', label: 'Treasury' },
   { key: 'setup', label: 'Platform setup', boardOnly: true },

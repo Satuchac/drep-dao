@@ -313,12 +313,18 @@ export class RoundsService {
     const round = await this.prisma.round.findUnique({ where: { id }, include: { schedule: true } });
     if (!round) throw new NotFoundException('round not found');
 
-    // §5.1 — only one Filtering stage active across all rounds.
-    if (target === RoundStatus.FILTERING) {
+    // §5.1 — rounds may overlap, but only ONE reviewing stage (Filtering OR Debate &
+    // Vote) can be active across all rounds at a time, so DReps are never asked to
+    // filter/vote two rounds at once.
+    if (target === RoundStatus.FILTERING || target === RoundStatus.DV) {
       const other = await this.prisma.round.findFirst({
-        where: { status: RoundStatus.FILTERING, id: { not: id } },
+        where: { status: { in: [RoundStatus.FILTERING, RoundStatus.DV] }, id: { not: id } },
       });
-      if (other) throw new ConflictException(`round #${other.number} is already in FILTERING`);
+      if (other) {
+        throw new ConflictException(
+          `round #${other.number} is already in ${other.status}; only one Filtering or Debate & Vote stage can be active at a time`,
+        );
+      }
     }
 
     const stageKey = STAGE_KEY_FOR_STATUS[target];
@@ -353,8 +359,8 @@ export class RoundsService {
 
   /**
    * Scheduler hook (§8 auto-start): advance every round whose confirmed, auto-start
-   * next stage is now due. Skips the §5.1 single-Filtering conflict for later retry.
-   * Returns the ids advanced.
+   * next stage is now due. Skips the §5.1 single reviewing-stage conflict for later
+   * retry. Returns the ids advanced.
    */
   async advanceDueStages(now = new Date()): Promise<string[]> {
     const candidates = await this.prisma.round.findMany({
@@ -373,7 +379,7 @@ export class RoundsService {
         await this.transitionTo(round.id, nextStatus, row.confirmedBy ?? null);
         advanced.push(round.id);
       } catch {
-        // e.g. another round holds FILTERING (§5.1) — leave it for the next tick / manual launch.
+        // e.g. another round holds the active Filtering/D&V stage (§5.1) — leave it for the next tick / manual launch.
       }
     }
     return advanced;
