@@ -475,6 +475,18 @@ model DvBoardOptIn {
   @@map("dv_board_opt_in")
 }
 
+// §18/§23 — operator secrets the PLATFORM manages (admin-only), e.g. the active
+// anchor hot-wallet mnemonic after an in-platform SEED rotation. Overrides the env
+// default. NEVER exposed via any read API. Prod should use a KMS instead of the DB.
+model PlatformSecret {
+  key       String   @id
+  value     String
+  updatedBy String?  @map("updated_by")
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("platform_secret")
+}
+
 model QuickPoll {
   id         String    @id @default(uuid()) @db.Uuid
   roundId    String    @map("round_id") @db.Uuid

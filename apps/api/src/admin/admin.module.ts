@@ -8,6 +8,7 @@ import { SysadminAuthController } from './sysadmin-auth.controller';
 import { SysadminGenesisController } from './sysadmin-genesis.controller';
 import { SysadminOpsController } from './sysadmin-ops.controller';
 import { SysadminAdminsController } from './sysadmin-admins.controller';
+import { SysadminWalletController } from './sysadmin-wallet.controller';
 
 @Module({
   controllers: [
@@ -15,6 +16,7 @@ import { SysadminAdminsController } from './sysadmin-admins.controller';
     SysadminGenesisController,
     SysadminOpsController,
     SysadminAdminsController,
+    SysadminWalletController,
   ],
   providers: [AdminAuthService, AdminAuditService, AdminService, GenesisService, AdminGuard],
   exports: [AdminAuthService],

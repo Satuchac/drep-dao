@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bip39 from 'bip39';
 import * as CSL from '@emurgo/cardano-serialization-lib-nodejs';
@@ -30,12 +30,21 @@ export interface AnchorResult {
  * computed anchor (txHash null) so the app degrades gracefully.
  */
 @Injectable()
-export class AnchorService {
+export class AnchorService implements OnModuleInit {
   private readonly logger = new Logger(AnchorService.name);
   private readonly base: string;
   private readonly networkId: number;
-  private readonly mnemonic?: string;
+  private mnemonic?: string; // mutable: an in-platform SEED rotation (admin) replaces it
   private readonly treasuryAddress?: string;
+
+  /** On boot, prefer a DB-stored (rotated) anchor seed over the env default. */
+  async onModuleInit() {
+    const row = await this.prisma.platformSecret.findUnique({ where: { key: 'ANCHOR_MNEMONIC' } });
+    if (row?.value) {
+      this.mnemonic = row.value;
+      this.logger.log('anchor hot-wallet seed loaded from platform_secret (rotated)');
+    }
+  }
 
   constructor(
     config: ConfigService,
@@ -75,6 +84,80 @@ export class AnchorService {
       hotWallet: { address: hot, balanceAda: ada(hot), configured: !!this.mnemonic },
       treasury: { address: treasury, balanceAda: ada(treasury), configured: !!treasury },
     };
+  }
+
+  /**
+   * §18/§23 (admin) — sweep ALL hot-wallet funds to the treasury (multisig). Must be
+   * done before rotating the seed so nothing is stranded on the old key.
+   */
+  async sweepToMultisig(): Promise<{ txHash: string; to: string }> {
+    if (!this.mnemonic) throw new BadRequestException('no anchor hot wallet is configured');
+    if (!this.treasuryAddress) throw new BadRequestException('no treasury (multisig) address is configured');
+    const { prv, addr } = this.anchorKeys(this.mnemonic);
+    const utxos = await this.koiosPost<{ tx_hash: string; tx_index: number; value: string }[]>('/address_utxos', {
+      _addresses: [addr.to_bech32()],
+    });
+    if (!utxos.length) throw new BadRequestException('the hot wallet is already empty');
+
+    const pp = (await this.koiosGet<Record<string, string | number>[]>('/epoch_params'))[0];
+    const txb = CSL.TransactionBuilder.new(this.builderCfg(pp));
+    const unspent = CSL.TransactionUnspentOutputs.new();
+    for (const u of utxos) {
+      unspent.add(
+        CSL.TransactionUnspentOutput.new(
+          CSL.TransactionInput.new(CSL.TransactionHash.from_hex(u.tx_hash), Number(u.tx_index)),
+          CSL.TransactionOutput.new(addr, CSL.Value.new(CSL.BigNum.from_str(String(u.value)))),
+        ),
+      );
+    }
+    txb.add_inputs_from(unspent, CSL.CoinSelectionStrategyCIP2.LargestFirst);
+    txb.add_change_if_needed(CSL.Address.from_bech32(this.treasuryAddress)); // everything (minus fee) → treasury
+    const fixed = CSL.FixedTransaction.from_hex(txb.build_tx().to_hex());
+    fixed.sign_and_add_vkey_signature(prv);
+    const txHash = fixed.transaction_hash().to_hex();
+    const res = await fetch(`${this.base}/submittx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/cbor' },
+      body: Buffer.from(fixed.to_hex(), 'hex'),
+    });
+    if (!res.ok) throw new Error(`submittx ${res.status}: ${await res.text()}`);
+    this.logger.warn(`hot wallet swept to treasury: ${txHash}`);
+    return { txHash, to: this.treasuryAddress };
+  }
+
+  /**
+   * §18/§23 (admin) — rotate the anchor hot-wallet SEED. Only allowed once the hot
+   * wallet is (near) empty, so no funds are lost. The platform generates + stores a
+   * fresh seed (never revealed); the new address is funded afresh from the treasury.
+   * SECURITY: the seed now lives in platform_secret — gate behind admin auth + audit;
+   * prod should hold it in a KMS rather than the DB.
+   */
+  async rotateSeed(adminId?: string | null): Promise<{ address: string | null }> {
+    if (!this.treasuryAddress) throw new BadRequestException('configure the treasury (multisig) address first');
+    const status = await this.walletStatus();
+    if (status.hotWallet.balanceAda > 2) {
+      throw new BadRequestException('move the hot-wallet funds to the multisig (sweep) before exchanging the seed');
+    }
+    const fresh = bip39.generateMnemonic(256); // 24-word
+    await this.prisma.platformSecret.upsert({
+      where: { key: 'ANCHOR_MNEMONIC' },
+      update: { value: fresh, updatedBy: adminId ?? null },
+      create: { key: 'ANCHOR_MNEMONIC', value: fresh, updatedBy: adminId ?? null },
+    });
+    this.mnemonic = fresh;
+    this.logger.warn('anchor hot-wallet SEED rotated (admin)');
+    return { address: this.hotWalletAddress() };
+  }
+
+  private builderCfg(pp: Record<string, string | number>) {
+    return CSL.TransactionBuilderConfigBuilder.new()
+      .fee_algo(CSL.LinearFee.new(CSL.BigNum.from_str(String(pp.min_fee_a)), CSL.BigNum.from_str(String(pp.min_fee_b))))
+      .pool_deposit(CSL.BigNum.from_str(String(pp.pool_deposit)))
+      .key_deposit(CSL.BigNum.from_str(String(pp.key_deposit)))
+      .max_value_size(Number(pp.max_val_size))
+      .max_tx_size(Number(pp.max_tx_size))
+      .coins_per_utxo_byte(CSL.BigNum.from_str(String(pp.coins_per_utxo_size)))
+      .build();
   }
 
   /**

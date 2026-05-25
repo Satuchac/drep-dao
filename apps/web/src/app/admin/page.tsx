@@ -6,6 +6,7 @@ import { useAdminAuth } from '@/lib/admin-auth-context';
 import { adminApi, type AdminHealth, type AuditRow } from '@/lib/admin-api';
 import { AdminGenesis } from '@/components/admin/admin-genesis';
 import { AdminsPanel } from '@/components/admin/admins-panel';
+import { WalletPanel } from '@/components/admin/wallet-panel';
 
 export default function AdminDashboard() {
   const { admin, loading, logout } = useAdminAuth();
@@ -67,6 +68,8 @@ export default function AdminDashboard() {
       </section>
 
       <AdminGenesis onBoardChange={refreshOverview} />
+
+      <WalletPanel />
 
       <AdminsPanel currentAdminId={admin.adminId} />
 

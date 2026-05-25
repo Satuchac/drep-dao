@@ -36,6 +36,11 @@ export interface AuditRow {
   occurredAt: string;
 }
 
+export interface AdminWalletStatus {
+  hotWallet: { address: string | null; balanceAda: number; configured: boolean };
+  treasury: { address: string | null; balanceAda: number; configured: boolean };
+}
+
 export interface GenesisState {
   boardCount: number;
   maxBoard: number;
@@ -94,6 +99,9 @@ export const adminApi = {
   health: () => request<AdminHealth>('/health'),
   admins: () => request<AdminRow[]>('/admins'),
   auditLog: () => request<AuditRow[]>('/audit-log'),
+  wallet: () => request<AdminWalletStatus>('/wallet'),
+  sweepWallet: () => request<{ txHash: string; to: string }>('/wallet/sweep', { method: 'POST' }),
+  rotateSeed: () => request<{ address: string | null }>('/wallet/rotate-seed', { method: 'POST' }),
   accounts: {
     invite: (username: string, email: string) =>
       request<{ token: string; expiresAt: string }>('/admins/invite', {
