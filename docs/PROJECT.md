@@ -75,7 +75,13 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
 - **Creation (board).** Categories are **GRANT** or **RFP**, each with a name,
   allocation, and description. A round can only be created once its categories
   **allocate the full budget** (P4), and any schedule windows must run **in order
-  and not overlap** (P7) — validated both client-side and in the API.
+  and not overlap** (P7) — validated both client-side and in the API. **The Create
+  button stays disabled until everything is complete** (round name, every category's
+  name + description + allocation, full budget, and all four stage windows set and
+  valid), with a "still needed" hint listing what's missing. The schedule uses a
+  **month-name** date+time picker (not numeric `mm/dd`), shows a **red warning** the
+  moment an end is at/before its start (or a stage starts before the previous ends),
+  and shows the **duration** (days/weeks/months) once a window is valid.
 - **Per-round settings (round setup, not platform setup).** Most tunables are set
   **per round** and stored on the round (null column ⇒ the `ROUND_SETTING_DEFAULTS`
   fallback in `@drep-dao/shared`): filtering/milestone **reviewer counts +
@@ -99,7 +105,13 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   that were computed but never reached the chain (hot wallet unconfigured/offline at
   the time). `AnchorService.submitPending` rebuilds the metadata from the stored
   preimage (same `proofHash`) and posts one tx; board-guarded `POST /admin/proofs/:id/submit`
-  + `/submit-all`.
+  + `/submit-all`. **Batch submit chains UTxOs:** the hot wallet usually holds one
+  UTxO and Koios's `/submittx` is load-balanced + lags the mempool, so `submitAllPending`
+  fetches UTxOs once and threads each tx's change into the next input, with a short
+  delay so the parent propagates across relays first (otherwise only the first tx lands).
+  Balanced voting power is fractional but tx metadata forbids floats, so
+  `buildResultMetadata` rounds every numeric field to an integer (full precision stays
+  in the hashed preimage) — this also unblocks D&V anchors that previously failed to submit.
 - **Stage transitions are board-confirmed (single board member).** From *My area →
   Round stage controls* a board member, for the next stage, checks the proposal
   counts (readiness), confirms the date, and chooses **auto-start at the planned

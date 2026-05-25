@@ -23,6 +23,12 @@ export interface AnchorResult {
   submitted: boolean;
 }
 
+interface Utxo {
+  tx_hash: string;
+  tx_index: number;
+  value: string;
+}
+
 /**
  * §18 anchor hot wallet. Posts ONE Cardano tx per voting decision that commits
  * (by hash) to the full set of signed votes + the tally, so anyone can re-verify
@@ -244,21 +250,64 @@ export class AnchorService implements OnModuleInit {
     return { hash: a.hash, txHash, submitted: true };
   }
 
-  /** §18 (board) — submit every anchor that is recorded but not yet on-chain. */
+  /**
+   * §18 (board) — submit every anchor that is recorded but not yet on-chain. Each
+   * anchor is its own metadata tx, all paid from the same hot wallet. Koios's
+   * `/address_utxos` lags the mempool, so we fetch UTxOs ONCE and chain each tx's
+   * change output into the next input (otherwise every tx after the first reuses the
+   * already-spent UTxO and is rejected — the "1 passed, 8 failed" symptom).
+   */
   async submitAllPending(): Promise<{ submitted: number; failed: number; total: number }> {
     const pending = await this.prisma.anchor.findMany({ where: { txHash: null }, orderBy: { createdAt: 'asc' } });
+    if (pending.length === 0) return { submitted: 0, failed: 0, total: 0 };
+    if (!this.mnemonic) {
+      throw new BadRequestException('no anchor hot wallet is configured — set or rotate the seed first');
+    }
+    const { prv, addr } = this.anchorKeys(this.mnemonic);
+    const pp = (await this.koiosGet<Record<string, string | number>[]>('/epoch_params'))[0];
+    let utxos = await this.koiosPost<Utxo[]>('/address_utxos', { _addresses: [addr.to_bech32()] });
+
     let submitted = 0;
     let failed = 0;
-    for (const a of pending) {
+    for (let i = 0; i < pending.length; i++) {
+      const a = pending[i];
+      if (utxos.length === 0) {
+        failed++;
+        this.logger.warn(`force-submit ${a.id} skipped: anchor wallet has no UTxOs`);
+        continue;
+      }
+      // Build first: a build failure (e.g. a malformed anchor) leaves the UTxO untouched,
+      // so we keep chaining for the remaining anchors instead of breaking the whole batch.
+      let built: { fixedHex: string; txHash: string; change: Utxo | null };
       try {
-        await this.submitPending(a.id);
-        submitted++;
+        built = this.buildMetadataTx(this.metadataFromAnchor(a), utxos, pp, prv, addr);
       } catch (e) {
         failed++;
-        this.logger.warn(`force-submit ${a.id} failed: ${e instanceof Error ? e.message : e}`);
+        this.logger.warn(`force-submit ${a.id} failed to build: ${e instanceof Error ? e.message : e}`);
+        continue; // UTxO not spent — leave `utxos` as-is for the next anchor
+      }
+      try {
+        await this.submitTxHex(built.fixedHex);
+        await this.prisma.anchor.update({ where: { id: a.id }, data: { txHash: built.txHash, submittedAt: new Date() } });
+        this.logger.log(`anchored on-chain: ${built.txHash}`);
+        submitted++;
+        // Chain: the next tx spends this tx's change (Koios won't show it yet). Pause so
+        // the parent propagates across Koios's load-balanced relays before the child
+        // (referencing its still-unconfirmed output) hits a possibly different relay.
+        utxos = built.change ? [built.change] : [];
+        if (i < pending.length - 1 && utxos.length > 0) await this.sleep(4000);
+      } catch (e) {
+        failed++;
+        this.logger.warn(`force-submit ${a.id} failed to submit: ${e instanceof Error ? e.message : e}`);
+        // The input may now be consumed — re-read from Koios for the next attempt.
+        utxos = await this.koiosPost<Utxo[]>('/address_utxos', { _addresses: [addr.to_bech32()] }).catch(() => []);
       }
     }
     return { submitted, failed, total: pending.length };
+  }
+
+  private sleep(ms: number): Promise<void> {
+    return new Promise((r) => setTimeout(r, ms));
   }
 
   /** Rebuild the on-chain metadata for an anchor from its stored preimage. */
@@ -319,30 +368,33 @@ export class AnchorService implements OnModuleInit {
   private async submitMetadataTx(event: AnchorResultMetadata): Promise<string> {
     if (!this.mnemonic) throw new Error('ANCHOR_MNEMONIC not configured (anchor recorded, not submitted)');
     const { prv, addr } = this.anchorKeys(this.mnemonic);
-    const addrBech = addr.to_bech32();
-
     const pp = (await this.koiosGet<Record<string, string | number>[]>('/epoch_params'))[0];
-    const utxos = await this.koiosPost<{ tx_hash: string; tx_index: number; value: string }[]>(
-      '/address_utxos',
-      { _addresses: [addrBech] },
-    );
+    const utxos = await this.koiosPost<Utxo[]>('/address_utxos', { _addresses: [addr.to_bech32()] });
     if (!utxos.length) throw new Error('anchor wallet has no UTxOs');
+    const built = this.buildMetadataTx(event, utxos, pp, prv, addr);
+    await this.submitTxHex(built.fixedHex);
+    this.logger.log(`anchored on-chain: ${built.txHash}`);
+    return built.txHash;
+  }
 
-    const cfg = CSL.TransactionBuilderConfigBuilder.new()
-      .fee_algo(CSL.LinearFee.new(CSL.BigNum.from_str(String(pp.min_fee_a)), CSL.BigNum.from_str(String(pp.min_fee_b))))
-      .pool_deposit(CSL.BigNum.from_str(String(pp.pool_deposit)))
-      .key_deposit(CSL.BigNum.from_str(String(pp.key_deposit)))
-      .max_value_size(Number(pp.max_val_size))
-      .max_tx_size(Number(pp.max_tx_size))
-      .coins_per_utxo_byte(CSL.BigNum.from_str(String(pp.coins_per_utxo_size)))
-      .build();
-    const txb = CSL.TransactionBuilder.new(cfg);
+  /**
+   * Build + sign one metadata tx from the given UTxOs. Returns the signed tx hex, its
+   * hash, and the change output (so a batch can chain txs without re-querying Koios).
+   */
+  private buildMetadataTx(
+    event: AnchorResultMetadata,
+    utxos: Utxo[],
+    pp: Record<string, string | number>,
+    prv: CSL.PrivateKey,
+    addr: CSL.Address,
+  ): { fixedHex: string; txHash: string; change: Utxo | null } {
+    if (!utxos.length) throw new Error('anchor wallet has no UTxOs');
+    const txb = CSL.TransactionBuilder.new(this.builderCfg(pp));
     txb.add_json_metadatum_with_schema(
       CSL.BigNum.from_str(String(GOVERNANCE_METADATA_LABEL)),
       JSON.stringify(event),
       CSL.MetadataJsonSchema.NoConversions,
     );
-
     const unspent = CSL.TransactionUnspentOutputs.new();
     for (const u of utxos) {
       unspent.add(
@@ -355,17 +407,32 @@ export class AnchorService implements OnModuleInit {
     txb.add_inputs_from(unspent, CSL.CoinSelectionStrategyCIP2.LargestFirst);
     txb.add_change_if_needed(addr);
 
-    const fixed = CSL.FixedTransaction.from_hex(txb.build_tx().to_hex());
+    const built = txb.build_tx();
+    const fixed = CSL.FixedTransaction.from_hex(built.to_hex());
     fixed.sign_and_add_vkey_signature(prv);
     const txHash = fixed.transaction_hash().to_hex();
+
+    // The single change output (back to our address) becomes the next chained input.
+    const addrBech = addr.to_bech32();
+    const outs = built.body().outputs();
+    let change: Utxo | null = null;
+    for (let i = 0; i < outs.len(); i++) {
+      const o = outs.get(i);
+      if (o.address().to_bech32() === addrBech) {
+        change = { tx_hash: txHash, tx_index: i, value: o.amount().coin().to_str() };
+        break;
+      }
+    }
+    return { fixedHex: fixed.to_hex(), txHash, change };
+  }
+
+  private async submitTxHex(hex: string): Promise<void> {
     const res = await fetch(`${this.base}/submittx`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/cbor' },
-      body: Buffer.from(fixed.to_hex(), 'hex'),
+      body: Buffer.from(hex, 'hex'),
     });
     if (!res.ok) throw new Error(`submittx ${res.status}: ${await res.text()}`);
-    this.logger.log(`anchored on-chain: ${txHash}`);
-    return txHash;
   }
 
   private anchorKeys(mnemonic: string) {

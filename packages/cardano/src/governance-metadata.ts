@@ -128,18 +128,22 @@ export function buildResultMetadata(p: {
   verify?: string;
 }): Record<string, AnchorResultMetadata> {
   const balanced = p.style === VotingStyle.BALANCED;
+  // Cardano tx metadata forbids floats, but balanced voting power is fractional, so
+  // round every numeric field to an integer here. The full-precision values live in
+  // the off-chain preimage that `proofHash` commits to; this is the readable summary.
+  const r = (n: number) => Math.round(n);
   const meta: AnchorResultMetadata = {
     title: SUBJECT_TITLE[p.subject],
     subject: p.subject,
     voting: STYLE_LABEL[p.style],
     applicant: p.applicant,
-    votes: p.votes,
+    votes: p.votes.map((v) => (v.power == null ? v : { ...v, power: r(v.power) })),
     tally: {
-      yes: p.yes,
-      no: p.no,
-      threshold: p.threshold,
+      yes: r(p.yes),
+      no: r(p.no),
+      threshold: r(p.threshold),
       unit: balanced ? 'power' : 'votes',
-      ...(balanced && p.totalPower != null ? { totalPower: p.totalPower } : {}),
+      ...(balanced && p.totalPower != null ? { totalPower: r(p.totalPower) } : {}),
     },
     outcome: p.outcome,
     decidedAt: new Date().toISOString(),

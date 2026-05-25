@@ -111,6 +111,13 @@ Admin (separate): `/admin/login`, user `satucha`.
       poll**, **milestone timing**, **proposer pledge**. Each box shows its default; blank ⇒
       default. The **approval** inputs cap to their reviewer count (and the API rejects
       approval > reviewer).
+- [ ] **Create round is gated**: the **Create round** button is disabled until everything is
+      filled — round **name**, every category's **name + description + allocation**, the **full
+      budget** allocated, and **all four** schedule windows set & valid — with a "still needed"
+      hint listing what's missing.
+- [ ] **Schedule picker**: stage dates use a **month-name** picker (Month / Day / Year + time),
+      not numeric `mm/dd`. Setting an end at/before its start (or a stage before the previous
+      ends) shows an **immediate red warning**; a valid window shows its **duration** (e.g. "3 weeks").
 - [ ] **Round page shows the setup**: clicking a round shows a **Round setup** card (reward
       bar + resolved settings, each tagged `(default)` when not overridden) above its proposals.
 - [ ] **Platform setup is leaner**: *Platform setup* lists only genuinely global params
@@ -118,7 +125,9 @@ Admin (separate): `/admin/login`, user `satucha`.
       explorer) — round/fee/quick-poll/milestone-timing/pledge/reward params live in the round setup.
 - [ ] **Board enforces anchor submission**: on *On-chain proofs*, a board member sees
       **Submit on-chain** beside any "anchor pending" record and a **Submit all pending (N)**
-      button; non-board members don't. (No pending anchors in the seeded demo — all are submitted.)
+      button; non-board members don't. **Submit all pending** chains the txs through one hot
+      wallet (so a batch of 8 all land, not just the first) and rounds the fractional D&V
+      voting power so those anchors no longer fail with "floats not allowed in metadata".
 - [ ] **Filtering shows one proposal at a time**: in *My area → Voting & reviews*, opening
       **View full proposal** on a filtering assignment shows ONLY that proposal (its detail +
       its own rationale/vote box) — the other assignments are hidden until you go back.

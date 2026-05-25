@@ -164,6 +164,64 @@ export function RoundsSection() {
 const field =
   'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
 
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
+/** Human duration between two timestamps (min → hours → days → weeks → months). */
+function durationLabel(ms: number): string {
+  if (ms <= 0) return '';
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.round(hours / 24);
+  if (days < 14) return `${days} day${days === 1 ? '' : 's'}`;
+  if (days < 60) return `${Math.round(days / 7)} weeks`;
+  return `${Math.round(days / 30)} months`;
+}
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/**
+ * Month-NAME date + time picker. Emits a "YYYY-MM-DDTHH:mm" (datetime-local) string,
+ * or '' while incomplete — so the surrounding form logic is unchanged.
+ */
+function DateTimeField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value || '');
+  // Local parts so a partial selection isn't lost before the whole value is valid.
+  const [year, setYear] = useState(m ? m[1] : '');
+  const [month, setMonth] = useState(m ? m[2] : '');
+  const [day, setDay] = useState(m ? m[3] : '');
+  const [time, setTime] = useState(m ? `${m[4]}:${m[5]}` : '');
+
+  const thisYear = new Date().getFullYear();
+  const years = Array.from({ length: 5 }, (_, i) => String(thisYear + i));
+
+  const emit = (y: string, mo: string, d: string, t: string) => {
+    onChange(y && mo && d && t ? `${y}-${mo}-${d}T${t}` : '');
+  };
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <select className={field} value={month} onChange={(e) => { setMonth(e.target.value); emit(year, e.target.value, day, time); }}>
+        <option value="">Month</option>
+        {MONTHS.map((name, i) => <option key={name} value={pad(i + 1)}>{name}</option>)}
+      </select>
+      <select className={field} value={day} onChange={(e) => { setDay(e.target.value); emit(year, month, e.target.value, time); }}>
+        <option value="">Day</option>
+        {Array.from({ length: 31 }, (_, i) => pad(i + 1)).map((d) => <option key={d} value={d}>{Number(d)}</option>)}
+      </select>
+      <select className={field} value={year} onChange={(e) => { setYear(e.target.value); emit(e.target.value, month, day, time); }}>
+        <option value="">Year</option>
+        {years.map((y) => <option key={y} value={y}>{y}</option>)}
+      </select>
+      <input type="time" className={field} value={time} onChange={(e) => { setTime(e.target.value); emit(year, month, day, e.target.value); }} />
+    </span>
+  );
+}
+
 function CreateRoundForm({ onDone }: { onDone: () => void }) {
   const [name, setName] = useState('');
   const [budget, setBudget] = useState(4_000_000);
@@ -209,6 +267,19 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
     }
     return null;
   };
+
+  // Item 2 — the Create button is enabled only once everything required is filled in.
+  const nameOk = name.trim().length > 0;
+  const catsOk = cats.every((c) => c.name.trim() && (c.description ?? '').trim() && Number(c.allocatedAda) > 0);
+  const scheduleComplete = STAGE_DEFS.every((s) => !!sched[s.key]?.startsAt && !!sched[s.key]?.endsAt);
+  const schedErr = scheduleError();
+  const missing: string[] = [];
+  if (!nameOk) missing.push('round name');
+  if (!catsOk) missing.push('a name, description & allocation for every category');
+  if (!budgetMatches) missing.push('the full budget allocated');
+  if (!scheduleComplete) missing.push('all schedule dates');
+  if (schedErr) missing.push(schedErr);
+  const canCreate = missing.length === 0;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -271,7 +342,7 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
   return (
     <form onSubmit={submit} className="space-y-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
       <div className="flex flex-wrap items-end gap-2">
-        <input className={field} placeholder="Round name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
+        <input className={field} placeholder="Round name" value={name} onChange={(e) => setName(e.target.value)} required />
         <label className="text-sm">Budget ₳ <input type="number" className={`${field} w-32`} value={budget} onChange={(e) => setBudget(Number(e.target.value))} /></label>
         <label className="text-sm">Rewards ₳ <input type="number" className={`${field} w-28`} value={rewards} onChange={(e) => setRewards(Number(e.target.value))} /></label>
       </div>
@@ -305,6 +376,7 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
                 placeholder="description — what this category funds, conditions, etc."
                 value={c.description ?? ''}
                 onChange={(e) => setCat(i, { description: e.target.value })}
+                required
               />
             </div>
           ))}
@@ -394,20 +466,46 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
       </div>
 
       <div>
-        <div className="mb-1 text-sm font-medium">Schedule (optional — stages must run in order)</div>
-        {STAGE_DEFS.map((s) => (
-          <div key={s.key} className="mb-1 flex flex-wrap items-center gap-2 text-sm">
-            <span className="w-28 text-neutral-500">{s.label}</span>
-            <input type="datetime-local" className={field} value={sched[s.key]?.startsAt ?? ''} onChange={(e) => setSched((p) => ({ ...p, [s.key]: { ...p[s.key], startsAt: e.target.value } }))} />
-            <input type="datetime-local" className={field} value={sched[s.key]?.endsAt ?? ''} onChange={(e) => setSched((p) => ({ ...p, [s.key]: { ...p[s.key], endsAt: e.target.value } }))} />
-          </div>
-        ))}
+        <div className="mb-1 text-sm font-medium">Schedule (all stages, in order)</div>
+        {STAGE_DEFS.map((s, idx) => {
+          const v = sched[s.key];
+          const startMs = v?.startsAt ? new Date(v.startsAt).getTime() : null;
+          const endMs = v?.endsAt ? new Date(v.endsAt).getTime() : null;
+          // Nearest earlier stage with an end set — for the "in order" check.
+          let prevEnd: number | null = null;
+          let prevLabel = '';
+          for (let j = idx - 1; j >= 0; j--) {
+            const pv = sched[STAGE_DEFS[j].key];
+            if (pv?.endsAt) { prevEnd = new Date(pv.endsAt).getTime(); prevLabel = STAGE_DEFS[j].label; break; }
+          }
+          let warn: string | null = null;
+          if (startMs != null && endMs != null && endMs <= startMs) warn = 'End must be after the start.';
+          else if (startMs != null && prevEnd != null && startMs < prevEnd) warn = `Must start after the ${prevLabel} stage ends.`;
+          const dur = startMs != null && endMs != null && endMs > startMs ? durationLabel(endMs - startMs) : null;
+          const setPart = (part: 'startsAt' | 'endsAt', val: string) =>
+            setSched((p) => ({ ...p, [s.key]: { ...p[s.key], [part]: val } }));
+          return (
+            <div key={s.key} className="mb-2 text-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="w-28 shrink-0 text-neutral-500">{s.label}</span>
+                <DateTimeField value={v?.startsAt ?? ''} onChange={(val) => setPart('startsAt', val)} />
+                <span className="text-neutral-400">→</span>
+                <DateTimeField value={v?.endsAt ?? ''} onChange={(val) => setPart('endsAt', val)} />
+                {dur ? <span className="text-xs font-medium text-emerald-600">· {dur}</span> : null}
+              </div>
+              {warn ? <div className="ml-28 mt-0.5 text-xs font-medium text-red-600">{warn}</div> : null}
+            </div>
+          );
+        })}
       </div>
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
+      {!canCreate ? (
+        <p className="text-xs text-amber-600">Still needed: {missing.join('; ')}.</p>
+      ) : null}
       <button
         type="submit"
-        disabled={busy || !budgetMatches}
+        disabled={busy || !canCreate}
         className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
       >
         {busy ? 'Creating…' : 'Create round'}
