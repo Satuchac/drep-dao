@@ -23,6 +23,7 @@ next-env.d.ts
 wallet.json
 tools/test-wallets.json
 tools/persona-wallets.json
+tools/heidi-delegators.json
 
 # prisma
 packages/db/prisma/*.db

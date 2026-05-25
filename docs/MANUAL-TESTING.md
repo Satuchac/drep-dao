@@ -134,14 +134,20 @@ Admin (separate): `/admin/login`, user `satucha`.
 - [ ] **Platform setup is leaner**: *Platform setup* lists only genuinely global params
       (admission votes, internal thresholds, eligibility minimums, merit cap, anchor cron,
       explorer) — round/fee/quick-poll/milestone-timing/pledge/reward params live in the round setup.
-- [ ] **DAO entry gate (§14.1)**: by default both switches `ENTRY_REQUIRE_VOTING_POWER` and
-      `ENTRY_REQUIRE_ACTIVITY` are **Disabled** (Platform setup shows boolean params as
-      Enabled/Disabled dropdowns), so a registered DRep's **JOIN DAO** button is **active**.
-      Flip a switch to **Enabled** → the button **disables** with a note (e.g. "Voting power —
-      own 4,998 ₳ (need 1,000,000), or 0 delegators ≥ 50,000 ₳ (need 20)"); the metrics are read
-      live from Koios. The `/me/drep-application` endpoint also rejects an ineligible apply.
-      (Group A = own power OR delegators; Group B = voted on ≥ MINIMUM_DREP_ACTIVITY% of the
-      last MINIMUM_VOTES_CASTED governance actions. Leave both OFF for testnet.)
+- [ ] **DAO entry gate (§14.1)**: in *Platform setup* the gated params are **grouped under
+      their switch** (`↳`, green accent) and **shadowed/disabled** while the switch is
+      Disabled — toggling `ENTRY_REQUIRE_VOTING_POWER`/`ENTRY_REQUIRE_ACTIVITY` greys/ungreys
+      their params live. Both default **Disabled**, so a registered DRep's **JOIN DAO** button
+      is **active**. Flip a switch to **Enabled** → the button **disables** with a note (e.g.
+      "Voting power — own 4,998 ₳ (need 1,000,000), or 0 delegators ≥ 50,000 ₳ (need 20)"),
+      metrics read live from Koios; `/me/drep-application` also rejects an ineligible apply.
+- [ ] **Delegator-path test (Heidi)**: `node tools/seed-heidi-delegators.cjs` created 2
+      delegators that each vote-delegated ~1,100 tADA to Heidi (she now has **3 delegators,
+      all ≥ 1,000 ₳**). Enable `ENTRY_REQUIRE_VOTING_POWER` and set `MIN_DELEGATORS=2`,
+      `MIN_DELEGATOR_STAKE_ADA=1000` → as Heidi the **JOIN DAO** button becomes **active**
+      (qualifies via the delegator path); with the defaults (20 / 50,000) it stays disabled.
+- [ ] **Removal is anchored**: a board 3-of-5 removal vote that resolves now posts an
+      on-chain proof — *On-chain proofs* shows **"Removal of a DAO member"** (like admission).
 - [ ] **Board enforces anchor submission**: on *On-chain proofs*, a board member sees
       **Submit on-chain** beside any "anchor pending" record and a **Submit all pending (N)**
       button; non-board members don't. **Submit all pending** chains the txs through one hot

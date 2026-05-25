@@ -6,6 +6,17 @@ import { invalidateConfig } from '@/lib/explorer';
 
 const EXPLORER_OPTIONS = ['cardanoscan', 'cexplorer', 'adastat'];
 
+// §14.1 — each entry-gate param is governed by a switch; when the switch is off the
+// param is shadowed/disabled (not applied), so it's clear which switch controls what.
+const CONTROLLED_BY: Record<string, string> = {
+  MIN_OWN_VOTING_POWER_ADA: 'ENTRY_REQUIRE_VOTING_POWER',
+  MIN_DELEGATORS: 'ENTRY_REQUIRE_VOTING_POWER',
+  MIN_DELEGATOR_STAKE_ADA: 'ENTRY_REQUIRE_VOTING_POWER',
+  MINIMUM_VOTES_CASTED: 'ENTRY_REQUIRE_ACTIVITY',
+  MINIMUM_DREP_ACTIVITY: 'ENTRY_REQUIRE_ACTIVITY',
+  ONLY_VOTES_WITH_RATIONALE: 'ENTRY_REQUIRE_ACTIVITY',
+};
+
 /** §6/§28 — board edits platform governance parameters. */
 export function GovernanceSetup() {
   const [params, setParams] = useState<GovParam[] | null>(null);
@@ -77,12 +88,27 @@ export function GovernanceSetup() {
             <tbody>
               {params.map((p) => {
                 const dirty = edits[p.key] !== String(p.value);
+                const ctrlKey = CONTROLLED_BY[p.key];
+                // A controlled param is shadowed when its switch is currently off (live, from edits).
+                const gatedOff = !!ctrlKey && edits[ctrlKey] !== 'true';
+                const isSwitch = p.key.startsWith('ENTRY_REQUIRE_');
+                const inputCls = 'w-40 rounded-md border border-neutral-300 px-2 py-1 text-sm disabled:bg-neutral-100 disabled:text-neutral-400 dark:border-neutral-700 dark:bg-neutral-900 dark:disabled:bg-neutral-800';
                 return (
-                  <tr key={p.key} className="border-t border-neutral-200 align-top dark:border-neutral-800">
+                  <tr
+                    key={p.key}
+                    className={`border-t border-neutral-200 align-top dark:border-neutral-800 ${
+                      ctrlKey ? 'border-l-2 border-l-emerald-300 dark:border-l-emerald-800' : ''
+                    } ${gatedOff ? 'opacity-40' : ''} ${isSwitch ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : ''}`}
+                  >
                     <td className="px-3 py-1.5">
-                      <div className="font-mono text-xs">{p.key}</div>
+                      <div className="font-mono text-xs">{ctrlKey ? '↳ ' : ''}{p.key}{isSwitch ? ' (switch)' : ''}</div>
                       {p.description ? (
                         <div className="mt-0.5 max-w-xs text-xs font-normal text-neutral-500">{p.description}</div>
+                      ) : null}
+                      {ctrlKey ? (
+                        <div className="mt-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
+                          {gatedOff ? `not applied — enable ${ctrlKey}` : `applied (${ctrlKey} on)`}
+                        </div>
                       ) : null}
                     </td>
                     <td className="px-3 py-1.5">
@@ -90,7 +116,8 @@ export function GovernanceSetup() {
                         <select
                           value={edits[p.key] ?? 'false'}
                           onChange={(e) => setEdits((s) => ({ ...s, [p.key]: e.target.value }))}
-                          className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                          disabled={gatedOff}
+                          className={inputCls}
                         >
                           <option value="true">Enabled</option>
                           <option value="false">Disabled</option>
@@ -99,7 +126,7 @@ export function GovernanceSetup() {
                         <select
                           value={edits[p.key] ?? ''}
                           onChange={(e) => setEdits((s) => ({ ...s, [p.key]: e.target.value }))}
-                          className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                          className={inputCls}
                         >
                           {EXPLORER_OPTIONS.map((o) => (
                             <option key={o} value={o}>{o}</option>
@@ -110,7 +137,8 @@ export function GovernanceSetup() {
                           value={edits[p.key] ?? ''}
                           onChange={(e) => setEdits((s) => ({ ...s, [p.key]: e.target.value }))}
                           inputMode={p.type === 'number' ? 'decimal' : 'text'}
-                          className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                          disabled={gatedOff}
+                          className={inputCls}
                         />
                       )}
                     </td>
@@ -118,7 +146,7 @@ export function GovernanceSetup() {
                     <td className="px-3 py-1.5">
                       <button
                         onClick={() => save(p)}
-                        disabled={busy === p.key || !dirty}
+                        disabled={busy === p.key || !dirty || gatedOff}
                         className="rounded-md border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
                       >
                         {busy === p.key ? 'Saving…' : 'Save'}

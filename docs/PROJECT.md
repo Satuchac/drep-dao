@@ -76,10 +76,15 @@ pnpm + Turborepo monorepo.
   (only votes with a rationale if `ONLY_VOTES_WITH_RATIONALE`). Metrics are read live
   from Koios (`CardanoQueryService.drepEntryMetrics` via `/drep_delegators`+`/account_info`;
   `drepActivityMetrics` via `/proposal_list`+`/drep_votes`). Booleans are first-class in
-  Platform setup (Enabled/Disabled dropdowns).
+  Platform setup (Enabled/Disabled dropdowns); each gated param is **grouped under its
+  switch** (`↳`, left accent) and **shadowed/disabled when the switch is off**, so it's
+  clear which switch governs which params and whether they're applied.
 - **Apply as Expert** (ADA holders without a DRep): board approves; expert
   provides subject-matter input. No on-chain DRep required.
-- **Removal**: a member can be voted out (RemovalPanel / RemovalBanner).
+- **Removal**: a member can be voted out (RemovalPanel / RemovalBanner). A resolved
+  3-of-5 removal is **anchored on-chain** (`DrepService.anchorRemoval` →
+  `GovSubject.REMOVAL`, like admission) so it appears in *On-chain proofs* as
+  "Removal of a DAO member".
 
 ## 4a. Funding rounds & stage flow (§5/§6/§8)
 

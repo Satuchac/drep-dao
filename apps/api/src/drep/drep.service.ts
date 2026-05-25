@@ -573,6 +573,7 @@ export class DrepService {
     if (yes >= threshold) status = 'APPROVED';
     else if (no > boardCount - threshold) status = 'REJECTED';
 
+    let anchorTxHash: string | null = null;
     if (status !== 'PENDING') {
       await this.prisma.drepRemoval.update({ where: { id: removalId }, data: { status, resolvedAt: new Date() } });
       if (status === 'APPROVED') {
@@ -581,8 +582,55 @@ export class DrepService {
           data: { status: DRepStatus.REMOVED, removedAt: new Date() },
         });
       }
+      // §C — anchor the removal decision on-chain (like admission), so it has a proof.
+      anchorTxHash = await this.anchorRemoval(removalId, removal.targetDrepId, status, yes, no, threshold);
     }
-    return { status, yes, no, threshold };
+    return { status, yes, no, threshold, anchorTxHash };
+  }
+
+  /** Anchor a resolved removal decision on-chain (best-effort; never blocks the vote). */
+  private async anchorRemoval(
+    removalId: string,
+    targetDrepRowId: string,
+    outcome: string,
+    yes: number,
+    no: number,
+    threshold: number,
+  ): Promise<string | null> {
+    try {
+      const target = await this.prisma.drep.findUnique({
+        where: { id: targetDrepRowId },
+        select: { drepIdOnchain: true },
+      });
+      if (!target) return null;
+      const votes = await this.prisma.drepRemovalVote.findMany({ where: { removalId } });
+      const voters = await this.prisma.drep.findMany({
+        where: { id: { in: votes.map((v) => v.boardDrepId) } },
+        select: { id: true, drepIdOnchain: true },
+      });
+      const onchain = new Map(voters.map((d) => [d.id, d.drepIdOnchain]));
+      const voteList = votes.map((v) => ({
+        drep: onchain.get(v.boardDrepId) ?? v.boardDrepId,
+        choice: v.choice,
+        rationale: v.rationale ?? null,
+      }));
+      const res = await this.anchor.anchorResult({
+        kind: 'removal',
+        subject: GovSubject.REMOVAL,
+        style: VotingStyle.ONE_PERSON_ONE_VOTE,
+        ref: target.drepIdOnchain,
+        proposalId: targetDrepRowId,
+        votes: voteList.map((v) => ({ drep: v.drep, vote: v.choice })),
+        preimageVotes: voteList,
+        outcome: outcome === 'APPROVED' ? 'REMOVED' : 'KEPT',
+        yes,
+        no,
+        threshold,
+      });
+      return res.txHash;
+    } catch {
+      return null; // anchoring must never undo the decision
+    }
   }
 
   /** Board view of pending removals (with this board member's own vote). */
