@@ -12,6 +12,7 @@ import {
   isApproved,
   approvalRatio,
   meritMultiplier,
+  PLATFORM_CONFIG_DEFAULTS,
   ProposalStage,
   ProposalStatus,
   ROUND_SETTING_DEFAULTS,
@@ -117,12 +118,19 @@ export class DvService {
   }
 
   private async addSnapshotEntry(snapshotId: string, drepId: string, stakeLovelace: bigint) {
-    const merit = await this.currentMerit(drepId);
+    const max = await this.meritMax();
+    const merit = await this.currentMerit(drepId, max);
     const bp = basePower(stakeLovelace);
-    const mm = meritMultiplier(merit);
+    const mm = meritMultiplier(merit, max);
     await this.prisma.voteSnapshotEntry.create({
       data: { snapshotId, drepId, stakeLovelace, meritPoints: merit, basePower: bp, meritMultiplier: mm, finalPower: bp * mm },
     });
+  }
+
+  /** §13 merit cap (runtime-configurable via MERIT_POINT_MAX). */
+  private async meritMax(): Promise<number> {
+    const row = await this.prisma.platformConfig.findUnique({ where: { key: 'MERIT_POINT_MAX' } });
+    return typeof row?.value === 'number' ? row.value : PLATFORM_CONFIG_DEFAULTS.MERIT_POINT_MAX;
   }
 
   /** §8.2 — eligible DRep casts/changes a balanced D&V vote (rationale mandatory). */
@@ -268,13 +276,13 @@ export class DvService {
     }));
   }
 
-  private async currentMerit(drepId: string): Promise<number> {
+  private async currentMerit(drepId: string, max?: number): Promise<number> {
     const rows = await this.prisma.meritLedger.aggregate({
       where: { drepId },
       _sum: { delta: true },
     });
     const sum = rows._sum.delta ? Number(rows._sum.delta) : 0;
-    return clampMerit(sum);
+    return clampMerit(sum, max ?? (await this.meritMax()));
   }
 }
 

@@ -131,6 +131,12 @@ Admin (separate): `/admin/login`, user `satucha`.
       default "Ecosystem").
 - [ ] **Round page shows the setup**: clicking a round shows a **Round setup** card (reward
       bar + resolved settings, each tagged `(default)` when not overridden) above its proposals.
+- [ ] **Platform params save + apply**: in *Platform setup*, editing a param (e.g. flip a
+      boolean to **Enabled**) and clicking **Save** persists it — on reload the **Current value**
+      column reflects it and Save greys out (the **Default** column always shows the unchanged
+      default, e.g. "Disabled"). Wired params take effect immediately (`MERIT_POINT_MAX` changes
+      the overview ×Mult when a member has merit; `ENTRY_REQUIRE_VOTING_POWER` toggles the gate).
+      Params with a **⏳ not yet wired** note are stored but not yet read by any feature.
 - [ ] **Platform setup is leaner**: *Platform setup* lists only genuinely global params
       (admission votes, internal thresholds, eligibility minimums, merit cap, anchor cron,
       explorer) — round/fee/quick-poll/milestone-timing/pledge/reward params live in the round setup.

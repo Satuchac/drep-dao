@@ -6,6 +6,16 @@ import { invalidateConfig } from '@/lib/explorer';
 
 const EXPLORER_OPTIONS = ['cardanoscan', 'cexplorer', 'adastat'];
 
+// Params that are stored + editable but not yet read by any feature (the feature
+// itself isn't built). Shown with a "not yet wired" note so the board isn't misled.
+const NOT_YET_WIRED: Record<string, string> = {
+  INTERNAL_DEFAULT_THRESHOLD_PCT: 'internal proposals (§10) not built yet',
+  INTERNAL_IMPORTANT_THRESHOLD_PCT: 'internal proposals (§10) not built yet',
+  AVOID_PERIOD_MAX_DAYS_PER_YEAR: 'availability / avoid-period not built yet',
+  BOARD_REWARD_DEADLINE_DAYS: 'reward distribution / penalty (§13) not built yet',
+  ANCHOR_SCHEDULE_CRON: 'informational — anchoring runs on demand, not on a cron',
+};
+
 // §14.1 — each entry-gate param is governed by a switch; when the switch is off the
 // param is shadowed/disabled (not applied), so it's clear which switch controls what.
 const CONTROLLED_BY: Record<string, string> = {
@@ -80,7 +90,7 @@ export function GovernanceSetup() {
             <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
               <tr>
                 <th className="px-3 py-2">Parameter</th>
-                <th className="px-3 py-2">Value</th>
+                <th className="px-3 py-2">Current value</th>
                 <th className="px-3 py-2">Default</th>
                 <th className="px-3 py-2"></th>
               </tr>
@@ -108,6 +118,11 @@ export function GovernanceSetup() {
                       {ctrlKey ? (
                         <div className="mt-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
                           {gatedOff ? `not applied — enable ${ctrlKey}` : `applied (${ctrlKey} on)`}
+                        </div>
+                      ) : null}
+                      {NOT_YET_WIRED[p.key] ? (
+                        <div className="mt-0.5 text-[10px] font-medium text-amber-600" title="Saved, but no feature reads this value yet.">
+                          ⏳ not yet wired — {NOT_YET_WIRED[p.key]}
                         </div>
                       ) : null}
                     </td>
@@ -142,7 +157,9 @@ export function GovernanceSetup() {
                         />
                       )}
                     </td>
-                    <td className="px-3 py-1.5 text-xs text-neutral-500">{String(p.default)}</td>
+                    <td className="px-3 py-1.5 text-xs text-neutral-500">
+                      {p.type === 'boolean' ? (p.default ? 'Enabled' : 'Disabled') : String(p.default)}
+                    </td>
                     <td className="px-3 py-1.5">
                       <button
                         onClick={() => save(p)}

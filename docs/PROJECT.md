@@ -122,6 +122,15 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   `PLATFORM_CONFIG_DEFAULTS` (Platform setup) holds only genuinely global params
   (admission votes, internal thresholds, eligibility minimums, merit cap, anchor
   cron, explorer).
+- **Platform-param wiring status.** Saved edits always persist; whether they *do*
+  anything depends on the feature. **Wired (applied at runtime):** `ADMISSION_APPROVAL_VOTES`
+  (admission + removal threshold), the `ENTRY_REQUIRE_*` gate + its 6 params (§14.1),
+  `MERIT_POINT_MAX` (voting-power merit cap — read live in the overview + D&V snapshot),
+  `CARDANO_EXPLORER`. **Not yet wired (stored but no consumer — feature pending):**
+  `INTERNAL_*_THRESHOLD_PCT` (§10 internal proposals), `AVOID_PERIOD_MAX_DAYS_PER_YEAR`
+  (availability), `BOARD_REWARD_DEADLINE_DAYS` (§13 reward penalty), `ANCHOR_SCHEDULE_CRON`
+  (informational — anchoring is on-demand). These show a **⏳ not yet wired** note in
+  Platform setup so the board isn't misled.
 - **Round page shows the round's setup.** Drilling into a round renders its
   resolved per-round settings (value or `(default)`) + the reward-distribution bar
   above its proposal list.
@@ -295,7 +304,7 @@ the name (top) + role/status (below) + notification badge.
 | `treasury-overview` | Balances + per-bucket allocated/spent/remaining bars + totals. |
 | `board-actions` | Pending multisig actions; approve via `signData`. |
 | `on-chain-proofs` | Anchored decisions + Cardanoscan links. |
-| `governance-setup` | Board-only setup: per-parameter descriptions + Platform wallets. |
+| `governance-setup` | Board-only setup: per-parameter descriptions + Platform wallets. Boolean params edit as Enabled/Disabled; saved edits persist + apply immediately (verified). Params not yet read by any feature show a **⏳ not yet wired** note. |
 | `notification-badge` | Red-circle count in the login card → My area. |
 | `voting-style-badge` | Shows 1P1V vs Balanced. |
 

@@ -84,6 +84,7 @@ export class DrepService {
     const minOwn = numCfg('MIN_OWN_VOTING_POWER_ADA');
     const minDelegs = numCfg('MIN_DELEGATORS');
     const minStakeLovelace = BigInt(Math.round(numCfg('MIN_DELEGATOR_STAKE_ADA'))) * 1_000_000n;
+    const meritMax = numCfg('MERIT_POINT_MAX'); // §13 merit cap (runtime-configurable)
 
     // §4 — on-chain DRep VOTING power (CIP-1694 vote delegation), live: total power +
     // delegator count, plus own power + qualifying delegators for the eligibility flag.
@@ -96,11 +97,11 @@ export class DrepService {
 
     const members = await Promise.all(
       rows.map(async (r) => {
-        const merit = r.drepRowId ? await this.currentMerit(r.drepRowId) : 0;
+        const merit = r.drepRowId ? await this.currentMerit(r.drepRowId, meritMax) : 0;
         const power = vp.get(r.drepId) ?? { votingPowerLovelace: 0n, delegators: 0, ownVotingPowerLovelace: 0n, qualifyingDelegators: 0 };
         const m = meta.get(r.drepId);
         const base = basePower(power.votingPowerLovelace);
-        const mult = meritMultiplier(merit);
+        const mult = meritMultiplier(merit, meritMax);
         // §14.1 — does the member still meet the entry power gate? Only evaluated when the
         // gate is enabled; board is exempt (seated via genesis). A shortfall is shown but
         // the member remains a full voting member.
@@ -163,10 +164,17 @@ export class DrepService {
     });
   }
 
-  /** Current merit = clamped sum of the DRep's merit-ledger deltas (§13). */
-  private async currentMerit(drepId: string): Promise<number> {
+  /** Current merit = clamped sum of the DRep's merit-ledger deltas (§13), capped at MERIT_POINT_MAX. */
+  private async currentMerit(drepId: string, max?: number): Promise<number> {
     const agg = await this.prisma.meritLedger.aggregate({ where: { drepId }, _sum: { delta: true } });
-    return clampMerit(agg._sum.delta ? Number(agg._sum.delta) : 0);
+    const cap = max ?? (await this.numConfig('MERIT_POINT_MAX'));
+    return clampMerit(agg._sum.delta ? Number(agg._sum.delta) : 0, cap);
+  }
+
+  /** Read a numeric platform_config value (DB override, else the compiled default). */
+  private async numConfig(key: keyof typeof PLATFORM_CONFIG_DEFAULTS): Promise<number> {
+    const row = await this.prisma.platformConfig.findUnique({ where: { key } });
+    return typeof row?.value === 'number' ? row.value : (PLATFORM_CONFIG_DEFAULTS[key] as number);
   }
 
   /** §2/§14 — an ADA holder applies to become an Expert (board then approves). */
