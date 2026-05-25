@@ -6,7 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
-  PLATFORM_CONFIG_DEFAULTS,
+  ROUND_SETTING_DEFAULTS,
   ProposalStatus,
   ProposalStage,
   ProposalType,
@@ -148,7 +148,7 @@ export class ProposalsService {
   /** §3.3 — submit: compute fee, move DRAFT → PENDING (awaiting fee confirmation). */
   async submit(userId: string, id: string, dto: SubmitProposalDto) {
     const p = await this.ownDraft(userId, id);
-    const fee = await this.computeFee(toAda(p.requestedAmountAda), p.isCommercial ?? false);
+    const fee = await this.computeFee(toAda(p.requestedAmountAda), p.isCommercial ?? false, p.roundId);
     await this.prisma.proposal.update({
       where: { id },
       data: {
@@ -312,18 +312,20 @@ export class ProposalsService {
     }
   }
 
-  /** §12 fee tiers from platform_config (with defaults). */
-  private async computeFee(requestedAda: number, isCommercial: boolean): Promise<number> {
-    const pctKey = isCommercial ? 'FEE_COMMERCIAL_PCT' : 'FEE_OSS_PCT';
-    const capKey = isCommercial ? 'FEE_COMMERCIAL_CAP_ADA' : 'FEE_OSS_CAP_ADA';
-    const pct = await this.cfg(pctKey);
-    const cap = await this.cfg(capKey);
+  /** §12 fee tiers — per-round settings (fall back to the ROUND_SETTING_DEFAULTS value). */
+  private async computeFee(requestedAda: number, isCommercial: boolean, roundId: string | null): Promise<number> {
+    const round = roundId
+      ? await this.prisma.round.findUnique({
+          where: { id: roundId },
+          select: { feeCommercialPct: true, feeCommercialCapAda: true, feeOssPct: true, feeOssCapAda: true },
+        })
+      : null;
+    const pct = isCommercial
+      ? round?.feeCommercialPct ?? ROUND_SETTING_DEFAULTS.feeCommercialPct
+      : round?.feeOssPct ?? ROUND_SETTING_DEFAULTS.feeOssPct;
+    const cap = isCommercial
+      ? round?.feeCommercialCapAda ?? ROUND_SETTING_DEFAULTS.feeCommercialCapAda
+      : round?.feeOssCapAda ?? ROUND_SETTING_DEFAULTS.feeOssCapAda;
     return Math.min((requestedAda * pct) / 100, cap);
-  }
-
-  private async cfg(key: keyof typeof PLATFORM_CONFIG_DEFAULTS): Promise<number> {
-    const row = await this.prisma.platformConfig.findUnique({ where: { key } });
-    const v = row?.value;
-    return typeof v === 'number' ? v : (PLATFORM_CONFIG_DEFAULTS[key] as number);
   }
 }

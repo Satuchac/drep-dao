@@ -4,31 +4,9 @@
  * `*_ADA` values are denominated in ADA (whole units), not Lovelace.
  */
 export const PLATFORM_CONFIG_DEFAULTS = {
-  NUMBER_OF_ROUNDS_PER_BUDGET: 3,
-  STAGES_REWARD_SPLIT_DV_PCT: 60, // §12.2 — % of round bucket to D&V (rest → milestones)
-  BONUS_SHARE_DV_PCT: 30, // within D&V slice, % that is bonus (rest = fixed)
-  FILTER_REVIEWER_COUNT: 5,
-  FILTER_APPROVAL_VOTES: 3,
-  MILESTONE_REVIEWER_COUNT: 3,
-  MILESTONE_APPROVAL_VOTES: 2,
   ADMISSION_APPROVAL_VOTES: 3, // §14.2 board YES votes needed to admit a DRep (3-of-5)
-  DV_APPROVAL_THRESHOLD_PCT: 67,
   INTERNAL_DEFAULT_THRESHOLD_PCT: 67,
   INTERNAL_IMPORTANT_THRESHOLD_PCT: 75,
-  QUICK_POLL_PARTICIPATION_PCT: 51,
-  QUICK_POLL_DURATION_HOURS: 48,
-  QUICK_POLL_MAX_EXTENSIONS: 3,
-  FEE_COMMERCIAL_PCT: 3,
-  FEE_COMMERCIAL_CAP_ADA: 5_000,
-  FEE_OSS_PCT: 1,
-  FEE_OSS_CAP_ADA: 1_000,
-  FEE_CAP_PER_ROUND_ADA: 50_000,
-  MILESTONE_NOTIFICATION_DAYS_BEFORE_END: 3,
-  MILESTONE_AUTO_EXTENSION_DAYS: 28,
-  MILESTONE_CHECK_PERIOD_DAYS: 10,
-  MILESTONE_BOARD_EXTRA_EXTENSION_DAYS: 90,
-  PLEDGE_THRESHOLD_ADA: 0,
-  PLEDGE_GRACE_DAYS: 14,
   MIN_OWN_VOTING_POWER_ADA: 1_000_000,
   MIN_DELEGATORS: 20,
   MIN_DELEGATOR_STAKE_ADA: 50_000,
@@ -46,36 +24,15 @@ export type PlatformConfigKey = keyof typeof PLATFORM_CONFIG_DEFAULTS;
  * §20 — one-line, human-readable description of each platform parameter, shown in
  * the board's Platform setup so everyone understands what each setting controls.
  * Keep a description for every key in PLATFORM_CONFIG_DEFAULTS.
+ *
+ * NOTE: round-specific parameters (filtering/milestone reviewers, reward split,
+ * fees, quick-poll, milestone timing, pledge) live in ROUND_SETTING_DEFAULTS and
+ * are set per round in the round setup — not here.
  */
 export const PLATFORM_CONFIG_META: Record<PlatformConfigKey, string> = {
-  NUMBER_OF_ROUNDS_PER_BUDGET: 'How many funding rounds a single budget allocation is split across.',
-  STAGES_REWARD_SPLIT_DV_PCT:
-    "Share of a round's reward pool paid for Debate & Vote participation (the rest funds milestone reviews).",
-  BONUS_SHARE_DV_PCT:
-    'Within the Debate & Vote reward slice, the portion paid as a performance bonus (the rest is a fixed share).',
-  FILTER_REVIEWER_COUNT: 'Number of DReps randomly drawn to review each proposal in the Filtering stage.',
-  FILTER_APPROVAL_VOTES:
-    'YES votes among the filter reviewers needed to advance a proposal to Debate & Vote (the same count of NO votes rejects it).',
-  MILESTONE_REVIEWER_COUNT: 'Number of DReps drawn to review each funded milestone delivery.',
-  MILESTONE_APPROVAL_VOTES: 'YES votes among milestone reviewers needed to approve a milestone payout.',
   ADMISSION_APPROVAL_VOTES: 'Board YES votes needed to admit a new DAO member (3-of-5).',
-  DV_APPROVAL_THRESHOLD_PCT: 'Percentage of balanced voting power required to approve a proposal in Debate & Vote.',
   INTERNAL_DEFAULT_THRESHOLD_PCT: 'Approval threshold (%) for ordinary internal proposals.',
   INTERNAL_IMPORTANT_THRESHOLD_PCT: 'Approval threshold (%) for internal proposals flagged as important.',
-  QUICK_POLL_PARTICIPATION_PCT: 'Minimum participation (%) for a quick-poll result to be valid.',
-  QUICK_POLL_DURATION_HOURS: 'Default time a quick poll stays open, in hours.',
-  QUICK_POLL_MAX_EXTENSIONS: 'How many times a quick poll may be extended when participation is too low.',
-  FEE_COMMERCIAL_PCT: 'Submission fee for commercial proposals, as a percent of the requested amount.',
-  FEE_COMMERCIAL_CAP_ADA: 'Maximum submission fee for a commercial proposal (ADA).',
-  FEE_OSS_PCT: 'Submission fee for open-source / non-commercial proposals, as a percent of the requested amount.',
-  FEE_OSS_CAP_ADA: 'Maximum submission fee for an open-source proposal (ADA).',
-  FEE_CAP_PER_ROUND_ADA: 'Cap on total submission fees collected in a single round (ADA).',
-  MILESTONE_NOTIFICATION_DAYS_BEFORE_END: 'Days before a milestone deadline to notify the team.',
-  MILESTONE_AUTO_EXTENSION_DAYS: 'Automatic grace extension granted to a late milestone (days).',
-  MILESTONE_CHECK_PERIOD_DAYS: 'Window reviewers have to check a delivered milestone (days).',
-  MILESTONE_BOARD_EXTRA_EXTENSION_DAYS: 'Extra milestone extension the board may grant on request (days).',
-  PLEDGE_THRESHOLD_ADA: 'Requested amount above which a proposer must post a refundable pledge (ADA; 0 disables pledges).',
-  PLEDGE_GRACE_DAYS: 'Days a proposer has to post the required pledge.',
   MIN_OWN_VOTING_POWER_ADA: 'Minimum own voting power a DRep needs to be eligible to vote (ADA).',
   MIN_DELEGATORS: 'Minimum number of delegators a DRep needs to be eligible.',
   MIN_DELEGATOR_STAKE_ADA: 'Minimum delegated stake a DRep needs to be eligible (ADA).',
@@ -84,6 +41,67 @@ export const PLATFORM_CONFIG_META: Record<PlatformConfigKey, string> = {
   BOARD_REWARD_DEADLINE_DAYS: 'Days the board has to distribute rewards after a round before a penalty applies.',
   ANCHOR_SCHEDULE_CRON: 'Cron schedule for the daily on-chain anchoring job (informational).',
   CARDANO_EXPLORER: 'Block explorer for on-chain links: cardanoscan, cexplorer, or adastat.',
+};
+
+/**
+ * §6/§12 — per-round settings. The board configures these in the round setup; each
+ * is stored on the round (nullable column) and these are the defaults used when a
+ * round leaves one blank. They are intentionally NOT in the platform-wide config.
+ *
+ * `rewardFixedPct` is the left side of the round's Fixed↔Bonus reward slider; the
+ * bonus share is the remainder (`100 - rewardFixedPct`).
+ */
+export const ROUND_SETTING_DEFAULTS = {
+  filterReviewerCount: 5,
+  filterApprovalVotes: 3,
+  milestoneReviewerCount: 3,
+  milestoneApprovalVotes: 2,
+  dvApprovalThresholdPct: 67,
+  rewardFixedPct: 70, // bonus share = 100 - rewardFixedPct
+  feeCommercialPct: 3,
+  feeCommercialCapAda: 5_000,
+  feeOssPct: 1,
+  feeOssCapAda: 1_000,
+  feeCapPerRoundAda: 50_000,
+  quickPollParticipationPct: 51,
+  quickPollDurationHours: 48,
+  quickPollMaxExtensions: 3,
+  milestoneNotificationDaysBeforeEnd: 3,
+  milestoneAutoExtensionDays: 28,
+  milestoneCheckPeriodDays: 10,
+  milestoneBoardExtraExtensionDays: 90,
+  pledgeThresholdAda: 0,
+  pledgeGraceDays: 14,
+} as const;
+
+export type RoundSettingKey = keyof typeof ROUND_SETTING_DEFAULTS;
+
+/** One-line description of each per-round setting, shown in the round setup form. */
+export const ROUND_SETTING_META: Record<RoundSettingKey, string> = {
+  filterReviewerCount: 'Number of DReps randomly drawn to review each proposal in the Filtering stage.',
+  filterApprovalVotes:
+    'YES votes among the filter reviewers needed to advance a proposal to Debate & Vote (the same count of NO votes rejects it). Max = filtering reviewers.',
+  milestoneReviewerCount: 'Number of DReps drawn to review each funded milestone delivery.',
+  milestoneApprovalVotes:
+    'YES votes among milestone reviewers needed to approve a milestone payout. Max = milestone reviewers.',
+  dvApprovalThresholdPct: 'Percentage of balanced voting power required to approve a proposal in Debate & Vote.',
+  rewardFixedPct:
+    "Fixed share (%) of the round's reward pool; the remainder is paid as a performance bonus (fixed + bonus = 100%).",
+  feeCommercialPct: 'Submission fee for commercial proposals, as a percent of the requested amount.',
+  feeCommercialCapAda: 'Maximum submission fee for a commercial proposal (ADA).',
+  feeOssPct: 'Submission fee for open-source / non-commercial proposals, as a percent of the requested amount.',
+  feeOssCapAda: 'Maximum submission fee for an open-source proposal (ADA).',
+  feeCapPerRoundAda:
+    'Cap on the filtering reward pool funded by submission fees; fees above the cap spill into the Debate & Vote reward slice.',
+  quickPollParticipationPct: 'Minimum participation (%) for a quick-poll result to be valid.',
+  quickPollDurationHours: 'Default time a quick poll stays open, in hours.',
+  quickPollMaxExtensions: 'How many times a quick poll may be extended when participation is too low.',
+  milestoneNotificationDaysBeforeEnd: 'Days before a milestone deadline to notify the team.',
+  milestoneAutoExtensionDays: 'Automatic grace extension granted to a late milestone (days).',
+  milestoneCheckPeriodDays: 'Window reviewers have to check a delivered milestone (days).',
+  milestoneBoardExtraExtensionDays: 'Extra milestone extension the board may grant on request (days).',
+  pledgeThresholdAda: 'Requested amount above which a proposer must post a refundable pledge (ADA; 0 disables pledges).',
+  pledgeGraceDays: 'Days a proposer has to post the required pledge.',
 };
 
 /** Known block explorers → tx/address URL templates per network ({hash}/{address} placeholders). */

@@ -1,6 +1,6 @@
 import { randomInt } from 'node:crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { PLATFORM_CONFIG_DEFAULTS, ProposalStage, ProposalStatus, VoteChoice, VotePhase } from '@drep-dao/shared';
+import { ROUND_SETTING_DEFAULTS, ProposalStage, ProposalStatus, VoteChoice, VotePhase } from '@drep-dao/shared';
 import { GovSubject, VotingStyle } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnchorService } from '../cardano/anchor.service';
@@ -43,7 +43,7 @@ export class MilestonesService {
     let pool = eligible.map((e) => e.drepId).filter((id) => id !== proposal.submitterDrepId);
     if (pool.length === 0) throw new BadRequestException('no eligible reviewers in this round');
     // §6 — per-round override of the milestone reviewer count.
-    const count = Math.min(proposal.round?.milestoneReviewerCount ?? (await this.cfg('MILESTONE_REVIEWER_COUNT')), pool.length);
+    const count = Math.min(proposal.round?.milestoneReviewerCount ?? ROUND_SETTING_DEFAULTS.milestoneReviewerCount, pool.length);
     const chosen: string[] = [];
     for (let i = 0; i < count; i++) {
       const j = randomInt(pool.length);
@@ -187,7 +187,7 @@ export class MilestonesService {
       include: { proposal: { select: { id: true, title: true, roundId: true, round: { select: { number: true, name: true, milestoneApprovalVotes: true } } } } },
     });
     if (!m || m.status !== 'POA_SUBMITTED') return;
-    const threshold = m.proposal.round?.milestoneApprovalVotes ?? (await this.cfg('MILESTONE_APPROVAL_VOTES'));
+    const threshold = m.proposal.round?.milestoneApprovalVotes ?? ROUND_SETTING_DEFAULTS.milestoneApprovalVotes;
     const votes = await this.voteList(milestoneId);
     const yes = votes.filter((v) => v.choice === VoteChoice.YES).length;
     const no = votes.filter((v) => v.choice === VoteChoice.NO).length;
@@ -249,15 +249,9 @@ export class MilestonesService {
     return hit?.txHash ?? null;
   }
 
-  /** §6 — per-round milestone approval threshold, else the platform default. */
+  /** §6 — per-round milestone approval threshold, else the ROUND_SETTING_DEFAULTS value. */
   private async milestoneThreshold(proposalId: string): Promise<number> {
     const p = await this.prisma.proposal.findUnique({ where: { id: proposalId }, select: { round: { select: { milestoneApprovalVotes: true } } } });
-    return p?.round?.milestoneApprovalVotes ?? (await this.cfg('MILESTONE_APPROVAL_VOTES'));
-  }
-
-  private async cfg(key: keyof typeof PLATFORM_CONFIG_DEFAULTS): Promise<number> {
-    const row = await this.prisma.platformConfig.findUnique({ where: { key } });
-    const v = row?.value;
-    return typeof v === 'number' ? v : (PLATFORM_CONFIG_DEFAULTS[key] as number);
+    return p?.round?.milestoneApprovalVotes ?? ROUND_SETTING_DEFAULTS.milestoneApprovalVotes;
   }
 }

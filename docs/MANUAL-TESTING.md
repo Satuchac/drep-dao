@@ -103,9 +103,17 @@ Admin (separate): `/admin/login`, user `satucha`.
 - [ ] **Board opt-in (§8.2)**: board members do NOT auto-vote on funding proposals — the
       D&V panel shows an **"Opt in to vote"** button for board; after opting in they
       become eligible (and can vote in My area). Regular admitted DReps vote by default.
-- [ ] **Per-round settings**: when creating a round, the **Round settings** inputs override
-      the platform defaults (filtering reviewers/approvals, milestone reviewers/approvals,
-      D&V threshold %). Leave blank to use the global value.
+- [ ] **Per-round settings (round setup)**: creating a round shows a **Round settings** block
+      with a **Fixed↔Bonus reward slider** (the two shares always sum to 100%) and grouped
+      number inputs — review & approval (filtering/milestone reviewers + approvals, D&V
+      threshold), **submission fees** (commercial/OSS % + caps, filtering reward cap),
+      **quick poll**, **milestone timing**, **proposer pledge**. Each box shows its default;
+      blank ⇒ default. The **approval** inputs cap to their reviewer count (and the API
+      rejects approval > reviewer). These were moved here out of *Platform setup*.
+- [ ] **Platform setup is leaner**: *Platform setup* now lists only the genuinely global
+      params (admission votes, internal thresholds, eligibility minimums, merit cap, anchor
+      cron, explorer) — the round/fee/quick-poll/milestone-timing/pledge params are gone
+      from here (they live in the round setup).
 - [ ] **Edit history**: the proposal detail shows a collapsed **"Edit history"** — expand it
       to compare any earlier version with the current one (diff or full side-by-side).
 - [ ] **Comment roles**: each comment shows a role badge — **Board member / DAO member /

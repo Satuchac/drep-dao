@@ -14,6 +14,7 @@ import {
   meritMultiplier,
   ProposalStage,
   ProposalStatus,
+  ROUND_SETTING_DEFAULTS,
   VoteChoice,
   VotePhase,
 } from '@drep-dao/shared';
@@ -186,7 +187,7 @@ export class DvService {
     }
     const thresholdPct = proposal?.approvalThresholdPct
       ? Number(proposal.approvalThresholdPct)
-      : Number(this.config.get('DV_APPROVAL_THRESHOLD_PCT') ?? 67);
+      : ROUND_SETTING_DEFAULTS.dvApprovalThresholdPct;
     const tally = { yesPower, totalPower, abstainPower, thresholdPct };
 
     const anchor = await this.prisma.anchor.findFirst({ where: { proposalId, kind: 'dv' }, orderBy: { createdAt: 'desc' } });

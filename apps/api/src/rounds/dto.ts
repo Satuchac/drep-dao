@@ -16,13 +16,37 @@ import {
 } from 'class-validator';
 import { CategoryType } from '@drep-dao/shared';
 
-/** §6 — per-round overrides of platform defaults (omit to use the global value). */
+/**
+ * §6/§12 — per-round settings (omit to use the ROUND_SETTING_DEFAULTS value). The
+ * approval-vote counts must not exceed their reviewer counts; that cross-field rule
+ * is enforced in RoundsService (clearer errors than a declarative validator).
+ */
 export class RoundSettingsInput {
   @IsOptional() @IsInt() @Min(1) filterReviewerCount?: number;
   @IsOptional() @IsInt() @Min(1) filterApprovalVotes?: number;
   @IsOptional() @IsInt() @Min(1) milestoneReviewerCount?: number;
   @IsOptional() @IsInt() @Min(1) milestoneApprovalVotes?: number;
   @IsOptional() @IsInt() @Min(1) @Max(100) dvApprovalThresholdPct?: number;
+  // §12.2 — fixed share (%) of the reward pool; bonus = 100 - rewardFixedPct.
+  @IsOptional() @IsInt() @Min(0) @Max(100) rewardFixedPct?: number;
+  // §12 — submission fees.
+  @IsOptional() @IsInt() @Min(0) @Max(100) feeCommercialPct?: number;
+  @IsOptional() @IsInt() @Min(0) feeCommercialCapAda?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(100) feeOssPct?: number;
+  @IsOptional() @IsInt() @Min(0) feeOssCapAda?: number;
+  @IsOptional() @IsInt() @Min(0) feeCapPerRoundAda?: number;
+  // §9 — quick poll.
+  @IsOptional() @IsInt() @Min(0) @Max(100) quickPollParticipationPct?: number;
+  @IsOptional() @IsInt() @Min(1) quickPollDurationHours?: number;
+  @IsOptional() @IsInt() @Min(0) quickPollMaxExtensions?: number;
+  // §11 — milestone timing.
+  @IsOptional() @IsInt() @Min(0) milestoneNotificationDaysBeforeEnd?: number;
+  @IsOptional() @IsInt() @Min(0) milestoneAutoExtensionDays?: number;
+  @IsOptional() @IsInt() @Min(0) milestoneCheckPeriodDays?: number;
+  @IsOptional() @IsInt() @Min(0) milestoneBoardExtraExtensionDays?: number;
+  // §3 — proposer pledge.
+  @IsOptional() @IsInt() @Min(0) pledgeThresholdAda?: number;
+  @IsOptional() @IsInt() @Min(0) pledgeGraceDays?: number;
 }
 
 // MVP schedule uses coarse operational windows rather than the 9 fine-grained

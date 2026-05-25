@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { ROUND_SETTING_DEFAULTS, ROUND_SETTING_META } from '@drep-dao/shared';
 import {
   boardRoundsApi,
   roundsApi,
   type CreateRoundInput,
   type RoundCategoryInput,
+  type RoundSettingsInput,
   type RoundSummary,
 } from '@/lib/api';
 import { ProposalList } from './proposal-list';
@@ -19,6 +21,56 @@ const STAGE_DEFS = [
   { key: 'funding', label: 'Funding' },
 ];
 const CATEGORY_TYPES = ['GRANT', 'RFP'];
+
+// §6/§12 — per-round settings shown in the round setup, grouped. `rewardFixedPct`
+// is handled separately as the Fixed↔Bonus slider. `unit` drives the input suffix.
+type SettingKey = Exclude<keyof RoundSettingsInput, 'rewardFixedPct'>;
+const SETTING_GROUPS: { title: string; fields: { key: SettingKey; label: string; unit?: '%' | '₳' }[] }[] = [
+  {
+    title: 'Review & approval',
+    fields: [
+      { key: 'filterReviewerCount', label: 'Filtering reviewers' },
+      { key: 'filterApprovalVotes', label: 'Filtering approvals' },
+      { key: 'milestoneReviewerCount', label: 'Milestone reviewers' },
+      { key: 'milestoneApprovalVotes', label: 'Milestone approvals' },
+      { key: 'dvApprovalThresholdPct', label: 'D&V threshold', unit: '%' },
+    ],
+  },
+  {
+    title: 'Submission fees',
+    fields: [
+      { key: 'feeCommercialPct', label: 'Commercial fee', unit: '%' },
+      { key: 'feeCommercialCapAda', label: 'Commercial cap', unit: '₳' },
+      { key: 'feeOssPct', label: 'Open-source fee', unit: '%' },
+      { key: 'feeOssCapAda', label: 'Open-source cap', unit: '₳' },
+      { key: 'feeCapPerRoundAda', label: 'Filtering reward cap', unit: '₳' },
+    ],
+  },
+  {
+    title: 'Quick poll',
+    fields: [
+      { key: 'quickPollParticipationPct', label: 'Min participation', unit: '%' },
+      { key: 'quickPollDurationHours', label: 'Duration (hours)' },
+      { key: 'quickPollMaxExtensions', label: 'Max extensions' },
+    ],
+  },
+  {
+    title: 'Milestone timing (days)',
+    fields: [
+      { key: 'milestoneNotificationDaysBeforeEnd', label: 'Notify before end' },
+      { key: 'milestoneAutoExtensionDays', label: 'Auto extension' },
+      { key: 'milestoneCheckPeriodDays', label: 'Check period' },
+      { key: 'milestoneBoardExtraExtensionDays', label: 'Board extra extension' },
+    ],
+  },
+  {
+    title: 'Proposer pledge',
+    fields: [
+      { key: 'pledgeThresholdAda', label: 'Pledge threshold', unit: '₳' },
+      { key: 'pledgeGraceDays', label: 'Grace (days)' },
+    ],
+  },
+];
 
 export function RoundsSection() {
   const { profile } = useAuth();
@@ -116,11 +168,18 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
     { name: 'Ecosystem', type: 'GRANT', allocatedAda: 4_000_000, description: '' },
   ]);
   const [sched, setSched] = useState<Record<string, { startsAt: string; endsAt: string }>>({});
-  // §6 — optional per-round overrides of the platform defaults (blank = use default).
+  // §6/§12 — per-round settings (blank = use the default). Reward split is its own slider.
   const [settings, setSettings] = useState<Record<string, string>>({});
+  const [rewardFixed, setRewardFixed] = useState<number>(ROUND_SETTING_DEFAULTS.rewardFixedPct);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const setSetting = (k: string, v: string) => setSettings((s) => ({ ...s, [k]: v }));
+  const num = (k: string) => (settings[k]?.trim() ? Number(settings[k]) : undefined);
+  // Approval votes can't exceed their reviewer count; the inputs cap to the effective value.
+  const filterReviewers = num('filterReviewerCount') ?? ROUND_SETTING_DEFAULTS.filterReviewerCount;
+  const milestoneReviewers = num('milestoneReviewerCount') ?? ROUND_SETTING_DEFAULTS.milestoneReviewerCount;
+  const approvalMax = (k: SettingKey): number | undefined =>
+    k === 'filterApprovalVotes' ? filterReviewers : k === 'milestoneApprovalVotes' ? milestoneReviewers : undefined;
 
   const setCat = (i: number, patch: Partial<RoundCategoryInput>) =>
     setCats((cs) => cs.map((c, j) => (j === i ? { ...c, ...patch } : c)));
@@ -158,6 +217,16 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
       setError(schedErr);
       return;
     }
+    const fa = num('filterApprovalVotes');
+    if (fa !== undefined && fa > filterReviewers) {
+      setError(`Filtering approvals (${fa}) can't exceed filtering reviewers (${filterReviewers}).`);
+      return;
+    }
+    const ma = num('milestoneApprovalVotes');
+    if (ma !== undefined && ma > milestoneReviewers) {
+      setError(`Milestone approvals (${ma}) can't exceed milestone reviewers (${milestoneReviewers}).`);
+      return;
+    }
     setBusy(true);
     try {
       const schedule = STAGE_DEFS.flatMap((s) => {
@@ -165,7 +234,13 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
         if (!v?.startsAt || !v?.endsAt) return [];
         return [{ stageKey: s.key, startsAt: new Date(v.startsAt).toISOString(), endsAt: new Date(v.endsAt).toISOString() }];
       });
-      const num = (k: string) => (settings[k]?.trim() ? Number(settings[k]) : undefined);
+      // §6/§12 — collect every supplied per-round setting; reward split always sent.
+      const settingsInput: RoundSettingsInput = { rewardFixedPct: rewardFixed };
+      for (const g of SETTING_GROUPS)
+        for (const f of g.fields) {
+          const v = num(f.key);
+          if (v !== undefined) (settingsInput as Record<string, number>)[f.key] = v;
+        }
       const input: CreateRoundInput = {
         name: name.trim() || undefined,
         budgetAda: Number(budget),
@@ -177,11 +252,7 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
           description: c.description?.trim() || undefined,
         })),
         schedule,
-        filterReviewerCount: num('filterReviewerCount'),
-        filterApprovalVotes: num('filterApprovalVotes'),
-        milestoneReviewerCount: num('milestoneReviewerCount'),
-        milestoneApprovalVotes: num('milestoneApprovalVotes'),
-        dvApprovalThresholdPct: num('dvApprovalThresholdPct'),
+        ...settingsInput,
       };
       await boardRoundsApi.create(input);
       onDone();
@@ -236,29 +307,54 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
         <button type="button" onClick={() => setCats((cs) => [...cs, { name: '', type: 'GRANT', allocatedAda: 0, description: '' }])} className="mt-1 text-xs underline">+ add category</button>
       </div>
 
-      <div>
-        <div className="mb-1 text-sm font-medium">Round settings (optional — override platform defaults)</div>
-        <div className="flex flex-wrap gap-2 text-sm">
-          {([
-            ['filterReviewerCount', 'Filtering reviewers'],
-            ['filterApprovalVotes', 'Filtering approvals'],
-            ['milestoneReviewerCount', 'Milestone reviewers'],
-            ['milestoneApprovalVotes', 'Milestone approvals'],
-            ['dvApprovalThresholdPct', 'D&V threshold %'],
-          ] as const).map(([k, label]) => (
-            <label key={k} className="text-xs text-neutral-500">
-              {label}
-              <input
-                type="number"
-                min={1}
-                value={settings[k] ?? ''}
-                onChange={(e) => setSetting(k, e.target.value)}
-                placeholder="default"
-                className={`${field} ml-1 w-20`}
-              />
-            </label>
-          ))}
+      <div className="space-y-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
+        <div className="text-sm font-medium">Round settings</div>
+
+        {/* §12.2 — Fixed↔Bonus reward split (always set; the two shares sum to 100%). */}
+        <div>
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="font-medium text-emerald-700 dark:text-emerald-400">Fixed reward {rewardFixed}%</span>
+            <span className="text-neutral-500">Reward split</span>
+            <span className="font-medium text-amber-700 dark:text-amber-400">Bonus {100 - rewardFixed}%</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={rewardFixed}
+            onChange={(e) => setRewardFixed(Number(e.target.value))}
+            className="w-full accent-emerald-600"
+            title={ROUND_SETTING_META.rewardFixedPct}
+          />
         </div>
+
+        {/* Per-round numeric settings; blank = the default (shown as the placeholder). */}
+        <p className="text-xs text-neutral-500">Leave a field blank to use the default (shown in each box).</p>
+        {SETTING_GROUPS.map((g) => (
+          <div key={g.title}>
+            <div className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">{g.title}</div>
+            <div className="flex flex-wrap gap-2">
+              {g.fields.map((f) => {
+                const max = approvalMax(f.key);
+                return (
+                  <label key={f.key} className="text-xs text-neutral-500" title={ROUND_SETTING_META[f.key]}>
+                    <span className="block">{f.label}{f.unit ? ` (${f.unit})` : ''}</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={max ?? (f.unit === '%' ? 100 : undefined)}
+                      value={settings[f.key] ?? ''}
+                      onChange={(e) => setSetting(f.key, e.target.value)}
+                      placeholder={String(ROUND_SETTING_DEFAULTS[f.key])}
+                      className={`${field} w-24`}
+                    />
+                    {max !== undefined ? <span className="ml-1 text-[10px] text-neutral-400">max {max}</span> : null}
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       <div>

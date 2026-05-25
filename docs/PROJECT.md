@@ -76,6 +76,17 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   allocation, and description. A round can only be created once its categories
   **allocate the full budget** (P4), and any schedule windows must run **in order
   and not overlap** (P7) — validated both client-side and in the API.
+- **Per-round settings (round setup, not platform setup).** Most tunables are set
+  **per round** and stored on the round (null column ⇒ the `ROUND_SETTING_DEFAULTS`
+  fallback in `@drep-dao/shared`): filtering/milestone **reviewer counts +
+  approvals** (an approval count may not exceed its reviewer count — enforced in
+  `RoundsService.assertSettings` and capped in the form), the **D&V threshold**,
+  submission **fees** (commercial/OSS % + ADA caps, and `feeCapPerRoundAda` which
+  caps the filtering reward pool), **quick-poll** settings, **milestone timing**,
+  and the **proposer pledge**. The **reward split** is a single Fixed↔Bonus slider
+  (`rewardFixedPct`; bonus = 100 − fixed). `PLATFORM_CONFIG_DEFAULTS` (Platform
+  setup) now holds only genuinely global params (admission votes, internal
+  thresholds, eligibility minimums, merit cap, anchor cron, explorer).
 - **Stage transitions are board-confirmed (single board member).** From *My area →
   Round stage controls* a board member, for the next stage, checks the proposal
   counts (readiness), confirms the date, and chooses **auto-start at the planned

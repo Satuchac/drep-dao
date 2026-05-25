@@ -5,9 +5,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DRepStatus, ProposalStatus, RoundStatus } from '@drep-dao/shared';
+import { DRepStatus, ProposalStatus, RoundStatus, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateRoundDto, UpdateRoundDto, CategoryInput, ScheduleInput, ConfirmStageDto } from './dto';
+import { CreateRoundDto, UpdateRoundDto, CategoryInput, ScheduleInput, ConfirmStageDto, RoundSettingsInput } from './dto';
 
 const LOVELACE = 1_000_000;
 const toLovelace = (ada: number): bigint => BigInt(Math.round(ada * LOVELACE));
@@ -51,6 +51,7 @@ export class RoundsService {
   async create(dto: CreateRoundDto) {
     this.assertCategoriesCoverBudget(dto.categories, dto.budgetAda);
     this.assertScheduleOrdered(dto.schedule);
+    this.assertSettings(dto);
 
     const last = await this.prisma.round.findFirst({ orderBy: { number: 'desc' } });
     const number = (last?.number ?? 0) + 1;
@@ -68,12 +69,8 @@ export class RoundsService {
         rewardsPoolAda: toLovelace(dto.rewardsPoolAda),
         multisigAddress,
         intersectTxHash: dto.intersectTxHash ?? null,
-        // §6 — per-round overrides (null = use the platform default).
-        filterReviewerCount: dto.filterReviewerCount ?? null,
-        filterApprovalVotes: dto.filterApprovalVotes ?? null,
-        milestoneReviewerCount: dto.milestoneReviewerCount ?? null,
-        milestoneApprovalVotes: dto.milestoneApprovalVotes ?? null,
-        dvApprovalThresholdPct: dto.dvApprovalThresholdPct ?? null,
+        // §6/§12 — per-round settings (null = use the ROUND_SETTING_DEFAULTS value).
+        ...this.settingsData(dto),
         categories: { create: dto.categories.map((c) => this.categoryData(c)) },
         schedule: { create: (dto.schedule ?? []).map((s) => this.scheduleData(s)) },
         eligibilities: { create: eligibleDrepIds.map((drepId) => ({ drepId })) },
@@ -180,13 +177,28 @@ export class RoundsService {
         maxAda: c.maxAda == null ? null : toAda(c.maxAda),
       })),
       schedule,
-      // §6 — per-round setting overrides (null = platform default).
+      // §6/§12 — per-round settings (null = the ROUND_SETTING_DEFAULTS value).
       settings: {
         filterReviewerCount: r.filterReviewerCount,
         filterApprovalVotes: r.filterApprovalVotes,
         milestoneReviewerCount: r.milestoneReviewerCount,
         milestoneApprovalVotes: r.milestoneApprovalVotes,
         dvApprovalThresholdPct: r.dvApprovalThresholdPct == null ? null : Number(r.dvApprovalThresholdPct),
+        rewardFixedPct: r.rewardFixedPct,
+        feeCommercialPct: r.feeCommercialPct,
+        feeCommercialCapAda: r.feeCommercialCapAda,
+        feeOssPct: r.feeOssPct,
+        feeOssCapAda: r.feeOssCapAda,
+        feeCapPerRoundAda: r.feeCapPerRoundAda,
+        quickPollParticipationPct: r.quickPollParticipationPct,
+        quickPollDurationHours: r.quickPollDurationHours,
+        quickPollMaxExtensions: r.quickPollMaxExtensions,
+        milestoneNotificationDaysBeforeEnd: r.milestoneNotificationDaysBeforeEnd,
+        milestoneAutoExtensionDays: r.milestoneAutoExtensionDays,
+        milestoneCheckPeriodDays: r.milestoneCheckPeriodDays,
+        milestoneBoardExtraExtensionDays: r.milestoneBoardExtraExtensionDays,
+        pledgeThresholdAda: r.pledgeThresholdAda,
+        pledgeGraceDays: r.pledgeGraceDays,
       },
       // §8 — what the board must confirm/launch next (null once CLOSED).
       nextStage: this.computeNextStage(r.status, schedule),
@@ -207,6 +219,13 @@ export class RoundsService {
     if (dto.categories) this.assertCategoriesCoverBudget(dto.categories, budgetAda);
     else this.assertCategoriesCoverBudget(round.categories.map((c) => ({ allocatedAda: toAda(c.allocatedAda) })), budgetAda);
     this.assertScheduleOrdered(dto.schedule);
+    // Validate approval-vote vs reviewer-count, falling back to the round's current values.
+    this.assertSettings({
+      filterReviewerCount: dto.filterReviewerCount ?? round.filterReviewerCount ?? undefined,
+      filterApprovalVotes: dto.filterApprovalVotes ?? round.filterApprovalVotes ?? undefined,
+      milestoneReviewerCount: dto.milestoneReviewerCount ?? round.milestoneReviewerCount ?? undefined,
+      milestoneApprovalVotes: dto.milestoneApprovalVotes ?? round.milestoneApprovalVotes ?? undefined,
+    });
 
     await this.prisma.$transaction(async (tx) => {
       await tx.round.update({
@@ -215,6 +234,8 @@ export class RoundsService {
           ...(dto.name !== undefined ? { name: dto.name } : {}),
           ...(dto.budgetAda !== undefined ? { budgetAda: toLovelace(dto.budgetAda) } : {}),
           ...(dto.rewardsPoolAda !== undefined ? { rewardsPoolAda: toLovelace(dto.rewardsPoolAda) } : {}),
+          // §6/§12 — only the per-round settings present in the DTO are updated.
+          ...this.settingsData(dto),
         },
       });
       if (dto.categories) {
@@ -406,6 +427,41 @@ export class RoundsService {
       autoStart: row?.autoStart ?? false,
       confirmed: !!row?.confirmedAt,
     };
+  }
+
+  /**
+   * §6/§12 — map the per-round settings present in the DTO onto round columns. Only
+   * keys actually supplied are included: on create, omitted keys default to null
+   * (→ the ROUND_SETTING_DEFAULTS value at read time); on update they stay unchanged.
+   */
+  private settingsData(dto: RoundSettingsInput) {
+    const out: Record<string, number> = {};
+    for (const key of Object.keys(ROUND_SETTING_DEFAULTS) as (keyof RoundSettingsInput)[]) {
+      const v = dto[key];
+      if (typeof v === 'number') out[key] = v;
+    }
+    return out;
+  }
+
+  /** §6 — an approval-vote count may not exceed its reviewer count. */
+  private assertSettings(s: {
+    filterReviewerCount?: number;
+    filterApprovalVotes?: number;
+    milestoneReviewerCount?: number;
+    milestoneApprovalVotes?: number;
+  }) {
+    const filterReviewers = s.filterReviewerCount ?? ROUND_SETTING_DEFAULTS.filterReviewerCount;
+    if (s.filterApprovalVotes != null && s.filterApprovalVotes > filterReviewers) {
+      throw new BadRequestException(
+        `filterApprovalVotes (${s.filterApprovalVotes}) cannot exceed filterReviewerCount (${filterReviewers})`,
+      );
+    }
+    const milestoneReviewers = s.milestoneReviewerCount ?? ROUND_SETTING_DEFAULTS.milestoneReviewerCount;
+    if (s.milestoneApprovalVotes != null && s.milestoneApprovalVotes > milestoneReviewers) {
+      throw new BadRequestException(
+        `milestoneApprovalVotes (${s.milestoneApprovalVotes}) cannot exceed milestoneReviewerCount (${milestoneReviewers})`,
+      );
+    }
   }
 
   private categoryData(c: CategoryInput) {

@@ -192,12 +192,33 @@ model Round {
   rewardsPoolAda  BigInt    @map("rewards_pool_ada")
   multisigAddress String    @map("multisig_address")
   intersectTxHash String?   @map("intersect_tx_hash")
-  // §6 — per-round overrides of the platform defaults (null = use the global value).
+  // §6/§12 — per-round settings (null = use the ROUND_SETTING_DEFAULTS value). The
+  // board sets these in the round setup; they are not in the platform-wide config.
   filterReviewerCount    Int?     @map("filter_reviewer_count")
   filterApprovalVotes    Int?     @map("filter_approval_votes")
   milestoneReviewerCount Int?     @map("milestone_reviewer_count")
   milestoneApprovalVotes Int?     @map("milestone_approval_votes")
   dvApprovalThresholdPct Decimal? @map("dv_approval_threshold_pct") @db.Decimal(5, 2)
+  // §12.2 — fixed share (%) of the reward pool; bonus share = 100 - rewardFixedPct.
+  rewardFixedPct                  Int? @map("reward_fixed_pct")
+  // §12 — submission fees (percent + ADA caps); feeCapPerRoundAda caps filtering rewards.
+  feeCommercialPct                Int? @map("fee_commercial_pct")
+  feeCommercialCapAda             Int? @map("fee_commercial_cap_ada")
+  feeOssPct                       Int? @map("fee_oss_pct")
+  feeOssCapAda                    Int? @map("fee_oss_cap_ada")
+  feeCapPerRoundAda               Int? @map("fee_cap_per_round_ada")
+  // §9 — quick-poll settings.
+  quickPollParticipationPct       Int? @map("quick_poll_participation_pct")
+  quickPollDurationHours          Int? @map("quick_poll_duration_hours")
+  quickPollMaxExtensions          Int? @map("quick_poll_max_extensions")
+  // §11 — milestone timing.
+  milestoneNotificationDaysBeforeEnd Int? @map("milestone_notification_days_before_end")
+  milestoneAutoExtensionDays         Int? @map("milestone_auto_extension_days")
+  milestoneCheckPeriodDays           Int? @map("milestone_check_period_days")
+  milestoneBoardExtraExtensionDays   Int? @map("milestone_board_extra_extension_days")
+  // §3 — proposer pledge.
+  pledgeThresholdAda              Int? @map("pledge_threshold_ada")
+  pledgeGraceDays                 Int? @map("pledge_grace_days")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   endedAt         DateTime? @map("ended_at") @db.Timestamptz(6)
 

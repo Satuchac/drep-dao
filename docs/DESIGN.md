@@ -1135,15 +1135,22 @@ The board may also terminate a project at any time (e.g., due to non-response), 
 
 ### 12.2 Configurable parameters
 
+> **Updated (implementation):** these are now **per-round settings** configured in the
+> round setup (stored on the round; the values below are the `ROUND_SETTING_DEFAULTS`
+> fallback), not platform-wide config. The two reward-split parameters were collapsed
+> into a single per-round **Fixed↔Bonus** slider: `rewardFixedPct` is the fixed share
+> and the bonus share is `100 − rewardFixedPct` (the separate D&V-vs-Milestones split
+> was dropped). The §12.3–12.4 formulas below predate that and will be revised when
+> the reward engine is built.
+
 | Parameter | Default | Range | Meaning |
 |---|---|---|---|
-| `STAGES_REWARD_SPLIT_DV_PCT` | 60 | 0–100 | % of round bucket going to D&V (rest → Milestones) |
-| `BONUS_SHARE_DV_PCT` | 30 | 0–100 | % of D&V slice that is bonus (rest = fixed) |
-| `FEE_CAP_PER_ROUND_ADA` | 50,000 | ≥0 | Cap on filtering reward pool from submission fees |
-| `FEE_COMMERCIAL_PCT` | 3 | 1–5 | Submission fee for commercial projects |
-| `FEE_COMMERCIAL_CAP_ADA` | 5,000 | ≥0 | Cap on commercial submission fee |
-| `FEE_OSS_PCT` | 1 | 0–3 | Submission fee for open-source projects |
-| `FEE_OSS_CAP_ADA` | 1,000 | ≥0 | Cap on OSS submission fee |
+| `rewardFixedPct` | 70 | 0–100 | Fixed share (%) of the reward pool; bonus = 100 − fixed |
+| `feeCapPerRoundAda` | 50,000 | ≥0 | Cap on filtering reward pool from submission fees (overflow → D&V) |
+| `feeCommercialPct` | 3 | 0–100 | Submission fee for commercial projects |
+| `feeCommercialCapAda` | 5,000 | ≥0 | Cap on commercial submission fee |
+| `feeOssPct` | 1 | 0–100 | Submission fee for open-source projects |
+| `feeOssCapAda` | 1,000 | ≥0 | Cap on OSS submission fee |
 
 ### 12.3 Filtering rewards (formula)
 
@@ -1882,36 +1889,21 @@ Three channels, all opt-in per user (defaults given):
 
 ---
 
-## 21. Configurable Platform Parameters
+## 21. Configurable Parameters
 
-Single source of truth for all configuration. All editable by the board via the platform's admin UI (which itself produces an `internal_proposal` for transparency, even if it doesn't require a vote for routine settings).
+Configuration is split in two: **platform-wide** parameters (board-editable in *Platform
+setup*) and **per-round** parameters (set in the round setup, stored on the round). The
+per-round defaults below live in `ROUND_SETTING_DEFAULTS` and are used when a round leaves
+a field blank. `NUMBER_OF_ROUNDS_PER_BUDGET` was removed — a new budget simply means a new
+round.
+
+### 21.1 Platform-wide (`PLATFORM_CONFIG_DEFAULTS`, Platform setup)
 
 | Parameter | Default | Used in |
 |---|---|---|
-| `NUMBER_OF_ROUNDS_PER_BUDGET` | 3 | Round planning |
-| `STAGES_REWARD_SPLIT_DV_PCT` | 60 | D&V vs milestones split |
-| `BONUS_SHARE_DV_PCT` | 30 | Within D&V slice, fixed vs bonus |
-| `FILTER_REVIEWER_COUNT` | 5 | Filtering |
-| `FILTER_APPROVAL_VOTES` | 3 | Filtering |
-| `MILESTONE_REVIEWER_COUNT` | 3 | Milestones |
-| `MILESTONE_APPROVAL_VOTES` | 2 | Milestones |
-| `DV_APPROVAL_THRESHOLD_PCT` | 67 | D&V |
+| `ADMISSION_APPROVAL_VOTES` | 3 | DAO admission (3-of-5) |
 | `INTERNAL_DEFAULT_THRESHOLD_PCT` | 67 | Internal |
 | `INTERNAL_IMPORTANT_THRESHOLD_PCT` | 75 | Internal (sensitive) |
-| `QUICK_POLL_PARTICIPATION_PCT` | 51 | Quick poll |
-| `QUICK_POLL_DURATION_HOURS` | 48 | Quick poll |
-| `QUICK_POLL_MAX_EXTENSIONS` | 3 | Quick poll |
-| `FEE_COMMERCIAL_PCT` | 3 | Submission fees |
-| `FEE_COMMERCIAL_CAP_ADA` | 5,000 | Submission fees |
-| `FEE_OSS_PCT` | 1 | Submission fees |
-| `FEE_OSS_CAP_ADA` | 1,000 | Submission fees |
-| `FEE_CAP_PER_ROUND_ADA` | 50,000 | Filtering reward overflow |
-| `MILESTONE_NOTIFICATION_DAYS_BEFORE_END` | 3 | Milestones |
-| `MILESTONE_AUTO_EXTENSION_DAYS` | 28 | Milestones |
-| `MILESTONE_CHECK_PERIOD_DAYS` | 10 | Milestones |
-| `MILESTONE_BOARD_EXTRA_EXTENSION_DAYS` | 90 | Milestones |
-| `PLEDGE_THRESHOLD_ADA` | 0 | Pledge required threshold |
-| `PLEDGE_GRACE_DAYS` | 14 | Pledge timeout |
 | `MIN_OWN_VOTING_POWER_ADA` | 1,000,000 | Admission gate |
 | `MIN_DELEGATORS` | 20 | Admission gate |
 | `MIN_DELEGATOR_STAKE_ADA` | 50,000 | Admission gate |
@@ -1919,6 +1911,32 @@ Single source of truth for all configuration. All editable by the board via the 
 | `MERIT_POINT_MAX` | 200 | Merit cap |
 | `BOARD_REWARD_DEADLINE_DAYS` | 30 | Merit penalty trigger |
 | `ANCHOR_SCHEDULE_CRON` | `0 2 * * *` | Daily anchoring |
+| `CARDANO_EXPLORER` | `cardanoscan` | On-chain links |
+
+### 21.2 Per-round (`ROUND_SETTING_DEFAULTS`, round setup)
+
+| Parameter | Default | Used in |
+|---|---|---|
+| `filterReviewerCount` | 5 | Filtering |
+| `filterApprovalVotes` | 3 | Filtering (≤ reviewer count) |
+| `milestoneReviewerCount` | 3 | Milestones |
+| `milestoneApprovalVotes` | 2 | Milestones (≤ reviewer count) |
+| `dvApprovalThresholdPct` | 67 | D&V |
+| `rewardFixedPct` | 70 | Reward split (bonus = 100 − fixed) |
+| `feeCommercialPct` | 3 | Submission fees |
+| `feeCommercialCapAda` | 5,000 | Submission fees |
+| `feeOssPct` | 1 | Submission fees |
+| `feeOssCapAda` | 1,000 | Submission fees |
+| `feeCapPerRoundAda` | 50,000 | Filtering reward overflow |
+| `quickPollParticipationPct` | 51 | Quick poll |
+| `quickPollDurationHours` | 48 | Quick poll |
+| `quickPollMaxExtensions` | 3 | Quick poll |
+| `milestoneNotificationDaysBeforeEnd` | 3 | Milestones |
+| `milestoneAutoExtensionDays` | 28 | Milestones |
+| `milestoneCheckPeriodDays` | 10 | Milestones |
+| `milestoneBoardExtraExtensionDays` | 90 | Milestones |
+| `pledgeThresholdAda` | 0 | Pledge required threshold |
+| `pledgeGraceDays` | 14 | Pledge timeout |
 
 ---
 

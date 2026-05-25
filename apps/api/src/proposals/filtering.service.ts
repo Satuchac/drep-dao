@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
-  PLATFORM_CONFIG_DEFAULTS,
+  ROUND_SETTING_DEFAULTS,
   ProposalStage,
   ProposalStatus,
   VoteChoice,
@@ -78,7 +78,7 @@ export class FilteringService {
       }))
       .sort((a, b) => a.tier - b.tier || a.drawn - b.drawn || a.rnd - b.rnd);
     // §6 — per-round override of the reviewer count, else the platform default.
-    const count = Math.min(proposal.round?.filterReviewerCount ?? (await this.cfg('FILTER_REVIEWER_COUNT')), ranked.length);
+    const count = Math.min(proposal.round?.filterReviewerCount ?? ROUND_SETTING_DEFAULTS.filterReviewerCount, ranked.length);
     const chosen = ranked.slice(0, count).map((r) => r.drepId);
 
     await this.prisma.filterAssignment.createMany({
@@ -147,8 +147,8 @@ export class FilteringService {
     if (!proposal || proposal.status !== ProposalStatus.ACTIVE || proposal.stage !== ProposalStage.FILTERING) return;
 
     // §6 — per-round overrides of the filtering approval count + D&V threshold.
-    const threshold = proposal.round?.filterApprovalVotes ?? (await this.cfg('FILTER_APPROVAL_VOTES'));
-    const dvThresholdPct = proposal.round?.dvApprovalThresholdPct ?? (await this.cfg('DV_APPROVAL_THRESHOLD_PCT'));
+    const threshold = proposal.round?.filterApprovalVotes ?? ROUND_SETTING_DEFAULTS.filterApprovalVotes;
+    const dvThresholdPct = proposal.round?.dvApprovalThresholdPct ?? ROUND_SETTING_DEFAULTS.dvApprovalThresholdPct;
     const votes = await this.prisma.vote.findMany({ where: { proposalId, phase: VotePhase.FILTERING } });
     const yes = votes.filter((v) => v.choice === VoteChoice.YES).length;
     const no = votes.filter((v) => v.choice === VoteChoice.NO).length;
@@ -221,7 +221,7 @@ export class FilteringService {
       this.anchorVoteList(proposalId),
       this.prisma.anchor.findFirst({ where: { proposalId, kind: 'filtering' }, orderBy: { createdAt: 'desc' } }),
     ]);
-    const threshold = proposal?.round?.filterApprovalVotes ?? (await this.cfg('FILTER_APPROVAL_VOTES'));
+    const threshold = proposal?.round?.filterApprovalVotes ?? ROUND_SETTING_DEFAULTS.filterApprovalVotes;
     const choiceByDrep = new Map(votes.map((v) => [v.drepId, v.choice]));
     const propSubs = new Set(proposal?.subcategoryIds ?? []);
     // §7.1 — who is assigned, whether they've voted yet, and if they matched the expertise.
@@ -245,11 +245,5 @@ export class FilteringService {
       anchorTxHash: anchor?.txHash ?? null,
       anchorHash: anchor?.hash ?? null,
     };
-  }
-
-  private async cfg(key: keyof typeof PLATFORM_CONFIG_DEFAULTS): Promise<number> {
-    const row = await this.prisma.platformConfig.findUnique({ where: { key } });
-    const v = row?.value;
-    return typeof v === 'number' ? v : (PLATFORM_CONFIG_DEFAULTS[key] as number);
   }
 }

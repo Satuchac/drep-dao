@@ -317,6 +317,21 @@ export interface RoundSettingsInput {
   milestoneReviewerCount?: number;
   milestoneApprovalVotes?: number;
   dvApprovalThresholdPct?: number;
+  rewardFixedPct?: number;
+  feeCommercialPct?: number;
+  feeCommercialCapAda?: number;
+  feeOssPct?: number;
+  feeOssCapAda?: number;
+  feeCapPerRoundAda?: number;
+  quickPollParticipationPct?: number;
+  quickPollDurationHours?: number;
+  quickPollMaxExtensions?: number;
+  milestoneNotificationDaysBeforeEnd?: number;
+  milestoneAutoExtensionDays?: number;
+  milestoneCheckPeriodDays?: number;
+  milestoneBoardExtraExtensionDays?: number;
+  pledgeThresholdAda?: number;
+  pledgeGraceDays?: number;
 }
 export interface CreateRoundInput extends RoundSettingsInput {
   name?: string;
@@ -366,13 +381,7 @@ export interface RoundDetail extends RoundSummary {
     description: string | null;
   }[];
   schedule: RoundScheduleEntry[];
-  settings: {
-    filterReviewerCount: number | null;
-    filterApprovalVotes: number | null;
-    milestoneReviewerCount: number | null;
-    milestoneApprovalVotes: number | null;
-    dvApprovalThresholdPct: number | null;
-  };
+  settings: { [K in keyof Required<RoundSettingsInput>]: number | null };
   nextStage: RoundNextStage | null;
 }
 
