@@ -90,8 +90,8 @@ export function GovernanceSetup() {
             <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
               <tr>
                 <th className="px-3 py-2">Parameter</th>
-                <th className="px-3 py-2">Current value</th>
-                <th className="px-3 py-2">Default</th>
+                <th className="px-3 py-2">New value</th>
+                <th className="px-3 py-2">Saved</th>
                 <th className="px-3 py-2"></th>
               </tr>
             </thead>
@@ -157,8 +157,14 @@ export function GovernanceSetup() {
                         />
                       )}
                     </td>
-                    <td className="px-3 py-1.5 text-xs text-neutral-500">
-                      {p.type === 'boolean' ? (p.default ? 'Enabled' : 'Disabled') : String(p.default)}
+                    {/* Current SAVED value (updates after Save), with the default as a hint. */}
+                    <td className="px-3 py-1.5 text-xs">
+                      <span className="font-medium text-neutral-700 dark:text-neutral-300">
+                        {p.type === 'boolean' ? (p.value ? 'Enabled' : 'Disabled') : String(p.value)}
+                      </span>
+                      <span className="ml-1 text-neutral-400">
+                        (default {p.type === 'boolean' ? (p.default ? 'Enabled' : 'Disabled') : String(p.default)})
+                      </span>
                     </td>
                     <td className="px-3 py-1.5">
                       <button
