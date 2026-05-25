@@ -1908,9 +1908,14 @@ round.
 | `ADMISSION_APPROVAL_VOTES` | 3 | DAO admission (3-of-5) |
 | `INTERNAL_DEFAULT_THRESHOLD_PCT` | 67 | Internal |
 | `INTERNAL_IMPORTANT_THRESHOLD_PCT` | 75 | Internal (sensitive) |
-| `MIN_OWN_VOTING_POWER_ADA` | 1,000,000 | Admission gate |
-| `MIN_DELEGATORS` | 20 | Admission gate |
-| `MIN_DELEGATOR_STAKE_ADA` | 50,000 | Admission gate |
+| `ENTRY_REQUIRE_VOTING_POWER` | false | Entry gate — switch for the power/delegator group |
+| `MIN_OWN_VOTING_POWER_ADA` | 1,000,000 | Entry gate — own self-delegated power (ADA) |
+| `MIN_DELEGATORS` | 20 | Entry gate — min delegators (alt to own power) |
+| `MIN_DELEGATOR_STAKE_ADA` | 50,000 | Entry gate — min stake per counted delegator (ADA) |
+| `ENTRY_REQUIRE_ACTIVITY` | false | Entry gate — switch for the voting-activity group |
+| `MINIMUM_VOTES_CASTED` | 50 | Entry gate — activity window (last N votes) |
+| `MINIMUM_DREP_ACTIVITY` | 50 | Entry gate — % of the window voted on |
+| `ONLY_VOTES_WITH_RATIONALE` | false | Entry gate — count only votes with a rationale |
 | `AVOID_PERIOD_MAX_DAYS_PER_YEAR` | 42 | Avoid signaling |
 | `MERIT_POINT_MAX` | 200 | Merit cap |
 | `BOARD_REWARD_DEADLINE_DAYS` | 30 | Merit penalty trigger |

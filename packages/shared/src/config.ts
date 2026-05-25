@@ -7,9 +7,17 @@ export const PLATFORM_CONFIG_DEFAULTS = {
   ADMISSION_APPROVAL_VOTES: 3, // §14.2 board YES votes needed to admit a DRep (3-of-5)
   INTERNAL_DEFAULT_THRESHOLD_PCT: 67,
   INTERNAL_IMPORTANT_THRESHOLD_PCT: 75,
-  MIN_OWN_VOTING_POWER_ADA: 1_000_000,
-  MIN_DELEGATORS: 20,
-  MIN_DELEGATOR_STAKE_ADA: 50_000,
+  // §14.1 — DAO-entry gate, layer 1: a registered DRep may request to join only if it
+  // meets the on-chain minimums. Two independent, separately-toggled groups (both OFF
+  // by default so testnet entry is open; enable on mainnet).
+  ENTRY_REQUIRE_VOTING_POWER: false, // switch for the voting-power/delegator group
+  MIN_OWN_VOTING_POWER_ADA: 1_000_000, // own stake self-delegated to the DRep (ADA)
+  MIN_DELEGATORS: 20, // OR: at least this many delegators…
+  MIN_DELEGATOR_STAKE_ADA: 50_000, // …each delegating at least this much (ADA)
+  ENTRY_REQUIRE_ACTIVITY: false, // switch for the on-chain voting-activity group
+  MINIMUM_VOTES_CASTED: 50, // window: the DRep's last N governance votes considered
+  MINIMUM_DREP_ACTIVITY: 50, // % of that window the DRep must have voted on (50% of 50 = 25)
+  ONLY_VOTES_WITH_RATIONALE: false, // count only votes that carry an on-chain rationale
   AVOID_PERIOD_MAX_DAYS_PER_YEAR: 42,
   MERIT_POINT_MAX: 200,
   BOARD_REWARD_DEADLINE_DAYS: 30,
@@ -33,9 +41,16 @@ export const PLATFORM_CONFIG_META: Record<PlatformConfigKey, string> = {
   ADMISSION_APPROVAL_VOTES: 'Board YES votes needed to admit a new DAO member (3-of-5).',
   INTERNAL_DEFAULT_THRESHOLD_PCT: 'Approval threshold (%) for ordinary internal proposals.',
   INTERNAL_IMPORTANT_THRESHOLD_PCT: 'Approval threshold (%) for internal proposals flagged as important.',
-  MIN_OWN_VOTING_POWER_ADA: 'Minimum own voting power a DRep needs to be eligible to vote (ADA).',
-  MIN_DELEGATORS: 'Minimum number of delegators a DRep needs to be eligible.',
-  MIN_DELEGATOR_STAKE_ADA: 'Minimum delegated stake a DRep needs to be eligible (ADA).',
+  ENTRY_REQUIRE_VOTING_POWER:
+    'Gate DAO entry on the DRep\'s on-chain voting power/delegators below. Turn OFF on testnet (entry stays open); ON for mainnet.',
+  MIN_OWN_VOTING_POWER_ADA: "Entry: minimum OWN voting power (ADA the DRep self-delegated). Meeting this alone qualifies.",
+  MIN_DELEGATORS: 'Entry (alternative to own power): minimum number of delegators, each ≥ the minimum stake below.',
+  MIN_DELEGATOR_STAKE_ADA: 'Entry: a delegator only counts toward MIN_DELEGATORS if they delegated at least this much (ADA).',
+  ENTRY_REQUIRE_ACTIVITY:
+    'Gate DAO entry on the DRep\'s past on-chain voting activity below. Turn OFF on testnet; ON for mainnet.',
+  MINIMUM_VOTES_CASTED: "Entry/activity window: how many of the DRep's most recent governance votes are considered.",
+  MINIMUM_DREP_ACTIVITY: 'Entry: % of that window the DRep must have voted on (e.g. 50% of 50 = 25 votes).',
+  ONLY_VOTES_WITH_RATIONALE: 'Entry: when ON, only votes carrying an on-chain rationale count toward the activity check.',
   AVOID_PERIOD_MAX_DAYS_PER_YEAR: 'Maximum days per year a DRep may mark themselves unavailable.',
   MERIT_POINT_MAX: "Cap on a DRep's merit score (also bounds the voting-power multiplier).",
   BOARD_REWARD_DEADLINE_DAYS: 'Days the board has to distribute rewards after a round before a penalty applies.',

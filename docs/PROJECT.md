@@ -64,6 +64,19 @@ pnpm + Turborepo monorepo.
   the board votes **1-member-1-vote**; 3 YES → **ADMITTED**, and the decision is
   anchored on-chain (§6). DRep on-chain metadata (CIP-119 name/image) is pulled
   into the member overview, with a generic avatar fallback.
+- **Entry gate (§14.1, configurable on-chain).** Two independently-toggled groups,
+  both **OFF by default** (testnet entry stays open; enable on mainnet). The **JOIN
+  DAO** button (`join-dao-button.tsx`, fed by `GET /me/entry-eligibility`) is active
+  when eligible, otherwise disabled with a note listing the unmet requirements; the
+  same check is enforced server-side in `DrepService.apply` (not just the button).
+  **Group A — voting power** (`ENTRY_REQUIRE_VOTING_POWER`): meet `MIN_OWN_VOTING_POWER_ADA`
+  (own stake self-delegated) **OR** at least `MIN_DELEGATORS` delegators each ≥
+  `MIN_DELEGATOR_STAKE_ADA`. **Group B — activity** (`ENTRY_REQUIRE_ACTIVITY`): voted
+  on ≥ `MINIMUM_DREP_ACTIVITY`% of the last `MINIMUM_VOTES_CASTED` governance actions
+  (only votes with a rationale if `ONLY_VOTES_WITH_RATIONALE`). Metrics are read live
+  from Koios (`CardanoQueryService.drepEntryMetrics` via `/drep_delegators`+`/account_info`;
+  `drepActivityMetrics` via `/proposal_list`+`/drep_votes`). Booleans are first-class in
+  Platform setup (Enabled/Disabled dropdowns).
 - **Apply as Expert** (ADA holders without a DRep): board approves; expert
   provides subject-matter input. No on-chain DRep required.
 - **Removal**: a member can be voted out (RemovalPanel / RemovalBanner).

@@ -279,6 +279,13 @@ export class DrepService {
       throw new ConflictException('an application is already pending');
     }
 
+    // §14.1 — enforce the (configurable) on-chain entry gate, not just the disabled button.
+    const elig = await this.entryEligibility(userId);
+    if (!elig.eligible) {
+      const why = elig.requirements.filter((r) => !r.met).map((r) => `${r.label}: ${r.detail}`).join('; ');
+      throw new ForbiddenException(`you don't yet meet the DAO entry requirements — ${why}`);
+    }
+
     if (dto.displayName !== undefined) {
       await this.prisma.appUser.update({ where: { id: userId }, data: { displayName: dto.displayName } });
     }
@@ -673,6 +680,76 @@ export class DrepService {
     });
     const v = row?.value;
     return typeof v === 'number' ? v : PLATFORM_CONFIG_DEFAULTS.ADMISSION_APPROVAL_VOTES;
+  }
+
+  /**
+   * §14.1 — can this registered DRep request DAO entry? Two independently-toggled
+   * gates: voting power/delegators, and past on-chain voting activity. When both
+   * switches are OFF (testnet default) entry is open. Returns per-requirement reasons
+   * so the UI can enable/disable the Join button and explain any shortfall.
+   */
+  async entryEligibility(userId: string): Promise<{
+    gatingEnabled: boolean;
+    eligible: boolean;
+    requirements: { group: 'power' | 'activity'; label: string; met: boolean; detail: string }[];
+  }> {
+    const rows = await this.prisma.platformConfig.findMany();
+    const overrides = new Map(rows.map((r) => [r.key, r.value]));
+    const D = PLATFORM_CONFIG_DEFAULTS as Record<string, number | string | boolean>;
+    const num = (k: string) => { const v = overrides.get(k); return typeof v === 'number' ? v : (D[k] as number); };
+    const bool = (k: string) => { const v = overrides.get(k); return typeof v === 'boolean' ? v : (D[k] as boolean); };
+
+    const requirePower = bool('ENTRY_REQUIRE_VOTING_POWER');
+    const requireActivity = bool('ENTRY_REQUIRE_ACTIVITY');
+    const gatingEnabled = requirePower || requireActivity;
+    const requirements: { group: 'power' | 'activity'; label: string; met: boolean; detail: string }[] = [];
+    if (!gatingEnabled) return { gatingEnabled: false, eligible: true, requirements };
+
+    const user = await this.prisma.appUser.findUnique({ where: { id: userId } });
+    if (!user?.drepKeyHash || !user.drepRegistered) {
+      return {
+        gatingEnabled,
+        eligible: false,
+        requirements: [{ group: 'power', label: 'Registered DRep', met: false, detail: 'register your DRep key on-chain, then sign in again' }],
+      };
+    }
+    const drepId = drepIdFromKeyHashHex(user.drepKeyHash);
+
+    if (requirePower) {
+      const minOwn = num('MIN_OWN_VOTING_POWER_ADA');
+      const minDelegs = num('MIN_DELEGATORS');
+      const minStake = num('MIN_DELEGATOR_STAKE_ADA');
+      const m = await this.cardano.drepEntryMetrics(drepId, user.stakeAddress, BigInt(Math.round(minStake)) * 1_000_000n);
+      const ownAda = Number(m.ownVotingPowerLovelace) / 1_000_000;
+      const met = m.available && (ownAda >= minOwn || m.qualifyingDelegators >= minDelegs);
+      requirements.push({
+        group: 'power',
+        label: 'Voting power',
+        met,
+        detail: !m.available
+          ? "couldn't read your on-chain delegation right now — try again"
+          : `own ${Math.round(ownAda).toLocaleString()} ₳ (need ${minOwn.toLocaleString()}), or ${m.qualifyingDelegators} delegators ≥ ${minStake.toLocaleString()} ₳ (need ${minDelegs})`,
+      });
+    }
+
+    if (requireActivity) {
+      const window = num('MINIMUM_VOTES_CASTED');
+      const activityPct = num('MINIMUM_DREP_ACTIVITY');
+      const onlyRationale = bool('ONLY_VOTES_WITH_RATIONALE');
+      const need = Math.ceil((window * activityPct) / 100);
+      const a = await this.cardano.drepActivityMetrics(drepId, window, onlyRationale);
+      const met = a.available && a.votesInWindow >= need;
+      requirements.push({
+        group: 'activity',
+        label: 'Voting activity',
+        met,
+        detail: !a.available
+          ? "couldn't read your on-chain voting history right now — try again"
+          : `voted on ${a.votesInWindow} of the last ${window} governance actions${onlyRationale ? ' (with rationale)' : ''} — need ${need}`,
+      });
+    }
+
+    return { gatingEnabled, eligible: requirements.every((r) => r.met), requirements };
   }
 }
 

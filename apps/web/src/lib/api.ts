@@ -173,16 +173,16 @@ export const treasuryApi = {
 
 export interface GovParam {
   key: string;
-  value: number | string;
-  default: number | string;
+  value: number | string | boolean;
+  default: number | string | boolean;
   type: string;
   description: string;
 }
 
 export const governanceApi = {
   list: () => request<GovParam[]>('/admin/governance'),
-  update: (key: string, value: number | string) =>
-    request<{ key: string; value: number | string }>('/admin/governance', {
+  update: (key: string, value: number | string | boolean) =>
+    request<{ key: string; value: number | string | boolean }>('/admin/governance', {
       method: 'PATCH',
       body: JSON.stringify({ key, value }),
     }),
@@ -231,6 +231,12 @@ export interface RemovableMember {
   drepIdOnchain: string;
 }
 
+export interface EntryEligibility {
+  gatingEnabled: boolean;
+  eligible: boolean;
+  requirements: { group: 'power' | 'activity'; label: string; met: boolean; detail: string }[];
+}
+
 export const drepApi = {
   mine: () => request<MyDrep | null>('/me/drep'),
   apply: (input: DrepApplicationInput) =>
@@ -239,6 +245,7 @@ export const drepApi = {
     request<MyDrep>('/me/drep', { method: 'PATCH', body: JSON.stringify(input) }),
   myRemoval: () => request<MyRemoval | null>('/me/removal'),
   leaveDao: () => request<{ status: string }>('/me/leave-dao', { method: 'POST' }),
+  entryEligibility: () => request<EntryEligibility>('/me/entry-eligibility'),
 };
 
 export const removalApi = {

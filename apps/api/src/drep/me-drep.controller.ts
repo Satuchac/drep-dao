@@ -26,6 +26,12 @@ export class MeDrepController {
     return this.drep.getMyActiveRemoval(ctx.userId);
   }
 
+  // §14.1 — whether I meet the (configurable) on-chain requirements to request DAO entry.
+  @Get('entry-eligibility')
+  entryEligibility(@CurrentUser() ctx: AuthContext) {
+    return this.drep.entryEligibility(ctx.userId);
+  }
+
   @Patch('drep')
   update(@CurrentUser() ctx: AuthContext, @Body() dto: UpdateDrepDto) {
     return this.drep.updateMine(ctx.userId, dto);

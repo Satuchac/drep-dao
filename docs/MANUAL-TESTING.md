@@ -134,6 +134,14 @@ Admin (separate): `/admin/login`, user `satucha`.
 - [ ] **Platform setup is leaner**: *Platform setup* lists only genuinely global params
       (admission votes, internal thresholds, eligibility minimums, merit cap, anchor cron,
       explorer) — round/fee/quick-poll/milestone-timing/pledge/reward params live in the round setup.
+- [ ] **DAO entry gate (§14.1)**: by default both switches `ENTRY_REQUIRE_VOTING_POWER` and
+      `ENTRY_REQUIRE_ACTIVITY` are **Disabled** (Platform setup shows boolean params as
+      Enabled/Disabled dropdowns), so a registered DRep's **JOIN DAO** button is **active**.
+      Flip a switch to **Enabled** → the button **disables** with a note (e.g. "Voting power —
+      own 4,998 ₳ (need 1,000,000), or 0 delegators ≥ 50,000 ₳ (need 20)"); the metrics are read
+      live from Koios. The `/me/drep-application` endpoint also rejects an ineligible apply.
+      (Group A = own power OR delegators; Group B = voted on ≥ MINIMUM_DREP_ACTIVITY% of the
+      last MINIMUM_VOTES_CASTED governance actions. Leave both OFF for testnet.)
 - [ ] **Board enforces anchor submission**: on *On-chain proofs*, a board member sees
       **Submit on-chain** beside any "anchor pending" record and a **Submit all pending (N)**
       button; non-board members don't. **Submit all pending** chains the txs through one hot

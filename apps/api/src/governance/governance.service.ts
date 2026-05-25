@@ -30,8 +30,10 @@ export class GovernanceService {
       throw new BadRequestException(`unknown governance parameter: ${key}`);
     }
     const def = (PLATFORM_CONFIG_DEFAULTS as Record<string, unknown>)[key];
-    let coerced: number | string;
-    if (typeof def === 'number') {
+    let coerced: number | string | boolean;
+    if (typeof def === 'boolean') {
+      coerced = value === true || value === 'true' || value === 1 || value === '1';
+    } else if (typeof def === 'number') {
       const n = Number(value);
       if (!Number.isFinite(n)) throw new BadRequestException(`${key} must be a number`);
       coerced = n;

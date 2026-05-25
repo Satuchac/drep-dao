@@ -10,6 +10,7 @@ import { GovernanceSetup } from './governance-setup';
 import { OnChainProofs } from './on-chain-proofs';
 import { TreasuryOverview } from './treasury-overview';
 import { ActiveProposals } from './active-proposals';
+import { JoinDaoButton } from './join-dao-button';
 import { NotificationBadge } from './notification-badge';
 import { HealthBadge } from '@/app/health-badge';
 
@@ -102,14 +103,7 @@ export function HomeShell() {
             View profile →
           </button>
         </div>
-        {canJoin ? (
-          <button
-            onClick={() => setView('me')}
-            className="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
-          >
-            JOIN DAO
-          </button>
-        ) : null}
+        {canJoin ? <JoinDaoButton onJoin={() => setView('me')} /> : null}
       </div>
     </div>
   );

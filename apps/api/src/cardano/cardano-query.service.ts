@@ -190,6 +190,77 @@ export class CardanoQueryService {
     return out;
   }
 
+  /**
+   * §14.1 entry gate (power/delegators): for a DRep, the OWN voting power (stake
+   * self-delegated from `ownStakeAddress`) and how many delegators each delegated at
+   * least `minDelegatorStakeLovelace`. Best-effort → available=false on any Koios error.
+   */
+  async drepEntryMetrics(
+    drepId: string,
+    ownStakeAddress: string,
+    minDelegatorStakeLovelace: bigint,
+  ): Promise<{ available: boolean; ownVotingPowerLovelace: bigint; delegators: number; qualifyingDelegators: number }> {
+    const miss = { available: false, ownVotingPowerLovelace: 0n, delegators: 0, qualifyingDelegators: 0 };
+    try {
+      const res = await fetch(`${this.base}/drep_delegators?_drep_id=${encodeURIComponent(drepId)}`, {
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) return miss;
+      const rows = (await res.json()) as { stake_address: string }[];
+      const addrs = rows.map((r) => r.stake_address).filter(Boolean);
+      const stake = await this.accountStake(addrs);
+      let ownVotingPowerLovelace = 0n;
+      let qualifyingDelegators = 0;
+      for (const a of addrs) {
+        const s = stake.get(a) ?? 0n;
+        if (a === ownStakeAddress) ownVotingPowerLovelace = s;
+        if (s >= minDelegatorStakeLovelace) qualifyingDelegators++;
+      }
+      return { available: true, ownVotingPowerLovelace, delegators: addrs.length, qualifyingDelegators };
+    } catch (e) {
+      this.logger.warn(`drepEntryMetrics ${drepId}: ${e instanceof Error ? e.message : e}`);
+      return miss;
+    }
+  }
+
+  /**
+   * §14.1 entry gate (activity): of the most recent `windowSize` governance actions,
+   * how many the DRep voted on (optionally only votes carrying an on-chain rationale).
+   * Best-effort → available=false on any Koios error.
+   */
+  async drepActivityMetrics(
+    drepId: string,
+    windowSize: number,
+    onlyWithRationale: boolean,
+  ): Promise<{ available: boolean; votesInWindow: number; windowConsidered: number }> {
+    const miss = { available: false, votesInWindow: 0, windowConsidered: 0 };
+    try {
+      const propRes = await fetch(`${this.base}/proposal_list`, { signal: AbortSignal.timeout(15000) });
+      if (!propRes.ok) return miss;
+      const props = ((await propRes.json()) as { proposal_id?: string; block_time?: number }[])
+        .filter((p) => p.proposal_id)
+        .sort((a, b) => (b.block_time ?? 0) - (a.block_time ?? 0))
+        .slice(0, Math.max(1, windowSize));
+      const windowIds = new Set(props.map((p) => p.proposal_id));
+
+      const voteRes = await fetch(`${this.base}/drep_votes?_drep_id=${encodeURIComponent(drepId)}`, {
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!voteRes.ok) return miss;
+      const votes = (await voteRes.json()) as { proposal_id?: string; meta_url?: string | null }[];
+      let votesInWindow = 0;
+      for (const v of votes) {
+        if (!v.proposal_id || !windowIds.has(v.proposal_id)) continue;
+        if (onlyWithRationale && !v.meta_url) continue;
+        votesInWindow++;
+      }
+      return { available: true, votesInWindow, windowConsidered: windowIds.size };
+    } catch (e) {
+      this.logger.warn(`drepActivityMetrics ${drepId}: ${e instanceof Error ? e.message : e}`);
+      return miss;
+    }
+  }
+
   /** For each bech32 drep id: is it a registered on-chain DRep, and its key hash. */
   async verifyDReps(drepIds: string[]): Promise<Map<string, DRepStatus>> {
     const out = new Map<string, DRepStatus>(

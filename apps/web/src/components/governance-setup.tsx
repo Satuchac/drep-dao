@@ -32,7 +32,7 @@ export function GovernanceSetup() {
     setBusy(p.key);
     try {
       const raw = edits[p.key];
-      const value = p.type === 'number' ? Number(raw) : raw;
+      const value = p.type === 'boolean' ? raw === 'true' : p.type === 'number' ? Number(raw) : raw;
       await governanceApi.update(p.key, value);
       setMsg(`Saved ${p.key}.`);
       // Explorer change → re-resolve all on-chain links live (no refresh needed).
@@ -86,7 +86,16 @@ export function GovernanceSetup() {
                       ) : null}
                     </td>
                     <td className="px-3 py-1.5">
-                      {p.key === 'CARDANO_EXPLORER' ? (
+                      {p.type === 'boolean' ? (
+                        <select
+                          value={edits[p.key] ?? 'false'}
+                          onChange={(e) => setEdits((s) => ({ ...s, [p.key]: e.target.value }))}
+                          className="w-40 rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                        >
+                          <option value="true">Enabled</option>
+                          <option value="false">Disabled</option>
+                        </select>
+                      ) : p.key === 'CARDANO_EXPLORER' ? (
                         <select
                           value={edits[p.key] ?? ''}
                           onChange={(e) => setEdits((s) => ({ ...s, [p.key]: e.target.value }))}
