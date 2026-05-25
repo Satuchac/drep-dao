@@ -325,6 +325,7 @@ export interface RoundSettingsInput {
   milestoneReviewerCount?: number;
   milestoneApprovalVotes?: number;
   dvApprovalThresholdPct?: number;
+  rewardExpertSharePct?: number;
   rewardDvSharePct?: number;
   rewardFixedPct?: number;
   feeCommercialPct?: number;

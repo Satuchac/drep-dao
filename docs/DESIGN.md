@@ -1147,7 +1147,8 @@ The board may also terminate a project at any time (e.g., due to non-response), 
 
 | Parameter | Default | Range | Meaning |
 |---|---|---|---|
-| `rewardDvSharePct` | 60 | 0–100 | % of reward pool → Debate & Vote (rest → milestone review) |
+| `rewardExpertSharePct` | 0 | 0–100 | Experts' direct cut (%) of the reward pool, subtracted before the DReps' split |
+| `rewardDvSharePct` | 60 | 0–100 | Of the DReps' pool (after experts): % → Debate & Vote (rest → milestone review) |
 | `rewardFixedPct` | 70 | 0–100 | Within the D&V slice, fixed share (%); bonus = 100 − fixed |
 | `feeCapPerRoundAda` | 50,000 | ≥0 | Cap on filtering reward pool from submission fees (overflow → D&V) |
 | `feeCommercialPct` | 3 | 0–100 | Submission fee for commercial projects |
@@ -1925,7 +1926,8 @@ round.
 | `milestoneReviewerCount` | 3 | Milestones |
 | `milestoneApprovalVotes` | 2 | Milestones (≤ reviewer count) |
 | `dvApprovalThresholdPct` | 67 | D&V |
-| `rewardDvSharePct` | 60 | Reward split: D&V vs milestone review |
+| `rewardExpertSharePct` | 0 | Reward split: experts' direct cut (subtracted first) |
+| `rewardDvSharePct` | 60 | Reward split (DReps' pool): D&V vs milestone review |
 | `rewardFixedPct` | 70 | Within D&V: fixed vs bonus (bonus = 100 − fixed) |
 | `feeCommercialPct` | 3 | Submission fees |
 | `feeCommercialCapAda` | 5,000 | Submission fees |

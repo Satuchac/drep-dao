@@ -41,7 +41,8 @@ Admin (separate): `/admin/login`, user `satucha`.
   approved+**ACTIVE** project (*Open mobile wallet*, 1/3 milestones, 1 in review), and a
   filtering-**REJECTED** proposal (*Token airdrop blaster*).
 - **DAO Member overview** — board + two non-board members (Heidi, Judy) with varied
-  voting power; **Experts** shows Ivan with expertise chips + bio.
+  voting power; **Experts** shows Ivan with expertise chips + bio. **Every column header
+  is click-to-sort** (toggles ▲/▼; default = adjusted power, highest first).
 - **On-chain proofs** — filtering / D&V / milestone anchors for Round Alpha (plus
   earlier admission anchors), each with an explorer link. Confirmed Preprod txs:
   filtering `80d2a6d5…`, D&V `23f8ec68…`, milestone `88c870d0…`.
@@ -109,9 +110,12 @@ Admin (separate): `/admin/login`, user `satucha`.
       D&V panel shows an **"Opt in to vote"** button for board; after opting in they
       become eligible (and can vote in My area). Regular admitted DReps vote by default.
 - [ ] **Per-round settings (round setup)**: creating a round shows a **Reward distribution**
-      block with **two sliders** — D&V vs Milestone review, and (within D&V) Fixed vs Bonus —
-      plus a **live bar** that re-splits the reward pool (D&V fixed / D&V bonus / milestone) as
-      you drag. Below, **Round parameters** are grouped with an **explanation under each field**:
+      block with **three sliders** — DReps vs **Experts** (experts' cut subtracted first), then
+      on the DReps' pool D&V vs Milestone review, and (within D&V) Fixed vs Bonus — plus a
+      **live bar** that re-splits the reward pool four ways (experts / D&V fixed / D&V bonus /
+      milestone) in ADA + % as you drag. E.g. 200K pool, experts 25% → 50K experts, then the
+      remaining 150K splits as before. Below, **Round parameters** are grouped with an
+      **explanation under each field**:
       review & approval ordered **Filtering → D&V → Milestone**, **submission fees**, **quick
       poll**, **milestone timing**, **proposer pledge**. Each box shows its default; blank ⇒
       default. The **approval** inputs cap to their reviewer count (and the API rejects

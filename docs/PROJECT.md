@@ -91,9 +91,11 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   caps the filtering reward pool), **quick-poll** settings, **milestone timing**,
   and the **proposer pledge**. Review & approval fields are ordered to the flow
   (Filtering → D&V → Milestone), and every field shows its explanation inline. The
-  **reward split** uses **two sliders** — `rewardDvSharePct` (D&V vs milestone
-  review) and `rewardFixedPct` (within D&V: fixed vs bonus) — with a live bar
-  visualising how the reward pool divides (D&V fixed / D&V bonus / milestone).
+  **reward split** uses **three sliders** — `rewardExpertSharePct` (experts' direct
+  cut, subtracted from the pool first; DReps vs experts), then on the DReps' pool
+  `rewardDvSharePct` (D&V vs milestone review) and `rewardFixedPct` (within D&V: fixed
+  vs bonus) — with a live bar visualising the four-way split (experts / D&V fixed /
+  D&V bonus / milestone) in ADA + %.
   `PLATFORM_CONFIG_DEFAULTS` (Platform setup) holds only genuinely global params
   (admission votes, internal thresholds, eligibility minimums, merit cap, anchor
   cron, explorer).
@@ -261,7 +263,7 @@ the name (top) + role/status (below) + notification badge.
 
 | View / component | Purpose |
 |---|---|
-| `dao-overview` | DAO members with CIP-119 name/image, voting power, since. |
+| `dao-overview` | DAO members with CIP-119 name/image, voting power, since. Every column is **click-to-sort** (asc/desc), default adjusted-power desc. |
 | `member-area` | Personal area: profile, apply/join, board panels, **Actions to sign**, **Round stage controls**, voting panels. |
 | `rounds-section` | Rounds list (status, active/complete, per-status proposal counts); click a round → its proposals. |
 | `active-proposals` | Active round's proposals with a horizontal round submenu to browse earlier rounds. |

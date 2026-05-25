@@ -1,10 +1,23 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { daoApi, type DaoMember, type DaoExpert } from '@/lib/api';
 
 const SUBCAT_LABEL: Record<string, string> = Object.fromEntries(DEFAULT_SUBCATEGORIES.map((s) => [s.id, s.label]));
+
+// Sortable columns of the member table; `num` distinguishes numeric vs text/date sort.
+type SortKey = 'displayName' | 'since' | 'votingPowerAda' | 'delegators' | 'basePower' | 'merit' | 'meritMultiplier' | 'adjustedPower';
+const COLUMNS: { key: SortKey; label: string; right?: boolean; num?: boolean }[] = [
+  { key: 'displayName', label: 'Member' },
+  { key: 'since', label: 'Member since' },
+  { key: 'votingPowerAda', label: 'Voting power (ADA)', right: true, num: true },
+  { key: 'delegators', label: 'Delegators', right: true, num: true },
+  { key: 'basePower', label: 'Base (log₁₀)', right: true, num: true },
+  { key: 'merit', label: 'Merit', right: true, num: true },
+  { key: 'meritMultiplier', label: '×Mult', right: true, num: true },
+  { key: 'adjustedPower', label: 'Adjusted power', right: true, num: true },
+];
 
 /** On-chain DRep image (CIP-119) if present, else a generic initials avatar. */
 function Avatar({ name, image }: { name: string; image: string | null }) {
@@ -25,6 +38,8 @@ export function DaoOverview() {
   const [members, setMembers] = useState<DaoMember[] | null>(null);
   const [experts, setExperts] = useState<DaoExpert[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Default: highest adjusted power first (matches the prior server order).
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'adjustedPower', dir: 'desc' });
 
   useEffect(() => {
     daoApi
@@ -33,6 +48,22 @@ export function DaoOverview() {
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
     daoApi.experts().then(setExperts).catch(() => undefined);
   }, []);
+
+  const sorted = useMemo(() => {
+    if (!members) return members;
+    const arr = [...members];
+    const { key, dir } = sort;
+    const f = dir === 'asc' ? 1 : -1;
+    arr.sort((a, b) => {
+      if (key === 'displayName') return f * (a.displayName ?? '').localeCompare(b.displayName ?? '');
+      if (key === 'since') return f * ((a.since ? new Date(a.since).getTime() : 0) - (b.since ? new Date(b.since).getTime() : 0));
+      return f * ((a[key] as number) - (b[key] as number));
+    });
+    return arr;
+  }, [members, sort]);
+
+  const onSort = (key: SortKey) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'displayName' || key === 'since' ? 'asc' : 'desc' }));
 
   return (
     <div className="space-y-3">
@@ -54,18 +85,22 @@ export function DaoOverview() {
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
               <tr>
-                <th className="px-3 py-2">Member</th>
-                <th className="px-3 py-2">Member since</th>
-                <th className="px-3 py-2 text-right">Voting power (ADA)</th>
-                <th className="px-3 py-2 text-right">Delegators</th>
-                <th className="px-3 py-2 text-right">Base (log₁₀)</th>
-                <th className="px-3 py-2 text-right">Merit</th>
-                <th className="px-3 py-2 text-right">×Mult</th>
-                <th className="px-3 py-2 text-right">Adjusted power</th>
+                {COLUMNS.map((c) => (
+                  <th key={c.key} className={`px-3 py-2 ${c.right ? 'text-right' : ''}`}>
+                    <button
+                      onClick={() => onSort(c.key)}
+                      className={`inline-flex items-center gap-1 uppercase hover:text-neutral-800 dark:hover:text-neutral-200 ${c.right ? 'flex-row-reverse' : ''}`}
+                      title="Sort"
+                    >
+                      {c.label}
+                      <span className="text-[10px]">{sort.key === c.key ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+                    </button>
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {members.map((m) => (
+              {(sorted ?? []).map((m) => (
                 <tr key={m.drepId} className="border-t border-neutral-200 dark:border-neutral-800">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">

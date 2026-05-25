@@ -26,7 +26,7 @@ const CATEGORY_TYPES = ['GRANT', 'RFP'];
 // §6/§12 — per-round settings shown in the round setup, grouped. The reward-split
 // keys (`rewardDvSharePct`, `rewardFixedPct`) are handled separately as sliders.
 // `unit` drives the input suffix.
-type SettingKey = Exclude<keyof RoundSettingsInput, 'rewardFixedPct' | 'rewardDvSharePct'>;
+type SettingKey = Exclude<keyof RoundSettingsInput, 'rewardFixedPct' | 'rewardDvSharePct' | 'rewardExpertSharePct'>;
 const SETTING_GROUPS: { title: string; fields: { key: SettingKey; label: string; unit?: '%' | '₳' }[] }[] = [
   {
     // Ordered to match the proposal flow: Filtering → Debate & Vote → Milestones.
@@ -233,6 +233,7 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
   const [sched, setSched] = useState<Record<string, { startsAt: string; endsAt: string }>>({});
   // §6/§12 — per-round settings (blank = use the default). Reward splits are sliders.
   const [settings, setSettings] = useState<Record<string, string>>({});
+  const [rewardExpert, setRewardExpert] = useState<number>(ROUND_SETTING_DEFAULTS.rewardExpertSharePct);
   const [rewardDvShare, setRewardDvShare] = useState<number>(ROUND_SETTING_DEFAULTS.rewardDvSharePct);
   const [rewardFixed, setRewardFixed] = useState<number>(ROUND_SETTING_DEFAULTS.rewardFixedPct);
   const [busy, setBusy] = useState(false);
@@ -312,7 +313,11 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
         return [{ stageKey: s.key, startsAt: new Date(v.startsAt).toISOString(), endsAt: new Date(v.endsAt).toISOString() }];
       });
       // §6/§12 — collect every supplied per-round setting; reward splits always sent.
-      const settingsInput: RoundSettingsInput = { rewardDvSharePct: rewardDvShare, rewardFixedPct: rewardFixed };
+      const settingsInput: RoundSettingsInput = {
+        rewardExpertSharePct: rewardExpert,
+        rewardDvSharePct: rewardDvShare,
+        rewardFixedPct: rewardFixed,
+      };
       for (const g of SETTING_GROUPS)
         for (const f of g.fields) {
           const v = num(f.key);
@@ -385,11 +390,28 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
         <button type="button" onClick={() => setCats((cs) => [...cs, { name: '', type: 'GRANT', allocatedAda: 0, description: '' }])} className="mt-1 text-xs underline">+ add category</button>
       </div>
 
-      {/* §12.2 — reward distribution: two sliders + a live visual of how the pool splits. */}
+      {/* §12.2 — reward distribution: three sliders + a live visual of how the pool splits. */}
       <div className="space-y-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
         <div className="text-sm font-medium">Reward distribution</div>
 
-        {/* Slider 1 — split the reward pool: Debate & Vote (left) vs Milestone review (right). */}
+        {/* Slider 1 — carve out the experts' direct cut first: DReps (left) vs Experts (right). */}
+        <div>
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="font-medium text-emerald-700 dark:text-emerald-400">DReps {100 - rewardExpert}%</span>
+            <span className="font-medium text-purple-700 dark:text-purple-400">Experts {rewardExpert}%</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={rewardExpert}
+            onChange={(e) => setRewardExpert(Number(e.target.value))}
+            className="w-full accent-purple-600"
+          />
+          <p className="mt-0.5 text-[11px] text-neutral-500">{ROUND_SETTING_META.rewardExpertSharePct}</p>
+        </div>
+
+        {/* Slider 2 — split the DReps' pool: Debate & Vote (left) vs Milestone review (right). */}
         <div>
           <div className="mb-1 flex items-center justify-between text-xs">
             <span className="font-medium text-emerald-700 dark:text-emerald-400">Debate &amp; Vote {rewardDvShare}%</span>
@@ -406,7 +428,7 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
           <p className="mt-0.5 text-[11px] text-neutral-500">{ROUND_SETTING_META.rewardDvSharePct}</p>
         </div>
 
-        {/* Slider 2 — within the Debate & Vote slice: Fixed (left) vs Bonus (right). */}
+        {/* Slider 3 — within the Debate & Vote slice: Fixed (left) vs Bonus (right). */}
         <div>
           <div className="mb-1 flex items-center justify-between text-xs">
             <span className="font-medium text-emerald-700 dark:text-emerald-400">Fixed {rewardFixed}%</span>
@@ -424,7 +446,7 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
           <p className="mt-0.5 text-[11px] text-neutral-500">{ROUND_SETTING_META.rewardFixedPct}</p>
         </div>
 
-        <RewardBar pool={Number(rewards) || 0} dvShare={rewardDvShare} fixed={rewardFixed} />
+        <RewardBar pool={Number(rewards) || 0} expertPct={rewardExpert} dvShare={rewardDvShare} fixed={rewardFixed} />
       </div>
 
       {/* §6/§12 — the rest of the per-round parameters, with an explanation under each. */}
@@ -515,13 +537,16 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-/** §12.2 — live visual of how the reward pool splits across the two sliders. */
-function RewardBar({ pool, dvShare, fixed }: { pool: number; dvShare: number; fixed: number }) {
-  // Pool → D&V slice (dvShare%) + Milestone slice (rest). Within D&V: fixed + bonus.
+/** §12.2 — live visual of how the reward pool splits across the three sliders. */
+function RewardBar({ pool, expertPct, dvShare, fixed }: { pool: number; expertPct: number; dvShare: number; fixed: number }) {
+  // Experts are carved out first; the rest is the DReps' pool → D&V slice + Milestone
+  // slice, and within D&V → fixed + bonus. Each `pct` is a share of the WHOLE pool.
+  const drep = 100 - expertPct;
   const segs = [
-    { label: 'D&V fixed', pct: (dvShare * fixed) / 100, cls: 'bg-emerald-500' },
-    { label: 'D&V bonus', pct: (dvShare * (100 - fixed)) / 100, cls: 'bg-amber-400' },
-    { label: 'Milestone review', pct: 100 - dvShare, cls: 'bg-sky-500' },
+    { label: 'Experts', pct: expertPct, cls: 'bg-purple-500' },
+    { label: 'D&V fixed', pct: (drep * dvShare * fixed) / 10000, cls: 'bg-emerald-500' },
+    { label: 'D&V bonus', pct: (drep * dvShare * (100 - fixed)) / 10000, cls: 'bg-amber-400' },
+    { label: 'Milestone review', pct: (drep * (100 - dvShare)) / 100, cls: 'bg-sky-500' },
   ];
   const ada = (pct: number) => Math.round((pool * pct) / 100);
   return (
@@ -540,8 +565,8 @@ function RewardBar({ pool, dvShare, fixed }: { pool: number; dvShare: number; fi
         ))}
       </div>
       <p className="mt-1 text-[11px] text-neutral-500">
-        Distribution of the {pool.toLocaleString()} ₳ reward pool. Milestone-review rewards are always fixed; the bonus
-        applies only within Debate &amp; Vote.
+        Distribution of the {pool.toLocaleString()} ₳ reward pool. Experts are paid directly (subtracted first);
+        milestone-review rewards are always fixed; the bonus applies only within Debate &amp; Vote.
       </p>
     </div>
   );
@@ -568,7 +593,7 @@ function RoundSettingsView({ roundId }: { roundId: string }) {
 
       <div>
         <div className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">Reward distribution</div>
-        <RewardBar pool={round.rewardsPoolAda} dvShare={resolved('rewardDvSharePct')} fixed={resolved('rewardFixedPct')} />
+        <RewardBar pool={round.rewardsPoolAda} expertPct={resolved('rewardExpertSharePct')} dvShare={resolved('rewardDvSharePct')} fixed={resolved('rewardFixedPct')} />
       </div>
 
       {SETTING_GROUPS.map((g) => (

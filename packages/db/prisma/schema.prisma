@@ -199,8 +199,10 @@ model Round {
   milestoneReviewerCount Int?     @map("milestone_reviewer_count")
   milestoneApprovalVotes Int?     @map("milestone_approval_votes")
   dvApprovalThresholdPct Decimal? @map("dv_approval_threshold_pct") @db.Decimal(5, 2)
-  // §12.2 — reward pool splits: rewardDvSharePct → D&V (rest → milestone review);
+  // §12.2 — reward pool splits: rewardExpertSharePct → experts (subtracted first);
+  // then of the DReps' pool, rewardDvSharePct → D&V (rest → milestone review);
   // within the D&V slice, rewardFixedPct is fixed (bonus = 100 - rewardFixedPct).
+  rewardExpertSharePct            Int? @map("reward_expert_share_pct")
   rewardDvSharePct                Int? @map("reward_dv_share_pct")
   rewardFixedPct                  Int? @map("reward_fixed_pct")
   // §12 — submission fees (percent + ADA caps); feeCapPerRoundAda caps filtering rewards.

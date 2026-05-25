@@ -57,7 +57,8 @@ export const ROUND_SETTING_DEFAULTS = {
   milestoneReviewerCount: 3,
   milestoneApprovalVotes: 2,
   dvApprovalThresholdPct: 67,
-  rewardDvSharePct: 60, // §12.2 — % of the reward pool → Debate & Vote (rest → milestone review)
+  rewardExpertSharePct: 0, // §12.2 — % of the reward pool paid directly to experts (subtracted first)
+  rewardDvSharePct: 60, // §12.2 — of the DReps' pool (after experts): % → Debate & Vote (rest → milestone review)
   rewardFixedPct: 70, // within the D&V slice: % fixed (bonus share = 100 - rewardFixedPct)
   feeCommercialPct: 3,
   feeCommercialCapAda: 5_000,
@@ -86,8 +87,10 @@ export const ROUND_SETTING_META: Record<RoundSettingKey, string> = {
   milestoneApprovalVotes:
     'YES votes among milestone reviewers needed to approve a milestone payout. Max = milestone reviewers.',
   dvApprovalThresholdPct: 'Percentage of balanced voting power required to approve a proposal in Debate & Vote.',
+  rewardExpertSharePct:
+    "Share (%) of the round's reward pool paid directly to experts; it is subtracted first, and the rest is the DReps' pool split across the stages below.",
   rewardDvSharePct:
-    "Share (%) of the round's reward pool paid for Debate & Vote participation; the remainder funds milestone reviewers (D&V + milestone = 100%).",
+    "Share (%) of the DReps' pool (after the experts' cut) paid for Debate & Vote participation; the remainder funds milestone reviewers (D&V + milestone = 100%).",
   rewardFixedPct:
     'Within the Debate & Vote slice, the fixed share (%); the remainder is a performance bonus (fixed + bonus = 100%). Milestone-review rewards are always fixed.',
   feeCommercialPct: 'Submission fee for commercial proposals, as a percent of the requested amount.',
