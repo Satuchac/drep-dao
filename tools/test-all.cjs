@@ -24,6 +24,7 @@ const SUITES = [
   ['test-cast', 'Cast roles: board / voting DRep / ADA holder + genesis verify'],
   ['test-dao', 'DAO membership: board auto-member, join + 3-of-5 admission'],
   ['test-overview', 'DAO overview voting power + Expert apply/approve'],
+  ['test-entry-gate', '§14.1 entry gate: config save, eligibility, below-min flag, MERIT cap (self-restoring)'],
   ['test-removal', 'Removal: propose + 3-of-5 vote → REMOVED, re-apply'],
   ['test-rounds', 'Rounds: stage transitions gate submission + governance params'],
   ['test-stage-flow', 'Stage flow: budget/schedule validation, confirm/launch/auto-start/close, proposal counts'],
