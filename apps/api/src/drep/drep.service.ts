@@ -81,10 +81,14 @@ export class DrepService {
     const numCfg = (k: string) => { const v = cfg.get(k); return typeof v === 'number' ? v : (D[k] as number); };
     const boolCfg = (k: string) => { const v = cfg.get(k); return typeof v === 'boolean' ? v : (D[k] as boolean); };
     const requirePower = boolCfg('ENTRY_REQUIRE_VOTING_POWER');
+    const requireActivity = boolCfg('ENTRY_REQUIRE_ACTIVITY');
     const minOwn = numCfg('MIN_OWN_VOTING_POWER_ADA');
     const minDelegs = numCfg('MIN_DELEGATORS');
     const minStakeLovelace = BigInt(Math.round(numCfg('MIN_DELEGATOR_STAKE_ADA'))) * 1_000_000n;
     const meritMax = numCfg('MERIT_POINT_MAX'); // §13 merit cap (runtime-configurable)
+    const activityWindow = numCfg('MINIMUM_VOTES_CASTED');
+    const activityNeed = Math.ceil((activityWindow * numCfg('MINIMUM_DREP_ACTIVITY')) / 100);
+    const onlyWithRationale = boolCfg('ONLY_VOTES_WITH_RATIONALE');
 
     // §4 — on-chain DRep VOTING power (CIP-1694 vote delegation), live: total power +
     // delegator count, plus own power + qualifying delegators for the eligibility flag.
@@ -92,6 +96,10 @@ export class DrepService {
       rows.map((r) => ({ drepId: r.drepId, ownStakeAddress: r.stakeAddress })),
       minStakeLovelace,
     );
+    // §14.1 activity gate — only query when enabled (1 + N Koios calls); off by default.
+    const activity = requireActivity
+      ? await this.cardano.drepActivityMetricsBatch(rows.map((r) => r.drepId), activityWindow, onlyWithRationale)
+      : null;
     // §CIP-119 — on-chain DRep name + image (else our stored name + a generic avatar).
     const meta = await this.cardano.drepMetadata(rows.map((r) => r.drepId));
 
@@ -102,12 +110,15 @@ export class DrepService {
         const m = meta.get(r.drepId);
         const base = basePower(power.votingPowerLovelace);
         const mult = meritMultiplier(merit, meritMax);
-        // §14.1 — does the member still meet the entry power gate? Only evaluated when the
-        // gate is enabled; board is exempt (seated via genesis). A shortfall is shown but
-        // the member remains a full voting member.
+        // §14.1 — does the member still meet the ENABLED entry gates? A shortfall is shown
+        // but the member remains a full voting member.
+        // - Power gate: board is exempt (seated via genesis, not the delegation threshold).
+        // - Activity gate: applies to EVERYONE incl. board (all DReps should stay active).
         const ownAda = Number(power.ownVotingPowerLovelace) / 1_000_000;
-        const meetsEntryRequirements =
-          !requirePower || r.isBoard || ownAda >= minOwn || power.qualifyingDelegators >= minDelegs;
+        const meetsPower = !requirePower || r.isBoard || ownAda >= minOwn || power.qualifyingDelegators >= minDelegs;
+        const act = activity?.get(r.drepId);
+        const meetsActivity = !requireActivity || (!!act?.available && act.votesInWindow >= activityNeed);
+        const meetsEntryRequirements = meetsPower && meetsActivity;
         return {
           drepId: r.drepId,
           displayName: m?.name ?? r.displayName,

@@ -115,7 +115,7 @@ export function DaoOverview() {
                       {!m.meetsEntryRequirements ? (
                         <span
                           className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                          title="Below the configured entry minimum (own voting power / qualifying delegators). Still a full voting member — this is informational only."
+                          title="Below a configured entry requirement (voting power / qualifying delegators, and/or voting activity). Still a full voting member — this is informational only."
                         >
                           ⚠ below minimum
                         </span>
@@ -159,8 +159,9 @@ export function DaoOverview() {
       ) : null}
       {members && members.some((m) => !m.meetsEntryRequirements) ? (
         <p className="text-xs text-amber-600">
-          <strong>⚠ below minimum</strong> — this member has dropped under the configured entry minimum (own
-          voting power / qualifying delegators). They remain a full voting member; the flag is informational.
+          <strong>⚠ below minimum</strong> — this member no longer meets a configured entry requirement (voting
+          power / qualifying delegators, and/or recent voting activity). They remain a full voting member; the flag
+          is informational. Board members are checked for activity but exempt from the voting-power minimum.
         </p>
       ) : null}
 

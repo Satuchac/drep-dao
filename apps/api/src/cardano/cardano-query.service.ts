@@ -274,6 +274,54 @@ export class CardanoQueryService {
   }
 
   /**
+   * §14.1 entry gate (activity) — batch for the member overview: fetch the recent
+   * governance-action window ONCE, then per DRep count how many of those it voted on.
+   * Best-effort → a DRep's `available=false` on Koios error (treated as not-met).
+   */
+  async drepActivityMetricsBatch(
+    drepIds: string[],
+    windowSize: number,
+    onlyWithRationale: boolean,
+  ): Promise<Map<string, { available: boolean; votesInWindow: number; windowConsidered: number }>> {
+    const out = new Map(drepIds.map((id) => [id, { available: false, votesInWindow: 0, windowConsidered: 0 }]));
+    if (drepIds.length === 0) return out;
+    let windowIds: Set<string>;
+    try {
+      const propRes = await fetch(`${this.base}/proposal_list`, { signal: AbortSignal.timeout(15000) });
+      if (!propRes.ok) return out;
+      const props = ((await propRes.json()) as { proposal_id?: string; block_time?: number }[])
+        .filter((p) => p.proposal_id)
+        .sort((a, b) => (b.block_time ?? 0) - (a.block_time ?? 0))
+        .slice(0, Math.max(1, windowSize));
+      windowIds = new Set(props.map((p) => p.proposal_id!));
+    } catch (e) {
+      this.logger.warn(`proposal_list: ${e instanceof Error ? e.message : e}`);
+      return out;
+    }
+    await Promise.all(
+      drepIds.map(async (id) => {
+        try {
+          const r = await fetch(`${this.base}/drep_votes?_drep_id=${encodeURIComponent(id)}`, {
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!r.ok) return; // leave available=false
+          const votes = (await r.json()) as { proposal_id?: string; meta_url?: string | null }[];
+          let count = 0;
+          for (const v of votes) {
+            if (!v.proposal_id || !windowIds.has(v.proposal_id)) continue;
+            if (onlyWithRationale && !v.meta_url) continue;
+            count++;
+          }
+          out.set(id, { available: true, votesInWindow: count, windowConsidered: windowIds.size });
+        } catch (e) {
+          this.logger.warn(`drep_votes ${id}: ${e instanceof Error ? e.message : e}`);
+        }
+      }),
+    );
+    return out;
+  }
+
+  /**
    * §14.1 entry gate (activity): of the most recent `windowSize` governance actions,
    * how many the DRep voted on (optionally only votes carrying an on-chain rationale).
    * Best-effort → available=false on any Koios error.
