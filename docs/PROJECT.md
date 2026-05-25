@@ -307,7 +307,7 @@ the name (top) + role/status (below) + notification badge.
 | `treasury-overview` | Balances + per-bucket allocated/spent/remaining bars + totals. |
 | `board-actions` | Pending multisig actions; approve via `signData`. |
 | `on-chain-proofs` | Anchored decisions + Cardanoscan links. |
-| `governance-setup` | Board-only setup: per-parameter descriptions + Platform wallets. Boolean params edit as Enabled/Disabled; saved edits persist + apply immediately (verified). Params not yet read by any feature show a **⏳ not yet wired** note. |
+| `governance-setup` | Board-only setup: per-parameter descriptions + Platform wallets. Columns: **New value** (editable combo/input) + **Saved** (current persisted value, refreshes after Save, with a `(default …)` hint). Booleans edit as Enabled/Disabled. Params not yet read by any feature show a **⏳ not yet wired** note. |
 | `notification-badge` | Red-circle count in the login card → My area. |
 | `voting-style-badge` | Shows 1P1V vs Balanced. |
 
