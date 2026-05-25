@@ -79,8 +79,9 @@ pnpm + Turborepo monorepo.
   Platform setup (Enabled/Disabled dropdowns); each gated param is **grouped under its
   switch** (`↳`, left accent) and **shadowed/disabled when the switch is off**, so it's
   clear which switch governs which params and whether they're applied. The same minimums
-  also drive an **ongoing health flag**: `listDaoMembers` returns `meetsEntryRequirements`
-  per member (own power ≥ min OR ≥ min qualifying delegators; board exempt), and the
+  also drive an **ongoing health flag**, but **only while `ENTRY_REQUIRE_VOTING_POWER` is
+  enabled**: `listDaoMembers` returns `meetsEntryRequirements` per member (true if the gate
+  is off; else own power ≥ min OR ≥ min qualifying delegators; board exempt), and the
   overview shows a **⚠ below minimum** badge for an admitted member who later drops below
   it — they keep full voting rights (informational only).
 - **Apply as Expert** (ADA holders without a DRep): board approves; expert
@@ -285,7 +286,7 @@ the name (top) + role/status (below) + notification badge.
 
 | View / component | Purpose |
 |---|---|
-| `dao-overview` | DAO members with CIP-119 name/image, voting power, since. Every column is **click-to-sort** (asc/desc), default adjusted-power desc. A member who has dropped under the §14.1 entry minimum (own power / qualifying delegators) shows a **⚠ below minimum** badge but stays a full voting member (board exempt). |
+| `dao-overview` | DAO members with CIP-119 name/image, voting power, since. Every column is **click-to-sort** (asc/desc), default adjusted-power desc. When `ENTRY_REQUIRE_VOTING_POWER` is enabled, a member under the §14.1 minimum (own power / qualifying delegators) shows a **⚠ below minimum** badge but stays a full voting member (board exempt); no flag when the gate is off. |
 | `member-area` | Personal area: profile, apply/join, board panels, **Actions to sign**, **Round stage controls**, voting panels. |
 | `rounds-section` | Rounds list (status, active/complete, per-status proposal counts); click a round → its proposals. |
 | `active-proposals` | Active round's proposals with a horizontal round submenu to browse earlier rounds. |

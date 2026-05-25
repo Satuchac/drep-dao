@@ -73,10 +73,14 @@ export class DrepService {
     const rows = [...byId.values()];
 
     // §14.1 — the membership power minimums (read once; used for the health flag below).
+    // The flag only applies when the entry power gate is ENABLED — if the switch is off,
+    // the minimum isn't a requirement, so nobody is flagged.
     const cfgRows = await this.prisma.platformConfig.findMany();
     const cfg = new Map(cfgRows.map((c) => [c.key, c.value]));
     const D = PLATFORM_CONFIG_DEFAULTS as Record<string, number | string | boolean>;
     const numCfg = (k: string) => { const v = cfg.get(k); return typeof v === 'number' ? v : (D[k] as number); };
+    const boolCfg = (k: string) => { const v = cfg.get(k); return typeof v === 'boolean' ? v : (D[k] as boolean); };
+    const requirePower = boolCfg('ENTRY_REQUIRE_VOTING_POWER');
     const minOwn = numCfg('MIN_OWN_VOTING_POWER_ADA');
     const minDelegs = numCfg('MIN_DELEGATORS');
     const minStakeLovelace = BigInt(Math.round(numCfg('MIN_DELEGATOR_STAKE_ADA'))) * 1_000_000n;
@@ -97,11 +101,12 @@ export class DrepService {
         const m = meta.get(r.drepId);
         const base = basePower(power.votingPowerLovelace);
         const mult = meritMultiplier(merit);
-        // §14.1 — does the member still meet the entry power gate? (board is exempt —
-        // seated via genesis, not the entry gate). A shortfall is shown but the member
-        // remains a full voting member.
+        // §14.1 — does the member still meet the entry power gate? Only evaluated when the
+        // gate is enabled; board is exempt (seated via genesis). A shortfall is shown but
+        // the member remains a full voting member.
         const ownAda = Number(power.ownVotingPowerLovelace) / 1_000_000;
-        const meetsEntryRequirements = r.isBoard || ownAda >= minOwn || power.qualifyingDelegators >= minDelegs;
+        const meetsEntryRequirements =
+          !requirePower || r.isBoard || ownAda >= minOwn || power.qualifyingDelegators >= minDelegs;
         return {
           drepId: r.drepId,
           displayName: m?.name ?? r.displayName,
