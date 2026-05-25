@@ -17,9 +17,9 @@ import { BoardActions } from './board-actions';
 import { RoundStageControls } from './round-stage-controls';
 import { FeeConfirmations } from './fee-confirmations';
 import { PreferencesPanel } from './preferences-panel';
+import { LeaveDao } from './leave-dao';
 
-const card =
-  'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
+const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
 
 export function MemberArea() {
   const { profile, loading } = useAuth();
@@ -33,104 +33,141 @@ export function MemberArea() {
 
   const isBoard = profile.roles.includes('BOARD');
   const isMember = profile.roles.includes('DAO_MEMBER');
+  const isDrep = profile.roles.includes('DREP');
   const isRegisteredDRep = profile.onchainDrep.registered;
   const daoStatus = profile.daoMembership?.status ?? null;
   const daoPending = daoStatus === 'PENDING_ADMISSION';
   const expertApproved = !!myExpert?.approvedByBoard;
   const expertPending = !!myExpert && !myExpert.approvedByBoard;
-
-  // §14 — once accepted (DAO member or approved expert) or pending, no apply options.
   const showApply = !isBoard && !isMember && !daoPending && !expertApproved && !expertPending;
 
-  return (
-    <div className="space-y-6">
-      {/* Removal vote against me (self-hides if none). */}
-      <RemovalBanner />
+  // §2 — split My area into horizontal tabs instead of one long page.
+  const tabs: { key: string; label: string; node: React.ReactNode }[] = [];
 
-      {/* DAO member: status + DRep ID first, then editable profile. */}
-      {isMember ? (
-        <>
-          <section className={card}>
-            <MyDrepStatus />
-          </section>
-          <section className={card}>
-            <h3 className="text-base font-semibold">Your DRep profile</h3>
-            <p className="mb-3 text-sm text-neutral-500">
-              {isBoard ? 'As a board member you are a DAO member.' : 'You are a DAO member.'} Keep your
-              details up to date.
-            </p>
-            <DrepForm mode="profile" />
-          </section>
-        </>
-      ) : null}
+  tabs.push({
+    key: 'profile',
+    label: isMember ? 'Profile' : expertApproved || expertPending ? 'Expert' : 'Get started',
+    node: (
+      <div className="space-y-6">
+        {isMember ? (
+          <>
+            <section className={card}><MyDrepStatus /></section>
+            <section className={card}>
+              <h3 className="text-base font-semibold">Your DRep profile</h3>
+              <p className="mb-3 text-sm text-neutral-500">
+                {isBoard ? 'As a board member you are a DAO member.' : 'You are a DAO member.'} Keep your details up to date.
+              </p>
+              <DrepForm mode="profile" />
+              {/* §14 — board members are managed via genesis; only non-board members self-leave. */}
+              {!isBoard ? <LeaveDao /> : null}
+            </section>
+          </>
+        ) : daoPending ? (
+          <section className={card}><MyDrepStatus /></section>
+        ) : expertPending || expertApproved ? (
+          <section className={card}><ExpertApplyForm onChange={loadExpert} /></section>
+        ) : showApply ? (
+          <section className={card}><ApplyOptions registeredDRep={isRegisteredDRep} onExpertChange={loadExpert} /></section>
+        ) : null}
+        <section className={card}><PreferencesPanel /></section>
+      </div>
+    ),
+  });
 
-      {/* Pending DAO applicant: progress + board rationales. */}
-      {daoPending ? (
-        <section className={card}>
-          <MyDrepStatus />
-        </section>
-      ) : null}
+  if (isMember || isDrep || expertApproved) {
+    tabs.push({
+      key: 'voting',
+      label: 'Voting & reviews',
+      node: (
+        <div className="space-y-6">
+          <p className="text-sm text-neutral-500">Everything awaiting your vote or review — filtering juries, Debate &amp; Vote, and milestone reviews.</p>
+          <FilteringPanel />
+          <VotingPanel />
+          <EmptyHint text="Nothing is awaiting your vote right now." />
+        </div>
+      ),
+    });
+  }
 
-      {/* Expert (pending or approved): self-managed status/form. */}
-      {(expertPending || expertApproved) && !isMember ? (
-        <section className={card}>
-          <ExpertApplyForm onChange={loadExpert} />
-        </section>
-      ) : null}
+  tabs.push({
+    key: 'proposals',
+    label: 'My proposals',
+    node: (
+      <div className="space-y-4">
+        <ProposalSubmit />
+      </div>
+    ),
+  });
 
-      {/* Not yet anything → choose how to participate. */}
-      {showApply ? (
-        <section className={card}>
-          <ApplyOptions registeredDRep={isRegisteredDRep} onExpertChange={loadExpert} />
-        </section>
-      ) : null}
-
-      {/* Board pending requests — below the personal info. */}
-      {isBoard ? (
-        <>
-          {/* Treasury/hot-wallet actions the platform prepared, awaiting 3-of-5 (self-hides if none). */}
+  if (isBoard) {
+    tabs.push({
+      key: 'sign',
+      label: 'Actions to sign',
+      node: (
+        <div className="space-y-6">
+          <p className="text-sm text-neutral-500">Treasury/hot-wallet approvals and submission-fee confirmations.</p>
           <BoardActions />
-          {/* §16 — submission fees awaiting board confirmation (self-hides if none). */}
           <FeeConfirmations />
-          {/* §8 — confirm/launch round stage transitions (self-hides when no round is open). */}
-          <RoundStageControls />
-          <section className={card}>
-            <BoardReviewPanel />
-          </section>
-          <section className={card}>
-            <ExpertReviewPanel />
-          </section>
-          <section className={card}>
-            <RemovalPanel />
-          </section>
-        </>
-      ) : null}
+          <EmptyHint text="Nothing to sign right now." />
+        </div>
+      ),
+    });
+    tabs.push({ key: 'rounds', label: 'Round control', node: <RoundStageControls /> });
+    tabs.push({
+      key: 'apps',
+      label: 'Applications',
+      node: (
+        <div className="space-y-6">
+          <section className={card}><BoardReviewPanel /></section>
+          <section className={card}><ExpertReviewPanel /></section>
+          <section className={card}><RemovalPanel /></section>
+        </div>
+      ),
+    });
+  }
 
-      <FilteringPanel />
-      <VotingPanel />
-      <ProposalSubmit />
-      {/* §20 — personal preferences (block explorer, …) for every signed-in member. */}
-      <PreferencesPanel />
+  return <MemberTabs tabs={tabs} />;
+}
+
+function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.ReactNode }[] }) {
+  const [active, setActive] = useState(tabs[0]?.key);
+  const current = tabs.find((t) => t.key === active) ?? tabs[0];
+  return (
+    <div className="space-y-4">
+      <RemovalBanner />
+      <div className="flex flex-wrap gap-1 border-b border-neutral-200 pb-2 dark:border-neutral-800">
+        {tabs.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setActive(t.key)}
+            className={`rounded-md px-3 py-1.5 text-sm ${
+              active === t.key
+                ? 'bg-emerald-600 font-medium text-white'
+                : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div>{current?.node}</div>
     </div>
   );
 }
 
+/** A muted fallback shown beneath self-hiding panels so an empty tab isn't blank. */
+function EmptyHint({ text }: { text: string }) {
+  return <p className="text-sm text-neutral-400">{text}</p>;
+}
+
 /** §14 — both participation routes; pick one (until accepted). */
-function ApplyOptions({
-  registeredDRep,
-  onExpertChange,
-}: {
-  registeredDRep: boolean;
-  onExpertChange: () => void;
-}) {
+function ApplyOptions({ registeredDRep, onExpertChange }: { registeredDRep: boolean; onExpertChange: () => void }) {
   const [mode, setMode] = useState<'choose' | 'dao' | 'expert'>('choose');
 
   if (mode === 'dao') {
     return (
       <div className="space-y-2">
-        <button onClick={() => setMode('choose')} className="text-xs text-neutral-500 hover:underline">
-          ← back
-        </button>
+        <button onClick={() => setMode('choose')} className="text-xs text-neutral-500 hover:underline">← back</button>
         {registeredDRep ? (
           <>
             <h3 className="text-base font-semibold">Request to join the DAO</h3>
@@ -138,9 +175,8 @@ function ApplyOptions({
           </>
         ) : (
           <p className="text-sm text-neutral-500">
-            To join as a DAO member your wallet must be a registered on-chain DRep. Register your DRep key
-            (e.g. Eternl → Governance → Register as a DRep), then sign in again. Meanwhile you can apply as an
-            Expert.
+            To join as a DAO member your wallet must be a registered on-chain DRep. Register your DRep key (e.g. Eternl →
+            Governance → Register as a DRep), then sign in again. Meanwhile you can apply as an Expert.
           </p>
         )}
       </div>
@@ -149,9 +185,7 @@ function ApplyOptions({
   if (mode === 'expert') {
     return (
       <div className="space-y-2">
-        <button onClick={() => setMode('choose')} className="text-xs text-neutral-500 hover:underline">
-          ← back
-        </button>
+        <button onClick={() => setMode('choose')} className="text-xs text-neutral-500 hover:underline">← back</button>
         <ExpertApplyForm onChange={onExpertChange} />
       </div>
     );
@@ -161,23 +195,13 @@ function ApplyOptions({
     <div className="space-y-3">
       <h3 className="text-base font-semibold">How do you want to participate?</h3>
       <div className="grid gap-3 sm:grid-cols-2">
-        <button
-          onClick={() => setMode('dao')}
-          className="rounded-lg border border-neutral-200 p-3 text-left hover:border-emerald-400 dark:border-neutral-700"
-        >
+        <button onClick={() => setMode('dao')} className="rounded-lg border border-neutral-200 p-3 text-left hover:border-emerald-400 dark:border-neutral-700">
           <div className="font-medium">Join as a DAO member</div>
-          <div className="text-xs text-neutral-500">
-            For registered on-chain DReps. Board votes 3-of-5 to admit. You then vote on proposals.
-          </div>
+          <div className="text-xs text-neutral-500">For registered on-chain DReps. Board votes 3-of-5 to admit. You then vote on proposals.</div>
         </button>
-        <button
-          onClick={() => setMode('expert')}
-          className="rounded-lg border border-neutral-200 p-3 text-left hover:border-emerald-400 dark:border-neutral-700"
-        >
+        <button onClick={() => setMode('expert')} className="rounded-lg border border-neutral-200 p-3 text-left hover:border-emerald-400 dark:border-neutral-700">
           <div className="font-medium">Apply as an Expert</div>
-          <div className="text-xs text-neutral-500">
-            For ADA holders with subject-matter knowledge. Board approves; you provide your expertise.
-          </div>
+          <div className="text-xs text-neutral-500">For ADA holders with subject-matter knowledge. Board approves; you provide your expertise.</div>
         </button>
       </div>
     </div>

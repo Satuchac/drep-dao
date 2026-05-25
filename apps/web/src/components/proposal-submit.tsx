@@ -9,10 +9,12 @@ import {
   type RoundSummary,
 } from '@/lib/api';
 import { useExplorer } from '@/lib/explorer';
+import { ProposalDetail } from './proposal-detail';
 
 export function ProposalSubmit() {
   const { cfg } = useExplorer();
   const [open, setOpen] = useState(false);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [rounds, setRounds] = useState<RoundSummary[]>([]);
   const [mine, setMine] = useState<ProposalSummary[]>([]);
   const [roundId, setRoundId] = useState('');
@@ -75,6 +77,15 @@ export function ProposalSubmit() {
       setBusy(false);
     }
   };
+
+  // §8 — open one of my proposals to read it, edit it (when the stage allows), and submit milestone POAs.
+  if (openId) {
+    return (
+      <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+        <ProposalDetail id={openId} onBack={() => { setOpenId(null); loadMine(); }} />
+      </section>
+    );
+  }
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
@@ -148,11 +159,14 @@ export function ProposalSubmit() {
       {mine.length > 0 ? (
         <div className="mt-3">
           <div className="text-sm font-medium">My proposals</div>
+          <p className="text-xs text-neutral-500">Open one to read it, edit it (during Filtering or pre-vote Debate &amp; Vote), and submit milestone proofs.</p>
           <ul className="mt-1 space-y-1 text-sm">
             {mine.map((p) => (
-              <li key={p.id} className="flex justify-between rounded border border-neutral-200 px-3 py-1.5 dark:border-neutral-800">
-                <span>{p.title} <span className="text-neutral-500">· {p.requestedAmountAda.toLocaleString()} ₳</span></span>
-                <span className="text-xs text-neutral-500">{p.status}{p.stage ? ` · ${p.stage}` : ''}</span>
+              <li key={p.id}>
+                <button onClick={() => setOpenId(p.id)} className="flex w-full justify-between rounded border border-neutral-200 px-3 py-1.5 text-left hover:border-emerald-400 dark:border-neutral-800">
+                  <span>{p.title} <span className="text-neutral-500">· {p.requestedAmountAda.toLocaleString()} ₳</span></span>
+                  <span className="text-xs text-neutral-500">{p.status}{p.stage ? ` · ${p.stage}` : ''}</span>
+                </button>
               </li>
             ))}
           </ul>

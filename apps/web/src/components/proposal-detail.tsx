@@ -153,7 +153,8 @@ function FilteringSection({ id }: { id: string }) {
               {a.voted ? (
                 <span className={`font-semibold ${choiceCls[a.choice ?? ''] ?? ''}`}>{a.choice}</span>
               ) : (
-                <span className="text-amber-600">pending</span>
+                // §5 — "pending" only while filtering is open; otherwise the reviewer simply didn't vote.
+                <span className="text-amber-600">{r.status === 'ACTIVE' && r.stage === 'FILTERING' ? 'pending' : 'not voted'}</span>
               )}
             </li>
           ))}
@@ -218,14 +219,20 @@ function DvSection({ id, isBoard }: { id: string; isBoard: boolean }) {
 function PowerBar({ yes, no, abstain, total, thresholdPosPct, thresholdPct }: { yes: number; no: number; abstain: number; total: number; thresholdPosPct: number; thresholdPct: number }) {
   const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0);
   const fmt = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  const tpos = Math.min(100, Math.max(0, thresholdPosPct));
   return (
-    <div className="mt-2">
-      <div className="relative h-5 w-full overflow-hidden rounded bg-neutral-200 dark:bg-neutral-800">
-        <div className="absolute inset-y-0 left-0 bg-emerald-500" style={{ width: `${pct(yes)}%` }} />
-        <div className="absolute inset-y-0 bg-red-400" style={{ left: `${pct(yes)}%`, width: `${pct(no)}%` }} />
-        <div className="absolute inset-y-0 bg-neutral-400" style={{ left: `${pct(yes + no)}%`, width: `${pct(abstain)}%` }} />
-        {/* threshold marker */}
-        <div className="absolute inset-y-0 w-0.5 bg-neutral-900 dark:bg-white" style={{ left: `${Math.min(100, thresholdPosPct)}%` }} title={`threshold ${thresholdPct}%`} />
+    <div className="mt-6">
+      <div className="relative h-5 w-full rounded bg-neutral-200 dark:bg-neutral-800">
+        <div className="absolute inset-0 overflow-hidden rounded">
+          <div className="absolute inset-y-0 left-0 bg-emerald-500" style={{ width: `${pct(yes)}%` }} />
+          <div className="absolute inset-y-0 bg-red-400" style={{ left: `${pct(yes)}%`, width: `${pct(no)}%` }} />
+          <div className="absolute inset-y-0 bg-neutral-400" style={{ left: `${pct(yes + no)}%`, width: `${pct(abstain)}%` }} />
+        </div>
+        {/* §6 — threshold marker with a labelled percentage above the line. */}
+        <div className="absolute -top-5 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-neutral-700 dark:text-neutral-300" style={{ left: `${tpos}%` }}>
+          threshold {thresholdPct}%
+        </div>
+        <div className="absolute -top-1.5 bottom-0 w-0.5 bg-neutral-900 dark:bg-white" style={{ left: `${tpos}%` }} title={`threshold ${thresholdPct}%`} />
       </div>
       <div className="mt-1 flex flex-wrap gap-3 text-xs text-neutral-500">
         <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-emerald-500" />YES {fmt(yes)}</span>

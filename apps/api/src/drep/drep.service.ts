@@ -311,6 +311,22 @@ export class DrepService {
     }
   }
 
+  /** §14 — a DAO member voluntarily leaves. Board members are managed via genesis. */
+  async leaveDao(userId: string) {
+    const drep = await this.prisma.drep.findUnique({
+      where: { userId },
+      include: { user: { select: { drepKeyHash: true } } },
+    });
+    if (!drep) throw new NotFoundException('no DRep profile');
+    if (drep.status !== DRepStatus.ADMITTED) throw new ConflictException('you are not an active DAO member');
+    const seat = drep.user.drepKeyHash
+      ? await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: drep.user.drepKeyHash } })
+      : null;
+    if (seat) throw new ForbiddenException('board members are managed via genesis and cannot self-leave');
+    await this.prisma.drep.update({ where: { id: drep.id }, data: { status: DRepStatus.REMOVED } });
+    return { status: DRepStatus.REMOVED };
+  }
+
   async updateMine(userId: string, dto: UpdateDrepDto) {
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
     if (!drep) throw new NotFoundException('no DRep profile — apply first');

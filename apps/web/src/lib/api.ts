@@ -230,6 +230,7 @@ export const drepApi = {
   update: (input: Partial<DrepApplicationInput>) =>
     request<MyDrep>('/me/drep', { method: 'PATCH', body: JSON.stringify(input) }),
   myRemoval: () => request<MyRemoval | null>('/me/removal'),
+  leaveDao: () => request<{ status: string }>('/me/leave-dao', { method: 'POST' }),
 };
 
 export const removalApi = {

@@ -10,6 +10,7 @@ import {
   type DvResult,
   type ProposalSummary,
 } from '@/lib/api';
+import { ProposalDetail } from './proposal-detail';
 
 export function VotingPanel() {
   const { profile } = useAuth();
@@ -57,6 +58,7 @@ function VoteCard({
   const [rationale, setRationale] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
 
   const loadResult = useCallback(() => {
     dvApi.result(proposal.id).then(setR).catch(() => setR(null));
@@ -77,11 +79,24 @@ function VoteCard({
     }
   };
 
+  if (open) {
+    return (
+      <li className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
+        <ProposalDetail id={proposal.id} onBack={() => setOpen(false)} />
+      </li>
+    );
+  }
+
   return (
     <li className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium">{proposal.title}</span>
-        <span className="text-xs text-neutral-500">{proposal.requestedAmountAda.toLocaleString()} ₳</span>
+        <span className="flex items-center gap-3">
+          <span className="text-xs text-neutral-500">{proposal.requestedAmountAda.toLocaleString()} ₳</span>
+          <button onClick={() => setOpen(true)} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">
+            View full proposal →
+          </button>
+        </span>
       </div>
 
       {r?.open ? (
@@ -120,9 +135,9 @@ function VoteCard({
             ))}
           </div>
           <textarea
-            className="w-full rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-            rows={2}
-            placeholder="Rationale (min 200 chars)…"
+            className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+            rows={8}
+            placeholder="Rationale (Markdown supported; min 200 chars). Explain your reasoning — it's published with your vote."
             value={rationale}
             onChange={(e) => setRationale(e.target.value)}
           />

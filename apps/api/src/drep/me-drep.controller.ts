@@ -30,4 +30,10 @@ export class MeDrepController {
   update(@CurrentUser() ctx: AuthContext, @Body() dto: UpdateDrepDto) {
     return this.drep.updateMine(ctx.userId, dto);
   }
+
+  // §14 — voluntarily leave the DAO (board members are managed via genesis, not here).
+  @Post('leave-dao')
+  leave(@CurrentUser() ctx: AuthContext) {
+    return this.drep.leaveDao(ctx.userId);
+  }
 }
