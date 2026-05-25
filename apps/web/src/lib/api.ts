@@ -101,6 +101,7 @@ export interface DaoMember {
   meritMultiplier: number;
   adjustedPower: number; // log10(votingPowerAda) × (1 + merit/200)
   since: string | null; // board install date (board) or board-approval date (DAO member)
+  meetsEntryRequirements: boolean; // §14.1 — still meets the power/delegator minimum (board always true)
 }
 
 export interface OnChainProof {

@@ -111,6 +111,15 @@ export function DaoOverview() {
                           BOARD
                         </span>
                       ) : null}
+                      {/* §14.1 — fell below the entry power/delegator minimum, but stays a full voting member. */}
+                      {!m.meetsEntryRequirements ? (
+                        <span
+                          className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                          title="Below the configured entry minimum (own voting power / qualifying delegators). Still a full voting member — this is informational only."
+                        >
+                          ⚠ below minimum
+                        </span>
+                      ) : null}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
@@ -146,6 +155,12 @@ export function DaoOverview() {
         <p className="text-xs text-neutral-400">
           0 voting power / 0 delegators means no account has delegated its vote to that DRep yet (CIP-1694
           vote delegation, separate from stake-pool delegation).
+        </p>
+      ) : null}
+      {members && members.some((m) => !m.meetsEntryRequirements) ? (
+        <p className="text-xs text-amber-600">
+          <strong>⚠ below minimum</strong> — this member has dropped under the configured entry minimum (own
+          voting power / qualifying delegators). They remain a full voting member; the flag is informational.
         </p>
       ) : null}
 

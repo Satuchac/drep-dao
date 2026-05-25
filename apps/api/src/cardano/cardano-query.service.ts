@@ -224,6 +224,56 @@ export class CardanoQueryService {
   }
 
   /**
+   * §4/§14.1 — batch version for the member overview: per DRep, the total voting power,
+   * delegator count, OWN power (self-delegated from `ownStakeAddress`), and how many
+   * delegators each delegated ≥ `minDelegatorStakeLovelace`. One /drep_delegators per
+   * DRep + a single batched /account_info (same cost as drepVotingPower).
+   */
+  async drepEntryMetricsBatch(
+    entries: { drepId: string; ownStakeAddress?: string }[],
+    minDelegatorStakeLovelace: bigint,
+  ): Promise<Map<string, { votingPowerLovelace: bigint; delegators: number; ownVotingPowerLovelace: bigint; qualifyingDelegators: number }>> {
+    const out = new Map(
+      entries.map((e) => [e.drepId, { votingPowerLovelace: 0n, delegators: 0, ownVotingPowerLovelace: 0n, qualifyingDelegators: 0 }]),
+    );
+    if (entries.length === 0) return out;
+
+    const addrsByDrep = new Map<string, string[]>();
+    const allAddrs = new Set<string>();
+    await Promise.all(
+      entries.map(async (e) => {
+        try {
+          const res = await fetch(`${this.base}/drep_delegators?_drep_id=${encodeURIComponent(e.drepId)}`, {
+            signal: AbortSignal.timeout(15000),
+          });
+          if (!res.ok) return;
+          const rows = (await res.json()) as { stake_address: string }[];
+          const addrs = rows.map((r) => r.stake_address).filter(Boolean);
+          addrsByDrep.set(e.drepId, addrs);
+          addrs.forEach((a) => allAddrs.add(a));
+        } catch (err) {
+          this.logger.warn(`drep_delegators ${e.drepId}: ${err instanceof Error ? err.message : err}`);
+        }
+      }),
+    );
+    const stake = await this.accountStake([...allAddrs]);
+    for (const e of entries) {
+      const addrs = addrsByDrep.get(e.drepId) ?? [];
+      let total = 0n;
+      let own = 0n;
+      let qualifying = 0;
+      for (const a of addrs) {
+        const s = stake.get(a) ?? 0n;
+        total += s;
+        if (e.ownStakeAddress && a === e.ownStakeAddress) own = s;
+        if (s >= minDelegatorStakeLovelace) qualifying++;
+      }
+      out.set(e.drepId, { votingPowerLovelace: total, delegators: addrs.length, ownVotingPowerLovelace: own, qualifyingDelegators: qualifying });
+    }
+    return out;
+  }
+
+  /**
    * §14.1 entry gate (activity): of the most recent `windowSize` governance actions,
    * how many the DRep voted on (optionally only votes carrying an on-chain rationale).
    * Best-effort → available=false on any Koios error.

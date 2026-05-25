@@ -148,6 +148,11 @@ Admin (separate): `/admin/login`, user `satucha`.
       (qualifies via the delegator path); with the defaults (20 / 50,000) it stays disabled.
 - [ ] **Removal is anchored**: a board 3-of-5 removal vote that resolves now posts an
       on-chain proof — *On-chain proofs* shows **"Removal of a DAO member"** (like admission).
+- [ ] **Below-minimum flag (§14.1)**: in *DAO Member overview*, an admitted (non-board)
+      member whose own power/qualifying-delegators fall under the configured minimum shows a
+      **⚠ below minimum** badge (with a footnote) — but stays a full voting member. Board
+      members are exempt. With the mainnet-default minimums every non-board member is flagged
+      on testnet; lower `MIN_OWN_VOTING_POWER_ADA` / `MIN_DELEGATORS` to see some clear it.
 - [ ] **Board enforces anchor submission**: on *On-chain proofs*, a board member sees
       **Submit on-chain** beside any "anchor pending" record and a **Submit all pending (N)**
       button; non-board members don't. **Submit all pending** chains the txs through one hot

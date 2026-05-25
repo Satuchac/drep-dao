@@ -72,19 +72,36 @@ export class DrepService {
     }
     const rows = [...byId.values()];
 
-    // §4 — on-chain DRep VOTING power (CIP-1694 vote delegation), live, plus
-    // the count of accounts that delegated their vote to each DRep.
-    const vp = await this.cardano.drepVotingPower(rows.map((r) => r.drepId));
+    // §14.1 — the membership power minimums (read once; used for the health flag below).
+    const cfgRows = await this.prisma.platformConfig.findMany();
+    const cfg = new Map(cfgRows.map((c) => [c.key, c.value]));
+    const D = PLATFORM_CONFIG_DEFAULTS as Record<string, number | string | boolean>;
+    const numCfg = (k: string) => { const v = cfg.get(k); return typeof v === 'number' ? v : (D[k] as number); };
+    const minOwn = numCfg('MIN_OWN_VOTING_POWER_ADA');
+    const minDelegs = numCfg('MIN_DELEGATORS');
+    const minStakeLovelace = BigInt(Math.round(numCfg('MIN_DELEGATOR_STAKE_ADA'))) * 1_000_000n;
+
+    // §4 — on-chain DRep VOTING power (CIP-1694 vote delegation), live: total power +
+    // delegator count, plus own power + qualifying delegators for the eligibility flag.
+    const vp = await this.cardano.drepEntryMetricsBatch(
+      rows.map((r) => ({ drepId: r.drepId, ownStakeAddress: r.stakeAddress })),
+      minStakeLovelace,
+    );
     // §CIP-119 — on-chain DRep name + image (else our stored name + a generic avatar).
     const meta = await this.cardano.drepMetadata(rows.map((r) => r.drepId));
 
     const members = await Promise.all(
       rows.map(async (r) => {
         const merit = r.drepRowId ? await this.currentMerit(r.drepRowId) : 0;
-        const power = vp.get(r.drepId) ?? { votingPowerLovelace: 0n, delegators: 0 };
+        const power = vp.get(r.drepId) ?? { votingPowerLovelace: 0n, delegators: 0, ownVotingPowerLovelace: 0n, qualifyingDelegators: 0 };
         const m = meta.get(r.drepId);
         const base = basePower(power.votingPowerLovelace);
         const mult = meritMultiplier(merit);
+        // §14.1 — does the member still meet the entry power gate? (board is exempt —
+        // seated via genesis, not the entry gate). A shortfall is shown but the member
+        // remains a full voting member.
+        const ownAda = Number(power.ownVotingPowerLovelace) / 1_000_000;
+        const meetsEntryRequirements = r.isBoard || ownAda >= minOwn || power.qualifyingDelegators >= minDelegs;
         return {
           drepId: r.drepId,
           displayName: m?.name ?? r.displayName,
@@ -97,6 +114,7 @@ export class DrepService {
           meritMultiplier: round(mult),
           adjustedPower: round(base * mult),
           since: r.since ? r.since.toISOString() : null,
+          meetsEntryRequirements,
         };
       }),
     );
