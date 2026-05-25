@@ -73,6 +73,9 @@ export function DaoOverview() {
           Adjusted power (§4) = log₁₀(on-chain DRep voting power in ADA) × (1 + merit/200). Voting power is
           ADA delegated to the DRep (CIP-1694 vote delegation — not stake-pool delegation).
         </p>
+        {members && members.length > 1 ? (
+          <p className="mt-1 text-xs text-neutral-400">Tip: click any column header to sort (click again to reverse).</p>
+        ) : null}
       </div>
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
@@ -85,18 +88,25 @@ export function DaoOverview() {
           <table className="w-full text-sm">
             <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
               <tr>
-                {COLUMNS.map((c) => (
-                  <th key={c.key} className={`px-3 py-2 ${c.right ? 'text-right' : ''}`}>
-                    <button
-                      onClick={() => onSort(c.key)}
-                      className={`inline-flex items-center gap-1 uppercase hover:text-neutral-800 dark:hover:text-neutral-200 ${c.right ? 'flex-row-reverse' : ''}`}
-                      title="Sort"
-                    >
-                      {c.label}
-                      <span className="text-[10px]">{sort.key === c.key ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
-                    </button>
-                  </th>
-                ))}
+                {COLUMNS.map((c) => {
+                  const active = sort.key === c.key;
+                  return (
+                    <th key={c.key} className={`px-3 py-2 ${c.right ? 'text-right' : ''}`}>
+                      <button
+                        onClick={() => onSort(c.key)}
+                        className={`inline-flex cursor-pointer select-none items-center gap-1 rounded px-1 py-0.5 uppercase hover:bg-neutral-200/70 dark:hover:bg-neutral-700/70 ${
+                          c.right ? 'flex-row-reverse' : ''
+                        } ${active ? 'font-semibold text-emerald-700 dark:text-emerald-400' : ''}`}
+                        title={`Sort by ${c.label}${active ? (sort.dir === 'asc' ? ' (ascending)' : ' (descending)') : ''}`}
+                      >
+                        {c.label}
+                        <span className={`text-[10px] ${active ? '' : 'text-neutral-400'}`}>
+                          {active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}
+                        </span>
+                      </button>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
