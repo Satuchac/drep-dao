@@ -36,6 +36,12 @@ Admin (separate): `/admin/login`, user `satucha`.
   toolkit"* is `COMPLETE` (it went fee → edit → filtering → D&V → milestone).
 - **Rounds** → **Round Beta (demo)** — `active`, in FILTERING, with two proposals
   under review (*Open liquidity router*, *Managed Koios mirror (RFP)*).
+- **Rounds** → **Round Gamma (demo)** — `active` (FUNDING), with varied projects: an
+  approved+**COMPLETE** project (*Cardano DEX aggregator v2*, all 3 milestones), an
+  approved+**ACTIVE** project (*Open mobile wallet*, 1/3 milestones, 1 in review), and a
+  filtering-**REJECTED** proposal (*Token airdrop blaster*).
+- **DAO Member overview** — board + two non-board members (Heidi, Judy) with varied
+  voting power; **Experts** shows Ivan with expertise chips + bio.
 - **On-chain proofs** — filtering / D&V / milestone anchors for Round Alpha (plus
   earlier admission anchors), each with an explorer link. Confirmed Preprod txs:
   filtering `80d2a6d5…`, D&V `23f8ec68…`, milestone `88c870d0…`.
@@ -123,6 +129,22 @@ Admin (separate): `/admin/login`, user `satucha`.
       **without a page refresh**.
 - [ ] **Round name in JSON**: an on-chain proof's `applicant`/subject reference includes the
       **round name** (e.g. "… · Round Alpha (demo)"), not just "round #N".
+
+### Round 4 review fixes (verify these specifically)
+- [ ] **My Area tabs**: My area is split into tabs (Profile · Voting & reviews · My proposals
+      · board: Actions to sign / Round control / Applications) — not one long page.
+- [ ] **Leave the DAO**: Profile tab (non-board member) has a "Leave the DAO" button → a
+      styled confirmation dialog. Board members don't see it (genesis-managed).
+- [ ] **Voting rationale**: filtering / D&V show a **large Markdown rationale box** (no
+      browser prompt) + a **"View full proposal"** link that expands the proposal inline.
+- [ ] **Submitter (sign in as Carol / `holder`)**: My proposals → open one → edit it (during
+      Filtering / pre-vote D&V) and submit milestone **Proof of Achievement**.
+- [ ] **Projects**: Round Gamma shows a COMPLETE project, an ACTIVE project (partial
+      milestones), and a REJECTED proposal.
+- [ ] **Admin hot wallet** (sign in at `/admin`): the **Anchor hot wallet** panel shows the
+      hot + treasury balances, **"1. Move everything to the multisig"** (sweep), then
+      **"2. Exchange the seed"** (enabled only after the sweep). The board's Platform setup
+      no longer shows wallets. Each admin action is in the audit log.
 
 ## 4. Known limitations / deferred (by design, for now)
 - **Real ADA payouts** (milestone disbursement, treasury top-ups) are recorded +

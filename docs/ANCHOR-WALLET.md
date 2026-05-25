@@ -42,21 +42,25 @@ Treasury (3-of-5 multisig)  ──top-up──▶  Anchor hot wallet  ──fees
 - The platform derives the hot-wallet address from its key and shows it; the
   board confirms that address is the one they fund.
 
-## Key rotation (compromise response)
+## Key rotation (compromise response) — admin-managed, with an interlock
 
-Because the key is operator-custodied and the float is minimal, rotation is a
-short, low-risk runbook — **no app/DB change can move funds**:
+Rotation is a **platform-admin** action (DReps/board don't touch it), in the admin
+dashboard → *Anchor hot wallet*. A two-step interlock prevents stranding funds:
 
-1. **Stop the bleeding** — operator removes/disables the old `ANCHOR_MNEMONIC`
-   (anchoring pauses; decisions still record pending anchors).
-2. **Provision a new key** — operator generates a fresh hot wallet (new mnemonic
-   in env/KMS). The platform now derives + displays the new address.
-3. **Board verifies + funds** — the board confirms the new address in *Platform
-   setup* and tops it up from the treasury multisig; any residual in the old
-   wallet is swept back to the treasury.
-4. **Resume** — pending anchors are re-submitted from the new wallet.
+1. **Move everything to the multisig** — `POST /sysadmin/wallet/sweep` sweeps all
+   hot-wallet UTxOs to the treasury (multisig) in one tx. Until this leaves the hot
+   wallet ≤ ~2 ₳, step 2 is disabled.
+2. **Exchange the seed** — `POST /sysadmin/wallet/rotate-seed` generates a fresh
+   24-word seed, stores it in the `platform_secret` table (overriding the env
+   default, loaded on boot), and surfaces the new address. The seed is never
+   returned to the UI. The DAO then funds the new address from the treasury.
 
-No private key ever lives in the database or passes through the browser, so the
-attack surface for fund theft is the operator's secret store (env/KMS) — not the
-DAO app. (Future hardening: move the key to a cloud KMS / HSM and sign anchors
-via a signing service; the app only requests signatures, never holds the key.)
+Both steps require admin auth (the separate `/admin` session, 2FA) and are written
+to the admin **audit log**.
+
+**Security tradeoff (by design choice):** enabling in-platform rotation moves the
+operator secret from env-only into the DB (`platform_secret`). That means an admin
+account or DB compromise could swap the seed — mitigated by: the sweep interlock
+(bounded float), admin-only + 2FA, the audit log, and the seed never being
+displayed. **Production hardening:** hold the seed in a cloud KMS/HSM and have the
+platform request signatures from a signing service rather than store the mnemonic.
