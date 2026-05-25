@@ -154,12 +154,13 @@ Admin (separate): `/admin/login`, user `satucha`.
       (qualifies via the delegator path); with the defaults (20 / 50,000) it stays disabled.
 - [ ] **Removal is anchored**: a board 3-of-5 removal vote that resolves now posts an
       on-chain proof — *On-chain proofs* shows **"Removal of a DAO member"** (like admission).
-- [ ] **Below-minimum flag (§14.1)**: the flag only applies while `ENTRY_REQUIRE_VOTING_POWER`
-      is **Enabled** — with it Disabled (testnet default) **no member is flagged**. Enable it,
-      then in *DAO Member overview* an admitted (non-board) member under the minimum (own power
-      / qualifying delegators) shows a **⚠ below minimum** badge (with a footnote) but stays a
-      full voting member (board exempt). With the mainnet-default minimums all non-board members
-      flag; lower `MIN_OWN_VOTING_POWER_ADA` / `MIN_DELEGATORS` to clear some.
+- [ ] **Below-minimum flag (§14.1)**: in *DAO Member overview*, a member who fails an
+      **enabled** gate shows a **⚠ below minimum** badge (full voting member; informational).
+      Both gates off (testnet default) ⇒ no flag. **Power gate** (`ENTRY_REQUIRE_VOTING_POWER`):
+      non-board members under the own-power/delegator minimum flag; **board is exempt**.
+      **Activity gate** (`ENTRY_REQUIRE_ACTIVITY`): **everyone incl. board** must have voted on
+      ≥ `MINIMUM_DREP_ACTIVITY`% of the last `MINIMUM_VOTES_CASTED` governance actions — on
+      Preprod nobody has vote history, so enabling it flags **all** members (board included).
 - [ ] **Board enforces anchor submission**: on *On-chain proofs*, a board member sees
       **Submit on-chain** beside any "anchor pending" record and a **Submit all pending (N)**
       button; non-board members don't. **Submit all pending** chains the txs through one hot

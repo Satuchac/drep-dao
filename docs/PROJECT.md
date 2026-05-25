@@ -79,11 +79,14 @@ pnpm + Turborepo monorepo.
   Platform setup (Enabled/Disabled dropdowns); each gated param is **grouped under its
   switch** (`↳`, left accent) and **shadowed/disabled when the switch is off**, so it's
   clear which switch governs which params and whether they're applied. The same minimums
-  also drive an **ongoing health flag**, but **only while `ENTRY_REQUIRE_VOTING_POWER` is
-  enabled**: `listDaoMembers` returns `meetsEntryRequirements` per member (true if the gate
-  is off; else own power ≥ min OR ≥ min qualifying delegators; board exempt), and the
-  overview shows a **⚠ below minimum** badge for an admitted member who later drops below
-  it — they keep full voting rights (informational only).
+  also drive an **ongoing health flag**: `listDaoMembers` returns `meetsEntryRequirements`
+  per member = passes every **enabled** gate, and the overview shows a **⚠ below minimum**
+  badge when false (full voting rights kept — informational). **Power gate** (when
+  `ENTRY_REQUIRE_VOTING_POWER` on): own power ≥ min OR ≥ min qualifying delegators — **board
+  exempt** (genesis-seated). **Activity gate** (when `ENTRY_REQUIRE_ACTIVITY` on): voted on
+  ≥ `MINIMUM_DREP_ACTIVITY`% of the last `MINIMUM_VOTES_CASTED` governance actions —
+  **applies to everyone incl. board** (computed via `drepActivityMetricsBatch`, only when
+  the gate is on). Both gates off ⇒ no flag.
 - **Apply as Expert** (ADA holders without a DRep): board approves; expert
   provides subject-matter input. No on-chain DRep required.
 - **Removal**: a member can be voted out (RemovalPanel / RemovalBanner). A resolved
