@@ -23,6 +23,8 @@ const PLAN = [
   { who: 'grace', toDrepOf: 'grace' },
   { who: 'board', toDrepOf: 'regular' }, // Bob → Alice (external delegator)
   { who: 'holder', toDrepOf: 'dave' }, // Carol → Dave (external delegator)
+  { who: 'heidi', toDrepOf: 'heidi' }, // self
+  { who: 'judy', toDrepOf: 'judy' }, // self
 ];
 
 async function koiosGet(p) {
