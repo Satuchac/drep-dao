@@ -58,8 +58,8 @@ export function MemberArea() {
                 {isBoard ? 'As a board member you are a DAO member.' : 'You are a DAO member.'} Keep your details up to date.
               </p>
               <DrepForm mode="profile" />
-              {/* §14 — board members are managed via genesis; only non-board members self-leave. */}
-              {!isBoard ? <LeaveDao /> : null}
+              {/* §14 — any DAO member can voluntarily leave; a board member also steps down. */}
+              <LeaveDao isBoard={isBoard} />
             </section>
           </>
         ) : daoPending ? (

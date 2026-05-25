@@ -311,7 +311,11 @@ export class DrepService {
     }
   }
 
-  /** §14 — a DAO member voluntarily leaves. Board members are managed via genesis. */
+  /**
+   * §14 — a DAO member voluntarily leaves (status → REMOVED). A board member who
+   * leaves also resigns their board seat, so they truly stop being on the board
+   * (an admin re-seats a replacement from genesis). Idempotent-ish; can re-apply.
+   */
   async leaveDao(userId: string) {
     const drep = await this.prisma.drep.findUnique({
       where: { userId },
@@ -322,9 +326,11 @@ export class DrepService {
     const seat = drep.user.drepKeyHash
       ? await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: drep.user.drepKeyHash } })
       : null;
-    if (seat) throw new ForbiddenException('board members are managed via genesis and cannot self-leave');
-    await this.prisma.drep.update({ where: { id: drep.id }, data: { status: DRepStatus.REMOVED } });
-    return { status: DRepStatus.REMOVED };
+    await this.prisma.$transaction(async (tx) => {
+      if (seat) await tx.boardSeat.delete({ where: { drepKeyHash: seat.drepKeyHash } }); // board member resigns
+      await tx.drep.update({ where: { id: drep.id }, data: { status: DRepStatus.REMOVED } });
+    });
+    return { status: DRepStatus.REMOVED, resignedBoardSeat: !!seat };
   }
 
   async updateMine(userId: string, dto: UpdateDrepDto) {

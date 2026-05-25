@@ -5,7 +5,7 @@ import { drepApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 
 /** §14 — voluntarily leave the DAO, with a styled confirmation dialog. */
-export function LeaveDao() {
+export function LeaveDao({ isBoard = false }: { isBoard?: boolean }) {
   const { refresh } = useAuth();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -31,7 +31,7 @@ export function LeaveDao() {
         onClick={() => setOpen(true)}
         className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"
       >
-        Leave the DAO
+        {isBoard ? 'Step down & leave the DAO' : 'Leave the DAO'}
       </button>
       <p className="mt-1 text-xs text-neutral-500">You can re-apply later. This does not deregister your on-chain DRep.</p>
 
@@ -41,10 +41,13 @@ export function LeaveDao() {
             className="w-full max-w-md rounded-xl border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-800 dark:bg-neutral-900"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">Leave the DAO?</h3>
+            <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
+              {isBoard ? 'Step down and leave the DAO?' : 'Leave the DAO?'}
+            </h3>
             <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-400">
               You will stop being a DAO member: you won&apos;t be drawn for filtering or vote in Debate &amp; Vote.
-              Your on-chain DRep registration is unaffected, and you can request to re-join later.
+              {isBoard ? ' As a board member you will also resign your board seat — the board drops below five until an admin seats a replacement.' : ''}
+              {' '}Your on-chain DRep registration is unaffected, and you can request to re-join later.
             </p>
             {error ? <div className="mt-2 text-sm text-red-600">{error}</div> : null}
             <div className="mt-4 flex justify-end gap-2">
