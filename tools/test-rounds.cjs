@@ -34,7 +34,7 @@ const throws = async (l, fn, re) => {
   const prisma = new PrismaService(config);
   const users = new UsersService(prisma, new CardanoQueryService(config));
   const rounds = new RoundsService(prisma, config);
-  const proposals = new ProposalsService(prisma);
+  const proposals = new ProposalsService(prisma, config, new CardanoQueryService(config));
   const gov = new GovernanceService(prisma);
 
   console.log('\n=== Governance parameters (board-editable) ===');

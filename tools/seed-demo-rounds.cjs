@@ -55,7 +55,7 @@ async function waitConfirm(txHash, label) {
   const users = new UsersService(prisma, cardano);
   const anchor = new AnchorService(config, prisma, cardano);
   const rounds = new RoundsService(prisma, config);
-  const proposals = new ProposalsService(prisma);
+  const proposals = new ProposalsService(prisma, config, cardano);
   const filtering = new FilteringService(prisma, anchor);
   const dv = new DvService(prisma, config, anchor, cardano);
   const milestones = new MilestonesService(prisma, anchor);

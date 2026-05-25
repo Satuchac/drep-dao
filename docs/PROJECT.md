@@ -127,16 +127,21 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   Debate & Vote at a time (conflicts are retried/left for manual launch).
 - **Proposals** move DRAFT → PENDING → ACTIVE → (FILTERING/DEBATE_VOTE) →
   APPROVED/REJECTED → FUNDING/COMPLETE/FAILED. The Rounds list shows per-status
-  counts per round; DRAFTs stay private.
+  counts per round. **DRAFT and PENDING are private** — visible only to their
+  submitter (excluded from all public listings + `get`); a proposal is public only
+  once its fee is confirmed (ACTIVE+).
 
 ## 4b. Proposal lifecycle — fees, filtering, D&V, editing, milestones (§7/§8/§11/§12/§16/§20)
 
 - **Submission fee (§12/§16).** Commercial **3%** / open-source **1%** of the
-  requested amount (capped, configurable). The submitter pays it on-chain to the
-  dedicated `SUBMISSION_FEE_ADDRESS` and provides the tx hash; a **board member
-  verifies it via the explorer and confirms** (My area → "Submission fees to
-  confirm", which also drives the notification badge). Confirmation moves the
-  proposal PENDING → ACTIVE in Filtering.
+  requested amount (capped, configurable). The submitter composes a proposal and can
+  **Save Draft** (private) or **Submit** — Submit needs the on-chain fee tx hash and
+  moves the proposal to PENDING (still private). A draft can be **submitted later**
+  from *My proposals*. The **platform verifies the fee on-chain**: `listPendingFee`
+  runs `CardanoQueryService.verifyPayment(txHash, SUBMISSION_FEE_ADDRESS, feeLovelace)`
+  (Koios `/tx_info`, sums outputs to the fee address) and shows the board a
+  ✓paid / ✗underpaid / ⏳not-found hint in *My area → "Submission fees to confirm"*.
+  The board confirms → PENDING → ACTIVE in Filtering, making the proposal public.
 - **Filtering (§7).** Reviewers are drawn from the round's admitted DReps; each
   casts 1p1v (NO needs rationale). ≥`FILTER_APPROVAL_VOTES` YES → Debate & Vote,
   ≥ that many NO → REJECTED. **The decision is anchored on-chain** (subject

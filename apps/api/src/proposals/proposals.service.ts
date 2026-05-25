@@ -13,7 +13,9 @@ import {
   RoundStatus,
   VotingType,
 } from '@drep-dao/shared';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
+import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { CreateProposalDto, MilestoneInput, SubmitProposalDto, UpdateProposalDto } from './dto';
 
 const LOVELACE = 1_000_000;
@@ -22,7 +24,11 @@ const toAda = (l: bigint | null): number => (l == null ? 0 : Number(l) / LOVELAC
 
 @Injectable()
 export class ProposalsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService,
+    private readonly cardano: CardanoQueryService,
+  ) {}
 
   async createDraft(userId: string, dto: CreateProposalDto) {
     // §3/§19 — proposals can only be submitted while the round's submission
@@ -175,9 +181,15 @@ export class ProposalsService {
     return this.get(id);
   }
 
+  // §16 — a proposal is public only once its fee is confirmed; DRAFT (private) and
+  // PENDING (submitted, fee not yet confirmed) are never shown in public listings.
+  private static readonly PRIVATE_STATUSES: ProposalStatus[] = [ProposalStatus.DRAFT, ProposalStatus.PENDING];
+
   async listByRound(roundId: string, status?: string) {
-    // Never expose DRAFTs publicly.
-    const statusFilter = status && status !== ProposalStatus.DRAFT ? status : { not: ProposalStatus.DRAFT };
+    const statusFilter =
+      status && !ProposalsService.PRIVATE_STATUSES.includes(status as ProposalStatus)
+        ? status
+        : { notIn: ProposalsService.PRIVATE_STATUSES };
     const proposals = await this.prisma.proposal.findMany({
       where: { roundId, status: statusFilter },
       orderBy: { createdAt: 'asc' },
@@ -186,7 +198,12 @@ export class ProposalsService {
     return proposals.map((p) => this.summary(p));
   }
 
-  /** §16 — proposals awaiting board fee confirmation (drives the board notification + My-area list). */
+  /**
+   * §16 — proposals awaiting board fee confirmation (drives the board notification +
+   * My-area list). The platform verifies each fee ON-CHAIN: it looks up the provided
+   * tx hash and checks that ≥ the expected fee was paid to the submission-fee address,
+   * surfacing a paid/not-paid hint so the board doesn't have to eyeball the explorer.
+   */
   async listPendingFee() {
     const rows = await this.prisma.proposal.findMany({
       where: { status: ProposalStatus.PENDING },
@@ -197,18 +214,29 @@ export class ProposalsService {
         round: { select: { number: true } },
       },
     });
-    return rows.map((p) => ({
-      id: p.id,
-      title: p.title,
-      roundNumber: p.round?.number ?? null,
-      categoryName: p.category?.name ?? null,
-      isCommercial: p.isCommercial,
-      requestedAmountAda: toAda(p.requestedAmountAda),
-      submissionFeeAda: toAda(p.submissionFeeAda),
-      submissionFeeTxHash: p.submissionFeeTxHash,
-      submitter: p.submitterUser?.displayName ?? null,
-      submittedAt: p.submittedAt,
-    }));
+    const feeAddress = this.config.get<string>('SUBMISSION_FEE_ADDRESS') ?? this.config.get<string>('TREASURY_ADDRESS') ?? '';
+    return Promise.all(
+      rows.map(async (p) => {
+        const v =
+          p.submissionFeeTxHash && feeAddress
+            ? await this.cardano.verifyPayment(p.submissionFeeTxHash, feeAddress, p.submissionFeeAda ?? 0n)
+            : { found: false, paid: false, paidLovelace: 0n };
+        return {
+          id: p.id,
+          title: p.title,
+          roundNumber: p.round?.number ?? null,
+          categoryName: p.category?.name ?? null,
+          isCommercial: p.isCommercial,
+          requestedAmountAda: toAda(p.requestedAmountAda),
+          submissionFeeAda: toAda(p.submissionFeeAda),
+          submissionFeeTxHash: p.submissionFeeTxHash,
+          submitter: p.submitterUser?.displayName ?? null,
+          submittedAt: p.submittedAt,
+          // On-chain verification result for the board's "fee paid?" hint.
+          feeVerified: { found: v.found, paid: v.paid, paidAda: toAda(v.paidLovelace) },
+        };
+      }),
+    );
   }
 
   async listMine(userId: string) {
@@ -226,7 +254,8 @@ export class ProposalsService {
       include: { milestones: { orderBy: { idx: 'asc' } }, category: { select: { name: true } } },
     });
     if (!p) throw new NotFoundException('proposal not found');
-    if (p.status === ProposalStatus.DRAFT && p.submitterUserId !== viewerUserId) {
+    // DRAFT + PENDING (fee not yet confirmed) are visible only to their submitter.
+    if (ProposalsService.PRIVATE_STATUSES.includes(p.status as ProposalStatus) && p.submitterUserId !== viewerUserId) {
       throw new NotFoundException('proposal not found');
     }
     return {

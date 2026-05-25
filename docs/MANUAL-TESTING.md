@@ -69,12 +69,17 @@ Admin (separate): `/admin/login`, user `satucha`.
 - [ ] Post a **comment** and a **reply** (5-minute edit window applies).
 
 ### Submission + fee (commercial 3% / OSS 1%)
-- [ ] As Carol, submit a proposal in Round Beta (open submission first if needed).
-      The form shows the computed fee + the **dedicated fee address**.
-- [ ] Pay the fee on-chain to that address, paste the tx hash, submit (status PENDING).
-- [ ] As a board member: **My area → "Submission fees to confirm"** shows it with an
-      explorer link + the **notification badge** count; verify the tx, confirm → the
-      proposal moves to FILTERING.
+- [ ] As Carol, compose a proposal. **Save Draft** keeps it **private** — it shows in *My
+      proposals* tagged "DRAFT · private" and is invisible to everyone else (browse the round
+      as another user: it isn't listed). The form explains drafts are private.
+- [ ] **Submit** needs the on-chain fee **tx hash** (Submit is disabled without it); the draft
+      can also be **submitted later** via the inline **Submit** on its My-proposals row. After
+      submitting, status is PENDING — still **not public** (only the submitter sees it).
+- [ ] As a board member: **My area → "Submission fees to confirm"** shows it with the
+      **platform's on-chain check** — ✓ "Fee verified on-chain — N ₳ paid", ✗ underpaid, or
+      ⏳ not found (the platform reads the tx via Koios and sums outputs to the fee address) —
+      plus the explorer link + notification badge. Confirm → FILTERING, and the proposal
+      becomes **publicly visible**.
 
 ### Filtering → D&V → milestones (a fresh proposal)
 - [ ] Board: draw filtering reviewers; assigned DReps vote (NO needs rationale);
@@ -116,8 +121,10 @@ Admin (separate): `/admin/login`, user `satucha`.
       budget** allocated, and **all four** schedule windows set & valid — with a "still needed"
       hint listing what's missing.
 - [ ] **Schedule picker**: stage dates use a **month-name** picker (Month / Day / Year + time),
-      not numeric `mm/dd`. Setting an end at/before its start (or a stage before the previous
-      ends) shows an **immediate red warning**; a valid window shows its **duration** (e.g. "3 weeks").
+      not numeric `mm/dd`; the **time defaults to midnight (12:00 AM)**. Setting an end at/before
+      its start (or a stage before the previous ends) shows an **immediate red warning**; a valid
+      window shows its **duration** (e.g. "3 weeks"). The first category starts **blank** (no
+      default "Ecosystem").
 - [ ] **Round page shows the setup**: clicking a round shows a **Round setup** card (reward
       bar + resolved settings, each tagged `(default)` when not overridden) above its proposals.
 - [ ] **Platform setup is leaner**: *Platform setup* lists only genuinely global params

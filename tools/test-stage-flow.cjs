@@ -34,7 +34,7 @@ const HOUR = 3_600_000;
   const prisma = new PrismaService(config);
   const users = new UsersService(prisma, new CardanoQueryService(config));
   const rounds = new RoundsService(prisma, config);
-  const proposals = new ProposalsService(prisma);
+  const proposals = new ProposalsService(prisma, config, new CardanoQueryService(config));
   const actor = await prisma.appUser.findFirst(); // any user id for confirmedBy
 
   console.log('\n=== P4/P7 — creation validations ===');

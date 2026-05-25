@@ -36,7 +36,7 @@ const log = (...a) => console.log(...a);
   const users = new UsersService(prisma, cardano);
   const anchor = new AnchorService(cfg, prisma, cardano);
   const rounds = new RoundsService(prisma, cfg);
-  const proposals = new ProposalsService(prisma);
+  const proposals = new ProposalsService(prisma, cfg, cardano);
   const filtering = new FilteringService(prisma, anchor);
   const dv = new DvService(prisma, cfg, anchor, cardano);
   const milestones = new MilestonesService(prisma, anchor);

@@ -194,7 +194,8 @@ function DateTimeField({ value, onChange }: { value: string; onChange: (v: strin
   const [year, setYear] = useState(m ? m[1] : '');
   const [month, setMonth] = useState(m ? m[2] : '');
   const [day, setDay] = useState(m ? m[3] : '');
-  const [time, setTime] = useState(m ? `${m[4]}:${m[5]}` : '');
+  // Default the time to midnight — DReps usually just pick a date (and may change it).
+  const [time, setTime] = useState(m ? `${m[4]}:${m[5]}` : '00:00');
 
   const thisYear = new Date().getFullYear();
   const years = Array.from({ length: 5 }, (_, i) => String(thisYear + i));
@@ -227,7 +228,7 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
   const [budget, setBudget] = useState(4_000_000);
   const [rewards, setRewards] = useState(200_000);
   const [cats, setCats] = useState<RoundCategoryInput[]>([
-    { name: 'Ecosystem', type: 'GRANT', allocatedAda: 4_000_000, description: '' },
+    { name: '', type: 'GRANT', allocatedAda: 4_000_000, description: '' },
   ]);
   const [sched, setSched] = useState<Record<string, { startsAt: string; endsAt: string }>>({});
   // §6/§12 — per-round settings (blank = use the default). Reward splits are sliders.

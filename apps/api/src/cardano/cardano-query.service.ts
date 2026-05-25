@@ -78,6 +78,42 @@ export class CardanoQueryService {
   }
 
   /**
+   * §16 — verify on-chain that `txHash` paid at least `minLovelace` to `toAddress`
+   * (the submission-fee address). Sums the tx's outputs to that address via Koios
+   * /tx_info. Best-effort: `found=false` if the tx isn't on-chain yet / Koios errors.
+   */
+  async verifyPayment(
+    txHash: string,
+    toAddress: string,
+    minLovelace: bigint,
+  ): Promise<{ found: boolean; paid: boolean; paidLovelace: bigint }> {
+    const miss = { found: false, paid: false, paidLovelace: 0n };
+    if (!txHash || !toAddress) return miss;
+    try {
+      const res = await fetch(`${this.base}/tx_info`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _tx_hashes: [txHash] }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) return miss;
+      const rows = (await res.json()) as { outputs?: { payment_addr?: { bech32?: string }; value?: string }[] }[];
+      const tx = rows[0];
+      if (!tx) return miss;
+      let paid = 0n;
+      for (const o of tx.outputs ?? []) {
+        if (o.payment_addr?.bech32 === toAddress) {
+          try { paid += BigInt(o.value ?? '0'); } catch { /* ignore */ }
+        }
+      }
+      return { found: true, paid: paid >= minLovelace, paidLovelace: paid };
+    } catch (e) {
+      this.logger.warn(`tx_info verify: ${e instanceof Error ? e.message : e}`);
+      return miss;
+    }
+  }
+
+  /**
    * Controlled on-chain stake (Lovelace) per stake address, via Koios
    * /account_info `total_balance`. For a self-delegated DRep this equals their
    * voting power, and it's available immediately (no epoch lag). Best-effort:

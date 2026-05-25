@@ -645,6 +645,8 @@ export interface PendingFee {
   submissionFeeTxHash: string | null;
   submitter: string | null;
   submittedAt: string;
+  // On-chain verification of the fee payment (found on chain? paid ≥ expected? how much).
+  feeVerified: { found: boolean; paid: boolean; paidAda: number };
 }
 export const boardFeeApi = {
   pending: () => request<PendingFee[]>('/admin/proposals/pending-fee'),

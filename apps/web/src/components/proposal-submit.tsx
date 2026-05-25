@@ -47,29 +47,68 @@ export function ProposalSubmit() {
 
   const field = 'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-    setMsg(null);
+  const buildInput = () => ({
+    roundId,
+    categoryId,
+    title: title.trim(),
+    contentMd: content,
+    isCommercial: commercial,
+    requestedAmountAda: Number(amount),
+    milestones: ms.map((m) => ({ description: m.description, amountAda: Number(m.amountAda) })),
+  });
+
+  const milestonesOk = () => {
     const sum = ms.reduce((a, m) => a + Number(m.amountAda), 0);
     if (sum !== Number(amount)) {
       setError(`milestones (${sum}) must sum to requested amount (${amount})`);
+      return false;
+    }
+    return true;
+  };
+
+  const reset = () => {
+    setTitle('');
+    setContent('');
+    setFee('');
+    setMs([{ description: '', amountAda: Number(amount) }]);
+  };
+
+  // §3 — save privately as a DRAFT (no fee needed); submit it later.
+  const saveDraft = async () => {
+    setError(null);
+    setMsg(null);
+    if (!milestonesOk()) return;
+    setBusy(true);
+    try {
+      const d = await proposalsApi.create(buildInput());
+      setMsg(`Saved draft "${d.title}" — it stays private until you submit and a board member confirms your fee.`);
+      setOpen(false);
+      reset();
+      loadMine();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'save failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // §3.3 — submit with the on-chain fee tx; goes to PENDING (still private) until the board confirms.
+  const submitNow = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setMsg(null);
+    if (!milestonesOk()) return;
+    if (!fee.trim()) {
+      setError('Paste the submission-fee transaction hash to submit (or use Save Draft).');
       return;
     }
     setBusy(true);
     try {
-      const draft = await proposalsApi.create({
-        roundId,
-        categoryId,
-        title: title.trim(),
-        contentMd: content,
-        isCommercial: commercial,
-        requestedAmountAda: Number(amount),
-        milestones: ms.map((m) => ({ description: m.description, amountAda: Number(m.amountAda) })),
-      });
-      const submitted = await proposalsApi.submit(draft.id, fee.trim() || 'pending-fee-tx');
-      setMsg(`Submitted "${submitted.title}" — fee ${submitted.submissionFeeAda} ₳, status ${submitted.status}.`);
+      const draft = await proposalsApi.create(buildInput());
+      const submitted = await proposalsApi.submit(draft.id, fee.trim());
+      setMsg(`Submitted "${submitted.title}" — fee ${submitted.submissionFeeAda} ₳. A board member verifies your payment on-chain; it becomes public once confirmed.`);
       setOpen(false);
+      reset();
       loadMine();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'submission failed');
@@ -87,12 +126,14 @@ export function ProposalSubmit() {
     );
   }
 
+  const feeEstimate = Math.round(Math.min((amount * (commercial ? 3 : 1)) / 100, commercial ? 5000 : 1000));
+
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold">Funding proposals</h3>
         <button onClick={() => setOpen((v) => !v)} className="rounded-md border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
-          {open ? 'Cancel' : '+ Submit proposal'}
+          {open ? 'Cancel' : '+ New proposal'}
         </button>
       </div>
 
@@ -106,7 +147,7 @@ export function ProposalSubmit() {
       ) : null}
 
       {open && rounds.length > 0 ? (
-        <form onSubmit={submit} className="mt-3 space-y-2">
+        <form onSubmit={submitNow} className="mt-3 space-y-2">
           <div className="flex flex-wrap gap-2">
             <select className={field} value={roundId} onChange={(e) => setRoundId(e.target.value)} required>
               <option value="">Select round…</option>
@@ -141,37 +182,113 @@ export function ProposalSubmit() {
           <div className="rounded border border-neutral-200 p-2 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
             <div>
               Submission fee: <strong>{commercial ? '3% (commercial)' : '1% (open-source)'}</strong> of the requested
-              amount ≈ <strong>{Math.round(Math.min((amount * (commercial ? 3 : 1)) / 100, commercial ? 5000 : 1000)).toLocaleString()} ₳</strong>.
-              Pay it to the address below, then paste the transaction hash. A board member verifies and confirms it.
+              amount ≈ <strong>{feeEstimate.toLocaleString()} ₳</strong>. To <strong>submit</strong>, pay it to the
+              address below and paste the transaction hash; the platform verifies it on-chain and a board member confirms.
             </div>
             {cfg?.submissionFeeAddress ? (
               <div className="mt-1 break-all font-mono text-[11px] text-neutral-500">{cfg.submissionFeeAddress}</div>
             ) : null}
           </div>
-          <input className={`${field} w-full`} placeholder="Submission fee TX hash" value={fee} onChange={(e) => setFee(e.target.value)} />
+          <input className={`${field} w-full`} placeholder="Submission fee TX hash (needed only to submit)" value={fee} onChange={(e) => setFee(e.target.value)} />
           {error ? <div className="text-sm text-red-600">{error}</div> : null}
-          <button type="submit" disabled={busy || !roundId} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-            {busy ? 'Submitting…' : 'Submit (creates draft + submits)'}
-          </button>
+          {/* §3 — privacy + the two ways out of the form. */}
+          <p className="text-xs text-neutral-500">
+            <strong>Drafts are private</strong> — visible only to you, not to DReps or the board. A proposal becomes
+            public only after you submit and a board member confirms the fee.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="submit" disabled={busy || !roundId || !fee.trim()} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+              {busy ? 'Working…' : 'Submit'}
+            </button>
+            <button type="button" onClick={saveDraft} disabled={busy || !roundId} className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
+              Save Draft
+            </button>
+          </div>
         </form>
       ) : null}
 
       {mine.length > 0 ? (
         <div className="mt-3">
           <div className="text-sm font-medium">My proposals</div>
-          <p className="text-xs text-neutral-500">Open one to read it, edit it (during Filtering or pre-vote Debate &amp; Vote), and submit milestone proofs.</p>
+          <p className="text-xs text-neutral-500">Drafts are private. Open one to read/edit it; submit a draft when you&apos;re ready (pay the fee + paste the tx).</p>
           <ul className="mt-1 space-y-1 text-sm">
             {mine.map((p) => (
-              <li key={p.id}>
-                <button onClick={() => setOpenId(p.id)} className="flex w-full justify-between rounded border border-neutral-200 px-3 py-1.5 text-left hover:border-emerald-400 dark:border-neutral-800">
-                  <span>{p.title} <span className="text-neutral-500">· {p.requestedAmountAda.toLocaleString()} ₳</span></span>
-                  <span className="text-xs text-neutral-500">{p.status}{p.stage ? ` · ${p.stage}` : ''}</span>
-                </button>
-              </li>
+              <MineRow key={p.id} p={p} feeAddress={cfg?.submissionFeeAddress ?? undefined} onOpen={() => setOpenId(p.id)} onSubmitted={loadMine} />
             ))}
           </ul>
         </div>
       ) : null}
     </section>
+  );
+}
+
+/** A row in "My proposals": open it, plus an inline Submit for DRAFTs (submit later). */
+function MineRow({
+  p,
+  feeAddress,
+  onOpen,
+  onSubmitted,
+}: {
+  p: ProposalSummary;
+  feeAddress?: string;
+  onOpen: () => void;
+  onSubmitted: () => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+  const [fee, setFee] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const field = 'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
+  const isDraft = p.status === 'DRAFT';
+
+  const submit = async () => {
+    setError(null);
+    if (!fee.trim()) { setError('Paste your submission-fee tx hash.'); return; }
+    setBusy(true);
+    try {
+      await proposalsApi.submit(p.id, fee.trim());
+      setSubmitting(false);
+      setFee('');
+      onSubmitted();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'submit failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li className="rounded border border-neutral-200 dark:border-neutral-800">
+      <div className="flex items-center justify-between px-3 py-1.5">
+        <button onClick={onOpen} className="flex-1 text-left hover:underline">
+          <span>{p.title} <span className="text-neutral-500">· {p.requestedAmountAda.toLocaleString()} ₳</span></span>
+        </button>
+        <span className="flex items-center gap-2">
+          <span className={`text-xs ${isDraft ? 'text-amber-600' : 'text-neutral-500'}`}>
+            {p.status}{p.stage ? ` · ${p.stage}` : ''}{isDraft ? ' · private' : ''}
+          </span>
+          {isDraft ? (
+            <button onClick={() => setSubmitting((v) => !v)} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950">
+              {submitting ? 'Close' : 'Submit'}
+            </button>
+          ) : null}
+        </span>
+      </div>
+      {isDraft && submitting ? (
+        <div className="space-y-1 border-t border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
+          <div className="text-neutral-500">
+            Pay the submission fee on-chain, then paste the tx hash. The platform verifies it and a board member confirms.
+          </div>
+          {feeAddress ? <div className="break-all font-mono text-[11px] text-neutral-500">{feeAddress}</div> : null}
+          <div className="flex flex-wrap items-center gap-2">
+            <input className={`${field} flex-1`} placeholder="Submission fee TX hash" value={fee} onChange={(e) => setFee(e.target.value)} />
+            <button onClick={submit} disabled={busy} className="rounded bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+              {busy ? 'Submitting…' : 'Submit'}
+            </button>
+          </div>
+          {error ? <div className="text-red-600">{error}</div> : null}
+        </div>
+      ) : null}
+    </li>
   );
 }
