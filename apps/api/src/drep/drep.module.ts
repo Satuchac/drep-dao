@@ -8,6 +8,7 @@ import { BoardAdmissionController } from './board-admission.controller';
 import { BoardExpertsController } from './board-experts.controller';
 import { BoardRemovalController } from './board-removal.controller';
 import { DaoController } from './dao.controller';
+import { BoardProofsController } from './board-proofs.controller';
 
 @Module({
   imports: [AuthModule], // provides JwtAuthGuard
@@ -18,6 +19,7 @@ import { DaoController } from './dao.controller';
     BoardExpertsController,
     BoardRemovalController,
     DaoController,
+    BoardProofsController,
   ],
   providers: [DrepService, BoardGuard],
 })

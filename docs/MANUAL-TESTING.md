@@ -103,17 +103,25 @@ Admin (separate): `/admin/login`, user `satucha`.
 - [ ] **Board opt-in (§8.2)**: board members do NOT auto-vote on funding proposals — the
       D&V panel shows an **"Opt in to vote"** button for board; after opting in they
       become eligible (and can vote in My area). Regular admitted DReps vote by default.
-- [ ] **Per-round settings (round setup)**: creating a round shows a **Round settings** block
-      with a **Fixed↔Bonus reward slider** (the two shares always sum to 100%) and grouped
-      number inputs — review & approval (filtering/milestone reviewers + approvals, D&V
-      threshold), **submission fees** (commercial/OSS % + caps, filtering reward cap),
-      **quick poll**, **milestone timing**, **proposer pledge**. Each box shows its default;
-      blank ⇒ default. The **approval** inputs cap to their reviewer count (and the API
-      rejects approval > reviewer). These were moved here out of *Platform setup*.
-- [ ] **Platform setup is leaner**: *Platform setup* now lists only the genuinely global
-      params (admission votes, internal thresholds, eligibility minimums, merit cap, anchor
-      cron, explorer) — the round/fee/quick-poll/milestone-timing/pledge params are gone
-      from here (they live in the round setup).
+- [ ] **Per-round settings (round setup)**: creating a round shows a **Reward distribution**
+      block with **two sliders** — D&V vs Milestone review, and (within D&V) Fixed vs Bonus —
+      plus a **live bar** that re-splits the reward pool (D&V fixed / D&V bonus / milestone) as
+      you drag. Below, **Round parameters** are grouped with an **explanation under each field**:
+      review & approval ordered **Filtering → D&V → Milestone**, **submission fees**, **quick
+      poll**, **milestone timing**, **proposer pledge**. Each box shows its default; blank ⇒
+      default. The **approval** inputs cap to their reviewer count (and the API rejects
+      approval > reviewer).
+- [ ] **Round page shows the setup**: clicking a round shows a **Round setup** card (reward
+      bar + resolved settings, each tagged `(default)` when not overridden) above its proposals.
+- [ ] **Platform setup is leaner**: *Platform setup* lists only genuinely global params
+      (admission votes, internal thresholds, eligibility minimums, merit cap, anchor cron,
+      explorer) — round/fee/quick-poll/milestone-timing/pledge/reward params live in the round setup.
+- [ ] **Board enforces anchor submission**: on *On-chain proofs*, a board member sees
+      **Submit on-chain** beside any "anchor pending" record and a **Submit all pending (N)**
+      button; non-board members don't. (No pending anchors in the seeded demo — all are submitted.)
+- [ ] **Filtering shows one proposal at a time**: in *My area → Voting & reviews*, opening
+      **View full proposal** on a filtering assignment shows ONLY that proposal (its detail +
+      its own rationale/vote box) — the other assignments are hidden until you go back.
 - [ ] **Edit history**: the proposal detail shows a collapsed **"Edit history"** — expand it
       to compare any earlier version with the current one (diff or full side-by-side).
 - [ ] **Comment roles**: each comment shows a role badge — **Board member / DAO member /

@@ -57,7 +57,8 @@ export const ROUND_SETTING_DEFAULTS = {
   milestoneReviewerCount: 3,
   milestoneApprovalVotes: 2,
   dvApprovalThresholdPct: 67,
-  rewardFixedPct: 70, // bonus share = 100 - rewardFixedPct
+  rewardDvSharePct: 60, // §12.2 — % of the reward pool → Debate & Vote (rest → milestone review)
+  rewardFixedPct: 70, // within the D&V slice: % fixed (bonus share = 100 - rewardFixedPct)
   feeCommercialPct: 3,
   feeCommercialCapAda: 5_000,
   feeOssPct: 1,
@@ -85,8 +86,10 @@ export const ROUND_SETTING_META: Record<RoundSettingKey, string> = {
   milestoneApprovalVotes:
     'YES votes among milestone reviewers needed to approve a milestone payout. Max = milestone reviewers.',
   dvApprovalThresholdPct: 'Percentage of balanced voting power required to approve a proposal in Debate & Vote.',
+  rewardDvSharePct:
+    "Share (%) of the round's reward pool paid for Debate & Vote participation; the remainder funds milestone reviewers (D&V + milestone = 100%).",
   rewardFixedPct:
-    "Fixed share (%) of the round's reward pool; the remainder is paid as a performance bonus (fixed + bonus = 100%).",
+    'Within the Debate & Vote slice, the fixed share (%); the remainder is a performance bonus (fixed + bonus = 100%). Milestone-review rewards are always fixed.',
   feeCommercialPct: 'Submission fee for commercial proposals, as a percent of the requested amount.',
   feeCommercialCapAda: 'Maximum submission fee for a commercial proposal (ADA).',
   feeOssPct: 'Submission fee for open-source / non-commercial proposals, as a percent of the requested amount.',

@@ -184,6 +184,7 @@ export class RoundsService {
         milestoneReviewerCount: r.milestoneReviewerCount,
         milestoneApprovalVotes: r.milestoneApprovalVotes,
         dvApprovalThresholdPct: r.dvApprovalThresholdPct == null ? null : Number(r.dvApprovalThresholdPct),
+        rewardDvSharePct: r.rewardDvSharePct,
         rewardFixedPct: r.rewardFixedPct,
         feeCommercialPct: r.feeCommercialPct,
         feeCommercialCapAda: r.feeCommercialCapAda,

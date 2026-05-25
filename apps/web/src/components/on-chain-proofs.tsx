@@ -1,29 +1,80 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { daoApi, type OnChainProof } from '@/lib/api';
+import { useCallback, useEffect, useState } from 'react';
+import { boardProofsApi, daoApi, type OnChainProof } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
 
 /** Everything the platform has anchored on-chain — human-readable + verifiable. */
 export function OnChainProofs() {
   const { txUrl } = useExplorer();
+  const { profile } = useAuth();
+  const isBoard = profile?.roles.includes('BOARD') ?? false;
   const [proofs, setProofs] = useState<OnChainProof[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     daoApi.proofs().then(setProofs).catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
   }, []);
+  useEffect(load, [load]);
+
+  const pending = (proofs ?? []).filter((p) => !p.txHash).length;
+
+  const submitOne = async (id: string) => {
+    setBusy(id);
+    setError(null);
+    setMsg(null);
+    try {
+      await boardProofsApi.submit(id);
+      setMsg('Anchor submitted on-chain.');
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'submission failed');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const submitAll = async () => {
+    setBusy('all');
+    setError(null);
+    setMsg(null);
+    try {
+      const r = await boardProofsApi.submitAll();
+      setMsg(`Submitted ${r.submitted}/${r.total} pending anchor${r.total === 1 ? '' : 's'}${r.failed ? ` (${r.failed} failed)` : ''}.`);
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'submission failed');
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <div className="space-y-3">
-      <div>
-        <h2 className="text-lg font-semibold">On-chain proofs</h2>
-        <p className="text-sm text-neutral-500">
-          Decisions anchored on Cardano as transaction metadata. Each links to the explorer; the metadata
-          itself lists the voters and outcome, so anyone can verify it independently.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-semibold">On-chain proofs</h2>
+          <p className="text-sm text-neutral-500">
+            Decisions anchored on Cardano as transaction metadata. Each links to the explorer; the metadata
+            itself lists the voters and outcome, so anyone can verify it independently.
+          </p>
+        </div>
+        {/* §18 — only board members can force pending anchors onto the chain. */}
+        {isBoard && pending > 0 ? (
+          <button
+            onClick={submitAll}
+            disabled={busy !== null}
+            className="shrink-0 rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {busy === 'all' ? 'Submitting…' : `Submit all pending (${pending})`}
+          </button>
+        ) : null}
       </div>
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
+      {msg ? <div className="text-sm text-emerald-600">{msg}</div> : null}
       {!proofs ? (
         <p className="text-sm text-neutral-500">Loading…</p>
       ) : proofs.length === 0 ? (
@@ -44,7 +95,19 @@ export function OnChainProofs() {
                     view on explorer ↗
                   </a>
                 ) : (
-                  <span className="text-amber-600">anchor pending (not yet submitted)</span>
+                  <>
+                    <span className="text-amber-600">anchor pending (not yet submitted)</span>
+                    {/* §18 — board can enforce submission for this record. */}
+                    {isBoard ? (
+                      <button
+                        onClick={() => submitOne(p.id)}
+                        disabled={busy !== null}
+                        className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                      >
+                        {busy === p.id ? 'Submitting…' : 'Submit on-chain'}
+                      </button>
+                    ) : null}
+                  </>
                 )}
               </div>
             </li>

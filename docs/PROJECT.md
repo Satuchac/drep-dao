@@ -83,10 +83,23 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   `RoundsService.assertSettings` and capped in the form), the **D&V threshold**,
   submission **fees** (commercial/OSS % + ADA caps, and `feeCapPerRoundAda` which
   caps the filtering reward pool), **quick-poll** settings, **milestone timing**,
-  and the **proposer pledge**. The **reward split** is a single Fixed↔Bonus slider
-  (`rewardFixedPct`; bonus = 100 − fixed). `PLATFORM_CONFIG_DEFAULTS` (Platform
-  setup) now holds only genuinely global params (admission votes, internal
-  thresholds, eligibility minimums, merit cap, anchor cron, explorer).
+  and the **proposer pledge**. Review & approval fields are ordered to the flow
+  (Filtering → D&V → Milestone), and every field shows its explanation inline. The
+  **reward split** uses **two sliders** — `rewardDvSharePct` (D&V vs milestone
+  review) and `rewardFixedPct` (within D&V: fixed vs bonus) — with a live bar
+  visualising how the reward pool divides (D&V fixed / D&V bonus / milestone).
+  `PLATFORM_CONFIG_DEFAULTS` (Platform setup) holds only genuinely global params
+  (admission votes, internal thresholds, eligibility minimums, merit cap, anchor
+  cron, explorer).
+- **Round page shows the round's setup.** Drilling into a round renders its
+  resolved per-round settings (value or `(default)`) + the reward-distribution bar
+  above its proposal list.
+- **Board can enforce anchor submission (§18).** On *On-chain proofs*, board members
+  see **Submit on-chain** per pending anchor and **Submit all pending** — for records
+  that were computed but never reached the chain (hot wallet unconfigured/offline at
+  the time). `AnchorService.submitPending` rebuilds the metadata from the stored
+  preimage (same `proofHash`) and posts one tx; board-guarded `POST /admin/proofs/:id/submit`
+  + `/submit-all`.
 - **Stage transitions are board-confirmed (single board member).** From *My area →
   Round stage controls* a board member, for the next stage, checks the proposal
   counts (readiness), confirms the date, and chooses **auto-start at the planned

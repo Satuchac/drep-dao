@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bip39 from 'bip39';
 import * as CSL from '@emurgo/cardano-serialization-lib-nodejs';
@@ -224,6 +224,70 @@ export class AnchorService implements OnModuleInit {
       },
     });
     return { hash, txHash, submitted: !!txHash };
+  }
+
+  /**
+   * §18 (board) — force-submit an anchor that was recorded but never reached the chain
+   * (e.g. the hot wallet was unconfigured/offline when the decision was made). Rebuilds
+   * the self-describing metadata from the stored preimage (same `proofHash`) and submits
+   * one tx. Idempotent: a no-op if it is already on-chain.
+   */
+  async submitPending(anchorId: string): Promise<AnchorResult> {
+    const a = await this.prisma.anchor.findUnique({ where: { id: anchorId } });
+    if (!a) throw new NotFoundException('anchor not found');
+    if (a.txHash) return { hash: a.hash, txHash: a.txHash, submitted: true };
+    if (!this.mnemonic) {
+      throw new BadRequestException('no anchor hot wallet is configured — set or rotate the seed first');
+    }
+    const txHash = await this.submitMetadataTx(this.metadataFromAnchor(a));
+    await this.prisma.anchor.update({ where: { id: anchorId }, data: { txHash, submittedAt: new Date() } });
+    return { hash: a.hash, txHash, submitted: true };
+  }
+
+  /** §18 (board) — submit every anchor that is recorded but not yet on-chain. */
+  async submitAllPending(): Promise<{ submitted: number; failed: number; total: number }> {
+    const pending = await this.prisma.anchor.findMany({ where: { txHash: null }, orderBy: { createdAt: 'asc' } });
+    let submitted = 0;
+    let failed = 0;
+    for (const a of pending) {
+      try {
+        await this.submitPending(a.id);
+        submitted++;
+      } catch (e) {
+        failed++;
+        this.logger.warn(`force-submit ${a.id} failed: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+    return { submitted, failed, total: pending.length };
+  }
+
+  /** Rebuild the on-chain metadata for an anchor from its stored preimage. */
+  private metadataFromAnchor(a: { kind: string; hash: string; preimage: unknown }): AnchorResultMetadata {
+    const p = (a.preimage ?? {}) as {
+      subject?: GovSubject;
+      style?: VotingStyle;
+      ref?: string;
+      votes?: { drep?: string; vote?: string; choice?: string; power?: number; weight?: number }[];
+      result?: { outcome?: string; yes?: number; no?: number; threshold?: number; totalPower?: number };
+    };
+    const votes = (p.votes ?? []).map((v) => ({
+      drep: v.drep ?? '',
+      vote: v.vote ?? v.choice ?? '',
+      power: v.power ?? v.weight,
+    }));
+    const r = p.result ?? {};
+    return buildResultMetadata({
+      subject: (p.subject ?? a.kind) as GovSubject,
+      style: (p.style ?? VotingStyle.ONE_PERSON_ONE_VOTE) as VotingStyle,
+      applicant: p.ref ?? '',
+      votes,
+      yes: r.yes ?? 0,
+      no: r.no ?? 0,
+      threshold: r.threshold ?? 0,
+      totalPower: r.totalPower,
+      outcome: r.outcome ?? '',
+      proofHash: a.hash,
+    })[GOVERNANCE_METADATA_LABEL];
   }
 
   /** Admission decision (1P1V). `votes` carry each board member's CIP-30 signature. */

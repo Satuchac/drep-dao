@@ -27,7 +27,9 @@ export class RoundSettingsInput {
   @IsOptional() @IsInt() @Min(1) milestoneReviewerCount?: number;
   @IsOptional() @IsInt() @Min(1) milestoneApprovalVotes?: number;
   @IsOptional() @IsInt() @Min(1) @Max(100) dvApprovalThresholdPct?: number;
-  // §12.2 — fixed share (%) of the reward pool; bonus = 100 - rewardFixedPct.
+  // §12.2 — reward pool split: D&V share (rest → milestone review), and within the
+  // D&V slice the fixed share (bonus = 100 - rewardFixedPct).
+  @IsOptional() @IsInt() @Min(0) @Max(100) rewardDvSharePct?: number;
   @IsOptional() @IsInt() @Min(0) @Max(100) rewardFixedPct?: number;
   // §12 — submission fees.
   @IsOptional() @IsInt() @Min(0) @Max(100) feeCommercialPct?: number;

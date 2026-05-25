@@ -1137,15 +1137,18 @@ The board may also terminate a project at any time (e.g., due to non-response), 
 
 > **Updated (implementation):** these are now **per-round settings** configured in the
 > round setup (stored on the round; the values below are the `ROUND_SETTING_DEFAULTS`
-> fallback), not platform-wide config. The two reward-split parameters were collapsed
-> into a single per-round **Fixed↔Bonus** slider: `rewardFixedPct` is the fixed share
-> and the bonus share is `100 − rewardFixedPct` (the separate D&V-vs-Milestones split
-> was dropped). The §12.3–12.4 formulas below predate that and will be revised when
-> the reward engine is built.
+> fallback), not platform-wide config. The reward split is set with **two sliders**:
+> `rewardDvSharePct` splits the reward pool between **Debate & Vote** (left) and
+> **Milestone review** (right), and `rewardFixedPct` splits the D&V slice between
+> **fixed** (left) and **bonus** (right). Milestone-review rewards are always fixed.
+> The round setup shows a live bar of the resulting distribution. The §12.3–12.4
+> formulas still apply (`rewardDvSharePct` plays the role of the old
+> `STAGES_REWARD_SPLIT_DV_PCT`; `100 − rewardFixedPct` is the old `BONUS_SHARE_DV_PCT`).
 
 | Parameter | Default | Range | Meaning |
 |---|---|---|---|
-| `rewardFixedPct` | 70 | 0–100 | Fixed share (%) of the reward pool; bonus = 100 − fixed |
+| `rewardDvSharePct` | 60 | 0–100 | % of reward pool → Debate & Vote (rest → milestone review) |
+| `rewardFixedPct` | 70 | 0–100 | Within the D&V slice, fixed share (%); bonus = 100 − fixed |
 | `feeCapPerRoundAda` | 50,000 | ≥0 | Cap on filtering reward pool from submission fees (overflow → D&V) |
 | `feeCommercialPct` | 3 | 0–100 | Submission fee for commercial projects |
 | `feeCommercialCapAda` | 5,000 | ≥0 | Cap on commercial submission fee |
@@ -1922,7 +1925,8 @@ round.
 | `milestoneReviewerCount` | 3 | Milestones |
 | `milestoneApprovalVotes` | 2 | Milestones (≤ reviewer count) |
 | `dvApprovalThresholdPct` | 67 | D&V |
-| `rewardFixedPct` | 70 | Reward split (bonus = 100 − fixed) |
+| `rewardDvSharePct` | 60 | Reward split: D&V vs milestone review |
+| `rewardFixedPct` | 70 | Within D&V: fixed vs bonus (bonus = 100 − fixed) |
 | `feeCommercialPct` | 3 | Submission fees |
 | `feeCommercialCapAda` | 5,000 | Submission fees |
 | `feeOssPct` | 1 | Submission fees |

@@ -120,6 +120,14 @@ export const daoApi = {
   proofs: () => request<OnChainProof[]>('/dao/proofs'),
 };
 
+// §18 — board force-submits anchors recorded but not yet posted on-chain.
+export const boardProofsApi = {
+  submit: (id: string) =>
+    request<{ hash: string; txHash: string | null; submitted: boolean }>(`/admin/proofs/${id}/submit`, { method: 'POST' }),
+  submitAll: () =>
+    request<{ submitted: number; failed: number; total: number }>('/admin/proofs/submit-all', { method: 'POST' }),
+};
+
 export interface WalletStatus {
   hotWallet: { address: string | null; balanceAda: number; configured: boolean };
   treasury: { address: string | null; balanceAda: number; configured: boolean };
@@ -317,6 +325,7 @@ export interface RoundSettingsInput {
   milestoneReviewerCount?: number;
   milestoneApprovalVotes?: number;
   dvApprovalThresholdPct?: number;
+  rewardDvSharePct?: number;
   rewardFixedPct?: number;
   feeCommercialPct?: number;
   feeCommercialCapAda?: number;

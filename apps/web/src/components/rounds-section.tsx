@@ -8,6 +8,7 @@ import {
   roundsApi,
   type CreateRoundInput,
   type RoundCategoryInput,
+  type RoundDetail,
   type RoundSettingsInput,
   type RoundSummary,
 } from '@/lib/api';
@@ -22,18 +23,20 @@ const STAGE_DEFS = [
 ];
 const CATEGORY_TYPES = ['GRANT', 'RFP'];
 
-// §6/§12 — per-round settings shown in the round setup, grouped. `rewardFixedPct`
-// is handled separately as the Fixed↔Bonus slider. `unit` drives the input suffix.
-type SettingKey = Exclude<keyof RoundSettingsInput, 'rewardFixedPct'>;
+// §6/§12 — per-round settings shown in the round setup, grouped. The reward-split
+// keys (`rewardDvSharePct`, `rewardFixedPct`) are handled separately as sliders.
+// `unit` drives the input suffix.
+type SettingKey = Exclude<keyof RoundSettingsInput, 'rewardFixedPct' | 'rewardDvSharePct'>;
 const SETTING_GROUPS: { title: string; fields: { key: SettingKey; label: string; unit?: '%' | '₳' }[] }[] = [
   {
+    // Ordered to match the proposal flow: Filtering → Debate & Vote → Milestones.
     title: 'Review & approval',
     fields: [
       { key: 'filterReviewerCount', label: 'Filtering reviewers' },
       { key: 'filterApprovalVotes', label: 'Filtering approvals' },
+      { key: 'dvApprovalThresholdPct', label: 'D&V threshold', unit: '%' },
       { key: 'milestoneReviewerCount', label: 'Milestone reviewers' },
       { key: 'milestoneApprovalVotes', label: 'Milestone approvals' },
-      { key: 'dvApprovalThresholdPct', label: 'D&V threshold', unit: '%' },
     ],
   },
   {
@@ -98,6 +101,7 @@ export function RoundsSection() {
           </h2>
           <StatusBadge status={open.status} />
         </div>
+        <RoundSettingsView roundId={open.id} />
         <ProposalList roundId={open.id} />
       </section>
     );
@@ -168,8 +172,9 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
     { name: 'Ecosystem', type: 'GRANT', allocatedAda: 4_000_000, description: '' },
   ]);
   const [sched, setSched] = useState<Record<string, { startsAt: string; endsAt: string }>>({});
-  // §6/§12 — per-round settings (blank = use the default). Reward split is its own slider.
+  // §6/§12 — per-round settings (blank = use the default). Reward splits are sliders.
   const [settings, setSettings] = useState<Record<string, string>>({});
+  const [rewardDvShare, setRewardDvShare] = useState<number>(ROUND_SETTING_DEFAULTS.rewardDvSharePct);
   const [rewardFixed, setRewardFixed] = useState<number>(ROUND_SETTING_DEFAULTS.rewardFixedPct);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -234,8 +239,8 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
         if (!v?.startsAt || !v?.endsAt) return [];
         return [{ stageKey: s.key, startsAt: new Date(v.startsAt).toISOString(), endsAt: new Date(v.endsAt).toISOString() }];
       });
-      // §6/§12 — collect every supplied per-round setting; reward split always sent.
-      const settingsInput: RoundSettingsInput = { rewardFixedPct: rewardFixed };
+      // §6/§12 — collect every supplied per-round setting; reward splits always sent.
+      const settingsInput: RoundSettingsInput = { rewardDvSharePct: rewardDvShare, rewardFixedPct: rewardFixed };
       for (const g of SETTING_GROUPS)
         for (const f of g.fields) {
           const v = num(f.key);
@@ -307,14 +312,32 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
         <button type="button" onClick={() => setCats((cs) => [...cs, { name: '', type: 'GRANT', allocatedAda: 0, description: '' }])} className="mt-1 text-xs underline">+ add category</button>
       </div>
 
+      {/* §12.2 — reward distribution: two sliders + a live visual of how the pool splits. */}
       <div className="space-y-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
-        <div className="text-sm font-medium">Round settings</div>
+        <div className="text-sm font-medium">Reward distribution</div>
 
-        {/* §12.2 — Fixed↔Bonus reward split (always set; the two shares sum to 100%). */}
+        {/* Slider 1 — split the reward pool: Debate & Vote (left) vs Milestone review (right). */}
         <div>
           <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="font-medium text-emerald-700 dark:text-emerald-400">Fixed reward {rewardFixed}%</span>
-            <span className="text-neutral-500">Reward split</span>
+            <span className="font-medium text-emerald-700 dark:text-emerald-400">Debate &amp; Vote {rewardDvShare}%</span>
+            <span className="font-medium text-sky-700 dark:text-sky-400">Milestone review {100 - rewardDvShare}%</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={rewardDvShare}
+            onChange={(e) => setRewardDvShare(Number(e.target.value))}
+            className="w-full accent-emerald-600"
+          />
+          <p className="mt-0.5 text-[11px] text-neutral-500">{ROUND_SETTING_META.rewardDvSharePct}</p>
+        </div>
+
+        {/* Slider 2 — within the Debate & Vote slice: Fixed (left) vs Bonus (right). */}
+        <div>
+          <div className="mb-1 flex items-center justify-between text-xs">
+            <span className="font-medium text-emerald-700 dark:text-emerald-400">Fixed {rewardFixed}%</span>
+            <span className="text-neutral-500">of the Debate &amp; Vote slice</span>
             <span className="font-medium text-amber-700 dark:text-amber-400">Bonus {100 - rewardFixed}%</span>
           </div>
           <input
@@ -324,32 +347,45 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
             value={rewardFixed}
             onChange={(e) => setRewardFixed(Number(e.target.value))}
             className="w-full accent-emerald-600"
-            title={ROUND_SETTING_META.rewardFixedPct}
           />
+          <p className="mt-0.5 text-[11px] text-neutral-500">{ROUND_SETTING_META.rewardFixedPct}</p>
         </div>
 
-        {/* Per-round numeric settings; blank = the default (shown as the placeholder). */}
+        <RewardBar pool={Number(rewards) || 0} dvShare={rewardDvShare} fixed={rewardFixed} />
+      </div>
+
+      {/* §6/§12 — the rest of the per-round parameters, with an explanation under each. */}
+      <div className="space-y-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
+        <div className="text-sm font-medium">Round parameters</div>
         <p className="text-xs text-neutral-500">Leave a field blank to use the default (shown in each box).</p>
         {SETTING_GROUPS.map((g) => (
           <div key={g.title}>
             <div className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">{g.title}</div>
-            <div className="flex flex-wrap gap-2">
+            <div className="space-y-2">
               {g.fields.map((f) => {
                 const max = approvalMax(f.key);
                 return (
-                  <label key={f.key} className="text-xs text-neutral-500" title={ROUND_SETTING_META[f.key]}>
-                    <span className="block">{f.label}{f.unit ? ` (${f.unit})` : ''}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={max ?? (f.unit === '%' ? 100 : undefined)}
-                      value={settings[f.key] ?? ''}
-                      onChange={(e) => setSetting(f.key, e.target.value)}
-                      placeholder={String(ROUND_SETTING_DEFAULTS[f.key])}
-                      className={`${field} w-24`}
-                    />
-                    {max !== undefined ? <span className="ml-1 text-[10px] text-neutral-400">max {max}</span> : null}
-                  </label>
+                  <div key={f.key} className="flex items-start gap-2">
+                    <label className="w-44 shrink-0 pt-1 text-xs text-neutral-600 dark:text-neutral-300" htmlFor={`rs-${f.key}`}>
+                      {f.label}{f.unit ? ` (${f.unit})` : ''}
+                    </label>
+                    <div className="min-w-0">
+                      <span className="flex items-center gap-1">
+                        <input
+                          id={`rs-${f.key}`}
+                          type="number"
+                          min={0}
+                          max={max ?? (f.unit === '%' ? 100 : undefined)}
+                          value={settings[f.key] ?? ''}
+                          onChange={(e) => setSetting(f.key, e.target.value)}
+                          placeholder={String(ROUND_SETTING_DEFAULTS[f.key])}
+                          className={`${field} w-24`}
+                        />
+                        {max !== undefined ? <span className="text-[10px] text-neutral-400">max {max}</span> : null}
+                      </span>
+                      <p className="mt-0.5 max-w-xl text-[11px] text-neutral-500">{ROUND_SETTING_META[f.key]}</p>
+                    </div>
+                  </div>
                 );
               })}
             </div>
@@ -377,5 +413,82 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
         {busy ? 'Creating…' : 'Create round'}
       </button>
     </form>
+  );
+}
+
+/** §12.2 — live visual of how the reward pool splits across the two sliders. */
+function RewardBar({ pool, dvShare, fixed }: { pool: number; dvShare: number; fixed: number }) {
+  // Pool → D&V slice (dvShare%) + Milestone slice (rest). Within D&V: fixed + bonus.
+  const segs = [
+    { label: 'D&V fixed', pct: (dvShare * fixed) / 100, cls: 'bg-emerald-500' },
+    { label: 'D&V bonus', pct: (dvShare * (100 - fixed)) / 100, cls: 'bg-amber-400' },
+    { label: 'Milestone review', pct: 100 - dvShare, cls: 'bg-sky-500' },
+  ];
+  const ada = (pct: number) => Math.round((pool * pct) / 100);
+  return (
+    <div>
+      <div className="flex h-5 w-full overflow-hidden rounded bg-neutral-200 dark:bg-neutral-800">
+        {segs.map((s) =>
+          s.pct > 0 ? <div key={s.label} className={s.cls} style={{ width: `${s.pct}%` }} title={`${s.label} ${s.pct.toFixed(0)}%`} /> : null,
+        )}
+      </div>
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-neutral-600 dark:text-neutral-400">
+        {segs.map((s) => (
+          <span key={s.label} className="inline-flex items-center gap-1">
+            <span className={`inline-block h-2 w-2 rounded-sm ${s.cls}`} />
+            {s.label} {s.pct.toFixed(0)}% · {ada(s.pct).toLocaleString()} ₳
+          </span>
+        ))}
+      </div>
+      <p className="mt-1 text-[11px] text-neutral-500">
+        Distribution of the {pool.toLocaleString()} ₳ reward pool. Milestone-review rewards are always fixed; the bonus
+        applies only within Debate &amp; Vote.
+      </p>
+    </div>
+  );
+}
+
+/** §4 — the round's setup, read-only, shown on the round page (resolved values; null ⇒ default). */
+function RoundSettingsView({ roundId }: { roundId: string }) {
+  const [round, setRound] = useState<RoundDetail | null>(null);
+  useEffect(() => {
+    roundsApi.get(roundId).then(setRound).catch(() => setRound(null));
+  }, [roundId]);
+  if (!round) return null;
+  const s = round.settings;
+  const resolved = (k: keyof typeof ROUND_SETTING_DEFAULTS): number =>
+    s[k] == null ? ROUND_SETTING_DEFAULTS[k] : (s[k] as number);
+
+  return (
+    <div className="space-y-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
+      <div className="text-sm font-medium">Round setup</div>
+      <div className="text-xs text-neutral-500">
+        budget {round.budgetAda.toLocaleString()} ₳ · rewards {round.rewardsPoolAda.toLocaleString()} ₳ ·{' '}
+        {round.categories.length} categories · {round.eligibleCount} eligible DReps
+      </div>
+
+      <div>
+        <div className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">Reward distribution</div>
+        <RewardBar pool={round.rewardsPoolAda} dvShare={resolved('rewardDvSharePct')} fixed={resolved('rewardFixedPct')} />
+      </div>
+
+      {SETTING_GROUPS.map((g) => (
+        <div key={g.title}>
+          <div className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">{g.title}</div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+            {g.fields.map((f) => (
+              <span key={f.key} className="text-neutral-600 dark:text-neutral-300" title={ROUND_SETTING_META[f.key]}>
+                {f.label}:{' '}
+                <span className="font-medium">
+                  {resolved(f.key).toLocaleString()}
+                  {f.unit === '%' ? '%' : f.unit === '₳' ? ' ₳' : ''}
+                </span>
+                {s[f.key] == null ? <span className="ml-0.5 text-[10px] text-neutral-400">(default)</span> : null}
+              </span>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
