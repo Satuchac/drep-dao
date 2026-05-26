@@ -21,6 +21,7 @@ export function ProposalSubmit() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
+  const [editingFeedback, setEditingFeedback] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [rounds, setRounds] = useState<RoundSummary[]>([]);
   const [mine, setMine] = useState<ProposalSummary[]>([]);
@@ -140,6 +141,7 @@ export function ProposalSubmit() {
   const reset = () => {
     setEditingId(null);
     setEditingStatus(null);
+    setEditingFeedback(null);
     setTitle('');
     setContent('');
     setFee('');
@@ -159,6 +161,7 @@ export function ProposalSubmit() {
       const p = await proposalsApi.get(id);
       setEditingId(p.id);
       setEditingStatus(p.status);
+      setEditingFeedback(p.feeReviewFeedback ?? null);
       setRoundId(p.roundId ?? '');
       setCategoryId(p.categoryId);
       setTitle(p.title);
@@ -274,13 +277,24 @@ export function ProposalSubmit() {
       </div>
 
       {msg ? <div className="mt-2 text-sm text-emerald-600">{msg}</div> : null}
-      {open && editingId ? (
+      {open && editingId && editingStatus === 'REJECTED' ? (
+        <div className="mt-2 rounded border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/30">
+          <div className="text-sm font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Rejected</div>
+          <div className="text-xs text-red-800 dark:text-red-300">
+            Fix the proposal — including the fee tx — then <strong>Re-submit</strong> to send it back for review.
+          </div>
+          {editingFeedback ? (
+            <div className="mt-1 border-t border-red-200 pt-1 dark:border-red-900">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Feedback from the reviewer:</span>
+              <div className="whitespace-pre-wrap text-xs text-red-800 dark:text-red-300">{editingFeedback}</div>
+            </div>
+          ) : null}
+        </div>
+      ) : open && editingId ? (
         <div className="mt-2 text-sm font-medium text-neutral-600 dark:text-neutral-400">
-          {editingStatus === 'REJECTED'
-            ? 'Editing a rejected proposal — fix it (including the fee tx), then Re-submit.'
-            : editingStatus === 'PENDING'
-              ? 'Editing a submitted proposal (awaiting fee confirmation) — change any field, then Save changes.'
-              : 'Editing your draft — save your changes below.'}
+          {editingStatus === 'PENDING'
+            ? 'Editing a submitted proposal (awaiting fee confirmation) — change any field, then Save changes.'
+            : 'Editing your draft — save your changes below.'}
         </div>
       ) : null}
 
@@ -293,7 +307,7 @@ export function ProposalSubmit() {
 
       {open && rounds.length > 0 ? (
         <form onSubmit={submitNow} className="mt-3 space-y-2">
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap items-end gap-4">
             <label className="flex flex-col gap-0.5 text-xs font-medium text-neutral-600 dark:text-neutral-400">
               Round{editingId ? <span className="font-normal text-neutral-400"> (fixed once created)</span> : null}
               <select className={field} value={roundId} onChange={(e) => setRoundId(e.target.value)} required disabled={!!editingId}>
@@ -531,7 +545,7 @@ function MineRow({
           <span>{p.title} <span className="text-neutral-500">· {p.requestedAmountAda.toLocaleString()} ₳</span></span>
         </button>
         <span className="flex items-center gap-2">
-          <span className={`text-xs ${isDraft ? 'text-amber-600' : 'text-neutral-500'}`}>
+          <span className={`text-xs ${p.status === 'REJECTED' ? 'font-medium text-red-600' : isDraft ? 'text-amber-600' : 'text-neutral-500'}`}>
             {p.status}{p.stage ? ` · ${p.stage}` : ''}{isDraft ? ' · private' : ''}
           </span>
           {fullFormEdit ? (
