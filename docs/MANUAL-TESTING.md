@@ -79,6 +79,10 @@ Admin (separate): `/admin/login`, user `satucha`.
 - [ ] As Carol, compose a proposal. **Save Draft** keeps it **private** — it shows in *My
       proposals* tagged "DRAFT · private" and is invisible to everyone else (browse the round
       as another user: it isn't listed). The form explains drafts are private.
+- [ ] **Open / Edit a draft**: clicking the draft's title opens its read view (no longer
+      "proposal not found"); the row also has an **Edit** button that reopens the full form
+      pre-filled (title, pitch, amount, milestones, §3.4) so you can change anything and
+      Save again — and a **Submit** button. The "DRAFT · private" status stays on the row.
 - [ ] **Submit** needs the on-chain fee **tx hash** (Submit is disabled without it); the draft
       can also be **submitted later** via the inline **Submit** on its My-proposals row. After
       submitting, status is PENDING — still **not public** (only the submitter sees it).

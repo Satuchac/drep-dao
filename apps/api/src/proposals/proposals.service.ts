@@ -285,6 +285,7 @@ export class ProposalsService {
     }
     return {
       ...this.summary(p),
+      categoryId: p.categoryId,
       contentMd: p.contentMd,
       costBreakdownMd: p.costBreakdownMd,
       // §3.4 — stored as markdown strings in the Json columns.

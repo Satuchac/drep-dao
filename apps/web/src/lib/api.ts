@@ -461,6 +461,7 @@ export interface ProposalSummary {
   requestedAmountAda: number;
 }
 export interface ProposalDetail extends ProposalSummary {
+  categoryId: string;
   contentMd: string;
   costBreakdownMd: string | null;
   teamInfoMd: string | null;
@@ -478,6 +479,8 @@ export const proposalsApi = {
   mine: () => request<ProposalSummary[]>('/me/proposals'),
   create: (input: CreateProposalInput) =>
     request<ProposalDetail>('/proposals', { method: 'POST', body: JSON.stringify(input) }),
+  update: (id: string, input: Partial<CreateProposalInput>) =>
+    request<ProposalDetail>(`/proposals/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   submit: (id: string, submissionFeeTxHash: string) =>
     request<ProposalDetail>(`/proposals/${id}/submit`, {
       method: 'POST',

@@ -10,6 +10,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { ProposalsService } from './proposals.service';
 import { CreateProposalDto, SubmitProposalDto, UpdateProposalDto } from './dto';
@@ -24,9 +25,11 @@ export class ProposalsController {
     return this.proposals.listByRound(roundId, status);
   }
 
+  // Public, but the owner may read their own private DRAFT/PENDING (optional auth).
+  @UseGuards(OptionalJwtAuthGuard)
   @Get('proposals/:id')
-  get(@Param('id', ParseUUIDPipe) id: string) {
-    return this.proposals.get(id);
+  get(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() ctx?: AuthContext) {
+    return this.proposals.get(id, ctx?.userId);
   }
 
   // §7/§8 — content version history (snapshots + current) for the diff view.

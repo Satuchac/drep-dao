@@ -203,8 +203,12 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
 - **Submission fee (§12/§16).** Commercial **3%** / open-source **1%** of the
   requested amount (capped, configurable). The submitter composes a proposal and can
   **Save Draft** (private) or **Submit** — Submit needs the on-chain fee tx hash and
-  moves the proposal to PENDING (still private). A draft can be **submitted later**
-  from *My proposals*. The **platform verifies the fee on-chain**: `listPendingFee`
+  moves the proposal to PENDING (still private). From *My proposals* a draft row has
+  **Edit** (reopens the full form pre-filled — all fields incl. milestones, via
+  `PATCH /proposals/:id`) and **Submit** (submit later), alongside its "DRAFT · private"
+  status. The detail/read view of a private proposal is reachable by its **owner** via
+  optional auth (`OptionalJwtAuthGuard` on the public `GET /proposals/:id` passes the
+  signed-in user's id to `get()`, which only reveals DRAFT/PENDING to their submitter). The **platform verifies the fee on-chain**: `listPendingFee`
   runs `CardanoQueryService.verifyPayment(txHash, SUBMISSION_FEE_ADDRESS, feeLovelace)`
   (Koios `/tx_info`, sums outputs to the fee address) and shows the board a
   ✓paid / ✗underpaid / ⏳not-found hint in *My area → "Submission fees to confirm"*.

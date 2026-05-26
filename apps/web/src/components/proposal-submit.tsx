@@ -18,6 +18,7 @@ type Cat = { id: string; name: string; minAda: number | null; maxAda: number | n
 export function ProposalSubmit() {
   const { cfg } = useExplorer();
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [rounds, setRounds] = useState<RoundSummary[]>([]);
   const [mine, setMine] = useState<ProposalSummary[]>([]);
@@ -56,8 +57,11 @@ export function ProposalSubmit() {
   useEffect(() => {
     if (!roundId) return;
     roundsApi.get(roundId).then((r) => {
-      setCats(r.categories.map((c) => ({ id: c.id, name: c.name, minAda: c.minAda, maxAda: c.maxAda, conditions: c.conditions })));
-      setCategoryId(r.categories[0]?.id ?? '');
+      const cs = r.categories.map((c) => ({ id: c.id, name: c.name, minAda: c.minAda, maxAda: c.maxAda, conditions: c.conditions }));
+      setCats(cs);
+      // Keep the currently-selected category if it belongs to this round (preserves the draft's
+      // category when editing); otherwise default to the first.
+      setCategoryId((cur) => (cs.some((c) => c.id === cur) ? cur : cs[0]?.id ?? ''));
     });
   }, [roundId]);
 
@@ -121,6 +125,7 @@ export function ProposalSubmit() {
   };
 
   const reset = () => {
+    setEditingId(null);
     setTitle('');
     setContent('');
     setFee('');
@@ -131,14 +136,44 @@ export function ProposalSubmit() {
     setMs([{ title: '', description: '', acceptanceCriteria: '', amountAda: Number(amount) }]);
   };
 
-  // §3 — save privately as a DRAFT (no fee needed); submit it later.
+  // Load an existing DRAFT into the form for editing (all fields, incl. milestones).
+  const startEdit = async (id: string) => {
+    setError(null);
+    setMsg(null);
+    setOpenId(null);
+    try {
+      const p = await proposalsApi.get(id);
+      setEditingId(p.id);
+      setRoundId(p.roundId ?? '');
+      setCategoryId(p.categoryId);
+      setTitle(p.title);
+      setContent(p.contentMd);
+      setAmount(p.requestedAmountAda);
+      setCommercial(!!p.isCommercial);
+      setCostBreakdown(p.costBreakdownMd ?? '');
+      setTeamInfo(p.teamInfoMd ?? '');
+      setRevenueSharing(p.revenueSharingMd ?? '');
+      setSubcatIds(p.subcategoryIds ?? []);
+      setMs(
+        p.milestones.length
+          ? p.milestones.map((m) => ({ title: m.title ?? '', description: m.description ?? '', acceptanceCriteria: m.acceptanceCriteria ?? '', amountAda: m.amountAda }))
+          : [{ title: '', description: '', acceptanceCriteria: '', amountAda: p.requestedAmountAda }],
+      );
+      setFee('');
+      setOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'could not load draft');
+    }
+  };
+
+  // §3 — save privately as a DRAFT (no fee needed); submit it later. Reuses the row when editing.
   const saveDraft = async () => {
     setError(null);
     setMsg(null);
     if (!inputsOk()) return;
     setBusy(true);
     try {
-      const d = await proposalsApi.create(buildInput());
+      const d = editingId ? await proposalsApi.update(editingId, buildInput()) : await proposalsApi.create(buildInput());
       setMsg(`Saved draft "${d.title}" — it stays private until you submit and a board member confirms your fee.`);
       setOpen(false);
       reset();
@@ -162,7 +197,7 @@ export function ProposalSubmit() {
     }
     setBusy(true);
     try {
-      const draft = await proposalsApi.create(buildInput());
+      const draft = editingId ? await proposalsApi.update(editingId, buildInput()) : await proposalsApi.create(buildInput());
       const submitted = await proposalsApi.submit(draft.id, fee.trim());
       setMsg(`Submitted "${submitted.title}" — fee ${submitted.submissionFeeAda} ₳. A board member verifies your payment on-chain; it becomes public once confirmed.`);
       setOpen(false);
@@ -190,12 +225,18 @@ export function ProposalSubmit() {
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold">Funding proposals</h3>
-        <button onClick={() => setOpen((v) => !v)} className="rounded-md border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
+        <button
+          onClick={() => { if (open) { setOpen(false); reset(); } else { reset(); setOpen(true); } }}
+          className="rounded-md border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+        >
           {open ? 'Cancel' : '+ New proposal'}
         </button>
       </div>
 
       {msg ? <div className="mt-2 text-sm text-emerald-600">{msg}</div> : null}
+      {open && editingId ? (
+        <div className="mt-2 text-sm font-medium text-neutral-600 dark:text-neutral-400">Editing draft — save your changes below.</div>
+      ) : null}
 
       {open && rounds.length === 0 ? (
         <p className="mt-3 text-sm text-neutral-500">
@@ -365,7 +406,7 @@ export function ProposalSubmit() {
           <p className="text-xs text-neutral-500">Drafts are private. Open one to read/edit it; submit a draft when you&apos;re ready (pay the fee + paste the tx).</p>
           <ul className="mt-1 space-y-1 text-sm">
             {mine.map((p) => (
-              <MineRow key={p.id} p={p} feeAddress={cfg?.submissionFeeAddress ?? undefined} onOpen={() => setOpenId(p.id)} onSubmitted={loadMine} />
+              <MineRow key={p.id} p={p} feeAddress={cfg?.submissionFeeAddress ?? undefined} onOpen={() => setOpenId(p.id)} onEdit={() => startEdit(p.id)} onSubmitted={loadMine} />
             ))}
           </ul>
         </div>
@@ -379,11 +420,13 @@ function MineRow({
   p,
   feeAddress,
   onOpen,
+  onEdit,
   onSubmitted,
 }: {
   p: ProposalSummary;
   feeAddress?: string;
   onOpen: () => void;
+  onEdit: () => void;
   onSubmitted: () => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
@@ -420,9 +463,14 @@ function MineRow({
             {p.status}{p.stage ? ` · ${p.stage}` : ''}{isDraft ? ' · private' : ''}
           </span>
           {isDraft ? (
-            <button onClick={() => setSubmitting((v) => !v)} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950">
-              {submitting ? 'Close' : 'Submit'}
-            </button>
+            <>
+              <button onClick={onEdit} className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800">
+                Edit
+              </button>
+              <button onClick={() => setSubmitting((v) => !v)} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950">
+                {submitting ? 'Close' : 'Submit'}
+              </button>
+            </>
           ) : null}
         </span>
       </div>
