@@ -610,8 +610,19 @@ export const proposalVersionsApi = {
   list: (id: string) => request<ProposalVersionEntry[]>(`/proposals/${id}/versions`),
 };
 export const proposalEditApi = {
-  update: (id: string, patch: { title?: string; contentMd?: string; requestedAmountAda?: number; costBreakdownMd?: string; submissionFeeTxHash?: string }) =>
-    request<ProposalDetail>(`/proposals/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  update: (
+    id: string,
+    patch: {
+      title?: string;
+      contentMd?: string;
+      requestedAmountAda?: number;
+      costBreakdownMd?: string;
+      teamInfoMd?: string;
+      revenueSharingMd?: string;
+      subcategoryIds?: string[];
+      submissionFeeTxHash?: string;
+    },
+  ) => request<ProposalDetail>(`/proposals/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
 };
 
 // -------- Comments (§20.1) --------

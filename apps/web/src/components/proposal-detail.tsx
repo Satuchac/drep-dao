@@ -439,11 +439,15 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(proposal.title);
   const [content, setContent] = useState(proposal.contentMd);
+  const [costBreakdown, setCostBreakdown] = useState(proposal.costBreakdownMd ?? '');
+  const [teamInfo, setTeamInfo] = useState(proposal.teamInfoMd ?? '');
+  const [revenueSharing, setRevenueSharing] = useState(proposal.revenueSharingMd ?? '');
+  const [subcatIds, setSubcatIds] = useState<string[]>(proposal.subcategoryIds ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Public/under-review revision (content only, versioned): during Filtering or the Debate &
-  // Vote editing sub-phase. Pre-public states (DRAFT/PENDING/fee-rejected) edit ALL fields in
-  // the full proposal form instead (see "Edit all fields" / My proposals → Edit).
+  // Public/under-review revision (all descriptive fields, versioned): during Filtering or the
+  // Debate & Vote editing sub-phase. The budget (amount + milestones) is fee-coupled and changes
+  // via "Request a budget change"; pre-public states (DRAFT/PENDING/fee-rejected) edit in the form.
   const editable = proposal.stage === 'FILTERING' || proposal.stage === 'DEBATE_VOTE';
   if (!editable) return null;
 
@@ -451,7 +455,14 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
     setError(null);
     setBusy(true);
     try {
-      await proposalEditApi.update(id, { title, contentMd: content });
+      await proposalEditApi.update(id, {
+        title,
+        contentMd: content,
+        costBreakdownMd: costBreakdown,
+        teamInfoMd: teamInfo,
+        revenueSharingMd: revenueSharing,
+        subcategoryIds: subcatIds,
+      });
       setOpen(false);
       onChange();
     } catch (e) {
@@ -469,8 +480,33 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
     );
   return (
     <div className="mt-3 space-y-2 rounded border border-neutral-200 p-2 dark:border-neutral-800">
-      <input className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <MarkdownEditor value={content} onChange={setContent} placeholder="Proposal pitch (markdown)" minRows={6} />
+      <div className="text-xs text-neutral-500">Edit the proposal text. The budget (amount + milestones) changes via &ldquo;Request a budget change&rdquo;.</div>
+      <label className="block">
+        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title</span>
+        <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={title} onChange={(e) => setTitle(e.target.value)} />
+      </label>
+      <MarkdownEditor value={content} onChange={setContent} title="Pitch / summary" placeholder="Proposal pitch (markdown)" minRows={6} />
+      <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title="Cost breakdown" hint="optional" placeholder="How the budget is spent" minRows={3} defaultCollapsed={!costBreakdown.trim()} />
+      <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title="Team info" hint="optional" placeholder="Who is delivering this" minRows={3} defaultCollapsed={!teamInfo.trim()} />
+      <MarkdownEditor value={revenueSharing} onChange={setRevenueSharing} title="Revenue sharing" hint="optional" placeholder="For commercial projects: how the DAO shares in returns" minRows={3} defaultCollapsed={!revenueSharing.trim()} />
+      <div>
+        <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Expertise areas</div>
+        <div className="mt-1 flex flex-wrap gap-1.5">
+          {DEFAULT_SUBCATEGORIES.map((s) => {
+            const on = subcatIds.includes(s.id);
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => setSubcatIds((cur) => (on ? cur.filter((x) => x !== s.id) : [...cur, s.id]))}
+                className={`rounded-full border px-2 py-0.5 text-[11px] ${on ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'border-neutral-300 text-neutral-500 hover:border-neutral-400 dark:border-neutral-700'}`}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
       {error ? <div className="text-xs text-red-600">{error}</div> : null}
       <div className="flex gap-2">
         <button disabled={busy} onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">

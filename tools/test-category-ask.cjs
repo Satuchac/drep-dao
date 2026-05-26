@@ -98,6 +98,11 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     const feeAnchor = await db.anchor.findFirst({ where: { proposalId: good.id, kind: 'submission' } });
     ok('acceptance anchored with proposalId+submitter+fee tx', !!feeAnchor && feeAnchor.preimage?.proposalId === approved.publicId && feeAnchor.preimage?.fee?.paid === true && feeAnchor.preimage?.fee?.txHash === 'txFIXED' && !!feeAnchor.preimage?.submitter, JSON.stringify(feeAnchor?.preimage));
 
+    // EditSection (ACTIVE/Filtering): all descriptive fields stay editable + persist; amount stays locked.
+    const reviewEdit = await proposals.updateDraft(u.id, good.id, { teamInfoMd: 'Updated team', revenueSharingMd: '10% to DAO', costBreakdownMd: 'Dev + ops', subcategoryIds: ['governance'] });
+    ok('ACTIVE edit persists §3.4 + expertise', reviewEdit.teamInfoMd === 'Updated team' && reviewEdit.revenueSharingMd === '10% to DAO' && reviewEdit.costBreakdownMd === 'Dev + ops' && JSON.stringify(reviewEdit.subcategoryIds) === JSON.stringify(['governance']), JSON.stringify({ t: reviewEdit.teamInfoMd, r: reviewEdit.revenueSharingMd, s: reviewEdit.subcategoryIds }));
+    await throws('amount still locked while ACTIVE', () => proposals.updateDraft(u.id, good.id, { requestedAmountAda: 70000 }), /locked after submission/);
+
     // §12 budget change on an ACTIVE proposal (OSS 1%, current fee 500 for 50,000 ₳).
     const increased = await proposals.requestBudgetChange(u.id, good.id, { requestedAmountAda: 80000, milestones: [{ description: 'm', amountAda: 80000 }] });
     ok('budget increase applies + stays ACTIVE', increased.status === 'ACTIVE' && increased.requestedAmountAda === 80000, `${increased.status}/${increased.requestedAmountAda}`);
@@ -129,6 +134,7 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     for (const rid of roundIds) {
       const props = await db.proposal.findMany({ where: { roundId: rid }, select: { id: true } });
       await db.feeAdjustment.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
+      await db.proposalVersion.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
       await db.anchor.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
       await db.milestone.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
       await db.proposal.deleteMany({ where: { roundId: rid } });

@@ -259,14 +259,16 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   mandatory (≥200 chars), threshold default 67%. The board's **publish/finalize
   anchors the final tally on-chain** (subject `dv`).
 - **Editing & versions (§7/§8).** **Pre-public states — DRAFT, PENDING (awaiting fee
-  confirmation), and a fee-REJECTED proposal — are fully editable** (all fields incl.
-  amount + milestones + the fee tx) in the proposal form; a fee-rejected proposal can be
-  fixed and **Re-submitted** (→ PENDING/ACTIVE, clearing the old feedback), and editing a
-  PENDING proposal's amount **recomputes its fee**. Edits in these states aren't versioned.
-  Once public (Filtering / Debate & Vote before voting opens), the submitter revises the
-  **title + pitch only** (structure locked) via the detail editor, and each edit snapshots
-  the prior content into `ProposalVersion`; the proposal detail shows an **original-vs-updated
-  line diff**. No edits during the D&V voting phase or after a decision.
+  confirmation), and a fee-REJECTED proposal — are edited in the full proposal form** (all
+  fields, incl. milestones + the fee tx). The **requested amount + commercial flag lock once
+  a fee is quoted** (PENDING) — only DRAFT / fee-rejected can change them; a fee-rejected
+  proposal can be fixed and **Re-submitted** (→ PENDING/ACTIVE, clearing the old feedback).
+  Edits in these states aren't versioned. Once public (Filtering / Debate & Vote before
+  voting opens), the detail editor revises **every descriptive field — title, pitch, cost
+  breakdown, team, revenue sharing, expertise tags** (the **budget** is fee-coupled and
+  changes via *Request a budget change*); each edit snapshots the prior content into
+  `ProposalVersion` and the detail shows an **original-vs-updated line diff**. No edits during
+  the D&V voting phase or after a decision.
 - **Milestone funding (§11).** After D&V approval the board draws + confirms
   reviewers; the submitter posts a Proof of Achievement per milestone; reviewers
   vote 1p1v (2-of-3 closes; NO needs feedback; resubmission re-opens review).
