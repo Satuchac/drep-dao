@@ -30,6 +30,8 @@ export class CreateProposalDto {
   @IsInt() @Min(1) requestedAmountAda!: number; // ADA
   @IsOptional() @IsArray() @IsString({ each: true }) subcategoryIds?: string[];
   @IsOptional() @IsString() @MaxLength(20000) costBreakdownMd?: string;
+  @IsOptional() @IsString() @MaxLength(20000) teamInfoMd?: string; // §3.4
+  @IsOptional() @IsString() @MaxLength(20000) revenueSharingMd?: string; // §3.4 (commercial)
 
   @IsArray()
   @ArrayMinSize(1)
@@ -45,6 +47,8 @@ export class UpdateProposalDto {
   @IsOptional() @IsInt() @Min(1) requestedAmountAda?: number;
   @IsOptional() @IsArray() @IsString({ each: true }) subcategoryIds?: string[];
   @IsOptional() @IsString() @MaxLength(20000) costBreakdownMd?: string;
+  @IsOptional() @IsString() @MaxLength(20000) teamInfoMd?: string;
+  @IsOptional() @IsString() @MaxLength(20000) revenueSharingMd?: string;
 
   @IsOptional()
   @IsArray()

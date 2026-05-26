@@ -99,9 +99,10 @@ pnpm + Turborepo monorepo.
 A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → CLOSED**.
 
 - **Creation (board).** Categories are **GRANT** or **RFP**, each with a name,
-  allocation, and description. A round can only be created once its categories
-  **allocate the full budget** (P4), and any schedule windows must run **in order
-  and not overlap** (P7) — validated both client-side and in the API. **The Create
+  allocation, description, **conditions**, and a **min/max funding-request per
+  proposal** (§5.2; blank = no bound, min ≤ max enforced). A round can only be created
+  once its categories **allocate the full budget** (P4), and any schedule windows must
+  run **in order and not overlap** (P7) — validated both client-side and in the API. **The Create
   button stays disabled until everything is complete** (round name, every category's
   name + description + allocation, full budget, and all four stage windows set and
   valid), with a "still needed" hint listing what's missing. The schedule uses a
@@ -170,6 +171,13 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
 
 ## 4b. Proposal lifecycle — fees, filtering, D&V, editing, milestones (§7/§8/§11/§12/§16/§20)
 
+- **Submission fields (§3.4/§5.2).** A funding proposal captures title, pitch, requested
+  amount, commercial flag, milestones (must sum to the request), and the §3.4 detail —
+  **cost breakdown, team info, revenue sharing** (markdown, in the existing Json/text
+  columns) — plus **expertise tags** (`subcategoryIds`, which drive the §7.1 filtering
+  draw). The **requested amount must fit the selected category's min/max ask**: enforced
+  in `ProposalsService.createDraft` (and validated client-side, with the range shown in
+  the form). The detail view shows the ask range, conditions, and the §3.4 sections.
 - **Submission fee (§12/§16).** Commercial **3%** / open-source **1%** of the
   requested amount (capped, configurable). The submitter composes a proposal and can
   **Save Draft** (private) or **Submit** — Submit needs the on-chain fee tx hash and

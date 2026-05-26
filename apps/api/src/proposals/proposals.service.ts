@@ -45,6 +45,19 @@ export class ProposalsService {
     if (!category || category.roundId !== dto.roundId) {
       throw new BadRequestException('category does not belong to that round');
     }
+    // §5.2 — the requested amount must fit the category's min/max ask (when the board set them).
+    const catMin = category.minAda == null ? null : toAda(category.minAda);
+    const catMax = category.maxAda == null ? null : toAda(category.maxAda);
+    if (catMin != null && dto.requestedAmountAda < catMin) {
+      throw new BadRequestException(
+        `requested ${dto.requestedAmountAda.toLocaleString()} ₳ is below the "${category.name}" minimum ask of ${catMin.toLocaleString()} ₳`,
+      );
+    }
+    if (catMax != null && dto.requestedAmountAda > catMax) {
+      throw new BadRequestException(
+        `requested ${dto.requestedAmountAda.toLocaleString()} ₳ exceeds the "${category.name}" maximum ask of ${catMax.toLocaleString()} ₳`,
+      );
+    }
     this.assertMilestonesSum(dto.milestones, dto.requestedAmountAda);
 
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
@@ -63,6 +76,9 @@ export class ProposalsService {
         isCommercial: dto.isCommercial,
         requestedAmountAda: toLovelace(dto.requestedAmountAda),
         costBreakdownMd: dto.costBreakdownMd ?? null,
+        // §3.4 funding fields (stored in the existing Json columns as markdown strings).
+        ...(dto.teamInfoMd ? { teamInfo: dto.teamInfoMd } : {}),
+        ...(dto.revenueSharingMd ? { revenueSharing: dto.revenueSharingMd } : {}),
         votingType: VotingType.ONE_PERSON_ONE_VOTE,
         milestones: {
           create: dto.milestones.map((m, idx) => ({
@@ -108,6 +124,8 @@ export class ProposalsService {
           ...(dto.requestedAmountAda !== undefined ? { requestedAmountAda: toLovelace(dto.requestedAmountAda) } : {}),
           ...(dto.subcategoryIds !== undefined ? { subcategoryIds: dto.subcategoryIds } : {}),
           ...(dto.costBreakdownMd !== undefined ? { costBreakdownMd: dto.costBreakdownMd } : {}),
+          ...(dto.teamInfoMd !== undefined ? { teamInfo: dto.teamInfoMd } : {}),
+          ...(dto.revenueSharingMd !== undefined ? { revenueSharing: dto.revenueSharingMd } : {}),
           ...(postSubmission ? { version: { increment: 1 } } : {}),
           updatedAt: new Date(),
         },
@@ -251,7 +269,10 @@ export class ProposalsService {
   async get(id: string, viewerUserId?: string) {
     const p = await this.prisma.proposal.findUnique({
       where: { id },
-      include: { milestones: { orderBy: { idx: 'asc' } }, category: { select: { name: true } } },
+      include: {
+        milestones: { orderBy: { idx: 'asc' } },
+        category: { select: { name: true, minAda: true, maxAda: true, conditions: true } },
+      },
     });
     if (!p) throw new NotFoundException('proposal not found');
     // DRAFT + PENDING (fee not yet confirmed) are visible only to their submitter.
@@ -262,9 +283,18 @@ export class ProposalsService {
       ...this.summary(p),
       contentMd: p.contentMd,
       costBreakdownMd: p.costBreakdownMd,
+      // §3.4 — stored as markdown strings in the Json columns.
+      teamInfoMd: typeof p.teamInfo === 'string' ? p.teamInfo : null,
+      revenueSharingMd: typeof p.revenueSharing === 'string' ? p.revenueSharing : null,
       submissionFeeAda: toAda(p.submissionFeeAda),
       submissionFeeTxHash: p.submissionFeeTxHash,
       subcategoryIds: p.subcategoryIds,
+      // §5.2 — the category's funding-request bounds + conditions, for display.
+      categoryAsk: {
+        minAda: p.category?.minAda == null ? null : toAda(p.category.minAda),
+        maxAda: p.category?.maxAda == null ? null : toAda(p.category.maxAda),
+        conditions: p.category?.conditions ?? null,
+      },
       milestones: p.milestones.map((m) => ({
         id: m.id,
         idx: m.idx,

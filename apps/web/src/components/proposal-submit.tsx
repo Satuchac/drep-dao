@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import {
   proposalsApi,
   roundsApi,
@@ -11,6 +12,8 @@ import {
 import { useExplorer } from '@/lib/explorer';
 import { ProposalDetail } from './proposal-detail';
 
+type Cat = { id: string; name: string; minAda: number | null; maxAda: number | null; conditions: string | null };
+
 export function ProposalSubmit() {
   const { cfg } = useExplorer();
   const [open, setOpen] = useState(false);
@@ -18,13 +21,17 @@ export function ProposalSubmit() {
   const [rounds, setRounds] = useState<RoundSummary[]>([]);
   const [mine, setMine] = useState<ProposalSummary[]>([]);
   const [roundId, setRoundId] = useState('');
-  const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
+  const [cats, setCats] = useState<Cat[]>([]);
   const [categoryId, setCategoryId] = useState('');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [amount, setAmount] = useState(50000);
   const [commercial, setCommercial] = useState(false);
   const [ms, setMs] = useState<ProposalMilestoneInput[]>([{ description: '', amountAda: 50000 }]);
+  const [costBreakdown, setCostBreakdown] = useState('');
+  const [teamInfo, setTeamInfo] = useState('');
+  const [revenueSharing, setRevenueSharing] = useState('');
+  const [subcatIds, setSubcatIds] = useState<string[]>([]);
   const [fee, setFee] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,10 +47,12 @@ export function ProposalSubmit() {
   useEffect(() => {
     if (!roundId) return;
     roundsApi.get(roundId).then((r) => {
-      setCats(r.categories.map((c) => ({ id: c.id, name: c.name })));
+      setCats(r.categories.map((c) => ({ id: c.id, name: c.name, minAda: c.minAda, maxAda: c.maxAda, conditions: c.conditions })));
       setCategoryId(r.categories[0]?.id ?? '');
     });
   }, [roundId]);
+
+  const selectedCat = cats.find((c) => c.id === categoryId);
 
   const field = 'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
 
@@ -54,13 +63,26 @@ export function ProposalSubmit() {
     contentMd: content,
     isCommercial: commercial,
     requestedAmountAda: Number(amount),
+    subcategoryIds: subcatIds.length ? subcatIds : undefined,
+    costBreakdownMd: costBreakdown.trim() || undefined,
+    teamInfoMd: teamInfo.trim() || undefined,
+    revenueSharingMd: revenueSharing.trim() || undefined,
     milestones: ms.map((m) => ({ description: m.description, amountAda: Number(m.amountAda) })),
   });
 
-  const milestonesOk = () => {
+  // §5.2 milestones must sum to the request, and the request must fit the category's ask range.
+  const inputsOk = () => {
     const sum = ms.reduce((a, m) => a + Number(m.amountAda), 0);
     if (sum !== Number(amount)) {
       setError(`milestones (${sum}) must sum to requested amount (${amount})`);
+      return false;
+    }
+    if (selectedCat?.minAda != null && Number(amount) < selectedCat.minAda) {
+      setError(`requested ${Number(amount).toLocaleString()} ₳ is below "${selectedCat.name}" minimum ask of ${selectedCat.minAda.toLocaleString()} ₳`);
+      return false;
+    }
+    if (selectedCat?.maxAda != null && Number(amount) > selectedCat.maxAda) {
+      setError(`requested ${Number(amount).toLocaleString()} ₳ exceeds "${selectedCat.name}" maximum ask of ${selectedCat.maxAda.toLocaleString()} ₳`);
       return false;
     }
     return true;
@@ -70,6 +92,10 @@ export function ProposalSubmit() {
     setTitle('');
     setContent('');
     setFee('');
+    setCostBreakdown('');
+    setTeamInfo('');
+    setRevenueSharing('');
+    setSubcatIds([]);
     setMs([{ description: '', amountAda: Number(amount) }]);
   };
 
@@ -77,7 +103,7 @@ export function ProposalSubmit() {
   const saveDraft = async () => {
     setError(null);
     setMsg(null);
-    if (!milestonesOk()) return;
+    if (!inputsOk()) return;
     setBusy(true);
     try {
       const d = await proposalsApi.create(buildInput());
@@ -97,7 +123,7 @@ export function ProposalSubmit() {
     e.preventDefault();
     setError(null);
     setMsg(null);
-    if (!milestonesOk()) return;
+    if (!inputsOk()) return;
     if (!fee.trim()) {
       setError('Paste the submission-fee transaction hash to submit (or use Save Draft).');
       return;
@@ -167,6 +193,17 @@ export function ProposalSubmit() {
             <label>Requested ₳ <input type="number" className={`${field} w-32`} value={amount} onChange={(e) => setAmount(Number(e.target.value))} /></label>
             <label className="flex items-center gap-1"><input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} /> commercial</label>
           </div>
+          {/* §5.2 — the selected category's per-proposal ask range + conditions. */}
+          {selectedCat && (selectedCat.minAda != null || selectedCat.maxAda != null || selectedCat.conditions) ? (
+            <div className="rounded border border-neutral-200 p-2 text-xs dark:border-neutral-800">
+              {selectedCat.minAda != null || selectedCat.maxAda != null ? (
+                <div className={(selectedCat.minAda != null && Number(amount) < selectedCat.minAda) || (selectedCat.maxAda != null && Number(amount) > selectedCat.maxAda) ? 'font-medium text-red-600' : 'text-neutral-600 dark:text-neutral-400'}>
+                  Allowed ask for “{selectedCat.name}”: {selectedCat.minAda != null ? `min ${selectedCat.minAda.toLocaleString()} ₳` : 'no min'} · {selectedCat.maxAda != null ? `max ${selectedCat.maxAda.toLocaleString()} ₳` : 'no max'}
+                </div>
+              ) : null}
+              {selectedCat.conditions ? <div className="mt-0.5 whitespace-pre-wrap text-neutral-500">Conditions: {selectedCat.conditions}</div> : null}
+            </div>
+          ) : null}
           <div>
             <div className="text-sm font-medium">Milestones (must sum to requested)</div>
             {ms.map((m, i) => (
@@ -177,6 +214,29 @@ export function ProposalSubmit() {
               </div>
             ))}
             <button type="button" className="mt-1 text-xs underline" onClick={() => setMs((p) => [...p, { description: '', amountAda: 0 }])}>+ add milestone</button>
+          </div>
+          {/* §3.4 — funding-specific detail (all optional). */}
+          <textarea className={`${field} w-full`} rows={2} placeholder="Cost breakdown (optional, markdown) — how the budget is spent" value={costBreakdown} onChange={(e) => setCostBreakdown(e.target.value)} />
+          <textarea className={`${field} w-full`} rows={2} placeholder="Team info (optional, markdown) — who is delivering this" value={teamInfo} onChange={(e) => setTeamInfo(e.target.value)} />
+          <textarea className={`${field} w-full`} rows={2} placeholder="Revenue sharing (optional, markdown) — for commercial projects: how the DAO shares in returns" value={revenueSharing} onChange={(e) => setRevenueSharing(e.target.value)} />
+          {/* §5.3/§7.1 — expertise tags drive which DReps are drawn to filter this proposal. */}
+          <div>
+            <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Expertise areas (helps match filtering reviewers)</div>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {DEFAULT_SUBCATEGORIES.map((s) => {
+                const on = subcatIds.includes(s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setSubcatIds((cur) => (on ? cur.filter((x) => x !== s.id) : [...cur, s.id]))}
+                    className={`rounded-full border px-2 py-0.5 text-[11px] ${on ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'border-neutral-300 text-neutral-500 hover:border-neutral-400 dark:border-neutral-700'}`}
+                  >
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
           {/* §12/§16 — the team pays the submission fee on-chain to the dedicated address. */}
           <div className="rounded border border-neutral-200 p-2 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">

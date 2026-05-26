@@ -305,6 +305,15 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
       setError(`Milestone approvals (${ma}) can't exceed milestone reviewers (${milestoneReviewers}).`);
       return;
     }
+    // §5.2 — a category's min ask must not exceed its max ask.
+    for (const c of cats) {
+      const mn = c.minAda != null && String(c.minAda) !== '' ? Number(c.minAda) : null;
+      const mx = c.maxAda != null && String(c.maxAda) !== '' ? Number(c.maxAda) : null;
+      if (mn != null && mx != null && mn > mx) {
+        setError(`Category "${c.name || '(unnamed)'}": min ask (${mn.toLocaleString()} ₳) can't exceed max ask (${mx.toLocaleString()} ₳).`);
+        return;
+      }
+    }
     setBusy(true);
     try {
       const schedule = STAGE_DEFS.flatMap((s) => {
@@ -331,6 +340,9 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
           name: c.name,
           type: c.type ?? 'GRANT',
           allocatedAda: Number(c.allocatedAda),
+          minAda: c.minAda != null && String(c.minAda) !== '' ? Number(c.minAda) : undefined,
+          maxAda: c.maxAda != null && String(c.maxAda) !== '' ? Number(c.maxAda) : undefined,
+          conditions: c.conditions?.trim() || undefined,
           description: c.description?.trim() || undefined,
         })),
         schedule,
@@ -376,13 +388,26 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
                   <button type="button" onClick={() => setCats((cs) => cs.filter((_, j) => j !== i))} className="text-xs text-red-600">remove</button>
                 ) : null}
               </div>
+              {/* §5.2 — per-proposal funding-request bounds (blank = no bound). */}
+              <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                <label>min ask ₳ <input type="number" min={0} className={`${field} ml-1 w-28`} placeholder="no min" value={c.minAda ?? ''} onChange={(e) => setCat(i, { minAda: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
+                <label>max ask ₳ <input type="number" min={0} className={`${field} ml-1 w-28`} placeholder="no max" value={c.maxAda ?? ''} onChange={(e) => setCat(i, { maxAda: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
+                <span className="text-neutral-400">a proposal&apos;s requested amount must fit this range</span>
+              </div>
               <textarea
                 className={`${field} w-full`}
                 rows={2}
-                placeholder="description — what this category funds, conditions, etc."
+                placeholder="description — what this category funds"
                 value={c.description ?? ''}
                 onChange={(e) => setCat(i, { description: e.target.value })}
                 required
+              />
+              <textarea
+                className={`${field} w-full`}
+                rows={2}
+                placeholder="conditions / restrictions (optional) — eligibility rules, who can apply, etc."
+                value={c.conditions ?? ''}
+                onChange={(e) => setCat(i, { conditions: e.target.value })}
               />
             </div>
           ))}

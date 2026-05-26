@@ -70,6 +70,12 @@ Admin (separate): `/admin/login`, user `satucha`.
 - [ ] Post a **comment** and a **reply** (5-minute edit window applies).
 
 ### Submission + fee (commercial 3% / OSS 1%)
+- [ ] **Category min/max ask (§5.2)**: when creating a round, each category has **min ask /
+      max ask** inputs + a **conditions** field (min ≤ max enforced). When submitting, the form
+      shows the selected category's allowed range; a requested amount outside it is rejected
+      (red, both client-side and by the API: "below/exceeds the … ask"). The proposal form also
+      has **cost breakdown / team info / revenue sharing** + **expertise tags** (§3.4/§7.1);
+      they show on the proposal detail.
 - [ ] As Carol, compose a proposal. **Save Draft** keeps it **private** — it shows in *My
       proposals* tagged "DRAFT · private" and is invisible to everyone else (browse the round
       as another user: it isn't listed). The form explains drafts are private.

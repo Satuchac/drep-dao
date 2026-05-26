@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
 import {
@@ -23,6 +24,7 @@ import {
 import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime } from './round-ui';
 
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
+const SUBCAT_LABEL: Record<string, string> = Object.fromEntries(DEFAULT_SUBCATEGORIES.map((s) => [s.id, s.label]));
 const choiceCls: Record<string, string> = {
   YES: 'text-emerald-600',
   NO: 'text-red-600',
@@ -69,8 +71,25 @@ export function ProposalDetail({ id, onBack }: { id: string; onBack: () => void 
         <div className="mt-1 text-xs text-neutral-500">
           {p.categoryName ?? 'uncategorized'} · {p.requestedAmountAda.toLocaleString()} ₳ ·{' '}
           {p.isCommercial ? 'commercial' : 'open-source'} · fee {p.submissionFeeAda.toLocaleString()} ₳
+          {p.categoryAsk && (p.categoryAsk.minAda != null || p.categoryAsk.maxAda != null) ? (
+            <> · category ask {p.categoryAsk.minAda != null ? `${p.categoryAsk.minAda.toLocaleString()}` : '0'}–{p.categoryAsk.maxAda != null ? `${p.categoryAsk.maxAda.toLocaleString()}` : '∞'} ₳</>
+          ) : null}
         </div>
+        {p.subcategoryIds && p.subcategoryIds.length > 0 ? (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {p.subcategoryIds.map((sid) => (
+              <span key={sid} className="rounded-full border border-neutral-300 px-2 py-0.5 text-[11px] text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
+                {SUBCAT_LABEL[sid] ?? sid}
+              </span>
+            ))}
+          </div>
+        ) : null}
         <div className="mt-3 whitespace-pre-wrap text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</div>
+        {/* §3.4 — funding-specific detail, shown when present. */}
+        <DetailBlock label="Cost breakdown" md={p.costBreakdownMd} />
+        <DetailBlock label="Team" md={p.teamInfoMd} />
+        <DetailBlock label="Revenue sharing" md={p.revenueSharingMd} />
+        {p.categoryAsk?.conditions ? <DetailBlock label="Category conditions" md={p.categoryAsk.conditions} /> : null}
         {mine ? <EditSection id={id} proposal={p} onChange={load} /> : null}
       </div>
 
@@ -90,6 +109,17 @@ function BackBtn({ onBack }: { onBack: () => void }) {
     <button onClick={onBack} className="text-xs text-neutral-500 hover:underline">
       ← back to proposals
     </button>
+  );
+}
+
+/** §3.4 — a labelled markdown detail section, rendered only when content is present. */
+function DetailBlock({ label, md }: { label: string; md?: string | null }) {
+  if (!md || !md.trim()) return null;
+  return (
+    <div className="mt-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{label}</div>
+      <div className="mt-0.5 whitespace-pre-wrap text-sm text-neutral-700 dark:text-neutral-300">{md}</div>
+    </div>
   );
 }
 

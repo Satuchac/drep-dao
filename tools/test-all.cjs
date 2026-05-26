@@ -29,6 +29,7 @@ const SUITES = [
   ['test-rounds', 'Rounds: stage transitions gate submission + governance params'],
   ['test-stage-flow', 'Stage flow: budget/schedule validation, confirm/launch/auto-start/close, proposal counts'],
   ['test-proposal-flow', 'Proposal lifecycle: fee, edit/version, filtering+D&V+milestone anchored, comments'],
+  ['test-category-ask', '§5.2 category min/max ask enforced on submit + §3.4 funding fields (self-cleaning)'],
 ];
 
 const failed = [];

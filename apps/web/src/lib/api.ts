@@ -318,8 +318,9 @@ export interface RoundCategoryInput {
   name: string;
   type?: string; // GRANT | RFP
   allocatedAda: number;
-  minAda?: number;
-  maxAda?: number;
+  minAda?: number; // min funding request per proposal (§5.2)
+  maxAda?: number; // max funding request per proposal (§5.2)
+  conditions?: string;
   description?: string;
 }
 export interface RoundScheduleInput {
@@ -396,6 +397,7 @@ export interface RoundDetail extends RoundSummary {
     allocatedAda: number;
     minAda: number | null;
     maxAda: number | null;
+    conditions: string | null;
     description: string | null;
   }[];
   schedule: RoundScheduleEntry[];
@@ -439,6 +441,10 @@ export interface CreateProposalInput {
   contentMd: string;
   isCommercial: boolean;
   requestedAmountAda: number;
+  subcategoryIds?: string[];
+  costBreakdownMd?: string;
+  teamInfoMd?: string;
+  revenueSharingMd?: string;
   milestones: ProposalMilestoneInput[];
 }
 export interface ProposalSummary {
@@ -454,8 +460,13 @@ export interface ProposalSummary {
 }
 export interface ProposalDetail extends ProposalSummary {
   contentMd: string;
+  costBreakdownMd: string | null;
+  teamInfoMd: string | null;
+  revenueSharingMd: string | null;
+  subcategoryIds: string[];
   submissionFeeAda: number;
   submissionFeeTxHash: string | null;
+  categoryAsk: { minAda: number | null; maxAda: number | null; conditions: string | null };
   milestones: { id: string; idx: number; description: string; amountAda: number; status: string }[];
 }
 
