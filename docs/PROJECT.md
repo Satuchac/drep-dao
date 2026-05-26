@@ -200,10 +200,19 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   proposal detail via a small **dependency-free, XSS-safe renderer** (`lib/markdown.ts`
   → `<Markdown>`): the source is HTML-escaped first and only a safe tag subset is
   emitted, with link hrefs restricted to http(s)/mailto.
-- **Submission fee (§12/§16).** Commercial **3%** / open-source **1%** of the
-  requested amount (capped, configurable). The submitter composes a proposal and can
-  **Save Draft** (private) or **Submit** — Submit needs the on-chain fee tx hash and
-  moves the proposal to PENDING (still private). From *My proposals* a draft row has
+- **Submission fee (§12/§16).** Commercial / open-source fee % comes from the **round's
+  settings** (defaults 3% / 1%, capped). The submit form resolves the fee for the chosen
+  type and **only shows the fee instructions + tx-hash field when that fee is > 0** — so
+  toggling **Commercial** can reveal/hide the tx field. **If the applicable fee is 0%,
+  no payment is needed and the proposal goes ACTIVE (public, in Filtering) immediately on
+  submit** — no PENDING, no board fee confirmation. Otherwise it needs the on-chain fee
+  tx hash and moves to PENDING. The submitter can **change the tx hash while PENDING**;
+  every distinct hash entered is kept in **`submissionFeeTxHashes`** so the board reviewer
+  sees them all (the tx locks once ACTIVE). **Board fee review** (`reviewFee`,
+  `POST /admin/proposals/:id/review-fee`): the panel shows each entered tx with its own
+  on-chain `verifyPayment` result; the reviewer **Approves** (→ ACTIVE/Filtering) or
+  **Rejects** (→ REJECTED, reason required) with feedback the submitter sees in a red
+  **FEEDBACK** box next to the fee tx (`feeReviewFeedback`). From *My proposals* a draft row has
   **Edit** (reopens the full form pre-filled — all fields incl. milestones, via
   `PATCH /proposals/:id`) and **Submit** (submit later), alongside its "DRAFT · private"
   status. The detail/read view of a private proposal is reachable by its **owner** via

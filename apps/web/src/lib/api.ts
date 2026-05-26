@@ -470,6 +470,8 @@ export interface ProposalDetail extends ProposalSummary {
   revenueSharingMd: string | null;
   subcategoryIds: string[];
   submissionFeeAda: number;
+  submissionFeeTxHashes: string[];
+  feeReviewFeedback: string | null;
   categoryAsk: { minAda: number | null; maxAda: number | null; conditions: string | null };
   milestones: { id: string; idx: number; title: string | null; description: string; acceptanceCriteria: string | null; amountAda: number; status: string }[];
 }
@@ -535,8 +537,8 @@ export const filteringApi = {
 
 // Board: confirm fee / draw reviewers / open D&V voting / finalize.
 export const boardProposalsApi = {
-  confirmFee: (id: string) =>
-    request<ProposalDetail>(`/admin/proposals/${id}/confirm-fee`, { method: 'POST' }),
+  reviewFee: (id: string, decision: 'APPROVE' | 'REJECT', feedback?: string) =>
+    request<ProposalDetail>(`/admin/proposals/${id}/review-fee`, { method: 'POST', body: JSON.stringify({ decision, feedback }) }),
   drawReviewers: (id: string) =>
     request<FilterResult>(`/admin/proposals/${id}/draw-reviewers`, { method: 'POST' }),
   openDvVote: (id: string) =>
@@ -605,7 +607,7 @@ export const proposalVersionsApi = {
   list: (id: string) => request<ProposalVersionEntry[]>(`/proposals/${id}/versions`),
 };
 export const proposalEditApi = {
-  update: (id: string, patch: { title?: string; contentMd?: string; requestedAmountAda?: number; costBreakdownMd?: string }) =>
+  update: (id: string, patch: { title?: string; contentMd?: string; requestedAmountAda?: number; costBreakdownMd?: string; submissionFeeTxHash?: string }) =>
     request<ProposalDetail>(`/proposals/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
 };
 
@@ -671,9 +673,11 @@ export interface PendingFee {
   requestedAmountAda: number;
   submissionFeeAda: number;
   submissionFeeTxHash: string | null;
+  // Every fee tx the submitter entered, each with its own on-chain verification.
+  txs: { hash: string; found: boolean; paid: boolean; paidAda: number }[];
   submitter: string | null;
   submittedAt: string;
-  // On-chain verification of the fee payment (found on chain? paid ≥ expected? how much).
+  // Summary on-chain verification (paid if ANY entered tx covered the fee).
   feeVerified: { found: boolean; paid: boolean; paidAda: number };
 }
 export const boardFeeApi = {

@@ -91,6 +91,7 @@ export function ProposalDetail({ id, onBack }: { id: string; onBack: () => void 
         <DetailBlock label="Team" md={p.teamInfoMd} />
         <DetailBlock label="Revenue sharing" md={p.revenueSharingMd} />
         {p.categoryAsk?.conditions ? <DetailBlock label="Category conditions" md={p.categoryAsk.conditions} /> : null}
+        {mine ? <FeeBlock proposal={p} /> : null}
         {mine ? <EditSection id={id} proposal={p} onChange={load} /> : null}
       </div>
 
@@ -120,6 +121,45 @@ function DetailBlock({ label, md }: { label: string; md?: string | null }) {
     <div className="mt-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{label}</div>
       <Markdown className="mt-0.5 text-sm text-neutral-700 dark:text-neutral-300">{md}</Markdown>
+    </div>
+  );
+}
+
+/**
+ * §12/§16 — the submitter's view of the submission fee: every tx hash they entered, plus the
+ * board's review feedback in a red FEEDBACK box (shown next to the tx, on approve or reject).
+ */
+function FeeBlock({ proposal }: { proposal: PDetail }) {
+  const { txUrl } = useExplorer();
+  const hashes = proposal.submissionFeeTxHashes?.length
+    ? proposal.submissionFeeTxHashes
+    : proposal.submissionFeeTxHash
+      ? [proposal.submissionFeeTxHash]
+      : [];
+  if (hashes.length === 0 && !proposal.feeReviewFeedback) return null;
+  return (
+    <div className="mt-3 rounded border border-neutral-200 p-2 dark:border-neutral-800">
+      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+        Submission fee{proposal.submissionFeeAda ? ` · ${proposal.submissionFeeAda.toLocaleString()} ₳` : ''}
+      </div>
+      {hashes.length > 0 ? (
+        <div className="mt-1 space-y-0.5">
+          {hashes.map((h, i) => (
+            <div key={h} className="text-xs">
+              <a href={txUrl(h)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">
+                {h} ↗
+              </a>
+              {hashes.length > 1 && i === hashes.length - 1 ? <span className="ml-1 text-[10px] uppercase text-neutral-400">latest</span> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {proposal.feeReviewFeedback ? (
+        <div className="mt-2 rounded border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/30">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Feedback</div>
+          <div className="mt-0.5 whitespace-pre-wrap text-xs text-red-800 dark:text-red-300">{proposal.feeReviewFeedback}</div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -390,18 +430,26 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(proposal.title);
   const [content, setContent] = useState(proposal.contentMd);
+  const [feeTx, setFeeTx] = useState(proposal.submissionFeeTxHash ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Editable while PENDING (submitted, awaiting fee confirmation), during Filtering, or the
   // Debate & Vote editing sub-phase (backend enforces precisely).
   const editable = proposal.status === 'PENDING' || proposal.stage === 'FILTERING' || proposal.stage === 'DEBATE_VOTE';
+  // The fee tx can still be corrected while PENDING (locked once ACTIVE); each change is kept
+  // in the history the reviewer sees.
+  const canEditFeeTx = proposal.status === 'PENDING';
   if (!editable) return null;
 
   const save = async () => {
     setError(null);
     setBusy(true);
     try {
-      await proposalEditApi.update(id, { title, contentMd: content });
+      await proposalEditApi.update(id, {
+        title,
+        contentMd: content,
+        ...(canEditFeeTx && feeTx.trim() !== (proposal.submissionFeeTxHash ?? '') ? { submissionFeeTxHash: feeTx.trim() } : {}),
+      });
       setOpen(false);
       onChange();
     } catch (e) {
@@ -421,10 +469,17 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
     <div className="mt-3 space-y-2 rounded border border-neutral-200 p-2 dark:border-neutral-800">
       <input className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={title} onChange={(e) => setTitle(e.target.value)} />
       <MarkdownEditor value={content} onChange={setContent} placeholder="Proposal pitch (markdown)" minRows={6} />
+      {canEditFeeTx ? (
+        <label className="block">
+          <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Submission fee tx hash</span>
+          <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" placeholder="correct the fee tx if needed" value={feeTx} onChange={(e) => setFeeTx(e.target.value)} />
+          <span className="text-[11px] text-neutral-400">Changing this keeps the previous hash in the history the board reviews.</span>
+        </label>
+      ) : null}
       {error ? <div className="text-xs text-red-600">{error}</div> : null}
       <div className="flex gap-2">
         <button disabled={busy} onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-          {busy ? 'Saving…' : 'Save (creates a new version)'}
+          {busy ? 'Saving…' : proposal.status === 'PENDING' ? 'Save changes' : 'Save (creates a new version)'}
         </button>
         <button onClick={() => setOpen(false)} className="text-xs text-neutral-500 hover:underline">cancel</button>
       </div>

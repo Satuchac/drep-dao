@@ -39,6 +39,7 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     categories: [{ name: 'Bounded', type: 'GRANT', allocatedAda: 500000, minAda: 10000, maxAda: 100000, conditions: 'OSS only' }],
   });
   const catId = r.categories[0].id;
+  const roundIds = [r.id];
   await db.round.update({ where: { id: r.id }, data: { status: 'SUBMISSION' } });
   const mk = (amt, extra = {}) => ({ roundId: r.id, categoryId: catId, title: 't', contentMd: 'c', isCommercial: false, requestedAmountAda: amt, milestones: [{ description: 'm', amountAda: amt }], ...extra });
 
@@ -66,19 +67,39 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     ok('fee tx hash persists on a saved draft', edited.submissionFeeTxHash === 'tx12345', String(edited.submissionFeeTxHash));
     const reread = await proposals.get(good.id, u.id);
     ok('fee tx hash survives reload', reread.submissionFeeTxHash === 'tx12345', String(reread.submissionFeeTxHash));
+    // Changing the tx keeps every hash entered so the board reviewer sees the full history.
+    const edited2 = await proposals.updateDraft(u.id, good.id, { submissionFeeTxHash: 'tx67890' });
+    ok('changing the tx keeps a history', JSON.stringify(edited2.submissionFeeTxHashes) === JSON.stringify(['tx12345', 'tx67890']), JSON.stringify(edited2.submissionFeeTxHashes));
     // A submitted (PENDING) proposal stays editable while it awaits the board's fee confirmation.
-    const submitted = await proposals.submit(u.id, good.id, { submissionFeeTxHash: 'tx12345' });
-    ok('submit moves DRAFT → PENDING', submitted.status === 'PENDING', submitted.status);
+    const submitted = await proposals.submit(u.id, good.id, { submissionFeeTxHash: 'tx67890' });
+    ok('submit moves DRAFT → PENDING (fee > 0)', submitted.status === 'PENDING', submitted.status);
     const pendingEdit = await proposals.updateDraft(u.id, good.id, { contentMd: 'edited while pending' });
     ok('PENDING proposal is still editable', pendingEdit.contentMd === 'edited while pending' && pendingEdit.status === 'PENDING', `${pendingEdit.status}/${pendingEdit.contentMd}`);
+    // Board fee review: reject needs a reason, then sets REJECTED + the feedback the submitter sees.
+    await throws('reject needs a reason', () => proposals.reviewFee(good.id, { decision: 'REJECT' }), /reason is required/);
+    const reviewed = await proposals.reviewFee(good.id, { decision: 'REJECT', feedback: 'fee underpaid' });
+    ok('reject → REJECTED + feedback', reviewed.status === 'REJECTED' && reviewed.feeReviewFeedback === 'fee underpaid', `${reviewed.status}/${reviewed.feeReviewFeedback}`);
+
+    // §12 zero-fee: a round whose OSS fee is 0% admits an open-source proposal immediately (no tx).
+    const freeRound = await rounds.create({
+      name: '__category_ask_free__', budgetAda: 100000, rewardsPoolAda: 1000, feeOssPct: 0,
+      categories: [{ name: 'Free', type: 'GRANT', allocatedAda: 100000 }],
+    });
+    roundIds.push(freeRound.id);
+    await db.round.update({ where: { id: freeRound.id }, data: { status: 'SUBMISSION' } });
+    const freeDraft = await proposals.createDraft(u.id, { roundId: freeRound.id, categoryId: freeRound.categories[0].id, title: 'free', contentMd: 'c', isCommercial: false, requestedAmountAda: 1000, milestones: [{ description: 'm', amountAda: 1000 }] });
+    const freeSubmitted = await proposals.submit(u.id, freeDraft.id, {});
+    ok('zero-fee OSS proposal goes ACTIVE on submit (no tx)', freeSubmitted.status === 'ACTIVE' && freeSubmitted.stage === 'FILTERING', `${freeSubmitted.status}/${freeSubmitted.stage}`);
   } finally {
-    const props = await db.proposal.findMany({ where: { roundId: r.id }, select: { id: true } });
-    await db.milestone.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
-    await db.proposal.deleteMany({ where: { roundId: r.id } });
-    await db.roundCategory.deleteMany({ where: { roundId: r.id } });
-    await db.roundDrepEligibility.deleteMany({ where: { roundId: r.id } });
-    await db.roundSchedule.deleteMany({ where: { roundId: r.id } });
-    await db.round.delete({ where: { id: r.id } });
+    for (const rid of roundIds) {
+      const props = await db.proposal.findMany({ where: { roundId: rid }, select: { id: true } });
+      await db.milestone.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
+      await db.proposal.deleteMany({ where: { roundId: rid } });
+      await db.roundCategory.deleteMany({ where: { roundId: rid } });
+      await db.roundDrepEligibility.deleteMany({ where: { roundId: rid } });
+      await db.roundSchedule.deleteMany({ where: { roundId: rid } });
+      await db.round.delete({ where: { id: rid } });
+    }
   }
 
   await prisma.$disconnect();

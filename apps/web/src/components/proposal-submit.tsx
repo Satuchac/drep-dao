@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
+import { DEFAULT_SUBCATEGORIES, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared';
 import {
   proposalsApi,
   roundsApi,
   type ProposalMilestoneInput,
   type ProposalSummary,
+  type RoundDetail,
   type RoundSummary,
 } from '@/lib/api';
 import { useExplorer } from '@/lib/explorer';
@@ -24,6 +25,7 @@ export function ProposalSubmit() {
   const [mine, setMine] = useState<ProposalSummary[]>([]);
   const [roundId, setRoundId] = useState('');
   const [cats, setCats] = useState<Cat[]>([]);
+  const [roundSettings, setRoundSettings] = useState<RoundDetail['settings'] | null>(null);
   const [categoryId, setCategoryId] = useState('');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -59,6 +61,7 @@ export function ProposalSubmit() {
     roundsApi.get(roundId).then((r) => {
       const cs = r.categories.map((c) => ({ id: c.id, name: c.name, minAda: c.minAda, maxAda: c.maxAda, conditions: c.conditions }));
       setCats(cs);
+      setRoundSettings(r.settings);
       // Keep the currently-selected category if it belongs to this round (preserves the draft's
       // category when editing); otherwise default to the first.
       setCategoryId((cur) => (cs.some((c) => c.id === cur) ? cur : cs[0]?.id ?? ''));
@@ -201,7 +204,7 @@ export function ProposalSubmit() {
     setError(null);
     setMsg(null);
     if (!inputsOk()) return;
-    if (!fee.trim()) {
+    if (feeRequired && !fee.trim()) {
       setError('Paste the submission-fee transaction hash to submit (or use Save Draft).');
       return;
     }
@@ -209,7 +212,11 @@ export function ProposalSubmit() {
     try {
       const draft = editingId ? await proposalsApi.update(editingId, updatePayload()) : await proposalsApi.create(buildInput());
       const submitted = await proposalsApi.submit(draft.id, fee.trim());
-      setMsg(`Submitted "${submitted.title}" — fee ${submitted.submissionFeeAda} ₳. A board member verifies your payment on-chain; it becomes public once confirmed.`);
+      setMsg(
+        feeRequired
+          ? `Submitted "${submitted.title}" — fee ${submitted.submissionFeeAda} ₳. A board member verifies your payment on-chain; it becomes public once confirmed.`
+          : `Submitted "${submitted.title}" — no submission fee for this proposal type, so it's now live and public.`,
+      );
       setOpen(false);
       reset();
       loadMine();
@@ -229,7 +236,16 @@ export function ProposalSubmit() {
     );
   }
 
-  const feeEstimate = Math.round(Math.min((amount * (commercial ? 3 : 1)) / 100, commercial ? 5000 : 1000));
+  // §12 — the fee for THIS proposal type comes from the round's settings (fall back to defaults).
+  // If that fee is 0%, no payment is needed and the proposal goes live immediately on submit.
+  const feePct = commercial
+    ? roundSettings?.feeCommercialPct ?? ROUND_SETTING_DEFAULTS.feeCommercialPct
+    : roundSettings?.feeOssPct ?? ROUND_SETTING_DEFAULTS.feeOssPct;
+  const feeCap = commercial
+    ? roundSettings?.feeCommercialCapAda ?? ROUND_SETTING_DEFAULTS.feeCommercialCapAda
+    : roundSettings?.feeOssCapAda ?? ROUND_SETTING_DEFAULTS.feeOssCapAda;
+  const feeRequired = feePct > 0;
+  const feeEstimate = feeRequired ? Math.round(Math.min((amount * feePct) / 100, feeCap)) : 0;
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
@@ -366,18 +382,28 @@ export function ProposalSubmit() {
               })}
             </div>
           </div>
-          {/* §12/§16 — the team pays the submission fee on-chain to the dedicated address. */}
-          <div className="rounded border border-neutral-200 p-2 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
-            <div>
-              Submission fee: <strong>{commercial ? '3% (commercial)' : '1% (open-source)'}</strong> of the requested
-              amount ≈ <strong>{feeEstimate.toLocaleString()} ₳</strong>. To <strong>submit</strong>, pay it to the
-              address below and paste the transaction hash; the platform verifies it on-chain and a board member confirms.
+          {/* §12/§16 — the fee + tx field appear only when the round charges a fee for this
+              proposal type. When it's 0% (e.g. open-source), no payment is needed at all. */}
+          {feeRequired ? (
+            <>
+              <div className="rounded border border-neutral-200 p-2 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
+                <div>
+                  Submission fee: <strong>{feePct}% ({commercial ? 'commercial' : 'open-source'})</strong> of the requested
+                  amount ≈ <strong>{feeEstimate.toLocaleString()} ₳</strong>. To <strong>submit</strong>, pay it to the
+                  address below and paste the transaction hash; the platform verifies it on-chain and a board member confirms.
+                </div>
+                {cfg?.submissionFeeAddress ? (
+                  <div className="mt-1 break-all font-mono text-[11px] text-neutral-500">{cfg.submissionFeeAddress}</div>
+                ) : null}
+              </div>
+              <input className={`${field} w-full`} placeholder="Submission fee TX hash (needed only to submit)" value={fee} onChange={(e) => setFee(e.target.value)} />
+            </>
+          ) : (
+            <div className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+              No submission fee for {commercial ? 'commercial' : 'open-source'} proposals in this round — your proposal
+              goes <strong>live immediately</strong> when you submit (no payment, no board fee confirmation).
             </div>
-            {cfg?.submissionFeeAddress ? (
-              <div className="mt-1 break-all font-mono text-[11px] text-neutral-500">{cfg.submissionFeeAddress}</div>
-            ) : null}
-          </div>
-          <input className={`${field} w-full`} placeholder="Submission fee TX hash (needed only to submit)" value={fee} onChange={(e) => setFee(e.target.value)} />
+          )}
           {error ? <div className="text-sm text-red-600">{error}</div> : null}
           {/* What's still missing before this can be saved/submitted (so a disabled button is never a mystery). */}
           {!draftReady ? (
@@ -389,9 +415,9 @@ export function ProposalSubmit() {
                 ))}
               </ul>
             </div>
-          ) : !fee.trim() ? (
+          ) : feeRequired && !fee.trim() ? (
             <div className="text-xs text-neutral-500">
-              Ready to save as a draft. To <strong>submit</strong>, also paste the submission-fee transaction hash below.
+              Ready to save as a draft. To <strong>submit</strong>, also paste the submission-fee transaction hash above.
             </div>
           ) : null}
           {/* §3 — privacy + the two ways out of the form. */}
@@ -400,8 +426,8 @@ export function ProposalSubmit() {
             public only after you submit and a board member confirms the fee.
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="submit" disabled={busy || !draftReady || !fee.trim()} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-              {busy ? 'Working…' : 'Submit'}
+            <button type="submit" disabled={busy || !draftReady || (feeRequired && !fee.trim())} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+              {busy ? 'Working…' : feeRequired ? 'Submit' : 'Submit (no fee)'}
             </button>
             <button type="button" onClick={saveDraft} disabled={busy || !draftReady} className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
               Save Draft
@@ -451,7 +477,8 @@ function MineRow({
 
   const submit = async () => {
     setError(null);
-    if (!fee.trim()) { setError('Paste your submission-fee tx hash.'); return; }
+    // No client-side fee check: the backend requires a tx only when this proposal's fee > 0
+    // (a 0% / open-source proposal submits with no tx and goes live immediately).
     setBusy(true);
     try {
       await proposalsApi.submit(p.id, fee.trim());

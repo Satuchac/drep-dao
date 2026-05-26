@@ -1,7 +1,8 @@
-import { Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { ProposalsService } from './proposals.service';
+import { ReviewFeeDto } from './dto';
 import { FilteringService } from './filtering.service';
 import { DvService } from './dv.service';
 
@@ -21,9 +22,10 @@ export class AdminProposalsController {
     return this.proposals.listPendingFee();
   }
 
-  @Post(':id/confirm-fee')
-  confirmFee(@Param('id', ParseUUIDPipe) id: string) {
-    return this.proposals.confirmFee(id);
+  // Approve (→ ACTIVE/Filtering) or reject (→ REJECTED, reason required) the submission fee.
+  @Post(':id/review-fee')
+  reviewFee(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewFeeDto) {
+    return this.proposals.reviewFee(id, dto);
   }
 
   // §7.1 — draw filtering reviewers (normally automatic at submission-stage end).

@@ -307,6 +307,11 @@ model Proposal {
   requestedAmountAda  BigInt?  @map("requested_amount_ada")
   submissionFeeAda    BigInt?  @map("submission_fee_ada")
   submissionFeeTxHash String?  @map("submission_fee_tx_hash")
+  // Every distinct fee tx hash the submitter entered (the latest is submissionFeeTxHash);
+  // the board reviewer sees the full list so a corrected hash doesn't hide earlier attempts.
+  submissionFeeTxHashes String[] @default([]) @map("submission_fee_tx_hashes")
+  // The board's fee-review note shown to the submitter (red FEEDBACK box) — set on approve or reject.
+  feeReviewFeedback   String?  @map("fee_review_feedback")
   pledgeAmountAda     BigInt?  @map("pledge_amount_ada")
   pledgeReturnMethod  String?  @map("pledge_return_method")
   pledgeTxHash        String?  @map("pledge_tx_hash")

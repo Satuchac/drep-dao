@@ -95,11 +95,18 @@ Admin (separate): `/admin/login`, user `satucha`.
 - [ ] **Submit** needs the on-chain fee **tx hash** (Submit is disabled without it); the draft
       can also be **submitted later** via the inline **Submit** on its My-proposals row. After
       submitting, status is PENDING — still **not public** (only the submitter sees it).
-- [ ] As a board member: **My area → "Submission fees to confirm"** shows it with the
-      **platform's on-chain check** — ✓ "Fee verified on-chain — N ₳ paid", ✗ underpaid, or
-      ⏳ not found (the platform reads the tx via Koios and sums outputs to the fee address) —
-      plus the explorer link + notification badge. Confirm → FILTERING, and the proposal
-      becomes **publicly visible**.
+- [ ] As a board member: **My area → "Submission fees to confirm"** shows **every tx hash**
+      the submitter entered, each with its own on-chain check (✓ paid / ✗ underpaid / ⏳ not
+      found). **Approve** → ACTIVE/Filtering (public); **Reject** → REJECTED (a reason is
+      required). Any feedback you type shows the submitter a red **FEEDBACK** box next to the
+      fee tx on their proposal.
+- [ ] **Change the tx after submitting**: while PENDING, the submitter can open the proposal
+      and edit the fee tx hash — the board then sees all hashes entered (the latest is marked).
+      Once ACTIVE, the tx can no longer be changed.
+- [ ] **Zero fee**: set a round's open-source (or commercial) submission fee to **0%** in its
+      settings. On the submit form, ticking/unticking **Commercial** shows/hides the tx field
+      accordingly; for the 0% type there's no fee box and **Submit makes the proposal ACTIVE
+      immediately** (no payment, no board confirmation).
 
 ### Filtering → D&V → milestones (a fresh proposal)
 - [ ] Board: draw filtering reviewers; assigned DReps vote (NO needs rationale);

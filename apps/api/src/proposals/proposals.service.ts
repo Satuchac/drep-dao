@@ -16,7 +16,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
-import { CreateProposalDto, MilestoneInput, SubmitProposalDto, UpdateProposalDto } from './dto';
+import { CreateProposalDto, MilestoneInput, ReviewFeeDto, SubmitProposalDto, UpdateProposalDto } from './dto';
 
 const LOVELACE = 1_000_000;
 const toLovelace = (ada: number): bigint => BigInt(Math.round(ada * LOVELACE));
@@ -78,6 +78,7 @@ export class ProposalsService {
         costBreakdownMd: dto.costBreakdownMd ?? null,
         // §12 — the fee tx hash can be saved with the draft and is verified on-chain at submission.
         submissionFeeTxHash: dto.submissionFeeTxHash ?? null,
+        submissionFeeTxHashes: dto.submissionFeeTxHash ? [dto.submissionFeeTxHash] : [],
         // §3.4 funding fields (stored in the existing Json columns as markdown strings).
         ...(dto.teamInfoMd ? { teamInfo: dto.teamInfoMd } : {}),
         ...(dto.revenueSharingMd ? { revenueSharing: dto.revenueSharingMd } : {}),
@@ -119,6 +120,15 @@ export class ProposalsService {
         throw new BadRequestException('category does not belong to this proposal’s round');
       }
     }
+    // The fee tx hash is editable only while DRAFT/PENDING (locked once ACTIVE); each new
+    // distinct value is appended to the history so the reviewer sees every hash entered.
+    const txEditable = p.status === ProposalStatus.DRAFT || p.status === ProposalStatus.PENDING;
+    let feeHashData: { submissionFeeTxHash?: string | null; submissionFeeTxHashes?: string[] } = {};
+    if (dto.submissionFeeTxHash !== undefined && txEditable) {
+      const hash = dto.submissionFeeTxHash || null;
+      const history = hash && !p.submissionFeeTxHashes.includes(hash) ? [...p.submissionFeeTxHashes, hash] : p.submissionFeeTxHashes;
+      feeHashData = { submissionFeeTxHash: hash, submissionFeeTxHashes: history };
+    }
     await this.prisma.$transaction(async (tx) => {
       if (postSubmission) {
         // Snapshot the version being replaced so reviewers can see what changed.
@@ -136,7 +146,7 @@ export class ProposalsService {
           ...(dto.requestedAmountAda !== undefined ? { requestedAmountAda: toLovelace(dto.requestedAmountAda) } : {}),
           ...(dto.subcategoryIds !== undefined ? { subcategoryIds: dto.subcategoryIds } : {}),
           ...(dto.costBreakdownMd !== undefined ? { costBreakdownMd: dto.costBreakdownMd } : {}),
-          ...(dto.submissionFeeTxHash !== undefined ? { submissionFeeTxHash: dto.submissionFeeTxHash || null } : {}),
+          ...feeHashData,
           ...(dto.teamInfoMd !== undefined ? { teamInfo: dto.teamInfoMd } : {}),
           ...(dto.revenueSharingMd !== undefined ? { revenueSharing: dto.revenueSharingMd } : {}),
           ...(postSubmission ? { version: { increment: 1 } } : {}),
@@ -184,32 +194,61 @@ export class ProposalsService {
     return history;
   }
 
-  /** §3.3 — submit: compute fee, move DRAFT → PENDING (awaiting fee confirmation). */
+  /**
+   * §3.3/§12 — submit. If the round's fee for this proposal type is **0%**, no payment is
+   * needed and the proposal goes straight to ACTIVE (Filtering). Otherwise a fee tx hash is
+   * required and the proposal moves to PENDING for the board to confirm the on-chain payment.
+   */
   async submit(userId: string, id: string, dto: SubmitProposalDto) {
     const p = await this.ownDraft(userId, id);
     const fee = await this.computeFee(toAda(p.requestedAmountAda), p.isCommercial ?? false, p.roundId);
+    if (fee <= 0) {
+      // No fee for this proposal type → admit immediately, no board fee confirmation.
+      await this.prisma.proposal.update({
+        where: { id },
+        data: { status: ProposalStatus.ACTIVE, stage: ProposalStage.FILTERING, submissionFeeAda: 0n, submittedAt: new Date() },
+      });
+      return this.get(id, userId);
+    }
+    const hash = dto.submissionFeeTxHash?.trim();
+    if (!hash) {
+      throw new BadRequestException('a submission-fee transaction hash is required for this proposal');
+    }
+    const history = p.submissionFeeTxHashes.includes(hash) ? p.submissionFeeTxHashes : [...p.submissionFeeTxHashes, hash];
     await this.prisma.proposal.update({
       where: { id },
       data: {
         status: ProposalStatus.PENDING,
         submissionFeeAda: toLovelace(fee),
-        submissionFeeTxHash: dto.submissionFeeTxHash,
+        submissionFeeTxHash: hash,
+        submissionFeeTxHashes: history,
         submittedAt: new Date(),
       },
     });
     return this.get(id, userId);
   }
 
-  /** §26.5 board override — confirm fee received → ACTIVE in FILTERING (on-chain verify deferred). */
-  async confirmFee(id: string) {
+  /**
+   * §26.5 board fee review of a PENDING proposal. APPROVE → ACTIVE in Filtering (the tx is
+   * now locked); REJECT → REJECTED (feedback required). The feedback (also optional on
+   * approve) is shown to the submitter in the red FEEDBACK box next to the fee tx.
+   */
+  async reviewFee(id: string, dto: ReviewFeeDto) {
     const p = await this.prisma.proposal.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('proposal not found');
     if (p.status !== ProposalStatus.PENDING) {
       throw new ConflictException('proposal is not awaiting fee confirmation');
     }
+    const feedback = dto.feedback?.trim() || null;
+    if (dto.decision === 'REJECT' && !feedback) {
+      throw new BadRequestException('a reason is required when rejecting a submission fee');
+    }
     await this.prisma.proposal.update({
       where: { id },
-      data: { status: ProposalStatus.ACTIVE, stage: ProposalStage.FILTERING },
+      data:
+        dto.decision === 'APPROVE'
+          ? { status: ProposalStatus.ACTIVE, stage: ProposalStage.FILTERING, feeReviewFeedback: feedback }
+          : { status: ProposalStatus.REJECTED, feeReviewFeedback: feedback },
     });
     return this.get(id);
   }
@@ -250,10 +289,17 @@ export class ProposalsService {
     const feeAddress = this.config.get<string>('SUBMISSION_FEE_ADDRESS') ?? this.config.get<string>('TREASURY_ADDRESS') ?? '';
     return Promise.all(
       rows.map(async (p) => {
-        const v =
-          p.submissionFeeTxHash && feeAddress
-            ? await this.cardano.verifyPayment(p.submissionFeeTxHash, feeAddress, p.submissionFeeAda ?? 0n)
-            : { found: false, paid: false, paidLovelace: 0n };
+        // The submitter may have entered several tx hashes (corrected/replaced) — show & verify
+        // each one so the board can find the one that actually paid. Fall back to the latest.
+        const hashes = p.submissionFeeTxHashes.length ? p.submissionFeeTxHashes : p.submissionFeeTxHash ? [p.submissionFeeTxHash] : [];
+        const txs = await Promise.all(
+          hashes.map(async (h) => {
+            const v = feeAddress ? await this.cardano.verifyPayment(h, feeAddress, p.submissionFeeAda ?? 0n) : { found: false, paid: false, paidLovelace: 0n };
+            return { hash: h, found: v.found, paid: v.paid, paidAda: toAda(v.paidLovelace) };
+          }),
+        );
+        const anyPaid = txs.find((t) => t.paid);
+        const anyFound = txs.find((t) => t.found);
         return {
           id: p.id,
           title: p.title,
@@ -263,10 +309,16 @@ export class ProposalsService {
           requestedAmountAda: toAda(p.requestedAmountAda),
           submissionFeeAda: toAda(p.submissionFeeAda),
           submissionFeeTxHash: p.submissionFeeTxHash,
+          // Every tx the submitter entered, each with its own on-chain verification result.
+          txs,
           submitter: p.submitterUser?.displayName ?? null,
           submittedAt: p.submittedAt,
-          // On-chain verification result for the board's "fee paid?" hint.
-          feeVerified: { found: v.found, paid: v.paid, paidAda: toAda(v.paidLovelace) },
+          // Summary hint: paid if ANY entered tx covered the fee.
+          feeVerified: anyPaid
+            ? { found: true, paid: true, paidAda: anyPaid.paidAda }
+            : anyFound
+              ? { found: true, paid: false, paidAda: anyFound.paidAda }
+              : { found: false, paid: false, paidAda: 0 },
         };
       }),
     );
@@ -304,6 +356,8 @@ export class ProposalsService {
       revenueSharingMd: typeof p.revenueSharing === 'string' ? p.revenueSharing : null,
       submissionFeeAda: toAda(p.submissionFeeAda),
       submissionFeeTxHash: p.submissionFeeTxHash,
+      submissionFeeTxHashes: p.submissionFeeTxHashes,
+      feeReviewFeedback: p.feeReviewFeedback,
       subcategoryIds: p.subcategoryIds,
       // §5.2 — the category's funding-request bounds + conditions, for display.
       categoryAsk: {

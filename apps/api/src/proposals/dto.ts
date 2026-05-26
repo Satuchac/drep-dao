@@ -64,7 +64,14 @@ export class UpdateProposalDto {
 }
 
 export class SubmitProposalDto {
-  @IsString() @IsNotEmpty() @MaxLength(120) submissionFeeTxHash!: string;
+  // Optional: when the round's fee for this proposal type is 0%, no tx is needed.
+  @IsOptional() @IsString() @MaxLength(120) submissionFeeTxHash?: string;
+}
+
+export class ReviewFeeDto {
+  @IsIn(['APPROVE', 'REJECT']) decision!: 'APPROVE' | 'REJECT';
+  // Shown to the submitter in the red FEEDBACK box — required when rejecting.
+  @IsOptional() @IsString() @MaxLength(5000) feedback?: string;
 }
 
 export class FilterVoteDto {
