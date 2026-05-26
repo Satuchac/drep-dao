@@ -224,8 +224,11 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
 - **Debate & Vote (§8).** Balanced voting power (snapshot at open), rationale
   mandatory (≥200 chars), threshold default 67%. The board's **publish/finalize
   anchors the final tally on-chain** (subject `dv`).
-- **Editing & versions (§7/§8).** The submitter can edit during Filtering and
-  during Debate & Vote *before voting opens*. Each edit snapshots the prior
+- **Editing & versions (§7/§8).** The submitter can edit while DRAFT, while
+  **PENDING** (submitted, awaiting fee confirmation — still private), during Filtering,
+  and during Debate & Vote *before voting opens*. DRAFT/PENDING are pre-public so edits
+  aren't versioned (structure is freely editable in DRAFT; in PENDING the title + pitch).
+  Once public (Filtering+), each edit snapshots the prior
   content into `ProposalVersion`; the proposal detail shows an **original-vs-updated
   line diff**. No edits during the D&V voting phase or after a decision.
 - **Milestone funding (§11).** After D&V approval the board draws + confirms

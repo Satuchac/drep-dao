@@ -66,6 +66,11 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     ok('fee tx hash persists on a saved draft', edited.submissionFeeTxHash === 'tx12345', String(edited.submissionFeeTxHash));
     const reread = await proposals.get(good.id, u.id);
     ok('fee tx hash survives reload', reread.submissionFeeTxHash === 'tx12345', String(reread.submissionFeeTxHash));
+    // A submitted (PENDING) proposal stays editable while it awaits the board's fee confirmation.
+    const submitted = await proposals.submit(u.id, good.id, { submissionFeeTxHash: 'tx12345' });
+    ok('submit moves DRAFT → PENDING', submitted.status === 'PENDING', submitted.status);
+    const pendingEdit = await proposals.updateDraft(u.id, good.id, { contentMd: 'edited while pending' });
+    ok('PENDING proposal is still editable', pendingEdit.contentMd === 'edited while pending' && pendingEdit.status === 'PENDING', `${pendingEdit.status}/${pendingEdit.contentMd}`);
   } finally {
     const props = await db.proposal.findMany({ where: { roundId: r.id }, select: { id: true } });
     await db.milestone.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });

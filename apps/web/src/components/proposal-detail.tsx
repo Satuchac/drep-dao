@@ -392,8 +392,9 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
   const [content, setContent] = useState(proposal.contentMd);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Editable during Filtering or the Debate & Vote editing sub-phase (backend enforces precisely).
-  const editable = proposal.stage === 'FILTERING' || proposal.stage === 'DEBATE_VOTE';
+  // Editable while PENDING (submitted, awaiting fee confirmation), during Filtering, or the
+  // Debate & Vote editing sub-phase (backend enforces precisely).
+  const editable = proposal.status === 'PENDING' || proposal.stage === 'FILTERING' || proposal.stage === 'DEBATE_VOTE';
   if (!editable) return null;
 
   const save = async () => {

@@ -88,6 +88,10 @@ Admin (separate): `/admin/login`, user `satucha`.
 - [ ] **Fee tx hash persists**: paste a tx hash, **Save Draft**, reopen via **Edit** — the
       hash is still there (and prefilled in the row's inline Submit). It's just a saved note
       until you Submit; the board still verifies it on-chain before confirming the fee.
+- [ ] **Edit after submitting (PENDING)**: a submitted proposal sits at **PENDING** (board
+      must confirm the fee). It stays **editable** — the row has an **Edit** button that opens
+      the proposal; the detail's "Edit proposal" lets you revise the title + pitch (same as the
+      Filtering-stage edit). Structure (amount/milestones/fee) stays locked once submitted.
 - [ ] **Submit** needs the on-chain fee **tx hash** (Submit is disabled without it); the draft
       can also be **submitted later** via the inline **Submit** on its My-proposals row. After
       submitting, status is PENDING — still **not public** (only the submitter sees it).

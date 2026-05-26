@@ -367,6 +367,7 @@ export class ProposalsService {
    * §7/§8 editing windows. Returns the proposal and whether this is a
    * post-submission edit (which must be versioned). Editable while:
    *  - DRAFT, or
+   *  - PENDING (submitted, awaiting the board's fee confirmation — still private), or
    *  - FILTERING stage (status ACTIVE) — submitter revises during the feedback rounds, or
    *  - DEBATE_VOTE stage *before voting opens* (votingStartAt null) — the editing sub-phase.
    * No edits during the D&V voting phase or after a final decision.
@@ -375,7 +376,10 @@ export class ProposalsService {
     const p = await this.prisma.proposal.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('proposal not found');
     if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
-    if (p.status === ProposalStatus.DRAFT) return { proposal: p, postSubmission: false };
+    // DRAFT and PENDING are still private (pre-review) → free editing, no version snapshot.
+    if (p.status === ProposalStatus.DRAFT || p.status === ProposalStatus.PENDING) {
+      return { proposal: p, postSubmission: false };
+    }
     const inFiltering = p.stage === ProposalStage.FILTERING && p.status === ProposalStatus.ACTIVE;
     const inDvEditing = p.stage === ProposalStage.DEBATE_VOTE && p.votingStartAt == null;
     if (inFiltering || inDvEditing) return { proposal: p, postSubmission: true };

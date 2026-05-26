@@ -446,6 +446,8 @@ function MineRow({
   const [error, setError] = useState<string | null>(null);
   const field = 'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
   const isDraft = p.status === 'DRAFT';
+  // After submission the proposal stays editable (content) while private/under review.
+  const editableInDetail = !isDraft && (p.status === 'PENDING' || p.stage === 'FILTERING' || p.stage === 'DEBATE_VOTE');
 
   const submit = async () => {
     setError(null);
@@ -482,6 +484,10 @@ function MineRow({
                 {submitting ? 'Close' : 'Submit'}
               </button>
             </>
+          ) : editableInDetail ? (
+            <button onClick={onOpen} className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800">
+              Edit
+            </button>
           ) : null}
         </span>
       </div>
