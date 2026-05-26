@@ -219,6 +219,21 @@ Admin (separate): `/admin/login`, user `satucha`.
       **"2. Exchange the seed"** (enabled only after the sweep). The board's Platform setup
       no longer shows wallets. Each admin action is in the audit log.
 
+### Proposal-form UX (verify these specifically)
+- [ ] **Category appears after a round**: the **Category** combo is labelled and shows only
+      once a **Round** is picked; if exactly one round is in Submission it's preselected.
+- [ ] **Commercial label** reads **"Commercial / for profit"**.
+- [ ] **What's missing is explicit**: with the form incomplete, an amber **"Still needed
+      before you can submit or save"** checklist lists exactly what's missing, and **both
+      Submit and Save Draft are disabled** until it clears.
+- [ ] **Milestone budget check**: set requested = 150,000 ₳ but milestones summing to
+      120,000 ₳ → a red line warns they must be equal (off by 30,000 ₳) and Submit stays
+      disabled. Make them equal → it turns green and the button enables.
+- [ ] **Formatting + sizing**: the pitch / cost breakdown / team / revenue fields have a
+      toolbar (Heading / **B** / *I* / • List / 1. List / 🔗 Link), a **Preview** toggle that
+      renders the markdown, and an **Expand / Shrink** button (and drag-resize). The rendered
+      formatting (headings, bold, bullets, links) shows on the proposal detail page.
+
 ## 4. Known limitations / deferred (by design, for now)
 - **Real ADA payouts** (milestone disbursement, treasury top-ups) are recorded +
   the multisig action collects 3-of-5 approvals, but the actual native-multisig

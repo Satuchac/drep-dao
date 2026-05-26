@@ -11,6 +11,7 @@ import {
 } from '@/lib/api';
 import { useExplorer } from '@/lib/explorer';
 import { ProposalDetail } from './proposal-detail';
+import { MarkdownEditor } from './markdown';
 
 type Cat = { id: string; name: string; minAda: number | null; maxAda: number | null; conditions: string | null };
 
@@ -40,7 +41,15 @@ export function ProposalSubmit() {
   const loadMine = () => proposalsApi.mine().then(setMine).catch(() => undefined);
   useEffect(() => {
     // §3/§19 — proposals can only be created while a round's Submission stage is open.
-    roundsApi.list().then((r) => setRounds(r.filter((x) => x.status === 'SUBMISSION'))).catch(() => undefined);
+    roundsApi
+      .list()
+      .then((r) => {
+        const open = r.filter((x) => x.status === 'SUBMISSION');
+        setRounds(open);
+        // If exactly one round is open for submission (the common case), preselect it.
+        if (open.length === 1) setRoundId(open[0].id);
+      })
+      .catch(() => undefined);
     loadMine();
   }, []);
 
@@ -55,6 +64,23 @@ export function ProposalSubmit() {
   const selectedCat = cats.find((c) => c.id === categoryId);
 
   const field = 'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
+
+  // §5.2 — live readiness: what's still missing before this can be saved/submitted.
+  const msSum = ms.reduce((a, m) => a + Number(m.amountAda || 0), 0);
+  const milestonesMatch = msSum === Number(amount);
+  const belowMin = selectedCat?.minAda != null && Number(amount) < selectedCat.minAda;
+  const aboveMax = selectedCat?.maxAda != null && Number(amount) > selectedCat.maxAda;
+  const draftMissing: string[] = [];
+  if (!roundId) draftMissing.push('select a round');
+  if (!categoryId) draftMissing.push('select a category');
+  if (!title.trim()) draftMissing.push('add a title');
+  if (!content.trim()) draftMissing.push('write the pitch');
+  if (!(Number(amount) > 0)) draftMissing.push('set a requested amount');
+  if (belowMin) draftMissing.push(`requested amount is below the category minimum (${selectedCat!.minAda!.toLocaleString()} ₳)`);
+  if (aboveMax) draftMissing.push(`requested amount is above the category maximum (${selectedCat!.maxAda!.toLocaleString()} ₳)`);
+  if (ms.some((m) => !m.description.trim())) draftMissing.push('describe every milestone');
+  if (!milestonesMatch) draftMissing.push(`milestones must sum to the requested amount (now ${msSum.toLocaleString()} of ${Number(amount).toLocaleString()} ₳)`);
+  const draftReady = draftMissing.length === 0;
 
   const buildInput = () => ({
     roundId,
@@ -174,24 +200,34 @@ export function ProposalSubmit() {
 
       {open && rounds.length > 0 ? (
         <form onSubmit={submitNow} className="mt-3 space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <select className={field} value={roundId} onChange={(e) => setRoundId(e.target.value)} required>
-              <option value="">Select round…</option>
-              {rounds.map((r) => (
-                <option key={r.id} value={r.id}>#{r.number} {r.name ?? ''} ({r.status})</option>
-              ))}
-            </select>
-            <select className={field} value={categoryId} onChange={(e) => setCategoryId(e.target.value)} required>
-              {cats.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
+          <div className="flex flex-wrap gap-4">
+            <label className="flex flex-col gap-0.5 text-xs font-medium text-neutral-600 dark:text-neutral-400">
+              Round
+              <select className={field} value={roundId} onChange={(e) => setRoundId(e.target.value)} required>
+                <option value="">Select round…</option>
+                {rounds.map((r) => (
+                  <option key={r.id} value={r.id}>#{r.number} {r.name ?? ''} ({r.status})</option>
+                ))}
+              </select>
+            </label>
+            {/* §5.2 — category picker appears only after a round is chosen (its categories are known then). */}
+            {roundId ? (
+              <label className="flex flex-col gap-0.5 text-xs font-medium text-neutral-600 dark:text-neutral-400">
+                Category
+                <select className={field} value={categoryId} onChange={(e) => setCategoryId(e.target.value)} required>
+                  <option value="">Select category…</option>
+                  {cats.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
           </div>
           <input className={`${field} w-full`} placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} required />
-          <textarea className={`${field} w-full`} rows={3} placeholder="Pitch (markdown)" value={content} onChange={(e) => setContent(e.target.value)} required />
+          <MarkdownEditor value={content} onChange={setContent} placeholder="Pitch — what you'll build and why (markdown)" minRows={4} required />
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <label>Requested ₳ <input type="number" className={`${field} w-32`} value={amount} onChange={(e) => setAmount(Number(e.target.value))} /></label>
-            <label className="flex items-center gap-1"><input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} /> commercial</label>
+            <label className="flex items-center gap-1"><input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} /> Commercial / for profit</label>
           </div>
           {/* §5.2 — the selected category's per-proposal ask range + conditions. */}
           {selectedCat && (selectedCat.minAda != null || selectedCat.maxAda != null || selectedCat.conditions) ? (
@@ -214,11 +250,23 @@ export function ProposalSubmit() {
               </div>
             ))}
             <button type="button" className="mt-1 text-xs underline" onClick={() => setMs((p) => [...p, { description: '', amountAda: 0 }])}>+ add milestone</button>
+            {/* Live milestone-budget check — must equal the requested amount. */}
+            <div className={`mt-1 text-xs ${milestonesMatch ? 'text-emerald-600' : 'font-medium text-red-600'}`}>
+              {milestonesMatch
+                ? `✓ Milestones sum to ${msSum.toLocaleString()} ₳ (matches requested).`
+                : `⚠ Milestones sum to ${msSum.toLocaleString()} ₳ but the requested amount is ${Number(amount).toLocaleString()} ₳ — they must be equal (off by ${Math.abs(msSum - Number(amount)).toLocaleString()} ₳).`}
+            </div>
           </div>
           {/* §3.4 — funding-specific detail (all optional). */}
-          <textarea className={`${field} w-full`} rows={2} placeholder="Cost breakdown (optional, markdown) — how the budget is spent" value={costBreakdown} onChange={(e) => setCostBreakdown(e.target.value)} />
-          <textarea className={`${field} w-full`} rows={2} placeholder="Team info (optional, markdown) — who is delivering this" value={teamInfo} onChange={(e) => setTeamInfo(e.target.value)} />
-          <textarea className={`${field} w-full`} rows={2} placeholder="Revenue sharing (optional, markdown) — for commercial projects: how the DAO shares in returns" value={revenueSharing} onChange={(e) => setRevenueSharing(e.target.value)} />
+          <FieldLabel label="Cost breakdown" hint="optional — how the budget is spent">
+            <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} placeholder="How the budget is spent" minRows={2} />
+          </FieldLabel>
+          <FieldLabel label="Team info" hint="optional — who is delivering this">
+            <MarkdownEditor value={teamInfo} onChange={setTeamInfo} placeholder="Who is delivering this, and why you're best suited" minRows={2} />
+          </FieldLabel>
+          <FieldLabel label="Revenue sharing" hint="optional — for commercial projects: how the DAO shares in returns">
+            <MarkdownEditor value={revenueSharing} onChange={setRevenueSharing} placeholder="For commercial projects: how the DAO shares in returns" minRows={2} />
+          </FieldLabel>
           {/* §5.3/§7.1 — expertise tags drive which DReps are drawn to filter this proposal. */}
           <div>
             <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Expertise areas (helps match filtering reviewers)</div>
@@ -251,16 +299,31 @@ export function ProposalSubmit() {
           </div>
           <input className={`${field} w-full`} placeholder="Submission fee TX hash (needed only to submit)" value={fee} onChange={(e) => setFee(e.target.value)} />
           {error ? <div className="text-sm text-red-600">{error}</div> : null}
+          {/* What's still missing before this can be saved/submitted (so a disabled button is never a mystery). */}
+          {!draftReady ? (
+            <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+              <div className="font-medium">Still needed before you can submit or save:</div>
+              <ul className="mt-0.5 list-disc pl-4">
+                {draftMissing.map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
+            </div>
+          ) : !fee.trim() ? (
+            <div className="text-xs text-neutral-500">
+              Ready to save as a draft. To <strong>submit</strong>, also paste the submission-fee transaction hash below.
+            </div>
+          ) : null}
           {/* §3 — privacy + the two ways out of the form. */}
           <p className="text-xs text-neutral-500">
             <strong>Drafts are private</strong> — visible only to you, not to DReps or the board. A proposal becomes
             public only after you submit and a board member confirms the fee.
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="submit" disabled={busy || !roundId || !fee.trim()} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+            <button type="submit" disabled={busy || !draftReady || !fee.trim()} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
               {busy ? 'Working…' : 'Submit'}
             </button>
-            <button type="button" onClick={saveDraft} disabled={busy || !roundId} className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
+            <button type="button" onClick={saveDraft} disabled={busy || !draftReady} className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
               Save Draft
             </button>
           </div>
@@ -279,6 +342,19 @@ export function ProposalSubmit() {
         </div>
       ) : null}
     </section>
+  );
+}
+
+/** A small label + hint above a field (used for the optional §3.4 markdown editors). */
+function FieldLabel({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
+        {label}
+        {hint ? <span className="font-normal text-neutral-400"> — {hint}</span> : null}
+      </div>
+      <div className="mt-0.5">{children}</div>
+    </div>
   );
 }
 

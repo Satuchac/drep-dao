@@ -178,6 +178,18 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   draw). The **requested amount must fit the selected category's min/max ask**: enforced
   in `ProposalsService.createDraft` (and validated client-side, with the range shown in
   the form). The detail view shows the ask range, conditions, and the §3.4 sections.
+- **Submission form UX.** The **Category** picker is labelled and appears only once a
+  **Round** is chosen; if exactly one round is in Submission it's preselected. The form
+  shows a live **"still needed" checklist** (round, category, title, pitch, in-range
+  amount, milestone descriptions, milestone sum) and **disables Submit/Save Draft until
+  it's clear** — including a live milestone-budget line that flags when the milestones
+  don't sum to the requested amount. Long markdown fields (pitch, cost breakdown, team,
+  revenue sharing) use a shared **`MarkdownEditor`** with a formatting toolbar
+  (heading/bold/italic/bullet+numbered lists/link), a Write/Preview toggle, and an
+  Expand/Collapse button (also drag-resizable). Markdown is rendered for real in the
+  proposal detail via a small **dependency-free, XSS-safe renderer** (`lib/markdown.ts`
+  → `<Markdown>`): the source is HTML-escaped first and only a safe tag subset is
+  emitted, with link hrefs restricted to http(s)/mailto.
 - **Submission fee (§12/§16).** Commercial **3%** / open-source **1%** of the
   requested amount (capped, configurable). The submitter composes a proposal and can
   **Save Draft** (private) or **Submit** — Submit needs the on-chain fee tx hash and

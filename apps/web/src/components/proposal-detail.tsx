@@ -22,6 +22,7 @@ import {
   type DvResult,
 } from '@/lib/api';
 import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime } from './round-ui';
+import { Markdown, MarkdownEditor } from './markdown';
 
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
 const SUBCAT_LABEL: Record<string, string> = Object.fromEntries(DEFAULT_SUBCATEGORIES.map((s) => [s.id, s.label]));
@@ -84,7 +85,7 @@ export function ProposalDetail({ id, onBack }: { id: string; onBack: () => void 
             ))}
           </div>
         ) : null}
-        <div className="mt-3 whitespace-pre-wrap text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</div>
+        <Markdown className="mt-3 text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</Markdown>
         {/* §3.4 — funding-specific detail, shown when present. */}
         <DetailBlock label="Cost breakdown" md={p.costBreakdownMd} />
         <DetailBlock label="Team" md={p.teamInfoMd} />
@@ -118,7 +119,7 @@ function DetailBlock({ label, md }: { label: string; md?: string | null }) {
   return (
     <div className="mt-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{label}</div>
-      <div className="mt-0.5 whitespace-pre-wrap text-sm text-neutral-700 dark:text-neutral-300">{md}</div>
+      <Markdown className="mt-0.5 text-sm text-neutral-700 dark:text-neutral-300">{md}</Markdown>
     </div>
   );
 }
@@ -418,7 +419,7 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
   return (
     <div className="mt-3 space-y-2 rounded border border-neutral-200 p-2 dark:border-neutral-800">
       <input className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={title} onChange={(e) => setTitle(e.target.value)} />
-      <textarea className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" rows={6} value={content} onChange={(e) => setContent(e.target.value)} />
+      <MarkdownEditor value={content} onChange={setContent} placeholder="Proposal pitch (markdown)" minRows={6} />
       {error ? <div className="text-xs text-red-600">{error}</div> : null}
       <div className="flex gap-2">
         <button disabled={busy} onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
