@@ -431,7 +431,9 @@ export const boardRoundsApi = {
 };
 
 export interface ProposalMilestoneInput {
+  title?: string;
   description: string;
+  acceptanceCriteria?: string;
   amountAda: number;
 }
 export interface CreateProposalInput {
@@ -467,7 +469,7 @@ export interface ProposalDetail extends ProposalSummary {
   submissionFeeAda: number;
   submissionFeeTxHash: string | null;
   categoryAsk: { minAda: number | null; maxAda: number | null; conditions: string | null };
-  milestones: { id: string; idx: number; description: string; amountAda: number; status: string }[];
+  milestones: { id: string; idx: number; title: string | null; description: string; acceptanceCriteria: string | null; amountAda: number; status: string }[];
 }
 
 export const proposalsApi = {
@@ -626,7 +628,9 @@ export const commentsApi = {
 export interface MilestoneView {
   id: string;
   idx: number;
+  title: string | null;
   description: string | null;
+  acceptanceCriteria: string | null;
   amountAda: number;
   status: string;
   reviewers: (string | null)[];

@@ -76,7 +76,9 @@ export class MilestonesService {
         return {
           id: m.id,
           idx: m.idx,
+          title: m.title,
           description: m.description,
+          acceptanceCriteria: m.acceptanceCriteria,
           amountAda: Number(m.amountAda) / LOVELACE,
           status: m.status,
           reviewers: m.assignments.map((a) => a.reviewerDrep?.drepIdOnchain).filter(Boolean),

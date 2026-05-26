@@ -476,14 +476,20 @@ function MilestoneRow({ m, isMine, onChange }: { m: MilestoneView; isMine: boole
   return (
     <li className="rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">
       <div className="flex items-center justify-between">
-        <span className="font-medium">Milestone #{m.idx + 1} — {m.amountAda.toLocaleString()} ₳</span>
+        <span className="font-medium">Milestone #{m.idx + 1}{m.title ? ` — ${m.title}` : ''} <span className="text-neutral-500">· {m.amountAda.toLocaleString()} ₳</span></span>
         <div className="flex items-center gap-2">
           <span className="text-xs text-neutral-500">{m.yes} YES / {m.no} NO (need {m.threshold})</span>
           <StatusBadge status={m.status} cls={PROPOSAL_STATUS_CLS} />
           <AnchorLink txHash={m.anchorTxHash} />
         </div>
       </div>
-      {m.description ? <div className="mt-0.5 text-xs text-neutral-500">{m.description}</div> : null}
+      {m.description ? <Markdown className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">{m.description}</Markdown> : null}
+      {m.acceptanceCriteria ? (
+        <div className="mt-1">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Acceptance criteria</div>
+          <Markdown className="text-xs text-neutral-600 dark:text-neutral-400">{m.acceptanceCriteria}</Markdown>
+        </div>
+      ) : null}
       {m.latestPoa ? (
         <div className="mt-1 rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-800/50">
           <div className="font-medium">Proof of Achievement (attempt {m.latestPoa.attempt})</div>

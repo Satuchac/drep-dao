@@ -368,14 +368,16 @@ model ProposalVersion {
 }
 
 model Milestone {
-  id          String    @id @default(uuid()) @db.Uuid
-  proposalId  String    @map("proposal_id") @db.Uuid
-  idx         Int
-  description String?
-  amountAda   BigInt    @map("amount_ada")
-  deadlineAt  DateTime? @map("deadline_at") @db.Timestamptz(6)
-  status      String // NOT_STARTED, POA_SUBMITTED, IN_REVIEW, APPROVED, REJECTED
-  closedAt    DateTime? @map("closed_at") @db.Timestamptz(6)
+  id                 String    @id @default(uuid()) @db.Uuid
+  proposalId         String    @map("proposal_id") @db.Uuid
+  idx                Int
+  title              String?
+  description        String?
+  acceptanceCriteria String?   @map("acceptance_criteria")
+  amountAda          BigInt    @map("amount_ada")
+  deadlineAt         DateTime? @map("deadline_at") @db.Timestamptz(6)
+  status             String // NOT_STARTED, POA_SUBMITTED, IN_REVIEW, APPROVED, REJECTED
+  closedAt           DateTime? @map("closed_at") @db.Timestamptz(6)
 
   proposal    Proposal              @relation(fields: [proposalId], references: [id])
   poas        MilestonePoa[]

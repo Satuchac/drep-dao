@@ -171,6 +171,12 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
 
 ## 4b. Proposal lifecycle — fees, filtering, D&V, editing, milestones (§7/§8/§11/§12/§16/§20)
 
+- **Milestones (§3).** Each milestone has four parts: **title**, **requested budget**
+  (the field right under the title), **description**, and **acceptance criteria**
+  (`milestone.title`/`acceptanceCriteria` columns). The milestone budgets must sum to the
+  requested amount. Title + description are required to submit; acceptance criteria is
+  optional. Shown (title + budget + description + acceptance criteria, markdown-rendered)
+  on the proposal detail and milestone-review panels.
 - **Submission fields (§3.4/§5.2).** A funding proposal captures title, pitch, requested
   amount, commercial flag, milestones (must sum to the request), and the §3.4 detail —
   **cost breakdown, team info, revenue sharing** (markdown, in the existing Json/text
@@ -184,9 +190,13 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   amount, milestone descriptions, milestone sum) and **disables Submit/Save Draft until
   it's clear** — including a live milestone-budget line that flags when the milestones
   don't sum to the requested amount. Long markdown fields (pitch, cost breakdown, team,
-  revenue sharing) use a shared **`MarkdownEditor`** with a formatting toolbar
-  (heading/bold/italic/bullet+numbered lists/link), a Write/Preview toggle, and an
-  Expand/Collapse button (also drag-resizable). Markdown is rendered for real in the
+  revenue sharing, and each milestone's description + acceptance criteria) use a shared
+  **`MarkdownEditor`**: a labelled header, a formatting toolbar
+  (heading/bold/italic/bullet+numbered lists/link), a Write/Preview toggle, a
+  Taller/Shorter height toggle, and a **Shrink** button that **collapses the field to
+  just its name** (content hidden, with a "✓ filled / empty" hint) so a long form stays
+  navigable — click the name to expand again. Optional fields start collapsed. Markdown
+  is rendered for real in the
   proposal detail via a small **dependency-free, XSS-safe renderer** (`lib/markdown.ts`
   → `<Markdown>`): the source is HTML-escaped first and only a safe tag subset is
   emitted, with link hrefs restricted to http(s)/mailto.

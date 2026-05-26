@@ -28,7 +28,7 @@ export function ProposalSubmit() {
   const [content, setContent] = useState('');
   const [amount, setAmount] = useState(50000);
   const [commercial, setCommercial] = useState(false);
-  const [ms, setMs] = useState<ProposalMilestoneInput[]>([{ description: '', amountAda: 50000 }]);
+  const [ms, setMs] = useState<ProposalMilestoneInput[]>([{ title: '', description: '', acceptanceCriteria: '', amountAda: 50000 }]);
   const [costBreakdown, setCostBreakdown] = useState('');
   const [teamInfo, setTeamInfo] = useState('');
   const [revenueSharing, setRevenueSharing] = useState('');
@@ -78,6 +78,7 @@ export function ProposalSubmit() {
   if (!(Number(amount) > 0)) draftMissing.push('set a requested amount');
   if (belowMin) draftMissing.push(`requested amount is below the category minimum (${selectedCat!.minAda!.toLocaleString()} ₳)`);
   if (aboveMax) draftMissing.push(`requested amount is above the category maximum (${selectedCat!.maxAda!.toLocaleString()} ₳)`);
+  if (ms.some((m) => !(m.title ?? '').trim())) draftMissing.push('give every milestone a title');
   if (ms.some((m) => !m.description.trim())) draftMissing.push('describe every milestone');
   if (!milestonesMatch) draftMissing.push(`milestones must sum to the requested amount (now ${msSum.toLocaleString()} of ${Number(amount).toLocaleString()} ₳)`);
   const draftReady = draftMissing.length === 0;
@@ -93,7 +94,12 @@ export function ProposalSubmit() {
     costBreakdownMd: costBreakdown.trim() || undefined,
     teamInfoMd: teamInfo.trim() || undefined,
     revenueSharingMd: revenueSharing.trim() || undefined,
-    milestones: ms.map((m) => ({ description: m.description, amountAda: Number(m.amountAda) })),
+    milestones: ms.map((m) => ({
+      title: m.title?.trim() || undefined,
+      description: m.description,
+      acceptanceCriteria: m.acceptanceCriteria?.trim() || undefined,
+      amountAda: Number(m.amountAda),
+    })),
   });
 
   // §5.2 milestones must sum to the request, and the request must fit the category's ask range.
@@ -122,7 +128,7 @@ export function ProposalSubmit() {
     setTeamInfo('');
     setRevenueSharing('');
     setSubcatIds([]);
-    setMs([{ description: '', amountAda: Number(amount) }]);
+    setMs([{ title: '', description: '', acceptanceCriteria: '', amountAda: Number(amount) }]);
   };
 
   // §3 — save privately as a DRAFT (no fee needed); submit it later.
@@ -223,8 +229,11 @@ export function ProposalSubmit() {
               </label>
             ) : null}
           </div>
-          <input className={`${field} w-full`} placeholder="Title" value={title} onChange={(e) => setTitle(e.target.value)} required />
-          <MarkdownEditor value={content} onChange={setContent} placeholder="Pitch — what you'll build and why (markdown)" minRows={4} required />
+          <label className="block">
+            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title</span>
+            <input className={`${field} mt-0.5 w-full`} placeholder="Proposal title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+          </label>
+          <MarkdownEditor value={content} onChange={setContent} title="Pitch / summary" placeholder="What you'll build and why (markdown)" minRows={5} required />
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <label>Requested ₳ <input type="number" className={`${field} w-32`} value={amount} onChange={(e) => setAmount(Number(e.target.value))} /></label>
             <label className="flex items-center gap-1"><input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} /> Commercial / for profit</label>
@@ -241,15 +250,41 @@ export function ProposalSubmit() {
             </div>
           ) : null}
           <div>
-            <div className="text-sm font-medium">Milestones (must sum to requested)</div>
-            {ms.map((m, i) => (
-              <div key={i} className="mt-1 flex flex-wrap items-center gap-2">
-                <input className={`${field} flex-1`} placeholder="description" value={m.description} onChange={(e) => setMs((p) => p.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} required />
-                <input type="number" className={`${field} w-28`} value={m.amountAda} onChange={(e) => setMs((p) => p.map((x, j) => (j === i ? { ...x, amountAda: Number(e.target.value) } : x)))} />
-                {ms.length > 1 ? <button type="button" className="text-xs text-red-600" onClick={() => setMs((p) => p.filter((_, j) => j !== i))}>remove</button> : null}
-              </div>
-            ))}
-            <button type="button" className="mt-1 text-xs underline" onClick={() => setMs((p) => [...p, { description: '', amountAda: 0 }])}>+ add milestone</button>
+            <div className="text-sm font-medium">Milestones (budgets must sum to requested)</div>
+            <div className="mt-1 space-y-2">
+              {ms.map((m, i) => {
+                const set = (patch: Partial<ProposalMilestoneInput>) =>
+                  setMs((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+                return (
+                  <div key={i} className="rounded-md border border-neutral-200 p-2 dark:border-neutral-800">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-neutral-500">Milestone {i + 1}</span>
+                      {ms.length > 1 ? (
+                        <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => setMs((p) => p.filter((_, j) => j !== i))}>remove</button>
+                      ) : null}
+                    </div>
+                    {/* 1. Title · 2. Requested budget (right below the title) · 3. Description · 4. Acceptance criteria */}
+                    <div className="mt-1 flex flex-wrap items-end gap-2">
+                      <label className="flex-1">
+                        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title</span>
+                        <input className={`${field} mt-0.5 w-full`} placeholder="Milestone title" value={m.title ?? ''} onChange={(e) => set({ title: e.target.value })} />
+                      </label>
+                      <label>
+                        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Requested budget (₳)</span>
+                        <input type="number" className={`${field} mt-0.5 w-32`} value={m.amountAda} onChange={(e) => set({ amountAda: Number(e.target.value) })} />
+                      </label>
+                    </div>
+                    <div className="mt-2">
+                      <MarkdownEditor value={m.description} onChange={(v) => set({ description: v })} title="Description" placeholder="What is delivered in this milestone" minRows={3} required />
+                    </div>
+                    <div className="mt-2">
+                      <MarkdownEditor value={m.acceptanceCriteria ?? ''} onChange={(v) => set({ acceptanceCriteria: v })} title="Acceptance criteria" hint="how completion is judged" placeholder="How completion will be verified" minRows={3} defaultCollapsed={!(m.acceptanceCriteria ?? '').trim()} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <button type="button" className="mt-1 text-xs underline" onClick={() => setMs((p) => [...p, { title: '', description: '', acceptanceCriteria: '', amountAda: 0 }])}>+ add milestone</button>
             {/* Live milestone-budget check — must equal the requested amount. */}
             <div className={`mt-1 text-xs ${milestonesMatch ? 'text-emerald-600' : 'font-medium text-red-600'}`}>
               {milestonesMatch
@@ -257,16 +292,10 @@ export function ProposalSubmit() {
                 : `⚠ Milestones sum to ${msSum.toLocaleString()} ₳ but the requested amount is ${Number(amount).toLocaleString()} ₳ — they must be equal (off by ${Math.abs(msSum - Number(amount)).toLocaleString()} ₳).`}
             </div>
           </div>
-          {/* §3.4 — funding-specific detail (all optional). */}
-          <FieldLabel label="Cost breakdown" hint="optional — how the budget is spent">
-            <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} placeholder="How the budget is spent" minRows={2} />
-          </FieldLabel>
-          <FieldLabel label="Team info" hint="optional — who is delivering this">
-            <MarkdownEditor value={teamInfo} onChange={setTeamInfo} placeholder="Who is delivering this, and why you're best suited" minRows={2} />
-          </FieldLabel>
-          <FieldLabel label="Revenue sharing" hint="optional — for commercial projects: how the DAO shares in returns">
-            <MarkdownEditor value={revenueSharing} onChange={setRevenueSharing} placeholder="For commercial projects: how the DAO shares in returns" minRows={2} />
-          </FieldLabel>
+          {/* §3.4 — funding-specific detail (all optional, collapsed by default to keep the form short). */}
+          <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title="Cost breakdown" hint="optional — how the budget is spent" placeholder="How the budget is spent" minRows={3} defaultCollapsed={!costBreakdown.trim()} />
+          <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title="Team info" hint="optional — who is delivering this" placeholder="Who is delivering this, and why you're best suited" minRows={3} defaultCollapsed={!teamInfo.trim()} />
+          <MarkdownEditor value={revenueSharing} onChange={setRevenueSharing} title="Revenue sharing" hint="optional — for commercial projects" placeholder="For commercial projects: how the DAO shares in returns" minRows={3} defaultCollapsed={!revenueSharing.trim()} />
           {/* §5.3/§7.1 — expertise tags drive which DReps are drawn to filter this proposal. */}
           <div>
             <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Expertise areas (helps match filtering reviewers)</div>
@@ -342,19 +371,6 @@ export function ProposalSubmit() {
         </div>
       ) : null}
     </section>
-  );
-}
-
-/** A small label + hint above a field (used for the optional §3.4 markdown editors). */
-function FieldLabel({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
-        {label}
-        {hint ? <span className="font-normal text-neutral-400"> — {hint}</span> : null}
-      </div>
-      <div className="mt-0.5">{children}</div>
-    </div>
   );
 }
 

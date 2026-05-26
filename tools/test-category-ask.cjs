@@ -45,10 +45,16 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
   try {
     await throws('request below min (5,000) rejected', () => proposals.createDraft(u.id, mk(5000)), /below.*minimum/);
     await throws('request above max (200,000) rejected', () => proposals.createDraft(u.id, mk(200000)), /exceeds.*maximum/);
-    const good = await proposals.createDraft(u.id, mk(50000, { teamInfoMd: 'Core team', costBreakdownMd: 'Dev 40k', revenueSharingMd: '5% to DAO' }));
+    const good = await proposals.createDraft(u.id, mk(50000, {
+      teamInfoMd: 'Core team', costBreakdownMd: 'Dev 40k', revenueSharingMd: '5% to DAO',
+      // §3 milestone parts: title + description + acceptance criteria + budget.
+      milestones: [{ title: 'MVP', description: 'Build the MVP', acceptanceCriteria: 'Demo on Preprod', amountAda: 50000 }],
+    }));
     ok('in-range request (50,000) accepted', good.requestedAmountAda === 50000, String(good.requestedAmountAda));
     ok('detail exposes category ask range + conditions', good.categoryAsk?.minAda === 10000 && good.categoryAsk?.maxAda === 100000 && good.categoryAsk?.conditions === 'OSS only');
     ok('detail exposes §3.4 fields', good.teamInfoMd === 'Core team' && good.costBreakdownMd === 'Dev 40k' && good.revenueSharingMd === '5% to DAO');
+    const m0 = good.milestones?.[0];
+    ok('milestone keeps title + acceptance criteria + budget', m0?.title === 'MVP' && m0?.acceptanceCriteria === 'Demo on Preprod' && m0?.description === 'Build the MVP' && m0?.amountAda === 50000, JSON.stringify(m0));
   } finally {
     const props = await db.proposal.findMany({ where: { roundId: r.id }, select: { id: true } });
     await db.milestone.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });

@@ -16,7 +16,9 @@ import {
 } from 'class-validator';
 
 export class MilestoneInput {
+  @IsOptional() @IsString() @MaxLength(200) title?: string;
   @IsString() @IsNotEmpty() @MaxLength(2000) description!: string;
+  @IsOptional() @IsString() @MaxLength(5000) acceptanceCriteria?: string;
   @IsInt() @Min(0) amountAda!: number; // ADA
   @IsOptional() @IsInt() @Min(0) deadlineDays?: number;
 }

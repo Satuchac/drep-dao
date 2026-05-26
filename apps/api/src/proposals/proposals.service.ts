@@ -83,7 +83,9 @@ export class ProposalsService {
         milestones: {
           create: dto.milestones.map((m, idx) => ({
             idx,
+            title: m.title ?? null,
             description: m.description,
+            acceptanceCriteria: m.acceptanceCriteria ?? null,
             amountAda: toLovelace(m.amountAda),
             status: 'NOT_STARTED',
           })),
@@ -136,7 +138,9 @@ export class ProposalsService {
           data: dto.milestones.map((m, idx) => ({
             proposalId: id,
             idx,
+            title: m.title ?? null,
             description: m.description,
+            acceptanceCriteria: m.acceptanceCriteria ?? null,
             amountAda: toLovelace(m.amountAda),
             status: 'NOT_STARTED',
           })),
@@ -298,7 +302,9 @@ export class ProposalsService {
       milestones: p.milestones.map((m) => ({
         id: m.id,
         idx: m.idx,
+        title: m.title,
         description: m.description,
+        acceptanceCriteria: m.acceptanceCriteria,
         amountAda: toAda(m.amountAda),
         status: m.status,
       })),

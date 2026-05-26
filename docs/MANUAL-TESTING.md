@@ -229,10 +229,17 @@ Admin (separate): `/admin/login`, user `satucha`.
 - [ ] **Milestone budget check**: set requested = 150,000 ₳ but milestones summing to
       120,000 ₳ → a red line warns they must be equal (off by 30,000 ₳) and Submit stays
       disabled. Make them equal → it turns green and the button enables.
-- [ ] **Formatting + sizing**: the pitch / cost breakdown / team / revenue fields have a
-      toolbar (Heading / **B** / *I* / • List / 1. List / 🔗 Link), a **Preview** toggle that
-      renders the markdown, and an **Expand / Shrink** button (and drag-resize). The rendered
-      formatting (headings, bold, bullets, links) shows on the proposal detail page.
+- [ ] **Formatting + sizing**: the pitch / cost breakdown / team / revenue / milestone fields
+      have a toolbar (Heading / **B** / *I* / • List / 1. List / 🔗 Link), a **Preview** toggle
+      that renders the markdown, a **Taller/Shorter** height toggle, and a **Shrink** button
+      that collapses the field to **just its name** (with a "✓ filled / empty" hint) — click the
+      name to expand again. The rendered formatting (headings, bold, bullets, links) shows on
+      the proposal detail page.
+- [ ] **Milestones have 4 parts**: each milestone block has **Title**, **Requested budget (₳)**
+      directly under the title, **Description**, and **Acceptance criteria** (the last two are
+      full markdown editors that can be enlarged/collapsed). Title + Description are required;
+      acceptance criteria is optional. The proposal detail shows the milestone title + budget +
+      description + acceptance criteria.
 
 ## 4. Known limitations / deferred (by design, for now)
 - **Real ADA payouts** (milestone disbursement, treasury top-ups) are recorded +
