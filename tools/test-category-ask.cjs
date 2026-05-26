@@ -59,9 +59,13 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     // (immutable). updateDraft must accept that shape and persist the change.
     const edited = await proposals.updateDraft(u.id, good.id, {
       categoryId: catId, title: 't', contentMd: 'changed pitch', isCommercial: false, requestedAmountAda: 50000,
+      submissionFeeTxHash: 'tx12345',
       milestones: [{ title: 'MVP', description: 'Build the MVP', acceptanceCriteria: 'Demo on Preprod', amountAda: 50000 }],
     });
     ok('editing a draft (categoryId, no roundId) persists', edited.contentMd === 'changed pitch', edited.contentMd);
+    ok('fee tx hash persists on a saved draft', edited.submissionFeeTxHash === 'tx12345', String(edited.submissionFeeTxHash));
+    const reread = await proposals.get(good.id, u.id);
+    ok('fee tx hash survives reload', reread.submissionFeeTxHash === 'tx12345', String(reread.submissionFeeTxHash));
   } finally {
     const props = await db.proposal.findMany({ where: { roundId: r.id }, select: { id: true } });
     await db.milestone.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });

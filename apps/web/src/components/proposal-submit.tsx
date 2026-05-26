@@ -98,6 +98,8 @@ export function ProposalSubmit() {
     costBreakdownMd: costBreakdown.trim() || undefined,
     teamInfoMd: teamInfo.trim() || undefined,
     revenueSharingMd: revenueSharing.trim() || undefined,
+    // Persist the fee tx hash with the draft so it survives a save (verified on-chain at submission).
+    submissionFeeTxHash: fee.trim() || undefined,
     milestones: ms.map((m) => ({
       title: m.title?.trim() || undefined,
       description: m.description,
@@ -166,7 +168,8 @@ export function ProposalSubmit() {
           ? p.milestones.map((m) => ({ title: m.title ?? '', description: m.description ?? '', acceptanceCriteria: m.acceptanceCriteria ?? '', amountAda: m.amountAda }))
           : [{ title: '', description: '', acceptanceCriteria: '', amountAda: p.requestedAmountAda }],
       );
-      // Leave the fee field as-is — editing a draft must not wipe a tx hash the user typed.
+      // Restore the fee tx hash saved with the draft (so it persists across edits).
+      setFee(p.submissionFeeTxHash ?? '');
       setOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'could not load draft');
@@ -412,7 +415,8 @@ export function ProposalSubmit() {
           <div className="text-sm font-medium">My proposals</div>
           <p className="text-xs text-neutral-500">Drafts are private. Open one to read/edit it; submit a draft when you&apos;re ready (pay the fee + paste the tx).</p>
           <ul className="mt-1 space-y-1 text-sm">
-            {mine.map((p) => (
+            {/* Hide the proposal currently open in the editor above (avoids a confusing duplicate). */}
+            {mine.filter((p) => p.id !== editingId).map((p) => (
               <MineRow key={p.id} p={p} feeAddress={cfg?.submissionFeeAddress ?? undefined} onOpen={() => setOpenId(p.id)} onEdit={() => startEdit(p.id)} onSubmitted={loadMine} />
             ))}
           </ul>
@@ -437,7 +441,7 @@ function MineRow({
   onSubmitted: () => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
-  const [fee, setFee] = useState('');
+  const [fee, setFee] = useState(p.submissionFeeTxHash ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const field = 'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';

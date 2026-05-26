@@ -76,6 +76,8 @@ export class ProposalsService {
         isCommercial: dto.isCommercial,
         requestedAmountAda: toLovelace(dto.requestedAmountAda),
         costBreakdownMd: dto.costBreakdownMd ?? null,
+        // §12 — the fee tx hash can be saved with the draft and is verified on-chain at submission.
+        submissionFeeTxHash: dto.submissionFeeTxHash ?? null,
         // §3.4 funding fields (stored in the existing Json columns as markdown strings).
         ...(dto.teamInfoMd ? { teamInfo: dto.teamInfoMd } : {}),
         ...(dto.revenueSharingMd ? { revenueSharing: dto.revenueSharingMd } : {}),
@@ -134,6 +136,7 @@ export class ProposalsService {
           ...(dto.requestedAmountAda !== undefined ? { requestedAmountAda: toLovelace(dto.requestedAmountAda) } : {}),
           ...(dto.subcategoryIds !== undefined ? { subcategoryIds: dto.subcategoryIds } : {}),
           ...(dto.costBreakdownMd !== undefined ? { costBreakdownMd: dto.costBreakdownMd } : {}),
+          ...(dto.submissionFeeTxHash !== undefined ? { submissionFeeTxHash: dto.submissionFeeTxHash || null } : {}),
           ...(dto.teamInfoMd !== undefined ? { teamInfo: dto.teamInfoMd } : {}),
           ...(dto.revenueSharingMd !== undefined ? { revenueSharing: dto.revenueSharingMd } : {}),
           ...(postSubmission ? { version: { increment: 1 } } : {}),
@@ -330,6 +333,7 @@ export class ProposalsService {
     roundId: string | null;
     isCommercial: boolean | null;
     requestedAmountAda: bigint | null;
+    submissionFeeTxHash?: string | null;
     createdAt: Date;
     category?: { name: string } | null;
   }) {
@@ -344,6 +348,7 @@ export class ProposalsService {
       roundId: p.roundId,
       isCommercial: p.isCommercial,
       requestedAmountAda: toAda(p.requestedAmountAda),
+      submissionFeeTxHash: p.submissionFeeTxHash ?? null,
       createdAt: p.createdAt,
     };
   }

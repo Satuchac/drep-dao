@@ -83,6 +83,11 @@ Admin (separate): `/admin/login`, user `satucha`.
       "proposal not found"); the row also has an **Edit** button that reopens the full form
       pre-filled (title, pitch, amount, milestones, §3.4) so you can change anything and
       Save again — and a **Submit** button. The "DRAFT · private" status stays on the row.
+      While editing, the proposal is **not** also listed under the Save/Submit buttons
+      (no confusing duplicate), and the **Round** select is locked (round can't change).
+- [ ] **Fee tx hash persists**: paste a tx hash, **Save Draft**, reopen via **Edit** — the
+      hash is still there (and prefilled in the row's inline Submit). It's just a saved note
+      until you Submit; the board still verifies it on-chain before confirming the fee.
 - [ ] **Submit** needs the on-chain fee **tx hash** (Submit is disabled without it); the draft
       can also be **submitted later** via the inline **Submit** on its My-proposals row. After
       submitting, status is PENDING — still **not public** (only the submitter sees it).

@@ -447,6 +447,7 @@ export interface CreateProposalInput {
   costBreakdownMd?: string;
   teamInfoMd?: string;
   revenueSharingMd?: string;
+  submissionFeeTxHash?: string;
   milestones: ProposalMilestoneInput[];
 }
 export interface ProposalSummary {
@@ -459,6 +460,7 @@ export interface ProposalSummary {
   roundId: string | null;
   isCommercial: boolean | null;
   requestedAmountAda: number;
+  submissionFeeTxHash: string | null;
 }
 export interface ProposalDetail extends ProposalSummary {
   categoryId: string;
@@ -468,7 +470,6 @@ export interface ProposalDetail extends ProposalSummary {
   revenueSharingMd: string | null;
   subcategoryIds: string[];
   submissionFeeAda: number;
-  submissionFeeTxHash: string | null;
   categoryAsk: { minAda: number | null; maxAda: number | null; conditions: string | null };
   milestones: { id: string; idx: number; title: string | null; description: string; acceptanceCriteria: string | null; amountAda: number; status: string }[];
 }

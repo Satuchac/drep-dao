@@ -208,7 +208,11 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   `PATCH /proposals/:id`) and **Submit** (submit later), alongside its "DRAFT · private"
   status. The detail/read view of a private proposal is reachable by its **owner** via
   optional auth (`OptionalJwtAuthGuard` on the public `GET /proposals/:id` passes the
-  signed-in user's id to `get()`, which only reveals DRAFT/PENDING to their submitter). The **platform verifies the fee on-chain**: `listPendingFee`
+  signed-in user's id to `get()`, which only reveals DRAFT/PENDING to their submitter).
+  The **fee tx hash is saved with the draft** (`submissionFeeTxHash` accepted by
+  create/update, persisted in DRAFT, prefilled when editing) so it survives a save —
+  but it is still only an unverified note until submission: the board's fee-confirmation
+  panel runs the on-chain `verifyPayment` check on the PENDING proposal before confirming. The **platform verifies the fee on-chain**: `listPendingFee`
   runs `CardanoQueryService.verifyPayment(txHash, SUBMISSION_FEE_ADDRESS, feeLovelace)`
   (Koios `/tx_info`, sums outputs to the fee address) and shows the board a
   ✓paid / ✗underpaid / ⏳not-found hint in *My area → "Submission fees to confirm"*.
