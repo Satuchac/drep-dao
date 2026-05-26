@@ -120,14 +120,23 @@ export class ProposalsService {
         throw new BadRequestException('category does not belong to this proposal’s round');
       }
     }
-    // The fee tx hash is editable only while DRAFT/PENDING (locked once ACTIVE); each new
-    // distinct value is appended to the history so the reviewer sees every hash entered.
-    const txEditable = p.status === ProposalStatus.DRAFT || p.status === ProposalStatus.PENDING;
+    // The fee tx hash is editable only while pre-public (DRAFT/PENDING/fee-REJECTED; locked
+    // once ACTIVE); each new distinct value is appended to the history the reviewer sees.
+    const feeRejected = p.status === ProposalStatus.REJECTED && p.stage == null;
+    const txEditable = p.status === ProposalStatus.DRAFT || p.status === ProposalStatus.PENDING || feeRejected;
     let feeHashData: { submissionFeeTxHash?: string | null; submissionFeeTxHashes?: string[] } = {};
     if (dto.submissionFeeTxHash !== undefined && txEditable) {
       const hash = dto.submissionFeeTxHash || null;
       const history = hash && !p.submissionFeeTxHashes.includes(hash) ? [...p.submissionFeeTxHashes, hash] : p.submissionFeeTxHashes;
       feeHashData = { submissionFeeTxHash: hash, submissionFeeTxHashes: history };
+    }
+    // A PENDING proposal already has a fee the board is verifying — if the amount or type
+    // changes, recompute it so the board verifies the tx against the correct expected fee.
+    let feeAmountData: { submissionFeeAda?: bigint } = {};
+    if (p.status === ProposalStatus.PENDING && (dto.requestedAmountAda !== undefined || dto.isCommercial !== undefined)) {
+      const effAmount = dto.requestedAmountAda ?? toAda(p.requestedAmountAda);
+      const effCommercial = dto.isCommercial ?? p.isCommercial ?? false;
+      feeAmountData = { submissionFeeAda: toLovelace(await this.computeFee(effAmount, effCommercial, p.roundId)) };
     }
     await this.prisma.$transaction(async (tx) => {
       if (postSubmission) {
@@ -147,6 +156,7 @@ export class ProposalsService {
           ...(dto.subcategoryIds !== undefined ? { subcategoryIds: dto.subcategoryIds } : {}),
           ...(dto.costBreakdownMd !== undefined ? { costBreakdownMd: dto.costBreakdownMd } : {}),
           ...feeHashData,
+          ...feeAmountData,
           ...(dto.teamInfoMd !== undefined ? { teamInfo: dto.teamInfoMd } : {}),
           ...(dto.revenueSharingMd !== undefined ? { revenueSharing: dto.revenueSharingMd } : {}),
           ...(postSubmission ? { version: { increment: 1 } } : {}),
@@ -206,7 +216,7 @@ export class ProposalsService {
       // No fee for this proposal type → admit immediately, no board fee confirmation.
       await this.prisma.proposal.update({
         where: { id },
-        data: { status: ProposalStatus.ACTIVE, stage: ProposalStage.FILTERING, submissionFeeAda: 0n, submittedAt: new Date() },
+        data: { status: ProposalStatus.ACTIVE, stage: ProposalStage.FILTERING, submissionFeeAda: 0n, submittedAt: new Date(), feeReviewFeedback: null },
       });
       return this.get(id, userId);
     }
@@ -223,6 +233,8 @@ export class ProposalsService {
         submissionFeeTxHash: hash,
         submissionFeeTxHashes: history,
         submittedAt: new Date(),
+        // A re-submission after a fee rejection starts a fresh review.
+        feeReviewFeedback: null,
       },
     });
     return this.get(id, userId);
@@ -407,12 +419,14 @@ export class ProposalsService {
     };
   }
 
+  /** A proposal that can be (re)submitted: a DRAFT, or one a fee review REJECTED (never public). */
   private async ownDraft(userId: string, id: string) {
     const p = await this.prisma.proposal.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('proposal not found');
     if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
-    if (p.status !== ProposalStatus.DRAFT) {
-      throw new ConflictException('proposal can only be edited while in DRAFT');
+    const feeRejected = p.status === ProposalStatus.REJECTED && p.stage == null;
+    if (p.status !== ProposalStatus.DRAFT && !feeRejected) {
+      throw new ConflictException('only a draft or a fee-rejected proposal can be submitted');
     }
     return p;
   }
@@ -430,8 +444,11 @@ export class ProposalsService {
     const p = await this.prisma.proposal.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('proposal not found');
     if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
-    // DRAFT and PENDING are still private (pre-review) → free editing, no version snapshot.
-    if (p.status === ProposalStatus.DRAFT || p.status === ProposalStatus.PENDING) {
+    // Pre-public states → full editing (all fields, no version snapshot):
+    //  DRAFT, PENDING (awaiting fee confirmation), and a fee-REJECTED proposal (REJECTED
+    //  before it ever entered Filtering) which the submitter fixes and re-submits.
+    const feeRejected = p.status === ProposalStatus.REJECTED && p.stage == null;
+    if (p.status === ProposalStatus.DRAFT || p.status === ProposalStatus.PENDING || feeRejected) {
       return { proposal: p, postSubmission: false };
     }
     const inFiltering = p.stage === ProposalStage.FILTERING && p.status === ProposalStatus.ACTIVE;

@@ -24,24 +24,31 @@ export function BoardActions({ onChange }: { onChange?: () => void }) {
     setError(null);
     setBusy(a.id);
     try {
-      let sig: { signature: string; signingKey: string; ts: string } | undefined;
-      const ts = new Date().toISOString();
-      if (profile) {
-        const message = boardActionMessage({
-          actionId: a.id,
-          kind: a.kind,
-          amountAda: a.amountAda ?? 0,
-          voterStakeAddress: profile.user.stakeAddress,
-          ts,
-        });
-        const s = await signMessage(message);
-        if (s) sig = { signature: s.signature, signingKey: s.key, ts };
+      if (!profile) {
+        setError('Connect your wallet to sign this action.');
+        return;
       }
-      await treasuryApi.approveAction(a.id, sig ?? {});
+      const ts = new Date().toISOString();
+      const message = boardActionMessage({
+        actionId: a.id,
+        kind: a.kind,
+        amountAda: a.amountAda ?? 0,
+        voterStakeAddress: profile.user.stakeAddress,
+        ts,
+      });
+      // A treasury approval MUST be signed by the board member's own wallet. signMessage
+      // throws if the user cancels (→ caught below, nothing recorded) and returns null only
+      // if the logged-in wallet can't be found.
+      const s = await signMessage(message);
+      if (!s) {
+        setError('Could not reach the wallet you logged in with — open it and try again. Nothing was approved.');
+        return;
+      }
+      await treasuryApi.approveAction(a.id, { signature: s.signature, signingKey: s.key, ts });
       load();
       onChange?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Approve failed');
+      setError(e instanceof Error ? e.message : 'Approve cancelled — nothing was recorded.');
     } finally {
       setBusy(null);
     }

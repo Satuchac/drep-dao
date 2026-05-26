@@ -73,12 +73,22 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     // A submitted (PENDING) proposal stays editable while it awaits the board's fee confirmation.
     const submitted = await proposals.submit(u.id, good.id, { submissionFeeTxHash: 'tx67890' });
     ok('submit moves DRAFT → PENDING (fee > 0)', submitted.status === 'PENDING', submitted.status);
-    const pendingEdit = await proposals.updateDraft(u.id, good.id, { contentMd: 'edited while pending' });
-    ok('PENDING proposal is still editable', pendingEdit.contentMd === 'edited while pending' && pendingEdit.status === 'PENDING', `${pendingEdit.status}/${pendingEdit.contentMd}`);
+    // PENDING is fully editable (all fields, not just title/content) and the fee recomputes
+    // from the new amount so the board verifies against the right number.
+    const pendingEdit = await proposals.updateDraft(u.id, good.id, {
+      contentMd: 'edited while pending', requestedAmountAda: 60000,
+      milestones: [{ title: 'MVP', description: 'Build', acceptanceCriteria: 'Demo', amountAda: 60000 }],
+    });
+    ok('PENDING fully editable (amount+milestones) + fee recomputed', pendingEdit.status === 'PENDING' && pendingEdit.requestedAmountAda === 60000 && pendingEdit.submissionFeeAda === 600, `${pendingEdit.status}/${pendingEdit.requestedAmountAda}/fee ${pendingEdit.submissionFeeAda}`);
     // Board fee review: reject needs a reason, then sets REJECTED + the feedback the submitter sees.
     await throws('reject needs a reason', () => proposals.reviewFee(good.id, { decision: 'REJECT' }), /reason is required/);
     const reviewed = await proposals.reviewFee(good.id, { decision: 'REJECT', feedback: 'fee underpaid' });
     ok('reject → REJECTED + feedback', reviewed.status === 'REJECTED' && reviewed.feeReviewFeedback === 'fee underpaid', `${reviewed.status}/${reviewed.feeReviewFeedback}`);
+    // A fee-rejected proposal can be fixed (new tx, kept in history) and re-submitted → PENDING, feedback cleared.
+    const fixedTx = await proposals.updateDraft(u.id, good.id, { submissionFeeTxHash: 'txFIXED' });
+    ok('fee-rejected proposal is editable (tx history grows)', fixedTx.submissionFeeTxHashes.includes('txFIXED'), JSON.stringify(fixedTx.submissionFeeTxHashes));
+    const resubmitted = await proposals.submit(u.id, good.id, { submissionFeeTxHash: 'txFIXED' });
+    ok('re-submit a fee-rejected proposal → PENDING, feedback cleared', resubmitted.status === 'PENDING' && resubmitted.feeReviewFeedback === null, `${resubmitted.status}/${resubmitted.feeReviewFeedback}`);
 
     // §12 zero-fee: a round whose OSS fee is 0% admits an open-source proposal immediately (no tx).
     const freeRound = await rounds.create({

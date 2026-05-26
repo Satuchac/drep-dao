@@ -27,6 +27,10 @@ interface AuthState {
   signMessage: (message: string) => Promise<{ signature: string; key: string } | null>;
 }
 
+// Remember WHICH wallet the user logged in with, so signing after a page reload
+// re-acquires that same wallet (e.g. Eternl) instead of guessing the first injected one.
+const WALLET_KEY_STORAGE = 'drepdao.walletKey';
+
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -48,6 +52,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     refreshWallets();
+    // Restore which wallet was used, so signing works after a reload (session is cookie-based).
+    if (typeof window !== 'undefined') walletKeyRef.current = window.localStorage.getItem(WALLET_KEY_STORAGE);
     void refresh().finally(() => setLoading(false));
   }, [refreshWallets, refresh]);
 
@@ -55,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { api, stakeHex, stakeAddress } = await getStakeAddress(entry);
     walletApiRef.current = api; // keep for CIP-95 DRep detection
     walletKeyRef.current = entry.key; // remember which wallet, to re-acquire for signing
+    if (typeof window !== 'undefined') window.localStorage.setItem(WALLET_KEY_STORAGE, entry.key);
     const { message } = await authApi.nonce(stakeAddress);
     const sig = await api.signData(stakeHex, utf8ToHex(message));
     const drepKeyHex = await getDRepKeyHex(api); // CIP-95 → board/DRep recognition
@@ -66,6 +73,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     await authApi.logout().catch(() => undefined);
     walletApiRef.current = null;
+    walletKeyRef.current = null;
+    if (typeof window !== 'undefined') window.localStorage.removeItem(WALLET_KEY_STORAGE);
     setProfile(null);
   }, []);
 
@@ -74,26 +83,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return detectDRepId(walletApiRef.current);
   }, []);
 
-  // Sign a message with the wallet's stake key. Re-acquires the wallet api if it
-  // was lost (e.g. after a reload), falling back to null so callers can degrade.
+  // Sign a message with the wallet's stake key. Re-acquires the SAME wallet the user
+  // logged in with (never a different injected wallet) if the api was lost on reload.
+  // Returns null only when no such wallet is available; **throws if the user cancels /
+  // rejects** so callers never record an unsigned action as "signed".
   const signMessage = useCallback(async (message: string) => {
     let api = walletApiRef.current;
     if (!api) {
       const key = walletKeyRef.current;
-      const entry = (key ? listInjectedWallets().find((w) => w.key === key) : null) ?? listInjectedWallets()[0];
-      if (!entry) return null;
-      try {
-        api = (await getStakeAddress(entry)).api;
-        walletApiRef.current = api;
-      } catch {
-        return null;
-      }
+      const entry = key ? listInjectedWallets().find((w) => w.key === key) : null;
+      if (!entry) return null; // can't tell which wallet → caller decides how to degrade
+      api = (await getStakeAddress(entry)).api; // enable() may throw if the user rejects → propagate
+      walletApiRef.current = api;
     }
-    try {
-      return await signMessageWithStakeKey(api, message);
-    } catch {
-      return null;
-    }
+    // signData throws if the user cancels in the wallet — let it propagate (do NOT swallow).
+    return await signMessageWithStakeKey(api, message);
   }, []);
 
   return (

@@ -140,21 +140,22 @@ export class TreasuryService {
     const action = await this.prisma.multisigAction.findUnique({ where: { id: actionId }, include: { signatures: true } });
     if (!action || action.status !== 'PENDING_SIGS') throw new ConflictException('action is not pending signatures');
 
-    // Authenticate the approval with a free CIP-30 signature over a canonical message.
-    let witnessCbor = `approved:${board.id}`;
-    if (dto.signature && dto.signingKey && dto.ts) {
-      const message = boardActionMessage({
-        actionId,
-        kind: action.kind,
-        amountAda: action.amountAda ? Number(action.amountAda) / ADA : 0,
-        voterStakeAddress: board.stakeAddress,
-        ts: dto.ts,
-      });
-      if (!verifyCip30Signature(dto.signature, dto.signingKey, message, board.stakeAddress)) {
-        throw new BadRequestException('approval signature verification failed');
-      }
-      witnessCbor = dto.signature;
+    // A treasury approval MUST carry a valid CIP-30 signature from the board member's own
+    // wallet — never record an unsigned/cancelled approval (it moves funds at 3-of-5).
+    if (!dto.signature || !dto.signingKey || !dto.ts) {
+      throw new BadRequestException('a wallet signature is required to approve a treasury action');
     }
+    const message = boardActionMessage({
+      actionId,
+      kind: action.kind,
+      amountAda: action.amountAda ? Number(action.amountAda) / ADA : 0,
+      voterStakeAddress: board.stakeAddress,
+      ts: dto.ts,
+    });
+    if (!verifyCip30Signature(dto.signature, dto.signingKey, message, board.stakeAddress)) {
+      throw new BadRequestException('approval signature verification failed');
+    }
+    const witnessCbor = dto.signature;
 
     await this.prisma.multisigSignature.upsert({
       where: { actionId_boardDrepId: { actionId, boardDrepId: board.id } },

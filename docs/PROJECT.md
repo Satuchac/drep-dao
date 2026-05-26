@@ -45,7 +45,12 @@ pnpm + Turborepo monorepo.
 - **Login = CIP-30 `signData`.** The user signs a one-time challenge with their
   wallet's stake key; the API verifies it (CIP-8 via
   `@cardano-foundation/cardano-verify-datasignature`) and issues a JWT. No
-  passwords for DAO users.
+  passwords for DAO users. The app **remembers which wallet** you logged in with
+  (so later signing re-acquires the same one, e.g. Eternl — not a random injected
+  wallet), and **never records an action as signed if you cancel** the wallet prompt
+  (the sign call propagates the cancellation). A **treasury approval requires a valid
+  signature both client- and server-side** — `treasury.approve` rejects an unsigned
+  request (no fund-moving action is ever recorded without a real board signature).
 - **Roles are derived, not assigned:**
   - `BOARD` — a registered DRep whose key hash is seated in `genesis.json`
     (`BoardSeat` table). Founding board = 5 DReps (see `ACTORS.md`).
@@ -233,12 +238,14 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
 - **Debate & Vote (§8).** Balanced voting power (snapshot at open), rationale
   mandatory (≥200 chars), threshold default 67%. The board's **publish/finalize
   anchors the final tally on-chain** (subject `dv`).
-- **Editing & versions (§7/§8).** The submitter can edit while DRAFT, while
-  **PENDING** (submitted, awaiting fee confirmation — still private), during Filtering,
-  and during Debate & Vote *before voting opens*. DRAFT/PENDING are pre-public so edits
-  aren't versioned (structure is freely editable in DRAFT; in PENDING the title + pitch).
-  Once public (Filtering+), each edit snapshots the prior
-  content into `ProposalVersion`; the proposal detail shows an **original-vs-updated
+- **Editing & versions (§7/§8).** **Pre-public states — DRAFT, PENDING (awaiting fee
+  confirmation), and a fee-REJECTED proposal — are fully editable** (all fields incl.
+  amount + milestones + the fee tx) in the proposal form; a fee-rejected proposal can be
+  fixed and **Re-submitted** (→ PENDING/ACTIVE, clearing the old feedback), and editing a
+  PENDING proposal's amount **recomputes its fee**. Edits in these states aren't versioned.
+  Once public (Filtering / Debate & Vote before voting opens), the submitter revises the
+  **title + pitch only** (structure locked) via the detail editor, and each edit snapshots
+  the prior content into `ProposalVersion`; the proposal detail shows an **original-vs-updated
   line diff**. No edits during the D&V voting phase or after a decision.
 - **Milestone funding (§11).** After D&V approval the board draws + confirms
   reviewers; the submitter posts a Proof of Achievement per milestone; reviewers

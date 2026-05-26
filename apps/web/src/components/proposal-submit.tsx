@@ -20,6 +20,7 @@ export function ProposalSubmit() {
   const { cfg } = useExplorer();
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingStatus, setEditingStatus] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [rounds, setRounds] = useState<RoundSummary[]>([]);
   const [mine, setMine] = useState<ProposalSummary[]>([]);
@@ -138,6 +139,7 @@ export function ProposalSubmit() {
 
   const reset = () => {
     setEditingId(null);
+    setEditingStatus(null);
     setTitle('');
     setContent('');
     setFee('');
@@ -156,6 +158,7 @@ export function ProposalSubmit() {
     try {
       const p = await proposalsApi.get(id);
       setEditingId(p.id);
+      setEditingStatus(p.status);
       setRoundId(p.roundId ?? '');
       setCategoryId(p.categoryId);
       setTitle(p.title);
@@ -187,7 +190,11 @@ export function ProposalSubmit() {
     setBusy(true);
     try {
       const d = editingId ? await proposalsApi.update(editingId, updatePayload()) : await proposalsApi.create(buildInput());
-      setMsg(`Saved draft "${d.title}" — it stays private until you submit and a board member confirms your fee.`);
+      setMsg(
+        editingStatus && editingStatus !== 'DRAFT'
+          ? `Saved your changes to "${d.title}".`
+          : `Saved draft "${d.title}" — it stays private until you submit and a board member confirms your fee.`,
+      );
       setOpen(false);
       reset();
       loadMine();
@@ -201,6 +208,8 @@ export function ProposalSubmit() {
   // §3.3 — submit with the on-chain fee tx; goes to PENDING (still private) until the board confirms.
   const submitNow = async (e: React.FormEvent) => {
     e.preventDefault();
+    // A PENDING proposal is already submitted — Enter just saves the edits, never re-submits.
+    if (editingStatus === 'PENDING') return saveDraft();
     setError(null);
     setMsg(null);
     if (!inputsOk()) return;
@@ -229,9 +238,14 @@ export function ProposalSubmit() {
 
   // §8 — open one of my proposals to read it, edit it (when the stage allows), and submit milestone POAs.
   if (openId) {
+    const detailId = openId;
     return (
       <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-        <ProposalDetail id={openId} onBack={() => { setOpenId(null); loadMine(); }} />
+        <ProposalDetail
+          id={detailId}
+          onBack={() => { setOpenId(null); loadMine(); }}
+          onEditFull={() => { setOpenId(null); startEdit(detailId); }}
+        />
       </section>
     );
   }
@@ -261,7 +275,13 @@ export function ProposalSubmit() {
 
       {msg ? <div className="mt-2 text-sm text-emerald-600">{msg}</div> : null}
       {open && editingId ? (
-        <div className="mt-2 text-sm font-medium text-neutral-600 dark:text-neutral-400">Editing draft — save your changes below.</div>
+        <div className="mt-2 text-sm font-medium text-neutral-600 dark:text-neutral-400">
+          {editingStatus === 'REJECTED'
+            ? 'Editing a rejected proposal — fix it (including the fee tx), then Re-submit.'
+            : editingStatus === 'PENDING'
+              ? 'Editing a submitted proposal (awaiting fee confirmation) — change any field, then Save changes.'
+              : 'Editing your draft — save your changes below.'}
+        </div>
       ) : null}
 
       {open && rounds.length === 0 ? (
@@ -426,12 +446,21 @@ export function ProposalSubmit() {
             public only after you submit and a board member confirms the fee.
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            <button type="submit" disabled={busy || !draftReady || (feeRequired && !fee.trim())} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-              {busy ? 'Working…' : feeRequired ? 'Submit' : 'Submit (no fee)'}
-            </button>
-            <button type="button" onClick={saveDraft} disabled={busy || !draftReady} className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
-              Save Draft
-            </button>
+            {editingStatus === 'PENDING' ? (
+              // Already submitted — only save the edits (re-submitting isn't meaningful).
+              <button type="button" onClick={saveDraft} disabled={busy || !draftReady} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+                {busy ? 'Working…' : 'Save changes'}
+              </button>
+            ) : (
+              <>
+                <button type="submit" disabled={busy || !draftReady || (feeRequired && !fee.trim())} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+                  {busy ? 'Working…' : editingStatus === 'REJECTED' ? 'Re-submit' : feeRequired ? 'Submit' : 'Submit (no fee)'}
+                </button>
+                <button type="button" onClick={saveDraft} disabled={busy || !draftReady} className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
+                  {editingStatus === 'REJECTED' ? 'Save changes' : 'Save Draft'}
+                </button>
+              </>
+            )}
           </div>
         </form>
       ) : null}
@@ -472,8 +501,11 @@ function MineRow({
   const [error, setError] = useState<string | null>(null);
   const field = 'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
   const isDraft = p.status === 'DRAFT';
-  // After submission the proposal stays editable (content) while private/under review.
-  const editableInDetail = !isDraft && (p.status === 'PENDING' || p.stage === 'FILTERING' || p.stage === 'DEBATE_VOTE');
+  const feeRejected = p.status === 'REJECTED' && !p.stage;
+  // Pre-public (DRAFT/PENDING/fee-rejected) → edit ALL fields in the full form.
+  const fullFormEdit = isDraft || p.status === 'PENDING' || feeRejected;
+  // Public/under-review (Filtering / Debate & Vote) → revise content in the detail editor.
+  const detailEdit = !fullFormEdit && (p.stage === 'FILTERING' || p.stage === 'DEBATE_VOTE');
 
   const submit = async () => {
     setError(null);
@@ -502,16 +534,18 @@ function MineRow({
           <span className={`text-xs ${isDraft ? 'text-amber-600' : 'text-neutral-500'}`}>
             {p.status}{p.stage ? ` · ${p.stage}` : ''}{isDraft ? ' · private' : ''}
           </span>
-          {isDraft ? (
+          {fullFormEdit ? (
             <>
               <button onClick={onEdit} className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800">
                 Edit
               </button>
-              <button onClick={() => setSubmitting((v) => !v)} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950">
-                {submitting ? 'Close' : 'Submit'}
-              </button>
+              {isDraft ? (
+                <button onClick={() => setSubmitting((v) => !v)} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950">
+                  {submitting ? 'Close' : 'Submit'}
+                </button>
+              ) : null}
             </>
-          ) : editableInDetail ? (
+          ) : detailEdit ? (
             <button onClick={onOpen} className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800">
               Edit
             </button>

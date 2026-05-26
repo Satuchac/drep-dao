@@ -89,9 +89,17 @@ Admin (separate): `/admin/login`, user `satucha`.
       hash is still there (and prefilled in the row's inline Submit). It's just a saved note
       until you Submit; the board still verifies it on-chain before confirming the fee.
 - [ ] **Edit after submitting (PENDING)**: a submitted proposal sits at **PENDING** (board
-      must confirm the fee). It stays **editable** — the row has an **Edit** button that opens
-      the proposal; the detail's "Edit proposal" lets you revise the title + pitch (same as the
-      Filtering-stage edit). Structure (amount/milestones/fee) stays locked once submitted.
+      must confirm the fee). Its **Edit** button opens the **full form** — you can change
+      **every** field (title, pitch, amount, milestones, §3.4, and the fee tx); changing the
+      amount **recomputes the fee**. Structure only locks once it's ACTIVE (public).
+- [ ] **Fix & re-submit a rejected proposal**: when the board rejects the fee, the submitter
+      sees the red FEEDBACK and the proposal is **REJECTED** but fully editable — open it,
+      enter a **new tx hash** (kept in the history) + change anything, then **Re-submit** → it
+      returns to PENDING and the old feedback clears.
+- [ ] **Wallet signing (bug check)**: log in with one wallet (e.g. Eternl). On *Actions to
+      sign* → Approve, the **same** wallet opens (not a different one). **Cancel** the wallet
+      prompt → the action is **NOT** marked approved (you see "Approve cancelled — nothing was
+      recorded"). Only a real signature counts.
 - [ ] **Submit** needs the on-chain fee **tx hash** (Submit is disabled without it); the draft
       can also be **submitted later** via the inline **Submit** on its My-proposals row. After
       submitting, status is PENDING — still **not public** (only the submitter sees it).
