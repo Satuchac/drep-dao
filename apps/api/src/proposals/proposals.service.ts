@@ -110,6 +110,13 @@ export class ProposalsService {
       const total = dto.requestedAmountAda ?? toAda(p.requestedAmountAda);
       this.assertMilestonesSum(dto.milestones, total);
     }
+    // A draft may be re-categorised, but only within its own round.
+    if (dto.categoryId && dto.categoryId !== p.categoryId) {
+      const cat = await this.prisma.roundCategory.findUnique({ where: { id: dto.categoryId } });
+      if (!cat || cat.roundId !== p.roundId) {
+        throw new BadRequestException('category does not belong to this proposal’s round');
+      }
+    }
     await this.prisma.$transaction(async (tx) => {
       if (postSubmission) {
         // Snapshot the version being replaced so reviewers can see what changed.
@@ -120,6 +127,7 @@ export class ProposalsService {
       await tx.proposal.update({
         where: { id },
         data: {
+          ...(dto.categoryId !== undefined ? { categoryId: dto.categoryId } : {}),
           ...(dto.title !== undefined ? { title: dto.title } : {}),
           ...(dto.contentMd !== undefined ? { contentMd: dto.contentMd } : {}),
           ...(dto.isCommercial !== undefined ? { isCommercial: dto.isCommercial } : {}),

@@ -106,6 +106,13 @@ export function ProposalSubmit() {
     })),
   });
 
+  // PATCH payload: the round is immutable once the draft exists, so drop it (the API
+  // rejects unknown fields); the category may still change within the same round.
+  const updatePayload = () => {
+    const { roundId: _omitRound, ...patch } = buildInput();
+    return patch;
+  };
+
   // §5.2 milestones must sum to the request, and the request must fit the category's ask range.
   const inputsOk = () => {
     const sum = ms.reduce((a, m) => a + Number(m.amountAda), 0);
@@ -159,7 +166,7 @@ export function ProposalSubmit() {
           ? p.milestones.map((m) => ({ title: m.title ?? '', description: m.description ?? '', acceptanceCriteria: m.acceptanceCriteria ?? '', amountAda: m.amountAda }))
           : [{ title: '', description: '', acceptanceCriteria: '', amountAda: p.requestedAmountAda }],
       );
-      setFee('');
+      // Leave the fee field as-is — editing a draft must not wipe a tx hash the user typed.
       setOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'could not load draft');
@@ -173,7 +180,7 @@ export function ProposalSubmit() {
     if (!inputsOk()) return;
     setBusy(true);
     try {
-      const d = editingId ? await proposalsApi.update(editingId, buildInput()) : await proposalsApi.create(buildInput());
+      const d = editingId ? await proposalsApi.update(editingId, updatePayload()) : await proposalsApi.create(buildInput());
       setMsg(`Saved draft "${d.title}" — it stays private until you submit and a board member confirms your fee.`);
       setOpen(false);
       reset();
@@ -197,7 +204,7 @@ export function ProposalSubmit() {
     }
     setBusy(true);
     try {
-      const draft = editingId ? await proposalsApi.update(editingId, buildInput()) : await proposalsApi.create(buildInput());
+      const draft = editingId ? await proposalsApi.update(editingId, updatePayload()) : await proposalsApi.create(buildInput());
       const submitted = await proposalsApi.submit(draft.id, fee.trim());
       setMsg(`Submitted "${submitted.title}" — fee ${submitted.submissionFeeAda} ₳. A board member verifies your payment on-chain; it becomes public once confirmed.`);
       setOpen(false);
@@ -249,8 +256,8 @@ export function ProposalSubmit() {
         <form onSubmit={submitNow} className="mt-3 space-y-2">
           <div className="flex flex-wrap gap-4">
             <label className="flex flex-col gap-0.5 text-xs font-medium text-neutral-600 dark:text-neutral-400">
-              Round
-              <select className={field} value={roundId} onChange={(e) => setRoundId(e.target.value)} required>
+              Round{editingId ? <span className="font-normal text-neutral-400"> (fixed once created)</span> : null}
+              <select className={field} value={roundId} onChange={(e) => setRoundId(e.target.value)} required disabled={!!editingId}>
                 <option value="">Select round…</option>
                 {rounds.map((r) => (
                   <option key={r.id} value={r.id}>#{r.number} {r.name ?? ''} ({r.status})</option>

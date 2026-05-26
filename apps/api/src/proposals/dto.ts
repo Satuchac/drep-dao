@@ -43,6 +43,7 @@ export class CreateProposalDto {
 }
 
 export class UpdateProposalDto {
+  @IsOptional() @IsUUID() categoryId?: string; // §5.2 — re-categorise a draft within its round
   @IsOptional() @IsString() @MaxLength(200) title?: string;
   @IsOptional() @IsString() @MaxLength(50000) contentMd?: string;
   @IsOptional() @IsBoolean() isCommercial?: boolean;
