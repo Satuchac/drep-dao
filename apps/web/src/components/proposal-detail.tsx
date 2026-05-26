@@ -65,6 +65,7 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-lg font-semibold">{p.title}</h2>
           <div className="flex items-center gap-2">
+            {p.publicId ? <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{p.publicId}</span> : null}
             {p.stage ? <span className="text-xs text-neutral-500">{p.stage}</span> : null}
             <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} />
           </div>

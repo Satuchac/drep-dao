@@ -290,6 +290,9 @@ model RoundSchedule {
 
 model Proposal {
   id     String  @id @default(uuid()) @db.Uuid
+  // Human-readable, globally-unique proposal id (e.g. "R6-P3"), assigned + frozen when the
+  // proposal first becomes ACTIVE (public). Used in the on-chain activation anchor + the UI.
+  publicId String? @unique @map("public_id")
   type   String // FUNDING or INTERNAL
   status String // DRAFT, PENDING, ACTIVE, APPROVED, REJECTED, COMPLETE, FAILED
   stage  String? // FILTERING, DV, FUNDING, VOTING

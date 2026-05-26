@@ -15,8 +15,11 @@ for (const line of fs.readFileSync(path.join(root, '.env'), 'utf8').split('\n'))
   const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*"?([^"\n]*)"?\s*$/);
   if (m && !process.env[m[1]]) process.env[m[1]] = m[2];
 }
+// Never submit a real tx from the test — record the anchor only.
+delete process.env.ANCHOR_MNEMONIC;
 const { PrismaService } = require(root + '/apps/api/dist/prisma/prisma.service.js');
 const { CardanoQueryService } = require(root + '/apps/api/dist/cardano/cardano-query.service.js');
+const { AnchorService } = require(root + '/apps/api/dist/cardano/anchor.service.js');
 const { RoundsService } = require(root + '/apps/api/dist/rounds/rounds.service.js');
 const { ProposalsService } = require(root + '/apps/api/dist/proposals/proposals.service.js');
 const { prisma: db } = require(root + '/packages/db/dist/index.js');
@@ -28,8 +31,10 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
 
 (async () => {
   const prisma = new PrismaService(config);
+  const cardano = new CardanoQueryService(config);
+  const anchor = new AnchorService(config, prisma, cardano);
   const rounds = new RoundsService(prisma, config);
-  const proposals = new ProposalsService(prisma, config, new CardanoQueryService(config));
+  const proposals = new ProposalsService(prisma, config, cardano, anchor);
   const u = await db.appUser.findFirst({ select: { id: true } });
   if (!u) { console.error('need at least one app_user'); process.exit(1); }
 
@@ -89,6 +94,11 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     ok('fee-rejected proposal is editable (tx history grows)', fixedTx.submissionFeeTxHashes.includes('txFIXED'), JSON.stringify(fixedTx.submissionFeeTxHashes));
     const resubmitted = await proposals.submit(u.id, good.id, { submissionFeeTxHash: 'txFIXED' });
     ok('re-submit a fee-rejected proposal → PENDING, feedback cleared', resubmitted.status === 'PENDING' && resubmitted.feeReviewFeedback === null, `${resubmitted.status}/${resubmitted.feeReviewFeedback}`);
+    // Approve the fee → ACTIVE + a structured public id + an on-chain acceptance anchor (fee paid + tx).
+    const approved = await proposals.reviewFee(good.id, { decision: 'APPROVE', feedback: 'looks good' });
+    ok('approve → ACTIVE + structured publicId', approved.status === 'ACTIVE' && /^R\d+-P\d+$/.test(approved.publicId || ''), `${approved.status}/${approved.publicId}`);
+    const feeAnchor = await db.anchor.findFirst({ where: { proposalId: good.id, kind: 'submission' } });
+    ok('acceptance anchored with proposalId+submitter+fee tx', !!feeAnchor && feeAnchor.preimage?.proposalId === approved.publicId && feeAnchor.preimage?.fee?.paid === true && feeAnchor.preimage?.fee?.txHash === 'txFIXED' && !!feeAnchor.preimage?.submitter, JSON.stringify(feeAnchor?.preimage));
 
     // §12 zero-fee: a round whose OSS fee is 0% admits an open-source proposal immediately (no tx).
     const freeRound = await rounds.create({
@@ -100,9 +110,13 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     const freeDraft = await proposals.createDraft(u.id, { roundId: freeRound.id, categoryId: freeRound.categories[0].id, title: 'free', contentMd: 'c', isCommercial: false, requestedAmountAda: 1000, milestones: [{ description: 'm', amountAda: 1000 }] });
     const freeSubmitted = await proposals.submit(u.id, freeDraft.id, {});
     ok('zero-fee OSS proposal goes ACTIVE on submit (no tx)', freeSubmitted.status === 'ACTIVE' && freeSubmitted.stage === 'FILTERING', `${freeSubmitted.status}/${freeSubmitted.stage}`);
+    ok('zero-fee proposal gets a structured publicId', /^R\d+-P\d+$/.test(freeSubmitted.publicId || ''), freeSubmitted.publicId);
+    const freeAnchor = await db.anchor.findFirst({ where: { proposalId: freeDraft.id, kind: 'submission' } });
+    ok('zero-fee acceptance anchored (no fee required)', !!freeAnchor && freeAnchor.preimage?.fee?.required === false && freeAnchor.preimage?.fee?.paid === false, JSON.stringify(freeAnchor?.preimage?.fee));
   } finally {
     for (const rid of roundIds) {
       const props = await db.proposal.findMany({ where: { roundId: rid }, select: { id: true } });
+      await db.anchor.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
       await db.milestone.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
       await db.proposal.deleteMany({ where: { roundId: rid } });
       await db.roundCategory.deleteMany({ where: { roundId: rid } });

@@ -148,11 +148,22 @@ export class DrepService {
         ref?: string;
         applicant?: string;
         result?: { outcome?: string; yes?: number; no?: number; threshold?: number };
+        // submission-anchor preimage
+        proposalId?: string;
+        submitter?: string;
+        submitterType?: string;
+        fee?: { required?: boolean; paid?: boolean; ada?: number; txHash?: string | null };
       };
       // Self-describing title/detail for every kind (admission, filtering, dv, milestone, …).
       const subject = (p.subject ?? a.kind) as keyof typeof SUBJECT_TITLE;
       const title = SUBJECT_TITLE[subject] ?? 'On-chain record';
       const ref = p.ref ?? p.applicant;
+      // A submission anchor records acceptance facts, not a vote tally.
+      if (subject === 'submission') {
+        const feeStr = p.fee?.required ? (p.fee.paid ? `fee ${p.fee.ada ?? 0} ₳ paid` : 'fee unpaid') : 'no fee required';
+        const detail = `${p.proposalId ?? ''} · by ${(p.submitter ?? '').slice(0, 24)}${(p.submitter ?? '').length > 24 ? '…' : ''} (${p.submitterType ?? 'Wallet'}) · ${feeStr}`;
+        return { id: a.id, title, detail, kind: a.kind, label: a.metadataLabel, hash: a.hash, txHash: a.txHash, createdAt: a.createdAt };
+      }
       let detail = '';
       if (p.result) {
         const r = p.result;

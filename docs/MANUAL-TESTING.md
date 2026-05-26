@@ -115,6 +115,10 @@ Admin (separate): `/admin/login`, user `satucha`.
       settings. On the submit form, ticking/unticking **Commercial** shows/hides the tx field
       accordingly; for the 0% type there's no fee box and **Submit makes the proposal ACTIVE
       immediately** (no payment, no board confirmation).
+- [ ] **Acceptance anchor (§3/§12)**: when a proposal becomes **ACTIVE** (fee approved, or no
+      fee), it gets a **unique id** (e.g. `R6-P3`, shown by the title) and an **On-chain proofs**
+      entry "Funding proposal accepted" recording the proposal id, the submitter (DRep id or
+      wallet address), and the fee facts (paid? which tx?). On Preprod the anchor tx is real.
 
 ### Filtering → D&V → milestones (a fresh proposal)
 - [ ] Board: draw filtering reviewers; assigned DReps vote (NO needs rationale);

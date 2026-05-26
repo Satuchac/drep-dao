@@ -8,7 +8,9 @@ import {
   GovSubject,
   VotingStyle,
   buildResultMetadata,
+  buildSubmissionMetadata,
   type AnchorResultMetadata,
+  type AnchorSubmissionMetadata,
   type GovVoteEvent,
 } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
@@ -233,6 +235,67 @@ export class AnchorService implements OnModuleInit {
   }
 
   /**
+   * §3/§12 — anchor a funding proposal's **acceptance** into a round (fee paid + confirmed,
+   * or no fee required). Records the unique proposal id, the submitter (DRep id, or stake
+   * address if not a DRep), and the fee facts (paid? amount? which tx paid it).
+   */
+  async anchorSubmission(params: {
+    proposalRowId: string;
+    publicId: string;
+    roundId?: string | null;
+    roundNumber?: number | null;
+    submitter: string;
+    submitterType: 'DRep' | 'Wallet';
+    feeRequired: boolean;
+    feePaid: boolean;
+    feeAda: number;
+    feeTxHash?: string | null;
+  }): Promise<AnchorResult> {
+    const preimage = {
+      subject: GovSubject.SUBMISSION,
+      proposalId: params.publicId,
+      round: params.roundNumber ?? null,
+      submitter: params.submitter,
+      submitterType: params.submitterType,
+      fee: { required: params.feeRequired, paid: params.feePaid, ada: params.feeAda, txHash: params.feeTxHash ?? null },
+      acceptedAt: new Date().toISOString(),
+    };
+    const hash = sha256hex(JSON.stringify(preimage));
+    const metadata = buildSubmissionMetadata({
+      proposalId: params.publicId,
+      round: params.roundNumber ?? null,
+      submitter: params.submitter,
+      submitterType: params.submitterType,
+      feeRequired: params.feeRequired,
+      feePaid: params.feePaid,
+      feeAda: params.feeAda,
+      feeTxHash: params.feeTxHash ?? null,
+      acceptedAt: preimage.acceptedAt,
+      proofHash: hash,
+    })[GOVERNANCE_METADATA_LABEL];
+
+    let txHash: string | null = null;
+    try {
+      txHash = await this.submitMetadataTx(metadata);
+    } catch (e) {
+      this.logger.warn(`submission anchor submit skipped/failed: ${e instanceof Error ? e.message : e}`);
+    }
+    await this.prisma.anchor.create({
+      data: {
+        kind: GovSubject.SUBMISSION,
+        proposalId: params.proposalRowId,
+        roundId: params.roundId ?? null,
+        hash,
+        preimage: preimage as unknown as object,
+        metadataLabel: GOVERNANCE_METADATA_LABEL,
+        txHash,
+        submittedAt: txHash ? new Date() : null,
+      },
+    });
+    return { hash, txHash, submitted: !!txHash };
+  }
+
+  /**
    * §18 (board) — force-submit an anchor that was recorded but never reached the chain
    * (e.g. the hot wallet was unconfigured/offline when the decision was made). Rebuilds
    * the self-describing metadata from the stored preimage (same `proofHash`) and submits
@@ -311,14 +374,33 @@ export class AnchorService implements OnModuleInit {
   }
 
   /** Rebuild the on-chain metadata for an anchor from its stored preimage. */
-  private metadataFromAnchor(a: { kind: string; hash: string; preimage: unknown }): AnchorResultMetadata {
+  private metadataFromAnchor(a: { kind: string; hash: string; preimage: unknown }): AnchorResultMetadata | AnchorSubmissionMetadata {
     const p = (a.preimage ?? {}) as {
       subject?: GovSubject;
       style?: VotingStyle;
       ref?: string;
       votes?: { drep?: string; vote?: string; choice?: string; power?: number; weight?: number }[];
       result?: { outcome?: string; yes?: number; no?: number; threshold?: number; totalPower?: number };
+      // submission-anchor preimage fields
+      proposalId?: string;
+      round?: number | null;
+      submitter?: string;
+      submitterType?: 'DRep' | 'Wallet';
+      fee?: { required?: boolean; paid?: boolean; ada?: number; txHash?: string | null };
     };
+    if ((p.subject ?? a.kind) === GovSubject.SUBMISSION) {
+      return buildSubmissionMetadata({
+        proposalId: p.proposalId ?? '',
+        round: p.round ?? null,
+        submitter: p.submitter ?? '',
+        submitterType: p.submitterType ?? 'Wallet',
+        feeRequired: p.fee?.required ?? false,
+        feePaid: p.fee?.paid ?? false,
+        feeAda: p.fee?.ada ?? 0,
+        feeTxHash: p.fee?.txHash ?? null,
+        proofHash: a.hash,
+      })[GOVERNANCE_METADATA_LABEL];
+    }
     const votes = (p.votes ?? []).map((v) => ({
       drep: v.drep ?? '',
       vote: v.vote ?? v.choice ?? '',
@@ -365,7 +447,7 @@ export class AnchorService implements OnModuleInit {
   }
 
   /** Build + sign + submit a single tx carrying `event` as metadata, from the anchor wallet. */
-  private async submitMetadataTx(event: AnchorResultMetadata): Promise<string> {
+  private async submitMetadataTx(event: AnchorResultMetadata | AnchorSubmissionMetadata): Promise<string> {
     if (!this.mnemonic) throw new Error('ANCHOR_MNEMONIC not configured (anchor recorded, not submitted)');
     const { prv, addr } = this.anchorKeys(this.mnemonic);
     const pp = (await this.koiosGet<Record<string, string | number>[]>('/epoch_params'))[0];
@@ -382,7 +464,7 @@ export class AnchorService implements OnModuleInit {
    * hash, and the change output (so a batch can chain txs without re-querying Koios).
    */
   private buildMetadataTx(
-    event: AnchorResultMetadata,
+    event: AnchorResultMetadata | AnchorSubmissionMetadata,
     utxos: Utxo[],
     pp: Record<string, string | number>,
     prv: CSL.PrivateKey,

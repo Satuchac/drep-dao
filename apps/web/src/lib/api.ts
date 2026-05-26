@@ -452,6 +452,7 @@ export interface CreateProposalInput {
 }
 export interface ProposalSummary {
   id: string;
+  publicId: string | null;
   type: string;
   status: string;
   stage: string | null;

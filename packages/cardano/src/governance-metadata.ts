@@ -31,6 +31,7 @@ export const GovSubject = {
   DV: 'dv',
   REMOVAL: 'removal',
   INTERNAL: 'internal',
+  SUBMISSION: 'submission', // a funding proposal accepted into the round (fee paid / not required)
 } as const;
 export type GovSubject = (typeof GovSubject)[keyof typeof GovSubject];
 
@@ -82,6 +83,7 @@ export const SUBJECT_TITLE: Record<GovSubject, string> = {
   milestone: 'Milestone review',
   dv: 'Debate & Vote (funding)',
   internal: 'Internal proposal',
+  submission: 'Funding proposal accepted',
 };
 export const STYLE_LABEL: Record<VotingStyle, string> = {
   '1P1V': '1 member, 1 vote',
@@ -149,6 +151,55 @@ export function buildResultMetadata(p: {
     decidedAt: new Date().toISOString(),
     ...(p.proofHash ? { proofHash: p.proofHash } : {}),
     ...(p.verify ? { verify: p.verify } : {}),
+  };
+  return { [GOVERNANCE_METADATA_LABEL]: meta };
+}
+
+/**
+ * §3/§12 — the self-describing on-chain anchor written when a funding proposal is **accepted**
+ * into a round (its submission fee was paid + confirmed, or no fee was required). Records the
+ * unique proposal id, who submitted it (DRep id, or stake/wallet id if not a DRep), and the
+ * fee facts (paid? amount? which tx paid it). `proofHash` commits to the off-chain preimage.
+ */
+export interface AnchorSubmissionMetadata {
+  title: string;
+  subject: 'submission';
+  proposalId: string; // structured public id, e.g. "R6-P3"
+  round?: number;
+  submitter: string; // DRep id (CIP-129) or stake/wallet address
+  submitterType: 'DRep' | 'Wallet';
+  fee: { required: boolean; paid: boolean; ada: number; txHash?: string };
+  acceptedAt: string;
+  proofHash?: string;
+}
+
+export function buildSubmissionMetadata(p: {
+  proposalId: string;
+  round?: number | null;
+  submitter: string;
+  submitterType: 'DRep' | 'Wallet';
+  feeRequired: boolean;
+  feePaid: boolean;
+  feeAda: number;
+  feeTxHash?: string | null;
+  acceptedAt?: string;
+  proofHash?: string;
+}): Record<string, AnchorSubmissionMetadata> {
+  const meta: AnchorSubmissionMetadata = {
+    title: SUBJECT_TITLE.submission,
+    subject: 'submission',
+    proposalId: p.proposalId,
+    ...(p.round != null ? { round: p.round } : {}),
+    submitter: p.submitter,
+    submitterType: p.submitterType,
+    fee: {
+      required: p.feeRequired,
+      paid: p.feePaid,
+      ada: Math.round(p.feeAda),
+      ...(p.feeTxHash ? { txHash: p.feeTxHash } : {}),
+    },
+    acceptedAt: p.acceptedAt ?? new Date().toISOString(),
+    ...(p.proofHash ? { proofHash: p.proofHash } : {}),
   };
   return { [GOVERNANCE_METADATA_LABEL]: meta };
 }

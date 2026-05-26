@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   ROUND_SETTING_DEFAULTS,
@@ -16,6 +17,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
+import { AnchorService } from '../cardano/anchor.service';
 import { CreateProposalDto, MilestoneInput, ReviewFeeDto, SubmitProposalDto, UpdateProposalDto } from './dto';
 
 const LOVELACE = 1_000_000;
@@ -28,6 +30,9 @@ export class ProposalsService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly cardano: CardanoQueryService,
+    // Optional so service-level test scripts can `new ProposalsService(prisma, config, cardano)`
+    // without an anchor wallet — anchoring is then simply skipped.
+    @Optional() private readonly anchor?: AnchorService,
   ) {}
 
   async createDraft(userId: string, dto: CreateProposalDto) {
@@ -214,10 +219,12 @@ export class ProposalsService {
     const fee = await this.computeFee(toAda(p.requestedAmountAda), p.isCommercial ?? false, p.roundId);
     if (fee <= 0) {
       // No fee for this proposal type → admit immediately, no board fee confirmation.
+      const publicId = p.publicId ?? (await this.nextPublicId(p.roundId));
       await this.prisma.proposal.update({
         where: { id },
-        data: { status: ProposalStatus.ACTIVE, stage: ProposalStage.FILTERING, submissionFeeAda: 0n, submittedAt: new Date(), feeReviewFeedback: null },
+        data: { status: ProposalStatus.ACTIVE, stage: ProposalStage.FILTERING, submissionFeeAda: 0n, submittedAt: new Date(), feeReviewFeedback: null, publicId },
       });
+      await this.anchorActivation(id, { required: false, paid: false, ada: 0, txHash: null });
       return this.get(id, userId);
     }
     const hash = dto.submissionFeeTxHash?.trim();
@@ -255,13 +262,17 @@ export class ProposalsService {
     if (dto.decision === 'REJECT' && !feedback) {
       throw new BadRequestException('a reason is required when rejecting a submission fee');
     }
-    await this.prisma.proposal.update({
-      where: { id },
-      data:
-        dto.decision === 'APPROVE'
-          ? { status: ProposalStatus.ACTIVE, stage: ProposalStage.FILTERING, feeReviewFeedback: feedback }
-          : { status: ProposalStatus.REJECTED, feeReviewFeedback: feedback },
-    });
+    if (dto.decision === 'APPROVE') {
+      const publicId = p.publicId ?? (await this.nextPublicId(p.roundId));
+      await this.prisma.proposal.update({
+        where: { id },
+        data: { status: ProposalStatus.ACTIVE, stage: ProposalStage.FILTERING, feeReviewFeedback: feedback, publicId },
+      });
+      // Fee was paid + confirmed → anchor the acceptance with the paying tx.
+      await this.anchorActivation(id, { required: true, paid: true, ada: toAda(p.submissionFeeAda), txHash: p.submissionFeeTxHash });
+    } else {
+      await this.prisma.proposal.update({ where: { id }, data: { status: ProposalStatus.REJECTED, feeReviewFeedback: feedback } });
+    }
     return this.get(id);
   }
 
@@ -391,6 +402,7 @@ export class ProposalsService {
 
   private summary(p: {
     id: string;
+    publicId?: string | null;
     type: string;
     status: string;
     stage: string | null;
@@ -405,6 +417,7 @@ export class ProposalsService {
   }) {
     return {
       id: p.id,
+      publicId: p.publicId ?? null,
       type: p.type,
       status: p.status,
       stage: p.stage,
@@ -417,6 +430,48 @@ export class ProposalsService {
       submissionFeeTxHash: p.submissionFeeTxHash ?? null,
       createdAt: p.createdAt,
     };
+  }
+
+  /** Next structured public id for a round, e.g. "R6-P3" (per-round sequence; unique). */
+  private async nextPublicId(roundId: string | null): Promise<string> {
+    const round = roundId ? await this.prisma.round.findUnique({ where: { id: roundId }, select: { number: true } }) : null;
+    const used = await this.prisma.proposal.count({ where: { roundId, publicId: { not: null } } });
+    return `R${round?.number ?? 0}-P${used + 1}`;
+  }
+
+  /**
+   * §3/§12 — when a proposal first becomes ACTIVE (fee confirmed or none required), write the
+   * on-chain acceptance anchor: structured proposal id + submitter (DRep id, or stake address
+   * if not a DRep) + the fee facts. Best-effort (degrades like every other anchor).
+   */
+  private async anchorActivation(proposalRowId: string, fee: { required: boolean; paid: boolean; ada: number; txHash?: string | null }): Promise<void> {
+    if (!this.anchor) return;
+    try {
+      const p = await this.prisma.proposal.findUnique({
+        where: { id: proposalRowId },
+        include: {
+          round: { select: { number: true } },
+          submitterDrep: { select: { drepIdOnchain: true } },
+          submitterUser: { select: { stakeAddress: true } },
+        },
+      });
+      if (!p) return;
+      const drepId = p.submitterDrep?.drepIdOnchain ?? null;
+      await this.anchor.anchorSubmission({
+        proposalRowId: p.id,
+        publicId: p.publicId ?? p.id,
+        roundId: p.roundId,
+        roundNumber: p.round?.number ?? null,
+        submitter: drepId ?? p.submitterUser?.stakeAddress ?? 'unknown',
+        submitterType: drepId ? 'DRep' : 'Wallet',
+        feeRequired: fee.required,
+        feePaid: fee.paid,
+        feeAda: fee.ada,
+        feeTxHash: fee.txHash ?? null,
+      });
+    } catch {
+      /* best-effort: never block activation on the anchor */
+    }
   }
 
   /** A proposal that can be (re)submitted: a DRAFT, or one a fee review REJECTED (never public). */

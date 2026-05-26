@@ -217,7 +217,16 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   `POST /admin/proposals/:id/review-fee`): the panel shows each entered tx with its own
   on-chain `verifyPayment` result; the reviewer **Approves** (→ ACTIVE/Filtering) or
   **Rejects** (→ REJECTED, reason required) with feedback the submitter sees in a red
-  **FEEDBACK** box next to the fee tx (`feeReviewFeedback`). From *My proposals* a draft row has
+  **FEEDBACK** box next to the fee tx (`feeReviewFeedback`).
+- **Acceptance anchor (§3/§12).** The moment a proposal first becomes **ACTIVE** — board
+  approved the paid fee, or no fee was required — it's assigned a **unique structured
+  proposal id** (`publicId`, e.g. `R6-P3`, frozen on the row + shown in the UI) and an
+  **on-chain anchor** is written (label 80808081, subject `submission`,
+  `AnchorService.anchorSubmission` → `buildSubmissionMetadata`) recording the **proposal id**,
+  the **submitter** (their DRep id, or stake/wallet address if not a DRep), and the **fee
+  facts** `{required, paid, ada, txHash}` (the tx that paid the fee). Shows in *On-chain
+  proofs* as "Funding proposal accepted"; best-effort + re-submittable like every anchor.
+  From *My proposals* a draft row has
   **Edit** (reopens the full form pre-filled — all fields incl. milestones, via
   `PATCH /proposals/:id`) and **Submit** (submit later), alongside its "DRAFT · private"
   status. The detail/read view of a private proposal is reachable by its **owner** via
