@@ -2,27 +2,29 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { roundsApi, type RoundSummary } from '@/lib/api';
+import { useUrlNav } from '@/lib/use-url-nav';
 import { ProposalList } from './proposal-list';
 
 /**
  * §11 — proposals of the active round, with a horizontal submenu to switch between
- * the active round and older rounds. Defaults to the active round when there is one.
+ * the active round and older rounds. The selected round lives in the URL (?round=),
+ * defaulting to the active round when one isn't specified — so links are shareable.
  */
 export function ActiveProposals() {
+  const { get, setParams } = useUrlNav();
+  const roundParam = get('round');
   const [rounds, setRounds] = useState<RoundSummary[] | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
 
   useEffect(() => {
-    roundsApi
-      .list()
-      .then((all) => {
-        setRounds(all);
-        // Default to the active round (highest-numbered active), else the latest round.
-        const active = all.find((r) => r.active);
-        setSelected(active?.id ?? all[0]?.id ?? null);
-      })
-      .catch(() => setRounds([]));
+    roundsApi.list().then(setRounds).catch(() => setRounds([]));
   }, []);
+
+  // The URL's round if valid, else default to the active (highest-numbered) or latest round.
+  const selected = useMemo(() => {
+    if (!rounds) return null;
+    if (roundParam && rounds.some((r) => r.id === roundParam)) return roundParam;
+    return rounds.find((r) => r.active)?.id ?? rounds[0]?.id ?? null;
+  }, [rounds, roundParam]);
 
   // Active rounds first, then older rounds (already number-desc from the API).
   const tabs = useMemo(() => {
@@ -55,7 +57,7 @@ export function ActiveProposals() {
         {tabs.map((r) => (
           <button
             key={r.id}
-            onClick={() => setSelected(r.id)}
+            onClick={() => setParams({ round: r.id, proposal: null })}
             className={`rounded-md px-3 py-1 text-sm ${
               selected === r.id
                 ? 'bg-emerald-600 font-medium text-white'

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { useUrlNav } from '@/lib/use-url-nav';
 import { expertApi, type MyExpert } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { MyDrepStatus } from './my-drep-status';
@@ -142,7 +143,10 @@ export function MemberArea() {
 }
 
 function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.ReactNode }[] }) {
-  const [active, setActive] = useState(tabs[0]?.key);
+  // The active tab lives in the URL (?tab=) so My-area submenu links are shareable.
+  const { get, setParams } = useUrlNav();
+  const fromUrl = get('tab');
+  const active = tabs.some((t) => t.key === fromUrl) ? fromUrl : tabs[0]?.key;
   const current = tabs.find((t) => t.key === active) ?? tabs[0];
   return (
     <div className="space-y-4">
@@ -151,7 +155,7 @@ function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setActive(t.key)}
+            onClick={() => setParams({ tab: t.key })}
             className={`rounded-md px-3 py-1.5 text-sm ${
               active === t.key
                 ? 'bg-emerald-600 font-medium text-white'

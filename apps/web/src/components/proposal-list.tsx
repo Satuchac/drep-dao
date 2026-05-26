@@ -2,19 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { proposalsApi, type ProposalSummary } from '@/lib/api';
+import { useUrlNav } from '@/lib/use-url-nav';
 import { StatusBadge, PROPOSAL_STATUS_CLS } from './round-ui';
-import { ProposalDetail } from './proposal-detail';
 
-/** §26.2 — public list of a round's proposals (DRAFTs are never returned). Click → full detail. */
+/** §26.2 — public list of a round's proposals (DRAFTs are never returned). Click → shareable detail URL. */
 export function ProposalList({ roundId }: { roundId: string }) {
+  // Opening a proposal sets ?proposal=<id>; the shell renders the detail (shareable link).
+  const { setParams } = useUrlNav();
   const [proposals, setProposals] = useState<ProposalSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     setProposals(null);
-    setOpenId(null); // switching rounds returns to the list (don't keep another round's proposal open)
     proposalsApi
       .byRound(roundId)
       .then((p) => alive && setProposals(p))
@@ -24,7 +24,6 @@ export function ProposalList({ roundId }: { roundId: string }) {
     };
   }, [roundId]);
 
-  if (openId) return <ProposalDetail id={openId} onBack={() => setOpenId(null)} />;
   if (error) return <div className="text-sm text-red-600">{error}</div>;
   if (!proposals) return <p className="text-sm text-neutral-500">Loading…</p>;
   if (proposals.length === 0) return <p className="text-sm text-neutral-500">No proposals in this round yet.</p>;
@@ -34,7 +33,7 @@ export function ProposalList({ roundId }: { roundId: string }) {
       {proposals.map((p) => (
         <li key={p.id}>
           <button
-            onClick={() => setOpenId(p.id)}
+            onClick={() => setParams({ proposal: p.id })}
             className="block w-full rounded-md border border-neutral-200 px-3 py-2 text-left text-sm hover:border-emerald-400 dark:border-neutral-800"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">

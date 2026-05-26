@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { useUrlNav } from '@/lib/use-url-nav';
 import { ROUND_SETTING_DEFAULTS, ROUND_SETTING_META } from '@drep-dao/shared';
 import {
   boardRoundsApi,
@@ -78,9 +79,11 @@ const SETTING_GROUPS: { title: string; fields: { key: SettingKey; label: string;
 export function RoundsSection() {
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
+  const { get, setParams } = useUrlNav();
   const [rounds, setRounds] = useState<RoundSummary[]>([]);
   const [creating, setCreating] = useState(false);
-  const [open, setOpen] = useState<RoundSummary | null>(null);
+  // The drilled-into round lives in the URL (?round=) so it's shareable + survives opening a proposal.
+  const open = rounds.find((r) => r.id === get('round')) ?? null;
 
   const load = useCallback(() => {
     roundsApi.list().then(setRounds).catch(() => undefined);
@@ -91,7 +94,7 @@ export function RoundsSection() {
   if (open) {
     return (
       <section className="space-y-3">
-        <button onClick={() => setOpen(null)} className="text-xs text-neutral-500 hover:underline">
+        <button onClick={() => setParams({ round: null })} className="text-xs text-neutral-500 hover:underline">
           ← all rounds
         </button>
         <div className="flex items-center gap-2">
@@ -130,7 +133,7 @@ export function RoundsSection() {
           rounds.map((r) => (
             <li key={r.id}>
               <button
-                onClick={() => setOpen(r)}
+                onClick={() => setParams({ round: r.id })}
                 className="block w-full rounded-md border border-neutral-200 px-3 py-2 text-left text-sm hover:border-emerald-400 dark:border-neutral-800"
               >
                 <div className="flex items-center justify-between gap-2">

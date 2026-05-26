@@ -373,6 +373,15 @@ Left nav: **DAO Member overview · My area · Rounds · Proposals · On-chain
 proofs · Treasury · Platform setup** (board-only). Login card on the right shows
 the name (top) + role/status (below) + notification badge.
 
+**URL-driven navigation (`lib/use-url-nav.ts`).** The single-page shell syncs its
+navigation into the URL query string so every screen has a **shareable link** and the
+browser back button works: `?view=` (left menu), `?tab=` (My-area submenu),
+`?round=` (Proposals/Rounds round selection), and `?proposal=<id>`. A `?proposal=<id>`
+link is rendered at the shell level on top of any view, so a proposal URL shows the
+same proposal page for whoever opens it (public proposals are world-readable). Switching
+a left-menu item clears the submenu params. `app/page.tsx` wraps the shell in `<Suspense>`
+(required for `useSearchParams`).
+
 | View / component | Purpose |
 |---|---|
 | `dao-overview` | DAO members with CIP-119 name/image, voting power, since. Every column is **click-to-sort** (asc/desc), default adjusted-power desc. When `ENTRY_REQUIRE_VOTING_POWER` is enabled, a member under the §14.1 minimum (own power / qualifying delegators) shows a **⚠ below minimum** badge but stays a full voting member (board exempt); no flag when the gate is off. |

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { useUrlNav } from '@/lib/use-url-nav';
 import { ConnectWallet } from './connect-wallet';
 import { MemberArea } from './member-area';
 import { RoundsSection } from './rounds-section';
@@ -10,6 +10,7 @@ import { GovernanceSetup } from './governance-setup';
 import { OnChainProofs } from './on-chain-proofs';
 import { TreasuryOverview } from './treasury-overview';
 import { ActiveProposals } from './active-proposals';
+import { ProposalDetail } from './proposal-detail';
 import { JoinDaoButton } from './join-dao-button';
 import { NotificationBadge } from './notification-badge';
 import { HealthBadge } from '@/app/health-badge';
@@ -27,7 +28,12 @@ const NAV: { key: View; label: string; boardOnly?: boolean }[] = [
 
 export function HomeShell() {
   const { profile, loading } = useAuth();
-  const [view, setView] = useState<View>('overview');
+  const { get, setParams } = useUrlNav();
+  // The active menu view + an optionally-open proposal come from the URL, so every screen
+  // (and any open proposal) has its own shareable link. Switching the menu clears submenu state.
+  const view = (NAV.some((n) => n.key === get('view')) ? get('view') : 'overview') as View;
+  const openProposal = get('proposal');
+  const setView = (v: View) => setParams({ view: v, tab: null, round: null, proposal: null });
 
   // Logged out (or restoring): centered landing with the wallet login.
   if (loading || !profile) {
@@ -80,15 +86,28 @@ export function HomeShell() {
         </div>
       </aside>
 
-      {/* Center: content starts at the top. */}
+      {/* Center: content starts at the top. A ?proposal=<id> link shows that proposal on
+          top of whatever view is selected, so proposal URLs are shareable from anywhere. */}
       <main className="order-last min-w-0 flex-1 lg:order-none">
-        {view === 'overview' ? <DaoOverview /> : null}
-        {view === 'me' ? <MemberArea /> : null}
-        {view === 'rounds' ? <RoundsSection /> : null}
-        {view === 'proposals' ? <ActiveProposals /> : null}
-        {view === 'proofs' ? <OnChainProofs /> : null}
-        {view === 'treasury' ? <TreasuryOverview /> : null}
-        {view === 'setup' && isBoard ? <GovernanceSetup /> : null}
+        {openProposal ? (
+          <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+            <ProposalDetail id={openProposal} onBack={() => setParams({ proposal: null })} />
+          </section>
+        ) : view === 'overview' ? (
+          <DaoOverview />
+        ) : view === 'me' ? (
+          <MemberArea />
+        ) : view === 'rounds' ? (
+          <RoundsSection />
+        ) : view === 'proposals' ? (
+          <ActiveProposals />
+        ) : view === 'proofs' ? (
+          <OnChainProofs />
+        ) : view === 'treasury' ? (
+          <TreasuryOverview />
+        ) : view === 'setup' && isBoard ? (
+          <GovernanceSetup />
+        ) : null}
       </main>
 
       {/* Right: login box (+ JOIN DAO). */}

@@ -280,6 +280,15 @@ Admin (separate): `/admin/login`, user `satucha`.
       acceptance criteria is optional. The proposal detail shows the milestone title + budget +
       description + acceptance criteria.
 
+### URL navigation (verify these specifically)
+- [ ] **Menu + submenu update the URL**: clicking left-nav items changes `?view=…`; My-area
+      tabs change `?tab=…`; the Proposals/Rounds round submenu changes `?round=…`. The browser
+      **back button** walks back through them.
+- [ ] **Shareable proposal link**: open a proposal from the Proposals list — the URL gets
+      `?proposal=<id>`. Copy it, open in a new tab (or send it) → it shows the **same proposal**
+      page (after login if needed; public proposals are readable by anyone). **Back** returns to
+      the list with the same round selected.
+
 ## 4. Known limitations / deferred (by design, for now)
 - **Real ADA payouts** (milestone disbursement, treasury top-ups) are recorded +
   the multisig action collects 3-of-5 approvals, but the actual native-multisig
