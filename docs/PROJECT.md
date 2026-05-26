@@ -218,6 +218,17 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   on-chain `verifyPayment` result; the reviewer **Approves** (→ ACTIVE/Filtering) or
   **Rejects** (→ REJECTED, reason required) with feedback the submitter sees in a red
   **FEEDBACK** box next to the fee tx (`feeReviewFeedback`).
+- **Fee integrity + budget changes (§12).** The fee-determining inputs — **requested amount
+  + commercial flag — are locked once a fee is quoted** (anything past DRAFT / fee-rejected):
+  `updateDraft` rejects changing them, so a submitter can't quote+pay a small fee then raise
+  the budget for free (the form disables those inputs while PENDING). A fee-rejected proposal
+  (no accepted payment) stays freely editable. **Once ACTIVE**, the submitter changes the
+  budget via **`requestBudgetChange`** (`POST /proposals/:id/budget-change`): the amount +
+  milestones update immediately and the **fee delta becomes a settlement** — an **increase**
+  owes a **TOPUP** (submitter pays more), a **decrease** a **REFUND** (DAO returns) — recorded
+  as a `FeeAdjustment`. The board settles it in **My Area → Payments** (`GET/POST
+  /admin/proposals/payments…`): each item shows how much to collect/return and the board
+  records the on-chain **tx** to mark it SETTLED.
 - **Acceptance anchor (§3/§12).** The moment a proposal first becomes **ACTIVE** — board
   approved the paid fee, or no fee was required — it's assigned a **unique structured
   proposal id** (`publicId`, e.g. `R6-P3`, frozen on the row + shown in the UI) and an

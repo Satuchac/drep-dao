@@ -119,6 +119,13 @@ Admin (separate): `/admin/login`, user `satucha`.
       fee), it gets a **unique id** (e.g. `R6-P3`, shown by the title) and an **On-chain proofs**
       entry "Funding proposal accepted" recording the proposal id, the submitter (DRep id or
       wallet address), and the fee facts (paid? which tx?). On Preprod the anchor tx is real.
+- [ ] **Amount locked after submission**: edit a PENDING proposal — the **Requested ₳** field
+      (and Commercial) are **disabled** (you can still fix the tx + other fields). This stops the
+      "pay a small fee, then raise the budget" gaming.
+- [ ] **Budget change (ACTIVE) → Payments**: open your ACTIVE proposal → **Request a budget
+      change**. **Increase** the amount → a **top-up** appears in a board member's *My Area →
+      Payments* ("submitter owes X ₳"); **decrease** → a **refund** ("return X ₳"). The amount X is
+      the fee **delta**. The board pastes the on-chain tx and clicks **Mark settled** to clear it.
 
 ### Filtering → D&V → milestones (a fresh proposal)
 - [ ] Board: draw filtering reviewers; assigned DReps vote (NO needs rationale);

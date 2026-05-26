@@ -1,8 +1,9 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
+import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { ProposalsService } from './proposals.service';
-import { ReviewFeeDto } from './dto';
+import { ReviewFeeDto, SettlePaymentDto } from './dto';
 import { FilteringService } from './filtering.service';
 import { DvService } from './dv.service';
 
@@ -26,6 +27,18 @@ export class AdminProposalsController {
   @Post(':id/review-fee')
   reviewFee(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewFeeDto) {
     return this.proposals.reviewFee(id, dto);
+  }
+
+  // §12 — outstanding fee settlements (budget-change top-ups owed by submitters / refunds owed to them).
+  @Get('payments')
+  payments() {
+    return this.proposals.listPayments();
+  }
+
+  // Record the on-chain tx that settles a top-up/refund → SETTLED.
+  @Post('payments/:id/settle')
+  settlePayment(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SettlePaymentDto) {
+    return this.proposals.settlePayment(ctx.userId, id, dto.txHash);
   }
 
   // §7.1 — draw filtering reviewers (normally automatic at submission-stage end).

@@ -485,6 +485,8 @@ export const proposalsApi = {
     request<ProposalDetail>('/proposals', { method: 'POST', body: JSON.stringify(input) }),
   update: (id: string, input: Partial<CreateProposalInput>) =>
     request<ProposalDetail>(`/proposals/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  budgetChange: (id: string, input: { requestedAmountAda: number; milestones: ProposalMilestoneInput[] }) =>
+    request<ProposalDetail>(`/proposals/${id}/budget-change`, { method: 'POST', body: JSON.stringify(input) }),
   submit: (id: string, submissionFeeTxHash: string) =>
     request<ProposalDetail>(`/proposals/${id}/submit`, {
       method: 'POST',
@@ -683,6 +685,26 @@ export interface PendingFee {
 }
 export const boardFeeApi = {
   pending: () => request<PendingFee[]>('/admin/proposals/pending-fee'),
+};
+
+// §12 — fee settlements from budget changes (board task: My Area → Payments).
+export interface FeePayment {
+  id: string;
+  kind: 'TOPUP' | 'REFUND';
+  amountAda: number;
+  prevAmountAda: number;
+  newAmountAda: number;
+  note: string | null;
+  proposalId: string;
+  proposalPublicId: string | null;
+  proposalTitle: string | null;
+  submitter: string | null;
+  createdAt: string;
+}
+export const boardPaymentsApi = {
+  pending: () => request<FeePayment[]>('/admin/proposals/payments'),
+  settle: (id: string, txHash: string) =>
+    request<{ status: string }>(`/admin/proposals/payments/${id}/settle`, { method: 'POST', body: JSON.stringify({ txHash }) }),
 };
 export const boardMilestoneApi = {
   drawReviewers: (proposalId: string) => request<MilestoneView[]>(`/admin/proposals/${proposalId}/draw-milestone-reviewers`, { method: 'POST' }),

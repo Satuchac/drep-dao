@@ -18,7 +18,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { AnchorService } from '../cardano/anchor.service';
-import { CreateProposalDto, MilestoneInput, ReviewFeeDto, SubmitProposalDto, UpdateProposalDto } from './dto';
+import { BudgetChangeDto, CreateProposalDto, MilestoneInput, ReviewFeeDto, SubmitProposalDto, UpdateProposalDto } from './dto';
 
 const LOVELACE = 1_000_000;
 const toLovelace = (ada: number): bigint => BigInt(Math.round(ada * LOVELACE));
@@ -125,23 +125,29 @@ export class ProposalsService {
         throw new BadRequestException('category does not belong to this proposal’s round');
       }
     }
+    // §12 anti-gaming — the fee-determining inputs (requested amount + commercial flag) are
+    // LOCKED once a fee has been quoted (anything past DRAFT/fee-REJECTED). Otherwise a
+    // submitter could quote+pay a small fee, then raise the budget for free. A fee-rejected
+    // proposal has no accepted payment, so it (like a draft) is still freely editable; an
+    // ACTIVE budget change goes through requestBudgetChange (which settles the fee delta).
+    const feeRejected = p.status === ProposalStatus.REJECTED && p.stage == null;
+    const amountLocked = !(p.status === ProposalStatus.DRAFT || feeRejected);
+    if (amountLocked) {
+      if (dto.requestedAmountAda != null && dto.requestedAmountAda !== toAda(p.requestedAmountAda)) {
+        throw new BadRequestException('the requested amount is locked after submission — request a budget change instead');
+      }
+      if (dto.isCommercial != null && dto.isCommercial !== (p.isCommercial ?? false)) {
+        throw new BadRequestException('the commercial flag is locked after submission (it determines the fee)');
+      }
+    }
     // The fee tx hash is editable only while pre-public (DRAFT/PENDING/fee-REJECTED; locked
     // once ACTIVE); each new distinct value is appended to the history the reviewer sees.
-    const feeRejected = p.status === ProposalStatus.REJECTED && p.stage == null;
     const txEditable = p.status === ProposalStatus.DRAFT || p.status === ProposalStatus.PENDING || feeRejected;
     let feeHashData: { submissionFeeTxHash?: string | null; submissionFeeTxHashes?: string[] } = {};
     if (dto.submissionFeeTxHash !== undefined && txEditable) {
       const hash = dto.submissionFeeTxHash || null;
       const history = hash && !p.submissionFeeTxHashes.includes(hash) ? [...p.submissionFeeTxHashes, hash] : p.submissionFeeTxHashes;
       feeHashData = { submissionFeeTxHash: hash, submissionFeeTxHashes: history };
-    }
-    // A PENDING proposal already has a fee the board is verifying — if the amount or type
-    // changes, recompute it so the board verifies the tx against the correct expected fee.
-    let feeAmountData: { submissionFeeAda?: bigint } = {};
-    if (p.status === ProposalStatus.PENDING && (dto.requestedAmountAda !== undefined || dto.isCommercial !== undefined)) {
-      const effAmount = dto.requestedAmountAda ?? toAda(p.requestedAmountAda);
-      const effCommercial = dto.isCommercial ?? p.isCommercial ?? false;
-      feeAmountData = { submissionFeeAda: toLovelace(await this.computeFee(effAmount, effCommercial, p.roundId)) };
     }
     await this.prisma.$transaction(async (tx) => {
       if (postSubmission) {
@@ -161,7 +167,6 @@ export class ProposalsService {
           ...(dto.subcategoryIds !== undefined ? { subcategoryIds: dto.subcategoryIds } : {}),
           ...(dto.costBreakdownMd !== undefined ? { costBreakdownMd: dto.costBreakdownMd } : {}),
           ...feeHashData,
-          ...feeAmountData,
           ...(dto.teamInfoMd !== undefined ? { teamInfo: dto.teamInfoMd } : {}),
           ...(dto.revenueSharingMd !== undefined ? { revenueSharing: dto.revenueSharingMd } : {}),
           ...(postSubmission ? { version: { increment: 1 } } : {}),
@@ -274,6 +279,117 @@ export class ProposalsService {
       await this.prisma.proposal.update({ where: { id }, data: { status: ProposalStatus.REJECTED, feeReviewFeedback: feedback } });
     }
     return this.get(id);
+  }
+
+  /**
+   * §12 — the submitter changes an ACTIVE proposal's budget. The amount + milestones update
+   * immediately, and the **fee delta** becomes a settlement task for the board: increasing the
+   * budget owes MORE fee (TOPUP), decreasing returns fee (REFUND). The board records the tx
+   * (My Area → Payments). Locked elsewhere (see updateDraft) so this is the only way to move it.
+   */
+  async requestBudgetChange(userId: string, id: string, dto: BudgetChangeDto) {
+    const p = await this.prisma.proposal.findUnique({ where: { id } });
+    if (!p) throw new NotFoundException('proposal not found');
+    if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
+    if (p.status !== ProposalStatus.ACTIVE) {
+      throw new ConflictException('the budget can only be changed once the proposal is ACTIVE (fee settled)');
+    }
+    const newAmount = dto.requestedAmountAda;
+    const oldAmount = toAda(p.requestedAmountAda);
+    if (newAmount === oldAmount) throw new BadRequestException('the requested amount is unchanged');
+    await this.assertAmountInCategory(p.categoryId, newAmount);
+    this.assertMilestonesSum(dto.milestones, newAmount);
+
+    const oldFee = toAda(p.submissionFeeAda); // fee accounted for so far
+    const newFee = await this.computeFee(newAmount, p.isCommercial ?? false, p.roundId);
+    const delta = Math.round((newFee - oldFee) * 1e6) / 1e6;
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.proposal.update({
+        where: { id },
+        data: { requestedAmountAda: toLovelace(newAmount), submissionFeeAda: toLovelace(newFee) },
+      });
+      await tx.milestone.deleteMany({ where: { proposalId: id } });
+      await tx.milestone.createMany({
+        data: dto.milestones.map((m, idx) => ({
+          proposalId: id,
+          idx,
+          title: m.title ?? null,
+          description: m.description,
+          acceptanceCriteria: m.acceptanceCriteria ?? null,
+          amountAda: toLovelace(m.amountAda),
+          status: 'NOT_STARTED',
+        })),
+      });
+      if (delta !== 0) {
+        const kind = delta > 0 ? 'TOPUP' : 'REFUND';
+        await tx.feeAdjustment.create({
+          data: {
+            proposalId: id,
+            kind,
+            amountAda: toLovelace(Math.abs(delta)),
+            prevAmountAda: toLovelace(oldAmount),
+            newAmountAda: toLovelace(newAmount),
+            status: 'PENDING',
+            note: `Budget ${delta > 0 ? 'increased' : 'decreased'} ${oldAmount.toLocaleString()} → ${newAmount.toLocaleString()} ₳`,
+          },
+        });
+      }
+    });
+    return this.get(id, userId);
+  }
+
+  /** §12 — board's outstanding fee settlements (top-ups owed by submitters / refunds owed to them). */
+  async listPayments() {
+    const rows = await this.prisma.feeAdjustment.findMany({
+      where: { status: 'PENDING' },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        proposal: {
+          select: { publicId: true, title: true, submitterUser: { select: { displayName: true } }, submitterDrep: { select: { drepIdOnchain: true } } },
+        },
+      },
+    });
+    return rows.map((a) => ({
+      id: a.id,
+      kind: a.kind, // TOPUP | REFUND
+      amountAda: toAda(a.amountAda),
+      prevAmountAda: toAda(a.prevAmountAda),
+      newAmountAda: toAda(a.newAmountAda),
+      note: a.note,
+      proposalId: a.proposalId,
+      proposalPublicId: a.proposal?.publicId ?? null,
+      proposalTitle: a.proposal?.title ?? null,
+      submitter: a.proposal?.submitterUser?.displayName ?? a.proposal?.submitterDrep?.drepIdOnchain ?? null,
+      createdAt: a.createdAt,
+    }));
+  }
+
+  /** §12 — a board member records the on-chain tx that settles a top-up/refund → SETTLED. */
+  async settlePayment(userId: string, adjustmentId: string, txHash: string) {
+    const a = await this.prisma.feeAdjustment.findUnique({ where: { id: adjustmentId } });
+    if (!a) throw new NotFoundException('payment not found');
+    if (a.status !== 'PENDING') throw new ConflictException('payment is already settled');
+    await this.prisma.feeAdjustment.update({
+      where: { id: adjustmentId },
+      data: { status: 'SETTLED', txHash: txHash.trim(), settledAt: new Date(), settledByUserId: userId },
+    });
+    return { status: 'SETTLED' as const };
+  }
+
+  /** §5.2 — assert an amount fits a category's min/max ask (shared by create + budget change). */
+  private async assertAmountInCategory(categoryId: string | null, amountAda: number) {
+    if (!categoryId) return;
+    const category = await this.prisma.roundCategory.findUnique({ where: { id: categoryId } });
+    if (!category) return;
+    const min = category.minAda == null ? null : toAda(category.minAda);
+    const max = category.maxAda == null ? null : toAda(category.maxAda);
+    if (min != null && amountAda < min) {
+      throw new BadRequestException(`requested ${amountAda.toLocaleString()} ₳ is below the "${category.name}" minimum ask of ${min.toLocaleString()} ₳`);
+    }
+    if (max != null && amountAda > max) {
+      throw new BadRequestException(`requested ${amountAda.toLocaleString()} ₳ exceeds the "${category.name}" maximum ask of ${max.toLocaleString()} ₳`);
+    }
   }
 
   // §16 — a proposal is public only once its fee is confirmed; DRAFT (private) and

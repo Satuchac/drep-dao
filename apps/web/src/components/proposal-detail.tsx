@@ -93,6 +93,8 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
         <DetailBlock label="Revenue sharing" md={p.revenueSharingMd} />
         {p.categoryAsk?.conditions ? <DetailBlock label="Category conditions" md={p.categoryAsk.conditions} /> : null}
         {mine ? <FeeBlock proposal={p} /> : null}
+        {/* §12 — once ACTIVE, the budget can change but the fee delta is settled by the board. */}
+        {mine && p.status === 'ACTIVE' ? <BudgetChangeSection id={id} proposal={p} onChange={load} /> : null}
         {/* Pre-public (PENDING / fee-rejected): edit ALL fields in the full form. */}
         {mine && onEditFull && (p.status === 'PENDING' || (p.status === 'REJECTED' && !p.stage)) ? (
           <button onClick={onEditFull} className="mt-3 rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
@@ -473,6 +475,88 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
       <div className="flex gap-2">
         <button disabled={busy} onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
           {busy ? 'Saving…' : 'Save (creates a new version)'}
+        </button>
+        <button onClick={() => setOpen(false)} className="text-xs text-neutral-500 hover:underline">cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * §12 — the submitter changes an ACTIVE proposal's budget. The new amount + milestones take
+ * effect immediately; the fee difference becomes a top-up (more to pay) or refund the board
+ * settles. Milestones must still sum to the new requested amount.
+ */
+function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal: PDetail; onChange: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState(proposal.requestedAmountAda);
+  const [ms, setMs] = useState(proposal.milestones.map((m) => ({ description: m.description ?? '', amountAda: m.amountAda })));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const sum = ms.reduce((a, m) => a + Number(m.amountAda || 0), 0);
+  const match = sum === Number(amount);
+  const delta = Number(amount) - proposal.requestedAmountAda;
+
+  const save = async () => {
+    setError(null);
+    setMsg(null);
+    if (!match) { setError(`Milestones sum to ${sum.toLocaleString()} ₳ but must equal ${Number(amount).toLocaleString()} ₳.`); return; }
+    setBusy(true);
+    try {
+      await proposalsApi.budgetChange(id, { requestedAmountAda: Number(amount), milestones: ms.map((m) => ({ description: m.description, amountAda: Number(m.amountAda) })) });
+      setMsg(delta > 0 ? 'Budget increased — a fee top-up was created for the board to settle.' : delta < 0 ? 'Budget decreased — a fee refund was created for the board to settle.' : 'Budget updated.');
+      setOpen(false);
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'budget change failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open)
+    return (
+      <div className="mt-3">
+        {msg ? <div className="mb-1 text-xs text-emerald-600">{msg}</div> : null}
+        <button onClick={() => setOpen(true)} className="rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
+          Request a budget change
+        </button>
+      </div>
+    );
+  return (
+    <div className="mt-3 space-y-2 rounded border border-neutral-200 p-2 dark:border-neutral-800">
+      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Request a budget change</div>
+      <label className="block text-sm">
+        New requested ₳
+        <input type="number" className="ml-2 w-36 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+      </label>
+      <div>
+        <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Milestones (must sum to the new amount)</div>
+        {ms.map((m, i) => (
+          <div key={i} className="mt-1 flex flex-wrap items-center gap-2">
+            <input className="flex-1 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" placeholder="description" value={m.description} onChange={(e) => setMs((p) => p.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} />
+            <input type="number" className="w-28 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={m.amountAda} onChange={(e) => setMs((p) => p.map((x, j) => (j === i ? { ...x, amountAda: Number(e.target.value) } : x)))} />
+            {ms.length > 1 ? <button type="button" className="text-xs text-red-600" onClick={() => setMs((p) => p.filter((_, j) => j !== i))}>remove</button> : null}
+          </div>
+        ))}
+        <button type="button" className="mt-1 text-xs underline" onClick={() => setMs((p) => [...p, { description: '', amountAda: 0 }])}>+ add milestone</button>
+        <div className={`mt-1 text-xs ${match ? 'text-emerald-600' : 'font-medium text-red-600'}`}>
+          {match ? `✓ sums to ${sum.toLocaleString()} ₳` : `⚠ sums to ${sum.toLocaleString()} ₳ — must equal ${Number(amount).toLocaleString()} ₳`}
+        </div>
+      </div>
+      <div className="text-xs text-neutral-500">
+        {delta > 0
+          ? 'Increasing the budget will create a submission-fee top-up the board collects on-chain.'
+          : delta < 0
+            ? 'Decreasing the budget will create a fee refund the board returns on-chain.'
+            : 'Change the amount to create a fee top-up (increase) or refund (decrease).'}
+      </div>
+      {error ? <div className="text-xs text-red-600">{error}</div> : null}
+      <div className="flex gap-2">
+        <button disabled={busy || delta === 0} onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+          {busy ? 'Saving…' : 'Apply budget change'}
         </button>
         <button onClick={() => setOpen(false)} className="text-xs text-neutral-500 hover:underline">cancel</button>
       </div>

@@ -354,10 +354,34 @@ model Proposal {
   privateThreads PrivateThread[]
   quickPollsWon  QuickPoll[]        @relation("QuickPollWinner")
   quickPollVotesFor QuickPollVote[] @relation("QuickPollChoice")
+  feeAdjustments FeeAdjustment[]
 
   @@index([roundId, status])
   @@index([type, status])
   @@map("proposal")
+}
+
+// §12 — a submission-fee settlement created when an ACTIVE proposal's budget changes:
+// an increase owes the submitter MORE fee (TOPUP), a decrease returns fee (REFUND). The
+// board settles it by recording the on-chain tx (a board task in My Area → Payments).
+model FeeAdjustment {
+  id              String    @id @default(uuid()) @db.Uuid
+  proposalId      String    @map("proposal_id") @db.Uuid
+  kind            String // TOPUP (submitter pays) | REFUND (DAO returns)
+  amountAda       BigInt    @map("amount_ada") // the fee delta to pay / return (lovelace)
+  prevAmountAda   BigInt    @map("prev_amount_ada") // proposal requested amount before
+  newAmountAda    BigInt    @map("new_amount_ada") // proposal requested amount after
+  status          String    @default("PENDING") // PENDING | SETTLED
+  txHash          String?   @map("tx_hash")
+  note            String?
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  settledAt       DateTime? @map("settled_at") @db.Timestamptz(6)
+  settledByUserId String?   @map("settled_by_user_id") @db.Uuid
+
+  proposal Proposal @relation(fields: [proposalId], references: [id])
+
+  @@index([status, createdAt])
+  @@map("fee_adjustment")
 }
 
 model ProposalVersion {

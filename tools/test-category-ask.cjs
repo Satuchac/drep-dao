@@ -78,13 +78,11 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     // A submitted (PENDING) proposal stays editable while it awaits the board's fee confirmation.
     const submitted = await proposals.submit(u.id, good.id, { submissionFeeTxHash: 'tx67890' });
     ok('submit moves DRAFT → PENDING (fee > 0)', submitted.status === 'PENDING', submitted.status);
-    // PENDING is fully editable (all fields, not just title/content) and the fee recomputes
-    // from the new amount so the board verifies against the right number.
-    const pendingEdit = await proposals.updateDraft(u.id, good.id, {
-      contentMd: 'edited while pending', requestedAmountAda: 60000,
-      milestones: [{ title: 'MVP', description: 'Build', acceptanceCriteria: 'Demo', amountAda: 60000 }],
-    });
-    ok('PENDING fully editable (amount+milestones) + fee recomputed', pendingEdit.status === 'PENDING' && pendingEdit.requestedAmountAda === 60000 && pendingEdit.submissionFeeAda === 600, `${pendingEdit.status}/${pendingEdit.requestedAmountAda}/fee ${pendingEdit.submissionFeeAda}`);
+    // PENDING: content/fields editable, but the requested amount is LOCKED (anti-gaming) —
+    // you can't quote+pay a small fee then raise the budget for free.
+    const pendingEdit = await proposals.updateDraft(u.id, good.id, { contentMd: 'edited while pending' });
+    ok('PENDING content is editable', pendingEdit.status === 'PENDING' && pendingEdit.contentMd === 'edited while pending' && pendingEdit.requestedAmountAda === 50000, `${pendingEdit.status}/${pendingEdit.requestedAmountAda}`);
+    await throws('requested amount is LOCKED while PENDING', () => proposals.updateDraft(u.id, good.id, { requestedAmountAda: 60000, milestones: [{ description: 'm', amountAda: 60000 }] }), /locked after submission/);
     // Board fee review: reject needs a reason, then sets REJECTED + the feedback the submitter sees.
     await throws('reject needs a reason', () => proposals.reviewFee(good.id, { decision: 'REJECT' }), /reason is required/);
     const reviewed = await proposals.reviewFee(good.id, { decision: 'REJECT', feedback: 'fee underpaid' });
@@ -99,6 +97,20 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     ok('approve → ACTIVE + structured publicId', approved.status === 'ACTIVE' && /^R\d+-P\d+$/.test(approved.publicId || ''), `${approved.status}/${approved.publicId}`);
     const feeAnchor = await db.anchor.findFirst({ where: { proposalId: good.id, kind: 'submission' } });
     ok('acceptance anchored with proposalId+submitter+fee tx', !!feeAnchor && feeAnchor.preimage?.proposalId === approved.publicId && feeAnchor.preimage?.fee?.paid === true && feeAnchor.preimage?.fee?.txHash === 'txFIXED' && !!feeAnchor.preimage?.submitter, JSON.stringify(feeAnchor?.preimage));
+
+    // §12 budget change on an ACTIVE proposal (OSS 1%, current fee 500 for 50,000 ₳).
+    const increased = await proposals.requestBudgetChange(u.id, good.id, { requestedAmountAda: 80000, milestones: [{ description: 'm', amountAda: 80000 }] });
+    ok('budget increase applies + stays ACTIVE', increased.status === 'ACTIVE' && increased.requestedAmountAda === 80000, `${increased.status}/${increased.requestedAmountAda}`);
+    let pays = await proposals.listPayments();
+    const topup = pays.find((x) => x.proposalId === good.id && x.kind === 'TOPUP');
+    ok('increase → TOPUP owed = fee delta (800−500)', !!topup && topup.amountAda === 300, JSON.stringify(topup));
+    await proposals.settlePayment(u.id, topup.id, 'txTOPUP');
+    pays = await proposals.listPayments();
+    ok('settled top-up leaves the pending list', !pays.find((x) => x.id === topup.id));
+    const decreased = await proposals.requestBudgetChange(u.id, good.id, { requestedAmountAda: 30000, milestones: [{ description: 'm', amountAda: 30000 }] });
+    ok('budget decrease applies', decreased.requestedAmountAda === 30000, String(decreased.requestedAmountAda));
+    const refund = (await proposals.listPayments()).find((x) => x.proposalId === good.id && x.kind === 'REFUND');
+    ok('decrease → REFUND owed = fee delta (800−300)', !!refund && refund.amountAda === 500, JSON.stringify(refund));
 
     // §12 zero-fee: a round whose OSS fee is 0% admits an open-source proposal immediately (no tx).
     const freeRound = await rounds.create({
@@ -116,6 +128,7 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
   } finally {
     for (const rid of roundIds) {
       const props = await db.proposal.findMany({ where: { roundId: rid }, select: { id: true } });
+      await db.feeAdjustment.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
       await db.anchor.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
       await db.milestone.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
       await db.proposal.deleteMany({ where: { roundId: rid } });

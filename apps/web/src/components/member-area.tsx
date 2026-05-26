@@ -16,6 +16,7 @@ import { VotingPanel } from './voting-panel';
 import { BoardActions } from './board-actions';
 import { RoundStageControls } from './round-stage-controls';
 import { FeeConfirmations } from './fee-confirmations';
+import { BoardPayments } from './board-payments';
 import { PreferencesPanel } from './preferences-panel';
 import { LeaveDao } from './leave-dao';
 
@@ -109,6 +110,17 @@ export function MemberArea() {
           <BoardActions />
           <FeeConfirmations />
           <EmptyHint text="Nothing to sign right now." />
+        </div>
+      ),
+    });
+    tabs.push({
+      key: 'payments',
+      label: 'Payments',
+      node: (
+        <div className="space-y-6">
+          <p className="text-sm text-neutral-500">Submission-fee settlements from budget changes — top-ups to collect, refunds to return.</p>
+          <BoardPayments />
+          <EmptyHint text="No payments to settle right now." />
         </div>
       ),
     });

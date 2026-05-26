@@ -74,6 +74,20 @@ export class ReviewFeeDto {
   @IsOptional() @IsString() @MaxLength(5000) feedback?: string;
 }
 
+// §12 — change an ACTIVE proposal's budget; the fee delta becomes a top-up/refund task.
+export class BudgetChangeDto {
+  @IsInt() @Min(1) requestedAmountAda!: number;
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => MilestoneInput)
+  milestones!: MilestoneInput[];
+}
+
+export class SettlePaymentDto {
+  @IsString() @IsNotEmpty() @MaxLength(120) txHash!: string;
+}
+
 export class FilterVoteDto {
   @IsIn(['YES', 'NO', 'ABSTAIN']) choice!: 'YES' | 'NO' | 'ABSTAIN';
   @IsOptional() @IsString() @MaxLength(5000) rationale?: string;

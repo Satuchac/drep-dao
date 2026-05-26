@@ -263,6 +263,9 @@ export function ProposalSubmit() {
     : roundSettings?.feeOssCapAda ?? ROUND_SETTING_DEFAULTS.feeOssCapAda;
   const feeRequired = feePct > 0;
   const feeEstimate = feeRequired ? Math.round(Math.min((amount * feePct) / 100, feeCap)) : 0;
+  // §12 — once submitted (PENDING), the budget + commercial flag are locked (they set the fee);
+  // a budget change then goes through the active proposal's "Request a budget change".
+  const amountLocked = editingStatus === 'PENDING';
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
@@ -336,9 +339,15 @@ export function ProposalSubmit() {
           </label>
           <MarkdownEditor value={content} onChange={setContent} title="Pitch / summary" placeholder="What you'll build and why (markdown)" minRows={5} required />
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <label>Requested ₳ <input type="number" className={`${field} w-32`} value={amount} onChange={(e) => setAmount(Number(e.target.value))} /></label>
-            <label className="flex items-center gap-1"><input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} /> Commercial / for profit</label>
+            <label>Requested ₳ <input type="number" className={`${field} w-32 disabled:opacity-60`} value={amount} onChange={(e) => setAmount(Number(e.target.value))} disabled={amountLocked} /></label>
+            <label className="flex items-center gap-1"><input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} disabled={amountLocked} /> Commercial / for profit</label>
           </div>
+          {amountLocked ? (
+            <div className="text-xs text-neutral-500">
+              The requested amount + commercial flag are <strong>locked after submission</strong> (they set the fee). To change
+              the budget, use <strong>Request a budget change</strong> on the proposal once it&apos;s active.
+            </div>
+          ) : null}
           {/* §5.2 — the selected category's per-proposal ask range + conditions. */}
           {selectedCat && (selectedCat.minAda != null || selectedCat.maxAda != null || selectedCat.conditions) ? (
             <div className="rounded border border-neutral-200 p-2 text-xs dark:border-neutral-800">

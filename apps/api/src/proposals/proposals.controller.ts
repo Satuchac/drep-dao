@@ -13,7 +13,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { ProposalsService } from './proposals.service';
-import { CreateProposalDto, SubmitProposalDto, UpdateProposalDto } from './dto';
+import { BudgetChangeDto, CreateProposalDto, SubmitProposalDto, UpdateProposalDto } from './dto';
 
 @Controller()
 export class ProposalsController {
@@ -61,5 +61,12 @@ export class ProposalsController {
   @Post('proposals/:id/submit')
   submit(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SubmitProposalDto) {
     return this.proposals.submit(ctx.userId, id, dto);
+  }
+
+  // §12 — submitter changes an ACTIVE proposal's budget (creates a fee top-up/refund task).
+  @UseGuards(JwtAuthGuard)
+  @Post('proposals/:id/budget-change')
+  budgetChange(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: BudgetChangeDto) {
+    return this.proposals.requestBudgetChange(ctx.userId, id, dto);
   }
 }
