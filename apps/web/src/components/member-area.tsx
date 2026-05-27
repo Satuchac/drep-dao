@@ -107,21 +107,13 @@ export function MemberArea() {
       label: 'Actions',
       node: (
         <div className="space-y-6">
-          <p className="text-sm text-neutral-500">Treasury/hot-wallet approvals and submission-fee confirmations.</p>
+          <p className="text-sm text-neutral-500">
+            Board to-dos: treasury/hot-wallet approvals, submission-fee confirmations, and budget-change settlements (top-ups to collect / refunds to return).
+          </p>
           <BoardActions />
           <FeeConfirmations />
-          <EmptyHint text="Nothing to sign right now." />
-        </div>
-      ),
-    });
-    tabs.push({
-      key: 'payments',
-      label: 'Payments',
-      node: (
-        <div className="space-y-6">
-          <p className="text-sm text-neutral-500">Submission-fee settlements from budget changes — top-ups to collect, refunds to return.</p>
           <BoardPayments />
-          <EmptyHint text="No payments to settle right now." />
+          <EmptyHint text="Nothing to do right now." />
         </div>
       ),
     });

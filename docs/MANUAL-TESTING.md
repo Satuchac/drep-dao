@@ -122,10 +122,11 @@ Admin (separate): `/admin/login`, user `satucha`.
 - [ ] **Amount locked after submission**: edit a PENDING proposal — the **Requested ₳** field
       (and Commercial) are **disabled** (you can still fix the tx + other fields). This stops the
       "pay a small fee, then raise the budget" gaming.
-- [ ] **Budget change (ACTIVE) → Payments**: open your ACTIVE proposal → **Request a budget
-      change**. **Increase** the amount → a **top-up** appears in a board member's *My Area →
-      Payments* ("submitter owes X ₳"); **decrease** → a **refund** ("return X ₳"). The amount X is
-      the fee **delta**. The board pastes the on-chain tx and clicks **Mark settled** to clear it.
+- [ ] **Budget change (ACTIVE) → Actions**: open your ACTIVE proposal → **Request a budget
+      change**. **Increase** the amount → a **top-up** appears for a board member in *My Area →
+      Actions* ("submitter owes X ₳") and bumps the **notification badge**; **decrease** → a
+      **refund** ("return X ₳"). The amount X is the fee **delta**. The board pastes the on-chain
+      tx and clicks **Mark settled** to clear it.
 
 ### Filtering → D&V → milestones (a fresh proposal)
 - [ ] Board: draw filtering reviewers; assigned DReps vote (NO needs rationale);

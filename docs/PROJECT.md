@@ -226,9 +226,10 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   budget via **`requestBudgetChange`** (`POST /proposals/:id/budget-change`): the amount +
   milestones update immediately and the **fee delta becomes a settlement** — an **increase**
   owes a **TOPUP** (submitter pays more), a **decrease** a **REFUND** (DAO returns) — recorded
-  as a `FeeAdjustment`. The board settles it in **My Area → Payments** (`GET/POST
-  /admin/proposals/payments…`): each item shows how much to collect/return and the board
-  records the on-chain **tx** to mark it SETTLED.
+  as a `FeeAdjustment`. The board settles it in **My Area → Actions** (alongside treasury
+  approvals + fee confirmations; `GET/POST /admin/proposals/payments…`): each item shows how
+  much to collect/return and the board records the on-chain **tx** to mark it SETTLED. Pending
+  settlements are included in the board **notification badge** count.
 - **Acceptance anchor (§3/§12).** The moment a proposal first becomes **ACTIVE** — board
   approved the paid fee, or no fee was required — it's assigned a **unique structured
   proposal id** (`publicId`, e.g. `R6-P3`, frozen on the row + shown in the UI) and an
