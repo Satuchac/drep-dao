@@ -137,10 +137,11 @@ export class RoundsService {
       },
     });
     if (!r) throw new NotFoundException('round not found');
-    // §9 — per-status proposal counts (DRAFTs stay private), as in list().
+    // §9 — per-status proposal counts. Unlike the public list(), the round detail INCLUDES
+    // DRAFT (a count only — content stays private) so the board sees drafts in Round control.
     const grouped = await this.prisma.proposal.groupBy({
       by: ['status'],
-      where: { roundId: id, status: { not: ProposalStatus.DRAFT } },
+      where: { roundId: id },
       _count: { _all: true },
     });
     const proposalCounts: Record<string, number> = {};
