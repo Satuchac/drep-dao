@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { DrepService } from './drep.service';
@@ -10,8 +10,8 @@ export class BoardExpertsController {
   constructor(private readonly drep: DrepService) {}
 
   @Get('applications')
-  applications() {
-    return this.drep.listExpertApplications();
+  applications(@Query('history') history?: string) {
+    return this.drep.listExpertApplications(history === '1');
   }
 
   @Post(':id/approve')

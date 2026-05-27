@@ -211,6 +211,7 @@ export interface PendingApplication {
   yes: number;
   no: number;
   threshold: number;
+  status: string; // PENDING_ADMISSION | ADMITTED | REJECTED
   myVote: { choice: string; feedback: string | null } | null;
 }
 
@@ -231,6 +232,8 @@ export interface ActiveRemoval extends MyRemoval {
   id: string;
   targetDrepId: string;
   targetName: string;
+  status: string; // PENDING | APPROVED (removed) | REJECTED (kept)
+  resolvedAt: string | null;
   myVote: string | null;
 }
 export interface RemovableMember {
@@ -257,7 +260,7 @@ export const drepApi = {
 };
 
 export const removalApi = {
-  list: () => request<ActiveRemoval[]>('/admin/removals'),
+  list: (history = false) => request<ActiveRemoval[]>(`/admin/removals${history ? '?history=1' : ''}`),
   removableMembers: () => request<RemovableMember[]>('/admin/removals/removable-members'),
   propose: (targetDrepId: string, reason?: string) =>
     request<{ id: string }>('/admin/removals', {
@@ -272,7 +275,8 @@ export const removalApi = {
 };
 
 export const boardApi = {
-  listApplications: () => request<PendingApplication[]>('/admin/drep-applications'),
+  listApplications: (history = false) =>
+    request<PendingApplication[]>(`/admin/drep-applications${history ? '?history=1' : ''}`),
   vote: (
     drepId: string,
     body: { choice: 'YES' | 'NO'; feedback: string; signature?: string; signingKey?: string; ts?: string },
@@ -301,6 +305,7 @@ export interface ExpertApplication {
   bio: string | null;
   stakeAddress: string;
   subcategoryIds: string[];
+  approved: boolean;
 }
 export interface DaoExpert {
   id: string;
@@ -316,7 +321,8 @@ export const expertApi = {
 };
 
 export const boardExpertsApi = {
-  applications: () => request<ExpertApplication[]>('/admin/experts/applications'),
+  applications: (history = false) =>
+    request<ExpertApplication[]>(`/admin/experts/applications${history ? '?history=1' : ''}`),
   approve: (id: string) => request<MyExpert>(`/admin/experts/${id}/approve`, { method: 'POST' }),
   reject: (id: string) => request<{ ok: boolean }>(`/admin/experts/${id}/reject`, { method: 'POST' }),
 };

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
@@ -12,8 +12,8 @@ export class BoardRemovalController {
   constructor(private readonly drep: DrepService) {}
 
   @Get()
-  list(@CurrentUser() ctx: AuthContext) {
-    return this.drep.listActiveRemovals(ctx.userId);
+  list(@CurrentUser() ctx: AuthContext, @Query('history') history?: string) {
+    return this.drep.listActiveRemovals(ctx.userId, history === '1');
   }
 
   @Get('removable-members')

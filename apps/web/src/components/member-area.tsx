@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { expertApi, drepApi, type MyExpert, type EntryEligibility } from '@/lib/api';
+import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardApi, boardExpertsApi, removalApi, type MyExpert, type EntryEligibility } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -32,9 +32,11 @@ export function MemberArea() {
   }, []);
   useEffect(loadExpert, [loadExpert]);
 
+  const isBoard = !!profile?.roles.includes('BOARD');
+  const todo = useBoardTodoCounts(isBoard); // red-circle counts for the Actions + Applications tabs
+
   if (loading || !profile) return null;
 
-  const isBoard = profile.roles.includes('BOARD');
   const isMember = profile.roles.includes('DAO_MEMBER');
   const isDrep = profile.roles.includes('DREP');
   const isRegisteredDRep = profile.onchainDrep.registered;
@@ -45,7 +47,7 @@ export function MemberArea() {
   const showApply = !isBoard && !isMember && !daoPending && !expertApproved && !expertPending;
 
   // §2 — split My area into horizontal tabs instead of one long page.
-  const tabs: { key: string; label: string; node: React.ReactNode }[] = [];
+  const tabs: { key: string; label: string; node: React.ReactNode; badge?: number }[] = [];
 
   tabs.push({
     key: 'profile',
@@ -103,19 +105,9 @@ export function MemberArea() {
   });
 
   if (isBoard) {
-    tabs.push({ key: 'sign', label: 'Actions', node: <ActionsTab /> });
+    tabs.push({ key: 'sign', label: 'Actions', badge: todo.actions, node: <ActionsTab /> });
     tabs.push({ key: 'rounds', label: 'Round control', node: <RoundStageControls /> });
-    tabs.push({
-      key: 'apps',
-      label: 'Applications',
-      node: (
-        <div className="space-y-6">
-          <section className={card}><BoardReviewPanel /></section>
-          <section className={card}><ExpertReviewPanel /></section>
-          <section className={card}><RemovalPanel /></section>
-        </div>
-      ),
-    });
+    tabs.push({ key: 'apps', label: 'Applications', badge: todo.applications, node: <ApplicationsTab /> });
   }
 
   return <MemberTabs tabs={tabs} />;
@@ -143,7 +135,67 @@ function ActionsTab() {
   );
 }
 
-function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.ReactNode }[] }) {
+/** Board "Applications" tab: DRep & Expert applications + member removals, with the same
+ *  "Show history" switch as Actions — resolved items appear marked as done. */
+function ApplicationsTab() {
+  const [showHistory, setShowHistory] = useState(false);
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-neutral-500">Review DRep &amp; Expert applications and member-removal votes.</p>
+        <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
+          <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
+          Show history
+        </label>
+      </div>
+      <section className={card}><BoardReviewPanel history={showHistory} /></section>
+      <section className={card}><ExpertReviewPanel history={showHistory} /></section>
+      <section className={card}><RemovalPanel history={showHistory} /></section>
+    </div>
+  );
+}
+
+/**
+ * Red-circle counts for the board's Actions + Applications tabs = items still awaiting THIS
+ * member: treasury actions / fees / payments, and DRep + Expert applications + removals the
+ * member hasn't voted on yet. Light polling, matches the login notification badge.
+ */
+function useBoardTodoCounts(enabled: boolean) {
+  const [counts, setCounts] = useState({ actions: 0, applications: 0 });
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    const poll = () =>
+      Promise.allSettled([
+        treasuryApi.boardActions(),
+        boardFeeApi.pending(),
+        boardPaymentsApi.pending(),
+        boardApi.listApplications(),
+        boardExpertsApi.applications(),
+        removalApi.list(),
+      ]).then(([a, f, p, dapps, eapps, rem]) => {
+        if (!alive) return;
+        const actions =
+          (a.status === 'fulfilled' ? a.value.count : 0) +
+          (f.status === 'fulfilled' ? f.value.length : 0) +
+          (p.status === 'fulfilled' ? p.value.length : 0);
+        const applications =
+          (dapps.status === 'fulfilled' ? dapps.value.filter((x) => !x.myVote).length : 0) +
+          (eapps.status === 'fulfilled' ? eapps.value.length : 0) +
+          (rem.status === 'fulfilled' ? rem.value.filter((x) => !x.myVote).length : 0);
+        setCounts({ actions, applications });
+      });
+    poll();
+    const id = setInterval(poll, 30_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [enabled]);
+  return counts;
+}
+
+function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.ReactNode; badge?: number }[] }) {
   // The active tab lives in the URL (?tab=) so My-area submenu links are shareable.
   const { get, setParams } = useUrlNav();
   const fromUrl = get('tab');
@@ -157,13 +209,19 @@ function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.
           <button
             key={t.key}
             onClick={() => setParams({ tab: t.key })}
-            className={`rounded-md px-3 py-1.5 text-sm ${
+            className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm ${
               active === t.key
                 ? 'bg-emerald-600 font-medium text-white'
                 : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
             }`}
           >
             {t.label}
+            {/* Red count of new items to process (Actions / Applications). */}
+            {t.badge ? (
+              <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white tabular-nums">
+                {t.badge}
+              </span>
+            ) : null}
           </button>
         ))}
       </div>

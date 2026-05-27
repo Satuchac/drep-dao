@@ -23,7 +23,7 @@ const optins = (a: PendingApplication) =>
     a.admissionCallOptin ? 'Admission call' : null,
   ].filter(Boolean) as string[];
 
-export function BoardReviewPanel() {
+export function BoardReviewPanel({ history = false }: { history?: boolean }) {
   const { profile, signMessage } = useAuth();
   const { txUrl } = useExplorer();
   const [apps, setApps] = useState<PendingApplication[]>([]);
@@ -37,7 +37,7 @@ export function BoardReviewPanel() {
   const load = useCallback(() => {
     setLoading(true);
     boardApi
-      .listApplications()
+      .listApplications(history)
       .then((list) => {
         setApps(list);
         // Prefill each rationale box with this board member's saved rationale.
@@ -45,7 +45,7 @@ export function BoardReviewPanel() {
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [history]);
 
   useEffect(load, [load]);
 
@@ -93,7 +93,9 @@ export function BoardReviewPanel() {
     <div className="space-y-3">
       <h3 className="flex flex-wrap items-center gap-2 text-base font-semibold">
         Board — DRep applications{' '}
-        <span className="text-sm font-normal text-neutral-500">({apps.length} pending)</span>
+        <span className="text-sm font-normal text-neutral-500">
+          ({apps.filter((a) => a.status === 'PENDING_ADMISSION').length} pending)
+        </span>
         <VotingStyleBadge style="1P1V" />
       </h3>
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
@@ -113,16 +115,28 @@ export function BoardReviewPanel() {
       {loading ? (
         <p className="text-sm text-neutral-500">Loading…</p>
       ) : apps.length === 0 ? (
-        <p className="text-sm text-neutral-500">No pending applications.</p>
+        <p className="text-sm text-neutral-500">{history ? 'No applications.' : 'No pending applications.'}</p>
       ) : (
         <ul className="space-y-3">
           {apps.map((a) => {
             const noRationale = !(rationale[a.drepId] ?? '').trim();
             const contact = a.contact ?? {};
+            const done = a.status !== 'PENDING_ADMISSION'; // ADMITTED / REJECTED — read-only history row
             return (
-              <li key={a.drepId} className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+              <li key={a.drepId} className={`rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800 ${done ? 'opacity-70' : ''}`}>
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{a.displayName ?? '(no name)'}</span>
+                  {done ? (
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                        a.status === 'ADMITTED'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                          : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                      }`}
+                    >
+                      {a.status === 'ADMITTED' ? '✓ ADMITTED' : '✗ REJECTED'}
+                    </span>
+                  ) : null}
                   {a.myVote ? (
                     <span
                       className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
@@ -161,30 +175,35 @@ export function BoardReviewPanel() {
                     {a.yes}/{a.threshold} YES{a.no ? ` · ${a.no} NO` : ''}
                   </Row>
                 </dl>
-                <textarea
-                  value={rationale[a.drepId] ?? ''}
-                  onChange={(e) => setRationale((r) => ({ ...r, [a.drepId]: e.target.value }))}
-                  placeholder="Rationale (required for YES and NO) — visible to the applicant"
-                  rows={2}
-                  className="mt-2 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-                />
-                <div className="mt-2 flex items-center gap-3">
-                  <button
-                    disabled={busy === a.drepId || noRationale}
-                    onClick={() => vote(a, 'YES')}
-                    className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
-                  >
-                    {a.myVote?.choice === 'YES' ? 'Update YES' : 'Approve (YES)'}
-                  </button>
-                  <button
-                    disabled={busy === a.drepId || noRationale}
-                    onClick={() => vote(a, 'NO')}
-                    className="rounded border border-red-400 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-300 dark:hover:bg-red-950"
-                  >
-                    {a.myVote?.choice === 'NO' ? 'Update NO' : 'Reject (NO)'}
-                  </button>
-                  {noRationale ? <span className="text-xs text-neutral-400">enter a rationale to vote</span> : null}
-                </div>
+                {/* Resolved applications are read-only history — no rationale box or vote buttons. */}
+                {done ? null : (
+                  <>
+                    <textarea
+                      value={rationale[a.drepId] ?? ''}
+                      onChange={(e) => setRationale((r) => ({ ...r, [a.drepId]: e.target.value }))}
+                      placeholder="Rationale (required for YES and NO) — visible to the applicant"
+                      rows={2}
+                      className="mt-2 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                    />
+                    <div className="mt-2 flex items-center gap-3">
+                      <button
+                        disabled={busy === a.drepId || noRationale}
+                        onClick={() => vote(a, 'YES')}
+                        className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                      >
+                        {a.myVote?.choice === 'YES' ? 'Update YES' : 'Approve (YES)'}
+                      </button>
+                      <button
+                        disabled={busy === a.drepId || noRationale}
+                        onClick={() => vote(a, 'NO')}
+                        className="rounded border border-red-400 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-40 dark:text-red-300 dark:hover:bg-red-950"
+                      >
+                        {a.myVote?.choice === 'NO' ? 'Update NO' : 'Reject (NO)'}
+                      </button>
+                      {noRationale ? <span className="text-xs text-neutral-400">enter a rationale to vote</span> : null}
+                    </div>
+                  </>
+                )}
               </li>
             );
           })}

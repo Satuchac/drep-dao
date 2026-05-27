@@ -218,12 +218,16 @@ export class DrepService {
     return this.prisma.expert.findFirst({ where: { userId } });
   }
 
-  /** Board view — pending Expert applications awaiting approval. */
-  async listExpertApplications() {
+  /**
+   * Board view of Expert applications. Default: pending (awaiting approval). `history` also
+   * includes already-approved experts (the done items). Note: rejected applications are deleted,
+   * so they leave no history.
+   */
+  async listExpertApplications(history = false) {
     const experts = await this.prisma.expert.findMany({
-      where: { approvedByBoard: false },
+      where: history ? {} : { approvedByBoard: false },
       include: { user: { select: { stakeAddress: true, displayName: true } } },
-      orderBy: { displayName: 'asc' },
+      orderBy: [{ approvedByBoard: 'asc' }, { displayName: 'asc' }],
     });
     return experts.map((e) => ({
       id: e.id,
@@ -231,6 +235,7 @@ export class DrepService {
       bio: e.bio,
       stakeAddress: e.user.stakeAddress,
       subcategoryIds: e.subcategoryIds,
+      approved: e.approvedByBoard,
     }));
   }
 
@@ -415,10 +420,16 @@ export class DrepService {
     });
   }
 
-  /** §25.5 — board view of pending applications + tally + this board member's own vote. */
-  async listApplications(boardUserId: string) {
+  /**
+   * §25.5 — board view of DRep applications + tally + this board member's own vote.
+   * `history` includes resolved (ADMITTED/REJECTED) applications for auditing; the default
+   * is only those still pending a decision.
+   */
+  async listApplications(boardUserId: string, history = false) {
     const dreps = await this.prisma.drep.findMany({
-      where: { status: DRepStatus.PENDING_ADMISSION },
+      where: history
+        ? { status: { in: [DRepStatus.PENDING_ADMISSION, DRepStatus.ADMITTED, DRepStatus.REJECTED] } }
+        : { status: DRepStatus.PENDING_ADMISSION },
       include: {
         user: { select: { stakeAddress: true, displayName: true, createdAt: true } },
         admissionVotesReceived: true,
@@ -428,7 +439,12 @@ export class DrepService {
     const threshold = await this.approvalThreshold();
     // The reviewing board member's own DRep id (to surface "your vote").
     const me = await this.prisma.drep.findUnique({ where: { userId: boardUserId }, select: { id: true } });
-    return dreps.map((d) => {
+    // In history, show only DReps that actually went through a board vote — exclude genesis-seated
+    // board members (auto-ADMITTED with no admission votes), who never "applied".
+    const visible = history
+      ? dreps.filter((d) => d.status === DRepStatus.PENDING_ADMISSION || d.admissionVotesReceived.length > 0)
+      : dreps;
+    return visible.map((d) => {
       const myVote = me ? d.admissionVotesReceived.find((v) => v.boardDrepId === me.id) : undefined;
       return {
         drepId: d.id,
@@ -445,6 +461,7 @@ export class DrepService {
         yes: d.admissionVotesReceived.filter((v) => v.choice === 'YES').length,
         no: d.admissionVotesReceived.filter((v) => v.choice === 'NO').length,
         threshold,
+        status: d.status, // PENDING_ADMISSION | ADMITTED | REJECTED
         myVote: myVote ? { choice: myVote.choice, feedback: myVote.feedback } : null,
       };
     });
@@ -686,11 +703,14 @@ export class DrepService {
     }
   }
 
-  /** Board view of pending removals (with this board member's own vote). */
-  async listActiveRemovals(boardUserId: string) {
+  /**
+   * Board view of removals (with this board member's own vote). Default: pending; `history`
+   * also includes resolved removals (APPROVED = removed / REJECTED = kept) for auditing.
+   */
+  async listActiveRemovals(boardUserId: string, history = false) {
     const me = await this.prisma.drep.findUnique({ where: { userId: boardUserId }, select: { id: true } });
     const removals = await this.prisma.drepRemoval.findMany({
-      where: { status: 'PENDING' },
+      where: history ? {} : { status: 'PENDING' },
       include: { votes: true },
       orderBy: { createdAt: 'asc' },
     });
@@ -705,6 +725,8 @@ export class DrepService {
       yes: r.votes.filter((v) => v.choice === 'YES').length,
       no: r.votes.filter((v) => v.choice === 'NO').length,
       threshold,
+      status: r.status, // PENDING | APPROVED (removed) | REJECTED (kept)
+      resolvedAt: r.resolvedAt,
       myVote: me ? r.votes.find((v) => v.boardDrepId === me.id)?.choice ?? null : null,
       votes: r.votes.map((v) => ({ choice: v.choice, rationale: v.rationale, voterName: names.get(v.boardDrepId) ?? 'Board member' })),
     }));
