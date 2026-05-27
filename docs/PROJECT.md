@@ -389,7 +389,8 @@ a left-menu item clears the submenu params. `app/page.tsx` wraps the shell in `<
 | `dao-overview` | DAO members with CIP-119 name/image, voting power, since. Every column is **click-to-sort** (asc/desc), default adjusted-power desc. When `ENTRY_REQUIRE_VOTING_POWER` is enabled, a member under the §14.1 minimum (own power / qualifying delegators) shows a **⚠ below minimum** badge but stays a full voting member (board exempt); no flag when the gate is off. |
 | `member-area` | Personal area: profile, apply/join, board panels, **Actions to sign**, **Round stage controls**, voting panels. |
 | `rounds-section` | Rounds list (status, active/complete, per-status proposal counts); click a round → its proposals. |
-| `active-proposals` | Active round's proposals with a horizontal round submenu to browse earlier rounds. |
+| `active-proposals` | A round's proposals, picked with a **round combo box** (scales to many rounds) that defaults to the **latest round still in the Submission phase**. Each row shows the proposal title + **submitter** + status. |
+| `proposal-detail` | Full read-only view for everyone (title + **submitter** + public id + category/amount/fee, pitch, §3.4 cost/team/revenue, expertise tags, and the **milestone plan** — title/budget/description/acceptance). The submitter additionally sees edit/budget-change/fee controls; non-authors see it read-only. |
 | `round-stage-controls` | Board-only: confirm/auto-start/launch each next stage + close the round. |
 | `proposal-list` / `round-ui` | Shared proposal list + status badges / count chips / date helpers. |
 | `treasury-overview` | Balances + per-bucket allocated/spent/remaining bars + totals. |

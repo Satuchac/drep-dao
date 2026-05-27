@@ -404,7 +404,7 @@ export class ProposalsService {
     const proposals = await this.prisma.proposal.findMany({
       where: { roundId, status: statusFilter },
       orderBy: { createdAt: 'asc' },
-      include: { category: { select: { name: true } } },
+      include: { category: { select: { name: true } }, submitterUser: { select: { displayName: true } }, submitterDrep: { select: { drepIdOnchain: true } } },
     });
     return proposals.map((p) => this.summary(p));
   }
@@ -467,7 +467,7 @@ export class ProposalsService {
     const proposals = await this.prisma.proposal.findMany({
       where: { submitterUserId: userId },
       orderBy: { createdAt: 'desc' },
-      include: { category: { select: { name: true } } },
+      include: { category: { select: { name: true } }, submitterUser: { select: { displayName: true } }, submitterDrep: { select: { drepIdOnchain: true } } },
     });
     return proposals.map((p) => this.summary(p));
   }
@@ -478,6 +478,8 @@ export class ProposalsService {
       include: {
         milestones: { orderBy: { idx: 'asc' } },
         category: { select: { name: true, minAda: true, maxAda: true, conditions: true } },
+        submitterUser: { select: { displayName: true } },
+        submitterDrep: { select: { drepIdOnchain: true } },
       },
     });
     if (!p) throw new NotFoundException('proposal not found');
@@ -530,6 +532,8 @@ export class ProposalsService {
     submissionFeeTxHash?: string | null;
     createdAt: Date;
     category?: { name: string } | null;
+    submitterUser?: { displayName: string | null } | null;
+    submitterDrep?: { drepIdOnchain: string } | null;
   }) {
     return {
       id: p.id,
@@ -544,6 +548,8 @@ export class ProposalsService {
       isCommercial: p.isCommercial,
       requestedAmountAda: toAda(p.requestedAmountAda),
       submissionFeeTxHash: p.submissionFeeTxHash ?? null,
+      // Who submitted it — display name, falling back to the DRep id (shown next to the title).
+      submitter: p.submitterUser?.displayName ?? p.submitterDrep?.drepIdOnchain ?? null,
       createdAt: p.createdAt,
     };
   }

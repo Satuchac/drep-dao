@@ -462,6 +462,7 @@ export interface ProposalSummary {
   isCommercial: boolean | null;
   requestedAmountAda: number;
   submissionFeeTxHash: string | null;
+  submitter: string | null;
 }
 export interface ProposalDetail extends ProposalSummary {
   categoryId: string;

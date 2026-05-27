@@ -63,7 +63,10 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
       <BackBtn onBack={onBack} />
       <div className={card}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold">{p.title}</h2>
+          <h2 className="text-lg font-semibold">
+            {p.title}
+            {p.submitter ? <span className="ml-2 text-sm font-normal text-neutral-500">by {p.submitter}</span> : null}
+          </h2>
           <div className="flex items-center gap-2">
             {p.publicId ? <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{p.publicId}</span> : null}
             {p.stage ? <span className="text-xs text-neutral-500">{p.stage}</span> : null}
@@ -92,6 +95,8 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
         <DetailBlock label="Team" md={p.teamInfoMd} />
         <DetailBlock label="Revenue sharing" md={p.revenueSharingMd} />
         {p.categoryAsk?.conditions ? <DetailBlock label="Category conditions" md={p.categoryAsk.conditions} /> : null}
+        {/* Milestone plan (read-only). The board's milestone-review workflow replaces it in FUNDING. */}
+        {!showMilestones && p.milestones.length > 0 ? <MilestonePlan milestones={p.milestones} /> : null}
         {mine ? <FeeBlock proposal={p} /> : null}
         {/* §12 — once ACTIVE, the budget can change but the fee delta is settled by the board. */}
         {mine && p.status === 'ACTIVE' ? <BudgetChangeSection id={id} proposal={p} onChange={load} /> : null}
@@ -130,6 +135,32 @@ function DetailBlock({ label, md }: { label: string; md?: string | null }) {
     <div className="mt-3">
       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{label}</div>
       <Markdown className="mt-0.5 text-sm text-neutral-700 dark:text-neutral-300">{md}</Markdown>
+    </div>
+  );
+}
+
+/** Read-only milestone plan (title · budget · description · acceptance), shown to everyone. */
+function MilestonePlan({ milestones }: { milestones: PDetail['milestones'] }) {
+  return (
+    <div className="mt-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Milestones</div>
+      <ul className="mt-1 space-y-2">
+        {milestones.map((m) => (
+          <li key={m.id} className="rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">
+            <div className="font-medium">
+              Milestone #{m.idx + 1}{m.title ? ` — ${m.title}` : ''}
+              <span className="text-neutral-500"> · {m.amountAda.toLocaleString()} ₳</span>
+            </div>
+            {m.description ? <Markdown className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">{m.description}</Markdown> : null}
+            {m.acceptanceCriteria ? (
+              <div className="mt-1">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Acceptance criteria</div>
+                <Markdown className="text-xs text-neutral-600 dark:text-neutral-400">{m.acceptanceCriteria}</Markdown>
+              </div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

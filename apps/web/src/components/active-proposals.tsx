@@ -19,18 +19,21 @@ export function ActiveProposals() {
     roundsApi.list().then(setRounds).catch(() => setRounds([]));
   }, []);
 
-  // The URL's round if valid, else default to the active (highest-numbered) or latest round.
+  // Newest first.
+  const ordered = useMemo(() => (rounds ? [...rounds].sort((a, b) => b.number - a.number) : []), [rounds]);
+
+  // The URL's round if valid; else default to the latest round still in the SUBMISSION phase
+  // (where proposals are being submitted), then the latest active round, then the most recent.
   const selected = useMemo(() => {
     if (!rounds) return null;
     if (roundParam && rounds.some((r) => r.id === roundParam)) return roundParam;
-    return rounds.find((r) => r.active)?.id ?? rounds[0]?.id ?? null;
-  }, [rounds, roundParam]);
-
-  // Active rounds first, then older rounds (already number-desc from the API).
-  const tabs = useMemo(() => {
-    if (!rounds) return [];
-    return [...rounds].sort((a, b) => Number(b.active) - Number(a.active) || b.number - a.number);
-  }, [rounds]);
+    return (
+      ordered.find((r) => r.status === 'SUBMISSION')?.id ??
+      ordered.find((r) => r.active)?.id ??
+      ordered[0]?.id ??
+      null
+    );
+  }, [rounds, ordered, roundParam]);
 
   if (!rounds) return <p className="text-sm text-neutral-500">Loading…</p>;
   if (rounds.length === 0)
@@ -52,22 +55,23 @@ export function ActiveProposals() {
         </p>
       </div>
 
-      {/* Horizontal round submenu. */}
-      <div className="flex flex-wrap gap-1 border-b border-neutral-200 pb-2 dark:border-neutral-800">
-        {tabs.map((r) => (
-          <button
-            key={r.id}
-            onClick={() => setParams({ round: r.id, proposal: null })}
-            className={`rounded-md px-3 py-1 text-sm ${
-              selected === r.id
-                ? 'bg-emerald-600 font-medium text-white'
-                : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
-            }`}
-          >
-            Round #{r.number}
-            {r.active ? <span className="ml-1 text-[10px] uppercase opacity-80">active</span> : null}
-          </button>
-        ))}
+      {/* Round picker — a combo box (scales to many rounds, unlike a horizontal row). */}
+      <div className="flex items-center gap-2 border-b border-neutral-200 pb-2 dark:border-neutral-800">
+        <label htmlFor="round-picker" className="text-sm text-neutral-600 dark:text-neutral-400">Round</label>
+        <select
+          id="round-picker"
+          className="rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+          value={selected ?? ''}
+          onChange={(e) => setParams({ round: e.target.value, proposal: null })}
+        >
+          {ordered.map((r) => (
+            <option key={r.id} value={r.id}>
+              Round #{r.number}
+              {r.name ? ` — ${r.name}` : ''}
+              {r.status === 'SUBMISSION' ? ' · submission' : r.active ? ' · active' : ''}
+            </option>
+          ))}
+        </select>
       </div>
 
       {selected ? <ProposalList roundId={selected} /> : null}

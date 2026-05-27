@@ -258,6 +258,15 @@ Admin (separate): `/admin/login`, user `satucha`.
       **"2. Exchange the seed"** (enabled only after the sweep). The board's Platform setup
       no longer shows wallets. Each admin action is in the audit log.
 
+### Proposals list + detail (verify these specifically)
+- [ ] **Round picker is a combo box** (not a wrapping row of buttons) and defaults to the
+      **latest round in the Submission phase**. Picking a round updates `?round=`.
+- [ ] **Submitter shown** next to each proposal's title — in the list and on the detail page.
+- [ ] **All fields visible on the detail** (read-only for non-authors): title, submitter,
+      public id, category/amount/fee, pitch, cost breakdown / team / revenue (when filled),
+      expertise tags, and the **milestone plan** (title · budget · description · acceptance).
+      Only the author sees Edit / Request-a-budget-change / fee controls.
+
 ### Proposal-form UX (verify these specifically)
 - [ ] **Category appears after a round**: the **Category** combo is labelled and shows only
       once a **Round** is picked; if exactly one round is in Submission it's preselected.
