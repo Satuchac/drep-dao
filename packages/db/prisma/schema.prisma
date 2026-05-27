@@ -315,6 +315,8 @@ model Proposal {
   submissionFeeTxHashes String[] @default([]) @map("submission_fee_tx_hashes")
   // The board's fee-review note shown to the submitter (red FEEDBACK box) — set on approve or reject.
   feeReviewFeedback   String?  @map("fee_review_feedback")
+  // Cardano address the submitter receives funds at — fee refunds and (once funded) the budget payout.
+  payoutAddress       String?  @map("payout_address")
   pledgeAmountAda     BigInt?  @map("pledge_amount_ada")
   pledgeReturnMethod  String?  @map("pledge_return_method")
   pledgeTxHash        String?  @map("pledge_tx_hash")
@@ -371,6 +373,8 @@ model FeeAdjustment {
   amountAda       BigInt    @map("amount_ada") // the fee delta to pay / return (lovelace)
   prevAmountAda   BigInt    @map("prev_amount_ada") // proposal requested amount before
   newAmountAda    BigInt    @map("new_amount_ada") // proposal requested amount after
+  prevFeeAda      BigInt?   @map("prev_fee_ada") // total submission fee before the change
+  newFeeAda       BigInt?   @map("new_fee_ada") // total submission fee after the change
   status          String    @default("PENDING") // PENDING | SETTLED
   txHash          String?   @map("tx_hash")
   note            String?

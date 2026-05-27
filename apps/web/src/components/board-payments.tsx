@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { boardPaymentsApi, type FeePayment } from '@/lib/api';
+import { CopyButton } from './copy-button';
 
 /**
  * §12 — board task list for submission-fee settlements created by budget changes:
@@ -69,8 +70,27 @@ function PaymentRow({ p, onSettled }: { p: FeePayment; onSettled: () => void }) 
         <span className={`font-semibold ${isTopup ? 'text-amber-700 dark:text-amber-400' : 'text-sky-700 dark:text-sky-400'}`}>
           {isTopup ? `Submitter owes ${p.amountAda.toLocaleString()} ₳` : `Return ${p.amountAda.toLocaleString()} ₳ to the submitter`}
         </span>
-        <span className="text-neutral-500"> · budget {p.prevAmountAda.toLocaleString()} → {p.newAmountAda.toLocaleString()} ₳{p.submitter ? ` · ${p.submitter}` : ''}</span>
+        <span className="text-neutral-500">{p.submitter ? ` · ${p.submitter}` : ''}</span>
       </div>
+      {/* Old → new fee (the "old payment" vs "current payment") + the budget change driving it. */}
+      <div className="mt-0.5 text-xs text-neutral-500">
+        budget {p.prevAmountAda.toLocaleString()} → {p.newAmountAda.toLocaleString()} ₳
+        {p.prevFeeAda != null && p.newFeeAda != null ? ` · fee ${p.prevFeeAda.toLocaleString()} → ${p.newFeeAda.toLocaleString()} ₳` : ''}
+      </div>
+      {/* §12 — the address to send a refund to (copyable). Top-ups are paid to the fee address. */}
+      {!isTopup ? (
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-neutral-500">Refund to:</span>
+          {p.payoutAddress ? (
+            <>
+              <span className="break-all font-mono text-neutral-700 dark:text-neutral-300">{p.payoutAddress}</span>
+              <CopyButton text={p.payoutAddress} />
+            </>
+          ) : (
+            <span className="text-amber-600">no payout address on the proposal — ask the submitter</span>
+          )}
+        </div>
+      ) : null}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <input
           className="flex-1 rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"

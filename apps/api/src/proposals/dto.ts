@@ -34,6 +34,7 @@ export class CreateProposalDto {
   @IsOptional() @IsString() @MaxLength(20000) costBreakdownMd?: string;
   @IsOptional() @IsString() @MaxLength(20000) teamInfoMd?: string; // §3.4
   @IsOptional() @IsString() @MaxLength(20000) revenueSharingMd?: string; // §3.4 (commercial)
+  @IsOptional() @IsString() @MaxLength(200) payoutAddress?: string; // Cardano address for refunds / budget payout
   @IsOptional() @IsString() @MaxLength(120) submissionFeeTxHash?: string; // §12 — savable with the draft
 
   @IsArray()
@@ -53,6 +54,7 @@ export class UpdateProposalDto {
   @IsOptional() @IsString() @MaxLength(20000) costBreakdownMd?: string;
   @IsOptional() @IsString() @MaxLength(20000) teamInfoMd?: string;
   @IsOptional() @IsString() @MaxLength(20000) revenueSharingMd?: string;
+  @IsOptional() @IsString() @MaxLength(200) payoutAddress?: string;
   @IsOptional() @IsString() @MaxLength(120) submissionFeeTxHash?: string;
 
   @IsOptional()

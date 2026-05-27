@@ -23,6 +23,7 @@ import {
 } from '@/lib/api';
 import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
+import { CopyButton } from './copy-button';
 
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
 const SUBCAT_LABEL: Record<string, string> = Object.fromEntries(DEFAULT_SUBCATEGORIES.map((s) => [s.id, s.label]));
@@ -106,6 +107,18 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
           )}
         </CollapsibleView>
         {p.categoryAsk?.conditions ? <DetailBlock label="Category conditions" md={p.categoryAsk.conditions} /> : null}
+        {/* Payout / refund address — where the DAO sends fee refunds + the budget once funded. */}
+        <div className="mt-3 rounded-md border border-neutral-300 px-2 py-1.5 dark:border-neutral-700">
+          <div className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Payout / refund address</div>
+          {p.payoutAddress ? (
+            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+              <span className="break-all font-mono text-xs text-neutral-600 dark:text-neutral-400">{p.payoutAddress}</span>
+              <CopyButton text={p.payoutAddress} />
+            </div>
+          ) : (
+            <div className="mt-0.5 text-xs text-neutral-400">Not provided.</div>
+          )}
+        </div>
         {mine ? <FeeBlock proposal={p} /> : null}
         {/* §12 — once ACTIVE, the budget can change but the fee delta is settled by the board. */}
         {mine && p.status === 'ACTIVE' ? <BudgetChangeSection id={id} proposal={p} onChange={load} /> : null}
@@ -526,6 +539,7 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
   const [costBreakdown, setCostBreakdown] = useState(proposal.costBreakdownMd ?? '');
   const [teamInfo, setTeamInfo] = useState(proposal.teamInfoMd ?? '');
   const [revenueSharing, setRevenueSharing] = useState(proposal.revenueSharingMd ?? '');
+  const [payoutAddress, setPayoutAddress] = useState(proposal.payoutAddress ?? '');
   const [subcatIds, setSubcatIds] = useState<string[]>(proposal.subcategoryIds ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -545,6 +559,7 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
         costBreakdownMd: costBreakdown,
         teamInfoMd: teamInfo,
         revenueSharingMd: revenueSharing,
+        payoutAddress,
         subcategoryIds: subcatIds,
       });
       setOpen(false);
@@ -573,6 +588,10 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
       <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title="Cost breakdown" hint="optional" placeholder="How the budget is spent" minRows={3} defaultCollapsed={!costBreakdown.trim()} />
       <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title="Team info" hint="optional" placeholder="Who is delivering this" minRows={3} defaultCollapsed={!teamInfo.trim()} />
       <MarkdownEditor value={revenueSharing} onChange={setRevenueSharing} title="Revenue sharing" hint="optional" placeholder="For commercial projects: how the DAO shares in returns" minRows={3} defaultCollapsed={!revenueSharing.trim()} />
+      <label className="block">
+        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Payout / refund address (Cardano)</span>
+        <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900" placeholder="addr_test1…" value={payoutAddress} onChange={(e) => setPayoutAddress(e.target.value)} />
+      </label>
       <div>
         <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Expertise areas</div>
         <div className="mt-1 flex flex-wrap gap-1.5">

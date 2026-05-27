@@ -447,6 +447,7 @@ export interface CreateProposalInput {
   costBreakdownMd?: string;
   teamInfoMd?: string;
   revenueSharingMd?: string;
+  payoutAddress?: string;
   submissionFeeTxHash?: string;
   milestones: ProposalMilestoneInput[];
 }
@@ -474,6 +475,7 @@ export interface ProposalDetail extends ProposalSummary {
   submissionFeeAda: number;
   submissionFeeTxHashes: string[];
   feeReviewFeedback: string | null;
+  payoutAddress: string | null;
   categoryAsk: { minAda: number | null; maxAda: number | null; conditions: string | null };
   milestones: { id: string; idx: number; title: string | null; description: string; acceptanceCriteria: string | null; amountAda: number; status: string }[];
 }
@@ -621,6 +623,7 @@ export const proposalEditApi = {
       teamInfoMd?: string;
       revenueSharingMd?: string;
       subcategoryIds?: string[];
+      payoutAddress?: string;
       submissionFeeTxHash?: string;
     },
   ) => request<ProposalDetail>(`/proposals/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
@@ -706,11 +709,14 @@ export interface FeePayment {
   amountAda: number;
   prevAmountAda: number;
   newAmountAda: number;
+  prevFeeAda: number | null;
+  newFeeAda: number | null;
   note: string | null;
   proposalId: string;
   proposalPublicId: string | null;
   proposalTitle: string | null;
   submitter: string | null;
+  payoutAddress: string | null;
   createdAt: string;
 }
 export const boardPaymentsApi = {

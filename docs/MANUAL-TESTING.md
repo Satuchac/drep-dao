@@ -123,10 +123,14 @@ Admin (separate): `/admin/login`, user `satucha`.
       (and Commercial) are **disabled** (you can still fix the tx + other fields). This stops the
       "pay a small fee, then raise the budget" gaming.
 - [ ] **Budget change (ACTIVE) → Actions**: open your ACTIVE proposal → **Request a budget
-      change**. **Increase** the amount → a **top-up** appears for a board member in *My Area →
-      Actions* ("submitter owes X ₳") and bumps the **notification badge**; **decrease** → a
-      **refund** ("return X ₳"). The amount X is the fee **delta**. The board pastes the on-chain
-      tx and clicks **Mark settled** to clear it.
+      change**. **Increase** → a **top-up** appears for a board member in *My Area → Actions*
+      ("submitter owes X ₳") and bumps the **notification badge**; **decrease** → a **refund**
+      ("return X ₳"). The settlement shows the **old → new fee** and the budget change; for a
+      refund it shows the submitter's **payout address with a Copy button**. The board pastes
+      the on-chain tx and clicks **Mark settled**.
+- [ ] **Payout / refund address**: the proposal form has a **Payout / refund address** field;
+      it shows (read-only, with Copy) near the bottom of the proposal detail and is where the
+      DAO sends refunds + the funded budget.
 
 ### Filtering → D&V → milestones (a fresh proposal)
 - [ ] Board: draw filtering reviewers; assigned DReps vote (NO needs rationale);

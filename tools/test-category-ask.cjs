@@ -52,11 +52,12 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     await throws('request below min (5,000) rejected', () => proposals.createDraft(u.id, mk(5000)), /below.*minimum/);
     await throws('request above max (200,000) rejected', () => proposals.createDraft(u.id, mk(200000)), /exceeds.*maximum/);
     const good = await proposals.createDraft(u.id, mk(50000, {
-      teamInfoMd: 'Core team', costBreakdownMd: 'Dev 40k', revenueSharingMd: '5% to DAO',
+      teamInfoMd: 'Core team', costBreakdownMd: 'Dev 40k', revenueSharingMd: '5% to DAO', payoutAddress: 'addr_test1_PAYOUT',
       // §3 milestone parts: title + description + acceptance criteria + budget.
       milestones: [{ title: 'MVP', description: 'Build the MVP', acceptanceCriteria: 'Demo on Preprod', amountAda: 50000 }],
     }));
     ok('in-range request (50,000) accepted', good.requestedAmountAda === 50000, String(good.requestedAmountAda));
+    ok('payout address round-trips', good.payoutAddress === 'addr_test1_PAYOUT', String(good.payoutAddress));
     ok('detail exposes category ask range + conditions', good.categoryAsk?.minAda === 10000 && good.categoryAsk?.maxAda === 100000 && good.categoryAsk?.conditions === 'OSS only');
     ok('detail exposes §3.4 fields', good.teamInfoMd === 'Core team' && good.costBreakdownMd === 'Dev 40k' && good.revenueSharingMd === '5% to DAO');
     const m0 = good.milestones?.[0];
@@ -109,6 +110,7 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     let pays = await proposals.listPayments();
     const topup = pays.find((x) => x.proposalId === good.id && x.kind === 'TOPUP');
     ok('increase → TOPUP owed = fee delta (800−500)', !!topup && topup.amountAda === 300, JSON.stringify(topup));
+    ok('settlement carries old→new fee + payout address', !!topup && topup.prevFeeAda === 500 && topup.newFeeAda === 800 && topup.payoutAddress === 'addr_test1_PAYOUT', JSON.stringify({ prev: topup?.prevFeeAda, next: topup?.newFeeAda, addr: topup?.payoutAddress }));
     await proposals.settlePayment(u.id, topup.id, 'txTOPUP');
     pays = await proposals.listPayments();
     ok('settled top-up leaves the pending list', !pays.find((x) => x.id === topup.id));

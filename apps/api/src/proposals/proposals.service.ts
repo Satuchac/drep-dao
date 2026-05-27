@@ -84,6 +84,7 @@ export class ProposalsService {
         // §12 — the fee tx hash can be saved with the draft and is verified on-chain at submission.
         submissionFeeTxHash: dto.submissionFeeTxHash ?? null,
         submissionFeeTxHashes: dto.submissionFeeTxHash ? [dto.submissionFeeTxHash] : [],
+        payoutAddress: dto.payoutAddress?.trim() || null,
         // §3.4 funding fields (stored in the existing Json columns as markdown strings).
         ...(dto.teamInfoMd ? { teamInfo: dto.teamInfoMd } : {}),
         ...(dto.revenueSharingMd ? { revenueSharing: dto.revenueSharingMd } : {}),
@@ -166,6 +167,7 @@ export class ProposalsService {
           ...(dto.requestedAmountAda !== undefined ? { requestedAmountAda: toLovelace(dto.requestedAmountAda) } : {}),
           ...(dto.subcategoryIds !== undefined ? { subcategoryIds: dto.subcategoryIds } : {}),
           ...(dto.costBreakdownMd !== undefined ? { costBreakdownMd: dto.costBreakdownMd } : {}),
+          ...(dto.payoutAddress !== undefined ? { payoutAddress: dto.payoutAddress || null } : {}),
           ...feeHashData,
           ...(dto.teamInfoMd !== undefined ? { teamInfo: dto.teamInfoMd } : {}),
           ...(dto.revenueSharingMd !== undefined ? { revenueSharing: dto.revenueSharingMd } : {}),
@@ -330,6 +332,8 @@ export class ProposalsService {
             amountAda: toLovelace(Math.abs(delta)),
             prevAmountAda: toLovelace(oldAmount),
             newAmountAda: toLovelace(newAmount),
+            prevFeeAda: toLovelace(oldFee),
+            newFeeAda: toLovelace(newFee),
             status: 'PENDING',
             note: `Budget ${delta > 0 ? 'increased' : 'decreased'} ${oldAmount.toLocaleString()} → ${newAmount.toLocaleString()} ₳`,
           },
@@ -346,7 +350,7 @@ export class ProposalsService {
       orderBy: { createdAt: 'asc' },
       include: {
         proposal: {
-          select: { publicId: true, title: true, submitterUser: { select: { displayName: true } }, submitterDrep: { select: { drepIdOnchain: true } } },
+          select: { publicId: true, title: true, payoutAddress: true, submitterUser: { select: { displayName: true } }, submitterDrep: { select: { drepIdOnchain: true } } },
         },
       },
     });
@@ -356,11 +360,15 @@ export class ProposalsService {
       amountAda: toAda(a.amountAda),
       prevAmountAda: toAda(a.prevAmountAda),
       newAmountAda: toAda(a.newAmountAda),
+      prevFeeAda: a.prevFeeAda == null ? null : toAda(a.prevFeeAda),
+      newFeeAda: a.newFeeAda == null ? null : toAda(a.newFeeAda),
       note: a.note,
       proposalId: a.proposalId,
       proposalPublicId: a.proposal?.publicId ?? null,
       proposalTitle: a.proposal?.title ?? null,
       submitter: a.proposal?.submitterUser?.displayName ?? a.proposal?.submitterDrep?.drepIdOnchain ?? null,
+      // The submitter's payout address — where the board sends a REFUND (copyable in the UI).
+      payoutAddress: a.proposal?.payoutAddress ?? null,
       createdAt: a.createdAt,
     }));
   }
@@ -499,6 +507,7 @@ export class ProposalsService {
       submissionFeeTxHash: p.submissionFeeTxHash,
       submissionFeeTxHashes: p.submissionFeeTxHashes,
       feeReviewFeedback: p.feeReviewFeedback,
+      payoutAddress: p.payoutAddress,
       subcategoryIds: p.subcategoryIds,
       // §5.2 — the category's funding-request bounds + conditions, for display.
       categoryAsk: {

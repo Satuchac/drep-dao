@@ -226,10 +226,15 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   budget via **`requestBudgetChange`** (`POST /proposals/:id/budget-change`): the amount +
   milestones update immediately and the **fee delta becomes a settlement** — an **increase**
   owes a **TOPUP** (submitter pays more), a **decrease** a **REFUND** (DAO returns) — recorded
-  as a `FeeAdjustment`. The board settles it in **My Area → Actions** (alongside treasury
-  approvals + fee confirmations; `GET/POST /admin/proposals/payments…`): each item shows how
-  much to collect/return and the board records the on-chain **tx** to mark it SETTLED. Pending
-  settlements are included in the board **notification badge** count.
+  as a `FeeAdjustment` (storing prev/new amount **and** prev/new total fee). The board settles
+  it in **My Area → Actions** (alongside treasury approvals + fee confirmations; `GET/POST
+  /admin/proposals/payments…`): each item shows the **old → new fee**, the budget change, and —
+  for a refund — the submitter's **payout address with a copy button**; the board records the
+  on-chain **tx** to mark it SETTLED. Pending settlements count toward the **notification badge**.
+- **Payout / refund address (§12).** A proposal carries a `payoutAddress` (Cardano address)
+  the submitter enters in the form — where the DAO sends **fee refunds** and the **funded
+  budget**. It's shown read-only near the bottom of the proposal detail (with a copy button)
+  and is editable wherever the proposal is editable.
 - **Acceptance anchor (§3/§12).** The moment a proposal first becomes **ACTIVE** — board
   approved the paid fee, or no fee was required — it's assigned a **unique structured
   proposal id** (`publicId`, e.g. `R6-P3`, frozen on the row + shown in the UI) and an

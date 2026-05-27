@@ -37,6 +37,7 @@ export function ProposalSubmit() {
   const [costBreakdown, setCostBreakdown] = useState('');
   const [teamInfo, setTeamInfo] = useState('');
   const [revenueSharing, setRevenueSharing] = useState('');
+  const [payoutAddress, setPayoutAddress] = useState('');
   const [subcatIds, setSubcatIds] = useState<string[]>([]);
   const [fee, setFee] = useState('');
   const [busy, setBusy] = useState(false);
@@ -103,6 +104,7 @@ export function ProposalSubmit() {
     costBreakdownMd: costBreakdown.trim() || undefined,
     teamInfoMd: teamInfo.trim() || undefined,
     revenueSharingMd: revenueSharing.trim() || undefined,
+    payoutAddress: payoutAddress.trim() || undefined,
     // Persist the fee tx hash with the draft so it survives a save (verified on-chain at submission).
     submissionFeeTxHash: fee.trim() || undefined,
     milestones: ms.map((m) => ({
@@ -148,6 +150,7 @@ export function ProposalSubmit() {
     setCostBreakdown('');
     setTeamInfo('');
     setRevenueSharing('');
+    setPayoutAddress('');
     setSubcatIds([]);
     setMs([{ title: '', description: '', acceptanceCriteria: '', amountAda: Number(amount) }]);
   };
@@ -171,6 +174,7 @@ export function ProposalSubmit() {
       setCostBreakdown(p.costBreakdownMd ?? '');
       setTeamInfo(p.teamInfoMd ?? '');
       setRevenueSharing(p.revenueSharingMd ?? '');
+      setPayoutAddress(p.payoutAddress ?? '');
       setSubcatIds(p.subcategoryIds ?? []);
       setMs(
         p.milestones.length
@@ -425,6 +429,11 @@ export function ProposalSubmit() {
               })}
             </div>
           </div>
+          {/* Cardano address the submitter receives funds at — fee refunds + the budget payout if funded. */}
+          <label className="block">
+            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Payout / refund address (Cardano)</span>
+            <input className={`${field} mt-0.5 w-full font-mono text-xs`} placeholder="addr_test1… — where the DAO sends refunds and the funded budget" value={payoutAddress} onChange={(e) => setPayoutAddress(e.target.value)} />
+          </label>
           {/* §12/§16 — the fee + tx field appear only when the round charges a fee for this
               proposal type. When it's 0% (e.g. open-source), no payment is needed at all. */}
           {feeRequired ? (
