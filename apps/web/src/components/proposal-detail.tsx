@@ -62,15 +62,17 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
     <div className="space-y-4">
       <BackBtn onBack={onBack} />
       <div className={card}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <h2 className="text-lg font-semibold">
             {p.title}
             {p.submitter ? <span className="ml-2 text-sm font-normal text-neutral-500">by {p.submitter}</span> : null}
           </h2>
-          <div className="flex items-center gap-2">
-            {p.publicId ? <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-xs text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{p.publicId}</span> : null}
-            {p.stage ? <span className="text-xs text-neutral-500">{p.stage}</span> : null}
-            <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} />
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
+            {p.publicId ? (
+              <span>Proposal ID: <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{p.publicId}</span></span>
+            ) : null}
+            {p.stage ? <span>Stage: <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.stage}</span></span> : null}
+            <span className="flex items-center gap-1">Status: <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} /></span>
           </div>
         </div>
         <div className="mt-1 text-xs text-neutral-500">
@@ -89,8 +91,10 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
             ))}
           </div>
         ) : null}
-        <Markdown className="mt-3 text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</Markdown>
-        {/* §3.4 — funding-specific detail, shown when present. */}
+        <CollapsibleView label="Pitch / summary">
+          <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</Markdown>
+        </CollapsibleView>
+        {/* §3.4 — funding-specific detail, shown when present (collapsible like the form). */}
         <DetailBlock label="Cost breakdown" md={p.costBreakdownMd} />
         <DetailBlock label="Team" md={p.teamInfoMd} />
         <DetailBlock label="Revenue sharing" md={p.revenueSharingMd} />
@@ -128,23 +132,39 @@ function BackBtn({ onBack }: { onBack: () => void }) {
   );
 }
 
-/** §3.4 — a labelled markdown detail section, rendered only when content is present. */
+/** A read-only section with a clickable header that shrinks/expands its content (default open). */
+function CollapsibleView({ label, defaultOpen = true, children }: { label: string; defaultOpen?: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
+      >
+        <span className="text-neutral-400">{open ? '▾' : '▸'}</span>
+        {label}
+      </button>
+      {open ? <div className="mt-0.5">{children}</div> : null}
+    </div>
+  );
+}
+
+/** §3.4 — a labelled, collapsible markdown detail section, rendered only when content is present. */
 function DetailBlock({ label, md }: { label: string; md?: string | null }) {
   if (!md || !md.trim()) return null;
   return (
-    <div className="mt-3">
-      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{label}</div>
-      <Markdown className="mt-0.5 text-sm text-neutral-700 dark:text-neutral-300">{md}</Markdown>
-    </div>
+    <CollapsibleView label={label}>
+      <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{md}</Markdown>
+    </CollapsibleView>
   );
 }
 
 /** Read-only milestone plan (title · budget · description · acceptance), shown to everyone. */
 function MilestonePlan({ milestones }: { milestones: PDetail['milestones'] }) {
   return (
-    <div className="mt-3">
-      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Milestones</div>
-      <ul className="mt-1 space-y-2">
+    <CollapsibleView label={`Milestones (${milestones.length})`}>
+      <ul className="space-y-2">
         {milestones.map((m) => (
           <li key={m.id} className="rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">
             <div className="font-medium">
@@ -161,7 +181,7 @@ function MilestonePlan({ milestones }: { milestones: PDetail['milestones'] }) {
           </li>
         ))}
       </ul>
-    </div>
+    </CollapsibleView>
   );
 }
 
