@@ -69,7 +69,13 @@ export class InternalProposalsService {
     const scope = dto.isPrivate ? VotersScope.BOARD_ONLY : dto.votersScope;
     const thresholdPct = await this.thresholdPct(dto.thresholdKind);
     const now = new Date();
-    const end = new Date(now.getTime() + dto.votingPeriodDays * DAY_MS);
+    // Submitter picks an end date (the platform derives the days); a days duration is the fallback.
+    const end = dto.votingEndAt
+      ? new Date(dto.votingEndAt)
+      : new Date(now.getTime() + (dto.votingPeriodDays ?? 7) * DAY_MS);
+    if (Number.isNaN(end.getTime()) || end.getTime() <= now.getTime()) {
+      throw new BadRequestException('the voting end must be a date in the future');
+    }
     const publicId = await this.nextPublicId();
 
     const proposal = await this.prisma.proposal.create({

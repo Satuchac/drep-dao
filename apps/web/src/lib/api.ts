@@ -605,6 +605,7 @@ export interface PublicConfig {
   explorer: string;
   submissionFeeAddress: string | null;
   anchorMetadataLabel: number;
+  internalThresholds: { default: number; important: number };
 }
 export const configApi = { get: () => request<PublicConfig>('/config') };
 
@@ -802,7 +803,8 @@ export interface CreateInternalInput {
   votersScope: string;
   thresholdKind: string;
   votingType: string;
-  votingPeriodDays: number;
+  votingEndAt?: string;
+  votingPeriodDays?: number;
   isPrivate?: boolean;
   pollOptions?: string[];
   pollMultiple?: boolean;

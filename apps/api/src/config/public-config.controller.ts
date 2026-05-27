@@ -17,13 +17,22 @@ export class PublicConfigController {
 
   @Get()
   async get() {
-    const row = await this.prisma.platformConfig.findUnique({ where: { key: 'CARDANO_EXPLORER' } });
-    const explorer = String(row?.value ?? PLATFORM_CONFIG_DEFAULTS.CARDANO_EXPLORER);
+    const rows = await this.prisma.platformConfig.findMany({
+      where: { key: { in: ['CARDANO_EXPLORER', 'INTERNAL_DEFAULT_THRESHOLD_PCT', 'INTERNAL_IMPORTANT_THRESHOLD_PCT'] } },
+    });
+    const val = (k: string) => rows.find((r) => r.key === k)?.value;
+    const num = (k: string) =>
+      typeof val(k) === 'number' ? (val(k) as number) : ((PLATFORM_CONFIG_DEFAULTS as Record<string, unknown>)[k] as number);
     return {
       network: this.config.get<string>('CARDANO_NETWORK') ?? 'Preprod',
-      explorer,
+      explorer: String(val('CARDANO_EXPLORER') ?? PLATFORM_CONFIG_DEFAULTS.CARDANO_EXPLORER),
       submissionFeeAddress: this.config.get<string>('SUBMISSION_FEE_ADDRESS') || null,
       anchorMetadataLabel: 80808081,
+      // §10 — internal-proposal thresholds, so the submit form can show the real % values.
+      internalThresholds: {
+        default: num('INTERNAL_DEFAULT_THRESHOLD_PCT'),
+        important: num('INTERNAL_IMPORTANT_THRESHOLD_PCT'),
+      },
     };
   }
 }

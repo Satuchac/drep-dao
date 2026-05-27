@@ -28,7 +28,10 @@ export class CreateInternalProposalDto {
   @IsIn(THRESHOLDS) thresholdKind!: string;
   @IsIn(VOTING_TYPES) votingType!: string;
 
-  @IsInt() @Min(1) @Max(365) votingPeriodDays!: number;
+  // The submitter picks a date; the platform derives the number of days. `votingPeriodDays`
+  // is kept as an alternative/fallback (e.g. for API clients that prefer a duration).
+  @IsOptional() @IsISO8601() votingEndAt?: string;
+  @IsOptional() @IsInt() @Min(1) @Max(365) votingPeriodDays?: number;
 
   // PRIVATE → visible + votable to board members only (forces BOARD_ONLY scope).
   @IsOptional() @IsBoolean() isPrivate?: boolean;

@@ -3,9 +3,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   internalProposalsApi,
+  daoApi,
+  configApi,
   type InternalProposalSummary,
   type InternalProposalDetail,
   type CreateInternalInput,
+  type DaoMember,
+  type PublicConfig,
 } from '@/lib/api';
 import { useExplorer } from '@/lib/explorer';
 import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput } from './round-ui';
@@ -103,21 +107,33 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
   const [votersScope, setVotersScope] = useState('BOTH');
   const [thresholdKind, setThresholdKind] = useState('DEFAULT');
   const [votingType, setVotingType] = useState('BALANCED');
-  const [votingPeriodDays, setDays] = useState(7);
+  const [votingEnd, setVotingEnd] = useState(() => toLocalInput(new Date(Date.now() + 7 * 86400_000).toISOString()));
   const [isPrivate, setIsPrivate] = useState(false);
   const [pollMultiple, setPollMultiple] = useState(false);
   const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
-  const [actors, setActors] = useState('');
+  const [actors, setActors] = useState<string[]>([]); // selected DRep display names
   const [deliveryDate, setDeliveryDate] = useState('');
+  const [members, setMembers] = useState<DaoMember[]>([]);
+  const [cfg, setCfg] = useState<PublicConfig | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    daoApi.members().then(setMembers).catch(() => setMembers([]));
+    configApi.get().then(setCfg).catch(() => setCfg(null));
+  }, []);
+
   const isPoll = internalType === 'POLL';
   const isInstructive = internalType === 'INSTRUCTIVE';
+  const days = Math.max(0, Math.ceil((new Date(votingEnd).getTime() - Date.now()) / 86400_000));
+  const dThresh = cfg?.internalThresholds.default;
+  const iThresh = cfg?.internalThresholds.important;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    const end = new Date(votingEnd);
+    if (Number.isNaN(end.getTime()) || end.getTime() <= Date.now()) { setError('Pick a voting-end date in the future.'); return; }
     const cleanOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
     if (isPoll && cleanOptions.length < 2) { setError('A poll needs at least two options.'); return; }
     const input: CreateInternalInput = {
@@ -127,10 +143,10 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
       votersScope: isPrivate ? 'BOARD_ONLY' : votersScope,
       thresholdKind,
       votingType,
-      votingPeriodDays,
+      votingEndAt: end.toISOString(),
       isPrivate,
       ...(isPoll ? { pollOptions: cleanOptions, pollMultiple } : {}),
-      ...(isInstructive && actors.trim() ? { actors: actors.split(',').map((a) => a.trim()).filter(Boolean) } : {}),
+      ...(isInstructive && actors.length ? { actors } : {}),
       ...(isInstructive && deliveryDate ? { deliveryDate: new Date(deliveryDate).toISOString() } : {}),
     };
     setBusy(true);
@@ -164,8 +180,9 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
           </select>
         </label>
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Voting period (days)</span>
-          <input type="number" min={1} max={365} className={field} value={votingPeriodDays} onChange={(e) => setDays(Number(e.target.value))} required />
+          <span className="text-sm font-medium">Voting ends</span>
+          <input type="datetime-local" className={field} value={votingEnd} min={toLocalInput(new Date().toISOString())} onChange={(e) => setVotingEnd(e.target.value)} required />
+          <span className="text-xs text-neutral-500">{days > 0 ? `voting will run ${days} day${days === 1 ? '' : 's'} from now` : 'pick a future date'}</span>
         </label>
       </div>
 
@@ -190,12 +207,29 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
 
       {isInstructive ? (
         <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <span className="text-sm font-medium">Actors <span className="font-normal text-neutral-400">(optional — who must act if approved)</span></span>
+            {/* Pick the DReps expected to act from the DAO member list. */}
+            <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border border-neutral-300 p-2 dark:border-neutral-700">
+              {members.length === 0 ? (
+                <span className="text-xs text-neutral-400">No DAO members to choose from.</span>
+              ) : (
+                members.map((m) => (
+                  <label key={m.drepId} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={actors.includes(m.displayName)}
+                      onChange={() => setActors((s) => (s.includes(m.displayName) ? s.filter((x) => x !== m.displayName) : [...s, m.displayName]))}
+                    />
+                    {m.displayName}{m.isBoard ? <span className="text-[10px] text-neutral-400"> (board)</span> : null}
+                  </label>
+                ))
+              )}
+            </div>
+            {actors.length ? <span className="text-xs text-neutral-500">{actors.join(', ')}</span> : null}
+          </div>
           <label className="block space-y-1">
-            <span className="text-sm font-medium">Actors (comma-separated)</span>
-            <input className={field} value={actors} onChange={(e) => setActors(e.target.value)} placeholder="who must act if approved" />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm font-medium">Delivery date</span>
+            <span className="text-sm font-medium">Delivery date <span className="font-normal text-neutral-400">(optional)</span></span>
             <input type="date" className={field} value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
           </label>
         </div>
@@ -217,8 +251,8 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
         <label className="block space-y-1">
           <span className="text-sm font-medium">Threshold</span>
           <select className={field} value={thresholdKind} onChange={(e) => setThresholdKind(e.target.value)}>
-            <option value="DEFAULT">Default (INTERNAL_DEFAULT_THRESHOLD_PCT)</option>
-            <option value="IMPORTANT">Important (INTERNAL_IMPORTANT_THRESHOLD_PCT)</option>
+            <option value="DEFAULT">Default{dThresh != null ? ` (${dThresh}%)` : ''}</option>
+            <option value="IMPORTANT">Important{iThresh != null ? ` (${iThresh}%)` : ''}</option>
           </select>
         </label>
       </div>
@@ -311,6 +345,14 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
               <span className={p.tally.approved ? 'font-semibold text-emerald-600' : 'font-semibold text-red-600'}>{p.tally.approved ? 'passing' : 'not passing'}</span>
             </div>
             <div className="text-xs text-neutral-500">{p.tally.cast} of {p.tally.eligible} eligible voted · abstain {p.tally.abstainPower} · total power {p.tally.totalPower}</div>
+            {/* §4.4 — YES/NO/abstain over the full eligible voting power (0 → max), with the threshold marker. */}
+            <ThresholdBar
+              yes={p.tally.yesPower}
+              abstain={p.tally.abstainPower}
+              total={p.tally.totalPower}
+              denominator={p.tally.denominator}
+              thresholdPct={p.tally.thresholdPct}
+            />
           </div>
         ) : (
           <div className="mt-1 space-y-1 text-sm">
@@ -351,7 +393,9 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
               ))}
             </div>
           ) : null}
-          <textarea className={`${field} mt-2`} rows={2} placeholder="Rationale (optional)" value={rationale} onChange={(e) => setRationale(e.target.value)} />
+          <div className="mt-2">
+            <MarkdownEditor value={rationale} onChange={setRationale} title="Rationale" hint="optional — Markdown supported" placeholder="Why you voted this way (optional)" minRows={3} />
+          </div>
           <div className="mt-2 flex flex-wrap gap-2">
             {isPoll ? (
               <button disabled={busy} onClick={votePoll} className="rounded border border-emerald-500 px-3 py-1 text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950">Submit vote</button>
@@ -385,4 +429,37 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
 
 function BackBtn({ onBack }: { onBack: () => void }) {
   return <button onClick={onBack} className="text-sm text-emerald-700 hover:underline dark:text-emerald-400">← back to internal proposals</button>;
+}
+
+/**
+ * §4.4 result bar: YES / NO / abstain over the **full eligible voting power** (0 → total), with a
+ * marker at the approval threshold (placed on the total-power scale, allowing for abstains).
+ */
+function ThresholdBar({ yes, abstain, total, denominator, thresholdPct }: { yes: number; abstain: number; total: number; denominator: number; thresholdPct: number }) {
+  const no = Math.max(0, total - yes - abstain); // explicit + implicit NO
+  const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0);
+  const fmt = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  // Threshold is a % of the denominator (total − abstain); place it on the 0→total scale.
+  const tpos = total > 0 ? Math.min(100, Math.max(0, (((thresholdPct / 100) * denominator) / total) * 100)) : 0;
+  return (
+    <div className="mt-5">
+      <div className="relative h-5 w-full rounded bg-neutral-200 dark:bg-neutral-800">
+        <div className="absolute inset-0 overflow-hidden rounded">
+          <div className="absolute inset-y-0 left-0 bg-emerald-500" style={{ width: `${pct(yes)}%` }} />
+          <div className="absolute inset-y-0 bg-red-400" style={{ left: `${pct(yes)}%`, width: `${pct(no)}%` }} />
+          <div className="absolute inset-y-0 bg-neutral-400" style={{ left: `${pct(yes + no)}%`, width: `${pct(abstain)}%` }} />
+        </div>
+        <div className="absolute -top-5 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-neutral-700 dark:text-neutral-300" style={{ left: `${tpos}%` }}>
+          threshold {thresholdPct}%
+        </div>
+        <div className="absolute -top-1.5 bottom-0 w-0.5 bg-neutral-900 dark:bg-white" style={{ left: `${tpos}%` }} title={`threshold ${thresholdPct}%`} />
+      </div>
+      <div className="mt-1 flex flex-wrap gap-3 text-xs text-neutral-500">
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-emerald-500" />YES {fmt(yes)}</span>
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-red-400" />NO {fmt(no)}</span>
+        {abstain > 0 ? <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-neutral-400" />abstain {fmt(abstain)}</span> : null}
+        <span className="tabular-nums">max power {fmt(total)}</span>
+      </div>
+    </div>
+  );
 }
