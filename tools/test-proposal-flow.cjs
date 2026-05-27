@@ -25,6 +25,7 @@ const { ProposalsService } = require(root + '/apps/api/dist/proposals/proposals.
 const { FilteringService } = require(root + '/apps/api/dist/proposals/filtering.service.js');
 const { DvService } = require(root + '/apps/api/dist/proposals/dv.service.js');
 const { MilestonesService } = require(root + '/apps/api/dist/milestones/milestones.service.js');
+const { buildResultMetadata, GOVERNANCE_METADATA_LABEL } = require(root + '/packages/cardano/dist/index.js');
 const { CommentsService } = require(root + '/apps/api/dist/comments/comments.service.js');
 const { stakeKeyHashFromBech32 } = require(root + '/packages/cardano/dist/index.js');
 const personas = require(root + '/tools/persona-wallets.json');
@@ -94,6 +95,13 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   ok('3 YES → advanced to DEBATE_VOTE', det.stage === 'DEBATE_VOTE');
   const fAnchor = await prisma.anchor.findFirst({ where: { proposalId: draft.id, kind: 'filtering' } });
   ok('filtering decision anchored (label 80808081)', !!fAnchor && fAnchor.metadataLabel === 80808081);
+  // The on-chain metadata for a proposal decision must carry the structured proposal id (e.g. R8-P1).
+  const pre = fAnchor?.preimage ?? {};
+  const fMeta = buildResultMetadata({
+    subject: pre.subject, style: pre.style, applicant: pre.ref, proposalId: pre.publicId,
+    votes: [], yes: 0, no: 0, threshold: 0, outcome: 'ACCEPTED',
+  })[GOVERNANCE_METADATA_LABEL];
+  ok('filtering on-chain metadata carries the proposal id', fMeta.proposalId === det.publicId && !!det.publicId, `${fMeta.proposalId} vs ${det.publicId}`);
   const fres = await filtering.result(draft.id);
   ok('filtering exposes public rationale', fres.votes.some((v) => v.rationale === 'clear and well-scoped'));
 

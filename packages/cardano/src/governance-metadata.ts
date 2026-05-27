@@ -103,8 +103,9 @@ export interface AnchorVote {
 export interface AnchorResultMetadata {
   title: string;
   subject: GovSubject;
+  proposalId?: string; // structured public id (e.g. "R3-P2") when the decision concerns a proposal
   voting: string; // human-readable voting style
-  applicant: string; // subject DRep id
+  applicant: string; // subject DRep id (admission/removal) or proposal reference (filtering/dv/milestone)
   votes: AnchorVote[];
   // For 1P1V: yes/no are vote counts, threshold is the count needed. For BAL:
   // yes/no are summed voting power, threshold is the % of total power required,
@@ -120,6 +121,7 @@ export function buildResultMetadata(p: {
   subject: GovSubject;
   style: VotingStyle;
   applicant: string;
+  proposalId?: string | null; // structured public id when the decision concerns a proposal
   votes: AnchorVote[];
   yes: number;
   no: number;
@@ -137,6 +139,7 @@ export function buildResultMetadata(p: {
   const meta: AnchorResultMetadata = {
     title: SUBJECT_TITLE[p.subject],
     subject: p.subject,
+    ...(p.proposalId ? { proposalId: p.proposalId } : {}),
     voting: STYLE_LABEL[p.style],
     applicant: p.applicant,
     votes: p.votes.map((v) => (v.power == null ? v : { ...v, power: r(v.power) })),

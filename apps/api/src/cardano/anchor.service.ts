@@ -180,6 +180,7 @@ export class AnchorService implements OnModuleInit {
     style: VotingStyle;
     ref: string; // readable subject reference, shown as "applicant" in the JSON
     proposalId?: string | null; // Anchor.proposalId (proposal row or applicant drep row)
+    publicId?: string | null; // structured proposal id (e.g. "R3-P2") embedded on-chain when the decision concerns a proposal
     roundId?: string | null;
     votes: { drep: string; vote: string; power?: number }[];
     outcome: string;
@@ -193,16 +194,18 @@ export class AnchorService implements OnModuleInit {
       subject: params.subject,
       style: params.style,
       ref: params.ref,
+      ...(params.publicId ? { publicId: params.publicId } : {}),
       votes: params.preimageVotes ?? params.votes,
       result: { outcome: params.outcome, yes: params.yes, no: params.no, threshold: params.threshold },
     };
     const hash = sha256hex(JSON.stringify(preimage));
 
-    // §3 — self-describing on-chain JSON: title + every voter's choice + tally.
+    // §3 — self-describing on-chain JSON: title + the proposal id (if any) + every voter's choice + tally.
     const metadata = buildResultMetadata({
       subject: params.subject,
       style: params.style,
       applicant: params.ref,
+      proposalId: params.publicId ?? null,
       votes: params.votes,
       yes: params.yes,
       no: params.no,
@@ -379,6 +382,7 @@ export class AnchorService implements OnModuleInit {
       subject?: GovSubject;
       style?: VotingStyle;
       ref?: string;
+      publicId?: string;
       votes?: { drep?: string; vote?: string; choice?: string; power?: number; weight?: number }[];
       result?: { outcome?: string; yes?: number; no?: number; threshold?: number; totalPower?: number };
       // submission-anchor preimage fields
@@ -411,6 +415,7 @@ export class AnchorService implements OnModuleInit {
       subject: (p.subject ?? a.kind) as GovSubject,
       style: (p.style ?? VotingStyle.ONE_PERSON_ONE_VOTE) as VotingStyle,
       applicant: p.ref ?? '',
+      proposalId: p.publicId ?? null,
       votes,
       yes: r.yes ?? 0,
       no: r.no ?? 0,

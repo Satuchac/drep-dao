@@ -179,6 +179,7 @@ export class FilteringService {
         style: VotingStyle.ONE_PERSON_ONE_VOTE,
         ref: `${proposal.title} · ${proposal.round?.name ?? `Round #${proposal.round?.number ?? '?'}`}`,
         proposalId,
+        publicId: proposal.publicId ?? null,
         roundId: proposal.round?.id ?? proposal.roundId ?? null,
         votes: voteList.map((v) => ({ drep: v.drep, vote: v.choice })),
         preimageVotes: voteList,

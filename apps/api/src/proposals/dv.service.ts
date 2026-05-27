@@ -243,6 +243,7 @@ export class DvService {
         style: VotingStyle.BALANCED,
         ref: `${proposal?.title ?? 'proposal'} · ${proposal?.round?.name ?? `Round #${proposal?.round?.number ?? '?'}`}`,
         proposalId,
+        publicId: proposal?.publicId ?? null,
         roundId: proposal?.round?.id ?? proposal?.roundId ?? null,
         votes: voteList.map((v) => ({ drep: v.drep, vote: v.choice, power: v.weight })),
         preimageVotes: voteList,
