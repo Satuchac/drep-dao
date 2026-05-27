@@ -82,25 +82,30 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
             <> · category ask {p.categoryAsk.minAda != null ? `${p.categoryAsk.minAda.toLocaleString()}` : '0'}–{p.categoryAsk.maxAda != null ? `${p.categoryAsk.maxAda.toLocaleString()}` : '∞'} ₳</>
           ) : null}
         </div>
-        {p.subcategoryIds && p.subcategoryIds.length > 0 ? (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {p.subcategoryIds.map((sid) => (
-              <span key={sid} className="rounded-full border border-neutral-300 px-2 py-0.5 text-[11px] text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
-                {SUBCAT_LABEL[sid] ?? sid}
-              </span>
-            ))}
-          </div>
-        ) : null}
         <CollapsibleView label="Pitch / summary">
           <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</Markdown>
         </CollapsibleView>
-        {/* §3.4 — funding-specific detail, shown when present (collapsible like the form). */}
-        <DetailBlock label="Cost breakdown" md={p.costBreakdownMd} />
-        <DetailBlock label="Team" md={p.teamInfoMd} />
-        <DetailBlock label="Revenue sharing" md={p.revenueSharingMd} />
-        {p.categoryAsk?.conditions ? <DetailBlock label="Category conditions" md={p.categoryAsk.conditions} /> : null}
         {/* Milestone plan (read-only). The board's milestone-review workflow replaces it in FUNDING. */}
         {!showMilestones && p.milestones.length > 0 ? <MilestonePlan milestones={p.milestones} /> : null}
+        {/* §3.4 — every funding field from the form is shown (collapsible); empty ones collapse with an "empty" marker. */}
+        <DetailBlock label="Cost breakdown" md={p.costBreakdownMd} hint="how the budget is spent" />
+        <DetailBlock label="Team info" md={p.teamInfoMd} hint="who is delivering this" />
+        <DetailBlock label="Revenue sharing" md={p.revenueSharingMd} hint="for commercial projects" />
+        {/* §5.3/§7.1 — expertise tags (always shown like the form). */}
+        <CollapsibleView label="Expertise areas" hint="helps match filtering reviewers" empty={!p.subcategoryIds || p.subcategoryIds.length === 0}>
+          {p.subcategoryIds && p.subcategoryIds.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {p.subcategoryIds.map((sid) => (
+                <span key={sid} className="rounded-full border border-neutral-300 px-2 py-0.5 text-[11px] text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
+                  {SUBCAT_LABEL[sid] ?? sid}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-sm text-neutral-400">None selected.</span>
+          )}
+        </CollapsibleView>
+        {p.categoryAsk?.conditions ? <DetailBlock label="Category conditions" md={p.categoryAsk.conditions} /> : null}
         {mine ? <FeeBlock proposal={p} /> : null}
         {/* §12 — once ACTIVE, the budget can change but the fee delta is settled by the board. */}
         {mine && p.status === 'ACTIVE' ? <BudgetChangeSection id={id} proposal={p} onChange={load} /> : null}
@@ -132,30 +137,53 @@ function BackBtn({ onBack }: { onBack: () => void }) {
   );
 }
 
-/** A read-only section with a clickable header that shrinks/expands its content (default open). */
-function CollapsibleView({ label, defaultOpen = true, children }: { label: string; defaultOpen?: boolean; children: React.ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen);
+/**
+ * A read-only section with a clickable header that shrinks/expands its content — like the
+ * form's fields. Optional `hint` (muted, after the label) and `empty` (shows "empty" + starts
+ * collapsed) so every field from the form is present in the view, even when not filled.
+ */
+function CollapsibleView({
+  label,
+  hint,
+  empty = false,
+  defaultOpen,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  empty?: boolean;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen ?? !empty);
   return (
     <div className="mt-3">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
+        className="flex w-full items-center gap-1 text-xs font-semibold uppercase tracking-wide text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
       >
         <span className="text-neutral-400">{open ? '▾' : '▸'}</span>
         {label}
+        {hint ? <span className="font-normal normal-case text-neutral-400"> — {hint}</span> : null}
+        {empty ? <span className="ml-auto font-normal normal-case text-neutral-400">empty</span> : null}
       </button>
       {open ? <div className="mt-0.5">{children}</div> : null}
     </div>
   );
 }
 
-/** §3.4 — a labelled, collapsible markdown detail section, rendered only when content is present. */
-function DetailBlock({ label, md }: { label: string; md?: string | null }) {
-  if (!md || !md.trim()) return null;
+/** §3.4 — a labelled, collapsible markdown detail section. Always shown (parity with the form);
+ * when empty it collapses with an "empty" marker rather than disappearing. */
+function DetailBlock({ label, md, hint }: { label: string; md?: string | null; hint?: string }) {
+  const has = !!md && md.trim().length > 0;
   return (
-    <CollapsibleView label={label}>
-      <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{md}</Markdown>
+    <CollapsibleView label={label} hint={hint} empty={!has}>
+      {has ? (
+        <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{md as string}</Markdown>
+      ) : (
+        <span className="text-sm text-neutral-400">Not provided.</span>
+      )}
     </CollapsibleView>
   );
 }
@@ -172,12 +200,14 @@ function MilestonePlan({ milestones }: { milestones: PDetail['milestones'] }) {
               <span className="text-neutral-500"> · {m.amountAda.toLocaleString()} ₳</span>
             </div>
             {m.description ? <Markdown className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">{m.description}</Markdown> : null}
-            {m.acceptanceCriteria ? (
-              <div className="mt-1">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Acceptance criteria</div>
+            <div className="mt-1">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Acceptance criteria</div>
+              {m.acceptanceCriteria ? (
                 <Markdown className="text-xs text-neutral-600 dark:text-neutral-400">{m.acceptanceCriteria}</Markdown>
-              </div>
-            ) : null}
+              ) : (
+                <span className="text-xs text-neutral-400">Not provided.</span>
+              )}
+            </div>
           </li>
         ))}
       </ul>
