@@ -39,11 +39,11 @@ export function NotificationBadge({ onClick }: { onClick: () => void }) {
   return (
     <button
       onClick={onClick}
-      title={`${count} action${count === 1 ? '' : 's'} awaiting your signature`}
+      title={`${count} action${count === 1 ? '' : 's'} awaiting you`}
       className="relative flex items-center gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-800 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
     >
       <span aria-hidden>🔔</span>
-      <span>Actions to sign</span>
+      <span>Actions</span>
       <span className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-xs font-bold text-white tabular-nums">
         {count}
       </span>
