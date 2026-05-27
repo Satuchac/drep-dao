@@ -9,8 +9,6 @@ const EXPLORER_OPTIONS = ['cardanoscan', 'cexplorer', 'adastat'];
 // Params that are stored + editable but not yet read by any feature (the feature
 // itself isn't built). Shown with a "not yet wired" note so the board isn't misled.
 const NOT_YET_WIRED: Record<string, string> = {
-  INTERNAL_DEFAULT_THRESHOLD_PCT: 'internal proposals (§10) not built yet',
-  INTERNAL_IMPORTANT_THRESHOLD_PCT: 'internal proposals (§10) not built yet',
   AVOID_PERIOD_MAX_DAYS_PER_YEAR: 'availability / avoid-period not built yet',
   BOARD_REWARD_DEADLINE_DAYS: 'reward distribution / penalty (§13) not built yet',
   ANCHOR_SCHEDULE_CRON: 'informational — anchoring runs on demand, not on a cron',
