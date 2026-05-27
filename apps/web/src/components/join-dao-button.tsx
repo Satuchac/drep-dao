@@ -21,7 +21,6 @@ export function JoinDaoButton({ onJoin }: { onJoin: () => void }) {
   }, []);
 
   const blocked = !!elig && elig.gatingEnabled && !elig.eligible;
-  const unmet = elig?.requirements.filter((r) => !r.met) ?? [];
 
   return (
     <div className="space-y-1">
@@ -33,18 +32,29 @@ export function JoinDaoButton({ onJoin }: { onJoin: () => void }) {
       >
         {loading ? 'Checking eligibility…' : 'JOIN DAO'}
       </button>
-      {blocked ? (
-        <div className="rounded-md border border-amber-300 bg-amber-50/60 p-2 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-          <div className="font-medium">You don&apos;t meet the minimum entry requirements:</div>
-          <ul className="mt-0.5 list-disc space-y-0.5 pl-4">
-            {unmet.map((r, i) => (
-              <li key={i}>
-                <span className="font-medium">{r.label}</span> — {r.detail}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      {blocked ? <EntryRequirementsNotice requirements={elig!.requirements} /> : null}
+    </div>
+  );
+}
+
+/**
+ * §14.1 — the amber notice listing which entry requirements a registered DRep does
+ * not yet meet. Shared by the header JOIN DAO button and the My-area join form (which
+ * shows it in place of the application form when the gate is enabled and unmet).
+ */
+export function EntryRequirementsNotice({ requirements }: { requirements: EntryEligibility['requirements'] }) {
+  const unmet = requirements.filter((r) => !r.met);
+  if (unmet.length === 0) return null;
+  return (
+    <div className="rounded-md border border-amber-300 bg-amber-50/60 p-2 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+      <div className="font-medium">You don&apos;t meet the minimum entry requirements:</div>
+      <ul className="mt-0.5 list-disc space-y-0.5 pl-4">
+        {unmet.map((r, i) => (
+          <li key={i}>
+            <span className="font-medium">{r.label}</span> — {r.detail}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

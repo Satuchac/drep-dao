@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { expertApi, type MyExpert } from '@/lib/api';
+import { expertApi, drepApi, type MyExpert, type EntryEligibility } from '@/lib/api';
 import { DrepForm } from './drep-form';
+import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
 import { BoardReviewPanel } from './board-review-panel';
 import { ExpertReviewPanel } from './expert-review-panel';
@@ -184,17 +185,7 @@ function ApplyOptions({ registeredDRep, onExpertChange }: { registeredDRep: bool
     return (
       <div className="space-y-2">
         <button onClick={() => setMode('choose')} className="text-xs text-neutral-500 hover:underline">← back</button>
-        {registeredDRep ? (
-          <>
-            <h3 className="text-base font-semibold">Request to join the DAO</h3>
-            <DrepForm mode="join" />
-          </>
-        ) : (
-          <p className="text-sm text-neutral-500">
-            To join as a DAO member your wallet must be a registered on-chain DRep. Register your DRep key (e.g. Eternl →
-            Governance → Register as a DRep), then sign in again. Meanwhile you can apply as an Expert.
-          </p>
-        )}
+        <DaoJoinBody registeredDRep={registeredDRep} />
       </div>
     );
   }
@@ -221,5 +212,49 @@ function ApplyOptions({ registeredDRep, onExpertChange }: { registeredDRep: bool
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * §14.1/§14.3 — the "request to join the DAO" body. A registered on-chain DRep gets the
+ * application form, but only once they meet the configured entry gates (voting power /
+ * delegators / activity); if a gate is enabled and unmet, the specific shortfalls are shown
+ * in place of the form. An unregistered wallet is told to register its DRep key first.
+ */
+function DaoJoinBody({ registeredDRep }: { registeredDRep: boolean }) {
+  const [elig, setElig] = useState<EntryEligibility | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!registeredDRep) { setLoading(false); return; }
+    drepApi.entryEligibility().then(setElig).catch(() => setElig(null)).finally(() => setLoading(false));
+  }, [registeredDRep]);
+
+  if (!registeredDRep) {
+    return (
+      <p className="text-sm text-neutral-500">
+        To join as a DAO member your wallet must be a registered on-chain DRep. Register your DRep key (e.g. Eternl →
+        Governance → Register as a DRep), then sign in again. Meanwhile you can apply as an Expert.
+      </p>
+    );
+  }
+  if (loading) return <p className="text-sm text-neutral-500">Checking your entry eligibility…</p>;
+
+  const blocked = !!elig && elig.gatingEnabled && !elig.eligible;
+  if (blocked) {
+    return (
+      <div className="space-y-2">
+        <h3 className="text-base font-semibold">Request to join the DAO</h3>
+        <p className="text-sm text-neutral-500">
+          The DAO currently enforces minimum entry requirements. You can apply once you meet them:
+        </p>
+        <EntryRequirementsNotice requirements={elig!.requirements} />
+      </div>
+    );
+  }
+  return (
+    <>
+      <h3 className="text-base font-semibold">Request to join the DAO</h3>
+      <DrepForm mode="join" />
+    </>
   );
 }
