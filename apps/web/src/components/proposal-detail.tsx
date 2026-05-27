@@ -156,19 +156,22 @@ function CollapsibleView({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? !empty);
+  // Mirror the form's collapsible field: a bordered card with a ▸/▾ label + hint, an "empty"
+  // marker, and an Expand/Shrink button; content sits below a divider when open.
   return (
-    <div className="mt-3">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1 text-xs font-semibold uppercase tracking-wide text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
-      >
-        <span className="text-neutral-400">{open ? '▾' : '▸'}</span>
-        {label}
-        {hint ? <span className="font-normal normal-case text-neutral-400"> — {hint}</span> : null}
-        {empty ? <span className="ml-auto font-normal normal-case text-neutral-400">empty</span> : null}
-      </button>
-      {open ? <div className="mt-0.5">{children}</div> : null}
+    <div className="mt-2 rounded-md border border-neutral-300 dark:border-neutral-700">
+      <div className="flex items-center gap-2 px-2 py-1.5">
+        <button type="button" onClick={() => setOpen((v) => !v)} className="flex flex-1 items-center gap-1 text-left text-sm font-medium text-neutral-700 hover:text-neutral-900 dark:text-neutral-300">
+          <span className="text-neutral-400">{open ? '▾' : '▸'}</span>
+          {label}
+          {hint ? <span className="font-normal text-neutral-400"> — {hint}</span> : null}
+        </button>
+        {empty ? <span className="text-xs text-neutral-400">empty</span> : null}
+        <button type="button" onClick={() => setOpen((v) => !v)} className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700">
+          {open ? '▣ Shrink' : '⤢ Expand'}
+        </button>
+      </div>
+      {open ? <div className="border-t border-neutral-200 px-2 py-1.5 dark:border-neutral-700">{children}</div> : null}
     </div>
   );
 }
