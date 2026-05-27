@@ -45,8 +45,10 @@ async function main() {
     regular: { stakeAddress: string; drepKeyHash: string };
     board: { stakeAddress: string; drepKeyHash: string };
   };
-  await admit(data.regular.stakeAddress, data.regular.drepKeyHash, 'Regular DRep', false);
-  await admit(data.board.stakeAddress, data.board.drepKeyHash, 'Board DRep', true);
+  await admit(data.regular.stakeAddress, data.regular.drepKeyHash, 'Alice', false);
+  // The "board" wallet is the cast's funder (Bob) — NOT a seated board member; name it plainly
+  // so the login card doesn't misleadingly read "Board DRep" for a non-board viewer.
+  await admit(data.board.stakeAddress, data.board.drepKeyHash, 'Bob', true);
 
   const board = await prisma.boardMembership.count({ where: { endedAt: null } });
   const dreps = await prisma.drep.count({ where: { status: DRepStatus.ADMITTED } });

@@ -104,7 +104,7 @@ export function MemberArea() {
   if (isBoard) {
     tabs.push({
       key: 'sign',
-      label: 'Actions to sign',
+      label: 'Actions',
       node: (
         <div className="space-y-6">
           <p className="text-sm text-neutral-500">Treasury/hot-wallet approvals and submission-fee confirmations.</p>

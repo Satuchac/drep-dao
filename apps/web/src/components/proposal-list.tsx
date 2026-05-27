@@ -41,9 +41,10 @@ export function ProposalList({ roundId }: { roundId: string }) {
                 {p.title}
                 {p.submitter ? <span className="ml-2 text-xs font-normal text-neutral-500">by {p.submitter}</span> : null}
               </span>
-              <div className="flex items-center gap-1.5">
-                {p.stage ? <span className="text-xs text-neutral-500">{p.stage}</span> : null}
-                <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} />
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
+                {p.publicId ? <span>ID: <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{p.publicId}</span></span> : null}
+                {p.stage ? <span>Stage: <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.stage}</span></span> : null}
+                <span className="flex items-center gap-1">Status: <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} /></span>
               </div>
             </div>
             <div className="mt-1 text-xs text-neutral-500">
