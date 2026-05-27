@@ -209,12 +209,13 @@ export class RoundsService {
     };
   }
 
-  /** Editable only while in PREPARATION (§6 settings remain editable; MVP limits to prep). */
+  /** Editable while still pre-review — PREPARATION or SUBMISSION (once Filtering/D&V start, the
+   * round config is locked). Categories are reconciled by id so existing proposals aren't orphaned. */
   async update(id: string, dto: UpdateRoundDto) {
     const round = await this.prisma.round.findUnique({ where: { id }, include: { categories: true } });
     if (!round) throw new NotFoundException('round not found');
-    if (round.status !== RoundStatus.PREPARATION) {
-      throw new ConflictException('round can only be edited during PREPARATION');
+    if (round.status !== RoundStatus.PREPARATION && round.status !== RoundStatus.SUBMISSION) {
+      throw new ConflictException('a round can only be edited while in Preparation or Submission');
     }
     // P4/P7 — re-validate against the resulting budget + schedule.
     const budgetAda = dto.budgetAda ?? toAda(round.budgetAda);
@@ -241,10 +242,21 @@ export class RoundsService {
         },
       });
       if (dto.categories) {
-        await tx.roundCategory.deleteMany({ where: { roundId: id } });
-        await tx.roundCategory.createMany({
-          data: dto.categories.map((c) => ({ roundId: id, ...this.categoryData(c) })),
-        });
+        // Reconcile by id so a category a proposal already points at isn't deleted/recreated:
+        // update existing in place, create new ones, and remove only those with no proposals.
+        const keepIds = new Set(dto.categories.filter((c) => c.id).map((c) => c.id as string));
+        for (const ex of round.categories) {
+          if (keepIds.has(ex.id)) continue;
+          const used = await tx.proposal.count({ where: { categoryId: ex.id } });
+          if (used > 0) {
+            throw new ConflictException(`category "${ex.name}" has ${used} proposal(s) — it can't be removed`);
+          }
+          await tx.roundCategory.delete({ where: { id: ex.id } });
+        }
+        for (const c of dto.categories) {
+          if (c.id) await tx.roundCategory.update({ where: { id: c.id }, data: this.categoryData(c) });
+          else await tx.roundCategory.create({ data: { roundId: id, ...this.categoryData(c) } });
+        }
       }
       if (dto.schedule) {
         await tx.roundSchedule.deleteMany({ where: { roundId: id } });

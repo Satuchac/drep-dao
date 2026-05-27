@@ -302,6 +302,15 @@ Admin (separate): `/admin/login`, user `satucha`.
       acceptance criteria is optional. The proposal detail shows the milestone title + budget +
       description + acceptance criteria.
 
+### Edit a round (board, verify these specifically)
+- [ ] In **My area → Round control**, a round in **Preparation or Submission** has an **Edit
+      round** button. It opens the round form pre-filled (name, budget, rewards, categories incl.
+      min/max ask + conditions, reward sliders, settings); the schedule isn't editable here (use
+      the stage confirm/launch controls). Change a field → **Save changes**.
+- [ ] **Category edits are proposal-safe**: editing an existing category's fields keeps proposals
+      attached; trying to remove a category that has proposals is rejected with a clear message.
+      Rounds in Filtering/D&V/Funding aren't editable (no Edit button).
+
 ### URL navigation (verify these specifically)
 - [ ] **Menu + submenu update the URL**: clicking left-nav items changes `?view=…`; My-area
       tabs change `?tab=…`; the Proposals/Rounds round submenu changes `?round=…`. The browser

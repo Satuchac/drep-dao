@@ -400,7 +400,7 @@ a left-menu item clears the submenu params. `app/page.tsx` wraps the shell in `<
 | `rounds-section` | Rounds list (status, active/complete, per-status proposal counts); click a round → its proposals. |
 | `active-proposals` | A round's proposals, picked with a **round combo box** (scales to many rounds) that defaults to the **latest round still in the Submission phase**. Each row shows the proposal title + **submitter** + status. |
 | `proposal-detail` | Full read-only view for everyone: title + **submitter**, labelled metadata (**Proposal ID: R5-P1 · Stage: … · Status: …**), category/amount/fee, and **collapsible** sections (pitch, §3.4 cost/team/revenue, category conditions, milestone plan — title/budget/description/acceptance) that shrink/expand like the form. Every section renders for any viewer; only the author additionally sees edit/budget-change/fee controls. |
-| `round-stage-controls` | Board-only: confirm/auto-start/launch each next stage + close the round. |
+| `round-stage-controls` | Board-only: confirm/auto-start/launch each next stage + close the round. Also an **Edit round** button (Preparation/Submission only) that opens the round form pre-filled to change name/budget/categories/settings (`PATCH /admin/rounds/:id`); category edits reconcile by id so proposals aren't orphaned, and a category with proposals can't be removed. |
 | `proposal-list` / `round-ui` | Shared proposal list + status badges / count chips / date helpers. |
 | `treasury-overview` | Balances + per-bucket allocated/spent/remaining bars + totals. |
 | `board-actions` | Pending multisig actions; approve via `signData`. |

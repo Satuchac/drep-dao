@@ -226,19 +226,35 @@ function DateTimeField({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
-function CreateRoundForm({ onDone }: { onDone: () => void }) {
-  const [name, setName] = useState('');
-  const [budget, setBudget] = useState(4_000_000);
-  const [rewards, setRewards] = useState(200_000);
-  const [cats, setCats] = useState<RoundCategoryInput[]>([
-    { name: '', type: 'GRANT', allocatedAda: 4_000_000, description: '' },
-  ]);
+export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => void; initial?: RoundDetail; roundId?: string }) {
+  // Edit mode when `roundId` is set: prefill from `initial`, keep category ids (update in place),
+  // and don't touch the schedule (the round is mid-schedule; the stage-confirm flow handles dates).
+  const editing = !!roundId;
+  const s0 = initial?.settings;
+  const sval = (k: keyof NonNullable<typeof s0>) => (s0 && s0[k] != null ? Number(s0[k]) : undefined);
+  const [name, setName] = useState(initial?.name ?? '');
+  const [budget, setBudget] = useState(initial?.budgetAda ?? 4_000_000);
+  const [rewards, setRewards] = useState(initial?.rewardsPoolAda ?? 200_000);
+  const [cats, setCats] = useState<RoundCategoryInput[]>(
+    initial?.categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      type: c.type,
+      allocatedAda: c.allocatedAda,
+      minAda: c.minAda ?? undefined,
+      maxAda: c.maxAda ?? undefined,
+      conditions: c.conditions ?? '',
+      description: c.description ?? '',
+    })) ?? [{ name: '', type: 'GRANT', allocatedAda: 4_000_000, description: '' }],
+  );
   const [sched, setSched] = useState<Record<string, { startsAt: string; endsAt: string }>>({});
   // §6/§12 — per-round settings (blank = use the default). Reward splits are sliders.
-  const [settings, setSettings] = useState<Record<string, string>>({});
-  const [rewardExpert, setRewardExpert] = useState<number>(ROUND_SETTING_DEFAULTS.rewardExpertSharePct);
-  const [rewardDvShare, setRewardDvShare] = useState<number>(ROUND_SETTING_DEFAULTS.rewardDvSharePct);
-  const [rewardFixed, setRewardFixed] = useState<number>(ROUND_SETTING_DEFAULTS.rewardFixedPct);
+  const [settings, setSettings] = useState<Record<string, string>>(() =>
+    s0 ? Object.fromEntries(Object.entries(s0).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])) : {},
+  );
+  const [rewardExpert, setRewardExpert] = useState<number>(sval('rewardExpertSharePct') ?? ROUND_SETTING_DEFAULTS.rewardExpertSharePct);
+  const [rewardDvShare, setRewardDvShare] = useState<number>(sval('rewardDvSharePct') ?? ROUND_SETTING_DEFAULTS.rewardDvSharePct);
+  const [rewardFixed, setRewardFixed] = useState<number>(sval('rewardFixedPct') ?? ROUND_SETTING_DEFAULTS.rewardFixedPct);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const setSetting = (k: string, v: string) => setSettings((s) => ({ ...s, [k]: v }));
@@ -282,8 +298,8 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
   if (!nameOk) missing.push('round name');
   if (!catsOk) missing.push('a name, description & allocation for every category');
   if (!budgetMatches) missing.push('the full budget allocated');
-  if (!scheduleComplete) missing.push('all schedule dates');
-  if (schedErr) missing.push(schedErr);
+  if (!editing && !scheduleComplete) missing.push('all schedule dates');
+  if (!editing && schedErr) missing.push(schedErr);
   const canCreate = missing.length === 0;
 
   const submit = async (e: React.FormEvent) => {
@@ -293,10 +309,12 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
       setError(`Categories must allocate the full budget (allocated ${allocated.toLocaleString()} ₳ of ${Number(budget).toLocaleString()} ₳).`);
       return;
     }
-    const schedErr = scheduleError();
-    if (schedErr) {
-      setError(schedErr);
-      return;
+    if (!editing) {
+      const schedErr = scheduleError();
+      if (schedErr) {
+        setError(schedErr);
+        return;
+      }
     }
     const fa = num('filterApprovalVotes');
     if (fa !== undefined && fa > filterReviewers) {
@@ -335,23 +353,22 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
           const v = num(f.key);
           if (v !== undefined) (settingsInput as Record<string, number>)[f.key] = v;
         }
-      const input: CreateRoundInput = {
-        name: name.trim() || undefined,
-        budgetAda: Number(budget),
-        rewardsPoolAda: Number(rewards),
-        categories: cats.map((c) => ({
-          name: c.name,
-          type: c.type ?? 'GRANT',
-          allocatedAda: Number(c.allocatedAda),
-          minAda: c.minAda != null && String(c.minAda) !== '' ? Number(c.minAda) : undefined,
-          maxAda: c.maxAda != null && String(c.maxAda) !== '' ? Number(c.maxAda) : undefined,
-          conditions: c.conditions?.trim() || undefined,
-          description: c.description?.trim() || undefined,
-        })),
-        schedule,
-        ...settingsInput,
-      };
-      await boardRoundsApi.create(input);
+      const categories: RoundCategoryInput[] = cats.map((c) => ({
+        ...(c.id ? { id: c.id } : {}),
+        name: c.name,
+        type: c.type ?? 'GRANT',
+        allocatedAda: Number(c.allocatedAda),
+        minAda: c.minAda != null && String(c.minAda) !== '' ? Number(c.minAda) : undefined,
+        maxAda: c.maxAda != null && String(c.maxAda) !== '' ? Number(c.maxAda) : undefined,
+        conditions: c.conditions?.trim() || undefined,
+        description: c.description?.trim() || undefined,
+      }));
+      if (editing && roundId) {
+        // Edit: don't touch the schedule (the round is mid-schedule; stages are confirmed separately).
+        await boardRoundsApi.update(roundId, { name: name.trim() || undefined, budgetAda: Number(budget), rewardsPoolAda: Number(rewards), categories, ...settingsInput });
+      } else {
+        await boardRoundsApi.create({ name: name.trim() || undefined, budgetAda: Number(budget), rewardsPoolAda: Number(rewards), categories, schedule, ...settingsInput });
+      }
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'create failed');
@@ -516,6 +533,9 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
         ))}
       </div>
 
+      {editing ? (
+        <p className="text-xs text-neutral-500">Schedule is managed via the per-stage confirm/launch controls above, so it isn&apos;t edited here.</p>
+      ) : (
       <div>
         <div className="mb-1 text-sm font-medium">Schedule (all stages, in order)</div>
         {STAGE_DEFS.map((s, idx) => {
@@ -549,6 +569,7 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
           );
         })}
       </div>
+      )}
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {!canCreate ? (
@@ -559,7 +580,7 @@ function CreateRoundForm({ onDone }: { onDone: () => void }) {
         disabled={busy || !canCreate}
         className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
       >
-        {busy ? 'Creating…' : 'Create round'}
+        {busy ? (editing ? 'Saving…' : 'Creating…') : editing ? 'Save changes' : 'Create round'}
       </button>
     </form>
   );

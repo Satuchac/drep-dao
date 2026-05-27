@@ -9,6 +9,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   Min,
   MaxLength,
@@ -58,6 +59,7 @@ export const ROUND_STAGE_KEYS = ['submission', 'filtering', 'debate_vote', 'fund
 const CATEGORY_TYPES = Object.values(CategoryType) as string[]; // ['GRANT','RFP']
 
 export class CategoryInput {
+  @IsOptional() @IsUUID() id?: string; // present when editing an existing category (update in place)
   @IsString() @IsNotEmpty() @MaxLength(120) name!: string;
   @IsOptional() @IsIn(CATEGORY_TYPES) type?: string;
   @IsOptional() @IsString() @MaxLength(2000) description?: string;

@@ -318,6 +318,7 @@ export const boardExpertsApi = {
 };
 
 export interface RoundCategoryInput {
+  id?: string; // present when editing an existing category (update in place)
   name: string;
   type?: string; // GRANT | RFP
   allocatedAda: number;
@@ -422,6 +423,8 @@ export interface ConfirmStageInput {
 export const boardRoundsApi = {
   create: (input: CreateRoundInput) =>
     request<RoundDetail>('/admin/rounds', { method: 'POST', body: JSON.stringify(input) }),
+  update: (id: string, input: Partial<CreateRoundInput>) =>
+    request<RoundDetail>(`/admin/rounds/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   startStage: (id: string, stage: string) =>
     request<RoundDetail>(`/admin/rounds/${id}/start-stage/${stage}`, { method: 'POST' }),
   confirmStage: (id: string, stageKey: string, input: ConfirmStageInput) =>

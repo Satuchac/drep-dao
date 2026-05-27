@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { boardRoundsApi, roundsApi, type RoundDetail } from '@/lib/api';
 import { ProposalCounts, StatusBadge, fmtDateTime, toLocalInput } from './round-ui';
+import { CreateRoundForm } from './rounds-section';
 
 const STAGE_LABEL: Record<string, string> = {
   SUBMISSION: 'Submission',
@@ -54,6 +55,9 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
   const [endsAt, setEndsAt] = useState(toLocalInput(next?.planned?.endsAt));
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  // A round's fields (name, budget, categories, settings) are editable until review starts.
+  const canEdit = round.status === 'PREPARATION' || round.status === 'SUBMISSION';
 
   const run = async (action: () => Promise<unknown>, tag: string) => {
     setError(null);
@@ -75,8 +79,25 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
           Round #{round.number}
           {round.name ? ` — ${round.name}` : ''}
         </span>
-        <StatusBadge status={round.status} />
+        <span className="flex items-center gap-2">
+          {canEdit ? (
+            <button
+              onClick={() => setEditing((v) => !v)}
+              className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              {editing ? 'Close editor' : 'Edit round'}
+            </button>
+          ) : null}
+          <StatusBadge status={round.status} />
+        </span>
       </div>
+
+      {/* §6 — board edits the round's fields (name/budget/categories/settings) while pre-review. */}
+      {editing ? (
+        <div className="mt-3">
+          <CreateRoundForm initial={round} roundId={round.id} onDone={() => { setEditing(false); onChange(); }} />
+        </div>
+      ) : null}
 
       <div className="mt-2">
         <div className="text-xs text-neutral-500">Proposals (verify readiness before advancing):</div>
