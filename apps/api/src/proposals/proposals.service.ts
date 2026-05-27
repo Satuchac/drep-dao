@@ -343,11 +343,14 @@ export class ProposalsService {
     return this.get(id, userId);
   }
 
-  /** §12 — board's outstanding fee settlements (top-ups owed by submitters / refunds owed to them). */
-  async listPayments() {
+  /**
+   * §12 — board fee settlements (top-ups owed by submitters / refunds owed to them). By default
+   * only the outstanding (PENDING) ones; `includeSettled` adds the settled history for auditing.
+   */
+  async listPayments(includeSettled = false) {
     const rows = await this.prisma.feeAdjustment.findMany({
-      where: { status: 'PENDING' },
-      orderBy: { createdAt: 'asc' },
+      where: includeSettled ? {} : { status: 'PENDING' },
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }], // PENDING before SETTLED, newest first
       include: {
         proposal: {
           select: { publicId: true, title: true, payoutAddress: true, submitterUser: { select: { displayName: true } }, submitterDrep: { select: { drepIdOnchain: true } } },
@@ -357,6 +360,9 @@ export class ProposalsService {
     return rows.map((a) => ({
       id: a.id,
       kind: a.kind, // TOPUP | REFUND
+      status: a.status, // PENDING | SETTLED
+      txHash: a.txHash,
+      settledAt: a.settledAt,
       amountAda: toAda(a.amountAda),
       prevAmountAda: toAda(a.prevAmountAda),
       newAmountAda: toAda(a.newAmountAda),

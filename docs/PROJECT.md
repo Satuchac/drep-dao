@@ -231,6 +231,9 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   /admin/proposals/payments…`): each item shows the **old → new fee**, the budget change, and —
   for a refund — the submitter's **payout address with a copy button**; the board records the
   on-chain **tx** to mark it SETTLED. Pending settlements count toward the **notification badge**.
+  The Actions tab has a **"Show history"** toggle (default off): on, it also lists **settled**
+  settlements + **executed** treasury actions (read-only, with tx) for auditing
+  (`?history=1` on `/admin/proposals/payments` + `/me/board-actions`); off, only the to-dos.
 - **Payout / refund address (§12).** A proposal carries a `payoutAddress` (Cardano address)
   the submitter enters in the form — where the DAO sends **fee refunds** and the **funded
   budget**. It's shown read-only near the bottom of the proposal detail (with a copy button)

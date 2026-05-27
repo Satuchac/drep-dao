@@ -1,5 +1,5 @@
 import { IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
@@ -27,8 +27,8 @@ export class TreasuryController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me/board-actions')
-  myActions(@CurrentUser() ctx: AuthContext) {
-    return this.treasury.boardActionsFor(ctx.userId);
+  myActions(@CurrentUser() ctx: AuthContext, @Query('history') history?: string) {
+    return this.treasury.boardActionsFor(ctx.userId, history === '1');
   }
 
   @UseGuards(JwtAuthGuard, BoardGuard)

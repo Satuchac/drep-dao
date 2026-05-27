@@ -76,9 +76,9 @@ export class TreasuryService {
   }
 
   /** Pending board actions for a board member (drives the notification badge). */
-  async boardActionsFor(userId: string) {
+  async boardActionsFor(userId: string, includeHistory = false) {
     const board = await this.boardDrep(userId);
-    if (!board) return { count: 0, actions: [] };
+    if (!board) return { count: 0, actions: [], history: [] };
     await this.maybePrepareTopUp(); // platform prepares a top-up if the hot wallet is low
 
     const actions = await this.prisma.multisigAction.findMany({
@@ -86,17 +86,29 @@ export class TreasuryService {
       include: { signatures: true },
       orderBy: { createdAt: 'asc' },
     });
-    const view = actions.map((a) => ({
+    const map = (a: { id: string; kind: string; description: string | null; amountAda: bigint | null; status: string; txHash: string | null; createdAt: Date; signatures: { boardDrepId: string }[] }) => ({
       id: a.id,
       kind: a.kind,
       description: a.description,
       amountAda: a.amountAda ? Number(a.amountAda) / ADA : null,
+      status: a.status,
+      txHash: a.txHash,
       approvals: a.signatures.length,
       threshold: APPROVAL_THRESHOLD,
       mineApproved: a.signatures.some((s) => s.boardDrepId === board.id),
       createdAt: a.createdAt,
-    }));
-    return { count: view.filter((a) => !a.mineApproved).length, actions: view };
+    });
+    const view = actions.map(map);
+    // Past actions (executed / no longer awaiting signatures), newest first — for the history view.
+    const history = includeHistory
+      ? (await this.prisma.multisigAction.findMany({
+          where: { status: { not: 'PENDING_SIGS' } },
+          include: { signatures: true },
+          orderBy: { createdAt: 'desc' },
+          take: 50,
+        })).map(map)
+      : [];
+    return { count: view.filter((a) => !a.mineApproved).length, actions: view, history };
   }
 
   /** §15.3 — platform prepares a treasury→hot-wallet top-up when the hot wallet runs low. */

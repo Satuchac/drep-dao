@@ -102,21 +102,7 @@ export function MemberArea() {
   });
 
   if (isBoard) {
-    tabs.push({
-      key: 'sign',
-      label: 'Actions',
-      node: (
-        <div className="space-y-6">
-          <p className="text-sm text-neutral-500">
-            Board to-dos: treasury/hot-wallet approvals, submission-fee confirmations, and budget-change settlements (top-ups to collect / refunds to return).
-          </p>
-          <BoardActions />
-          <FeeConfirmations />
-          <BoardPayments />
-          <EmptyHint text="Nothing to do right now." />
-        </div>
-      ),
-    });
+    tabs.push({ key: 'sign', label: 'Actions', node: <ActionsTab /> });
     tabs.push({ key: 'rounds', label: 'Round control', node: <RoundStageControls /> });
     tabs.push({
       key: 'apps',
@@ -132,6 +118,28 @@ export function MemberArea() {
   }
 
   return <MemberTabs tabs={tabs} />;
+}
+
+/** Board "Actions" tab: the to-do panels + a "Show history" switch that also reveals done items. */
+function ActionsTab() {
+  const [showHistory, setShowHistory] = useState(false);
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-neutral-500">
+          Board to-dos: treasury/hot-wallet approvals, submission-fee confirmations, and budget-change settlements (top-ups to collect / refunds to return).
+        </p>
+        <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
+          <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
+          Show history
+        </label>
+      </div>
+      <BoardActions history={showHistory} />
+      <FeeConfirmations />
+      <BoardPayments history={showHistory} />
+      <EmptyHint text={showHistory ? 'No actions — past or present.' : 'Nothing to do right now.'} />
+    </div>
+  );
 }
 
 function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.ReactNode }[] }) {

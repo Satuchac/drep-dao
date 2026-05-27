@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
@@ -29,10 +29,10 @@ export class AdminProposalsController {
     return this.proposals.reviewFee(id, dto);
   }
 
-  // §12 — outstanding fee settlements (budget-change top-ups owed by submitters / refunds owed to them).
+  // §12 — fee settlements (budget-change top-ups / refunds). `?history=1` includes settled ones.
   @Get('payments')
-  payments() {
-    return this.proposals.listPayments();
+  payments(@Query('history') history?: string) {
+    return this.proposals.listPayments(history === '1');
   }
 
   // Record the on-chain tx that settles a top-up/refund → SETTLED.

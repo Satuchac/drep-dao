@@ -154,6 +154,8 @@ export interface BoardAction {
   kind: string;
   description: string | null;
   amountAda: number | null;
+  status: string;
+  txHash: string | null;
   approvals: number;
   threshold: number;
   mineApproved: boolean;
@@ -162,7 +164,8 @@ export interface BoardAction {
 
 export const treasuryApi = {
   overview: () => request<TreasuryOverview>('/dao/treasury'),
-  boardActions: () => request<{ count: number; actions: BoardAction[] }>('/me/board-actions'),
+  boardActions: (history = false) =>
+    request<{ count: number; actions: BoardAction[]; history: BoardAction[] }>(`/me/board-actions${history ? '?history=1' : ''}`),
   prepareTopUp: (amountAda: number) =>
     request<{ id: string }>('/admin/treasury/prepare-topup', { method: 'POST', body: JSON.stringify({ amountAda }) }),
   approveAction: (id: string, body: { signature?: string; signingKey?: string; ts?: string }) =>
@@ -706,6 +709,9 @@ export const boardFeeApi = {
 export interface FeePayment {
   id: string;
   kind: 'TOPUP' | 'REFUND';
+  status: string; // PENDING | SETTLED
+  txHash: string | null;
+  settledAt: string | null;
   amountAda: number;
   prevAmountAda: number;
   newAmountAda: number;
@@ -720,7 +726,7 @@ export interface FeePayment {
   createdAt: string;
 }
 export const boardPaymentsApi = {
-  pending: () => request<FeePayment[]>('/admin/proposals/payments'),
+  pending: (history = false) => request<FeePayment[]>(`/admin/proposals/payments${history ? '?history=1' : ''}`),
   settle: (id: string, txHash: string) =>
     request<{ status: string }>(`/admin/proposals/payments/${id}/settle`, { method: 'POST', body: JSON.stringify({ txHash }) }),
 };

@@ -128,6 +128,10 @@ Admin (separate): `/admin/login`, user `satucha`.
       ("return X ₳"). The settlement shows the **old → new fee** and the budget change; for a
       refund it shows the submitter's **payout address with a Copy button**. The board pastes
       the on-chain tx and clicks **Mark settled**.
+- [ ] **Actions history toggle**: the board **Actions** tab defaults to only what needs doing
+      (done items disappear). Tick **Show history** (top-right) → settled budget settlements
+      (with their tx) and executed treasury actions also appear, read-only, so DReps can audit.
+      Untick → back to just the to-dos. The notification badge always counts only pending items.
 - [ ] **Payout / refund address**: the proposal form has a **Payout / refund address** field;
       it shows (read-only, with Copy) near the bottom of the proposal detail and is where the
       DAO sends refunds + the funded budget.
