@@ -180,7 +180,8 @@ export class AnchorService implements OnModuleInit {
     style: VotingStyle;
     ref: string; // readable subject reference, shown as "applicant" in the JSON
     proposalId?: string | null; // Anchor.proposalId (proposal row or applicant drep row)
-    publicId?: string | null; // structured proposal id (e.g. "R3-P2") embedded on-chain when the decision concerns a proposal
+    publicId?: string | null; // structured proposal id (e.g. "R3-P2", "Internal 4") embedded on-chain
+    docHash?: string | null; // sha256 of title+content (internal proposals) — date-independent
     roundId?: string | null;
     votes: { drep: string; vote: string; power?: number }[];
     outcome: string;
@@ -195,6 +196,7 @@ export class AnchorService implements OnModuleInit {
       style: params.style,
       ref: params.ref,
       ...(params.publicId ? { publicId: params.publicId } : {}),
+      ...(params.docHash ? { docHash: params.docHash } : {}),
       votes: params.preimageVotes ?? params.votes,
       result: { outcome: params.outcome, yes: params.yes, no: params.no, threshold: params.threshold },
     };
@@ -206,6 +208,7 @@ export class AnchorService implements OnModuleInit {
       style: params.style,
       applicant: params.ref,
       proposalId: params.publicId ?? null,
+      docHash: params.docHash ?? null,
       votes: params.votes,
       yes: params.yes,
       no: params.no,
@@ -383,6 +386,7 @@ export class AnchorService implements OnModuleInit {
       style?: VotingStyle;
       ref?: string;
       publicId?: string;
+      docHash?: string;
       votes?: { drep?: string; vote?: string; choice?: string; power?: number; weight?: number }[];
       result?: { outcome?: string; yes?: number; no?: number; threshold?: number; totalPower?: number };
       // submission-anchor preimage fields
@@ -416,6 +420,7 @@ export class AnchorService implements OnModuleInit {
       style: (p.style ?? VotingStyle.ONE_PERSON_ONE_VOTE) as VotingStyle,
       applicant: p.ref ?? '',
       proposalId: p.publicId ?? null,
+      docHash: p.docHash ?? null,
       votes,
       yes: r.yes ?? 0,
       no: r.no ?? 0,

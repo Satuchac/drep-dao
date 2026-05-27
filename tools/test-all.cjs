@@ -31,6 +31,7 @@ const SUITES = [
   ['test-proposal-flow', 'Proposal lifecycle: fee, edit/version, filtering+D&V+milestone anchored, comments'],
   ['test-category-ask', '§5.2 category min/max ask enforced on submit + §3.4 funding fields (self-cleaning)'],
   ['test-round-counts', '§9 round overview per-status counts incl. DRAFT/PENDING, update as status changes (self-cleaning)'],
+  ['test-internal', '§10 internal proposals: submit/threshold/poll/extend/scope/private + on-chain anchor (self-cleaning)'],
 ];
 
 const failed = [];

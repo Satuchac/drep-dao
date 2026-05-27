@@ -747,3 +747,78 @@ export const boardMilestoneApi = {
   drawReviewers: (proposalId: string) => request<MilestoneView[]>(`/admin/proposals/${proposalId}/draw-milestone-reviewers`, { method: 'POST' }),
   terminate: (proposalId: string) => request<{ status: string }>(`/admin/proposals/${proposalId}/terminate`, { method: 'POST' }),
 };
+
+// -------- §10 Internal proposals --------
+export type InternalTally =
+  | {
+      kind: 'THRESHOLD';
+      eligible: number;
+      cast: number;
+      yesPower: number;
+      abstainPower: number;
+      totalPower: number;
+      denominator: number;
+      ratioPct: number;
+      thresholdPct: number;
+      approved: boolean;
+    }
+  | { kind: 'POLL'; eligible: number; voted: number; options: { option: string; power: number; voters: number }[] };
+
+export interface InternalProposalSummary {
+  id: string;
+  publicId: string | null;
+  title: string;
+  internalType: string; // INSTRUCTIVE | INFORMATIVE | POLL
+  votersScope: string; // DREPS_ONLY | BOARD_ONLY | BOTH
+  votingType: string; // ONE_PERSON_ONE_VOTE | BALANCED
+  thresholdKind: string; // DEFAULT | IMPORTANT
+  isPrivate: boolean;
+  status: string; // ACTIVE | APPROVED | REJECTED
+  submitter: string | null;
+  votingEndAt: string | null;
+  thresholdPct: number | null;
+  tally: InternalTally;
+}
+export interface InternalProposalDetail extends InternalProposalSummary {
+  contentMd: string;
+  submitterDrepId: string | null;
+  isMine: boolean;
+  actors: string[] | null;
+  deliveryDate: string | null;
+  poll: { multiple: boolean; options: string[] } | null;
+  votingStartAt: string | null;
+  resultFinalizedAt: string | null;
+  canVote: boolean;
+  myVotes: string[];
+  anchorTxHash: string | null;
+  anchorHash: string | null;
+}
+export interface CreateInternalInput {
+  title: string;
+  contentMd: string;
+  internalType: string;
+  votersScope: string;
+  thresholdKind: string;
+  votingType: string;
+  votingPeriodDays: number;
+  isPrivate?: boolean;
+  pollOptions?: string[];
+  pollMultiple?: boolean;
+  actors?: string[];
+  deliveryDate?: string;
+}
+export interface VoteInternalInput {
+  choice?: 'YES' | 'NO' | 'ABSTAIN';
+  options?: string[];
+  rationale?: string;
+}
+export const internalProposalsApi = {
+  list: () => request<InternalProposalSummary[]>('/internal-proposals'),
+  get: (id: string) => request<InternalProposalDetail>(`/internal-proposals/${id}`),
+  submit: (input: CreateInternalInput) =>
+    request<InternalProposalDetail>('/internal-proposals', { method: 'POST', body: JSON.stringify(input) }),
+  vote: (id: string, input: VoteInternalInput) =>
+    request<InternalProposalDetail>(`/internal-proposals/${id}/vote`, { method: 'POST', body: JSON.stringify(input) }),
+  extend: (id: string, votingEndAt: string) =>
+    request<InternalProposalDetail>(`/internal-proposals/${id}/extend`, { method: 'POST', body: JSON.stringify({ votingEndAt }) }),
+};

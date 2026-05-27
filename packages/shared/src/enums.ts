@@ -75,6 +75,7 @@ export const VotePhase = {
   DEBATE_VOTE: 'DEBATE_VOTE',
   MILESTONE: 'MILESTONE',
   QUICK_POLL: 'QUICK_POLL',
+  INTERNAL: 'INTERNAL',
 } as const;
 export type VotePhase = (typeof VotePhase)[keyof typeof VotePhase];
 

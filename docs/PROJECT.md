@@ -296,6 +296,31 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   D&V results with **public rationales** + on-chain proof links, milestones (with
   POA + reviewer voting), and comments.
 
+## 4c. Internal proposals (§10)
+
+DAO-governance decisions — process/parameter/board changes, polls — **not tied to a
+round**. Left nav: **Internal proposals** (the funding queue is now **Funding
+proposals**). `InternalProposalsModule` (`/internal-proposals`); they reuse the unified
+`proposal` table (`type=INTERNAL`) + the D&V snapshot/§4.4 tally machinery.
+
+- **Submit → ACTIVE immediately** (no fee/pledge, no PENDING); voting opens at once.
+  Structured id **`Internal N`**. Lifecycle DRAFT→**ACTIVE→APPROVED/REJECTED** (we submit
+  straight to ACTIVE).
+- The submitter sets: **type** (INSTRUCTIVE names actors / INFORMATIVE yes-no / **POLL**
+  with options + single-or-multi select); **who votes** (`DREPS_ONLY` non-board /
+  `BOARD_ONLY` / `BOTH`); **voting type** (1 member-1 vote *or* adjusted voting power);
+  **threshold** (`DEFAULT`=`INTERNAL_DEFAULT_THRESHOLD_PCT` / `IMPORTANT`=`…IMPORTANT…`);
+  **voting period (days)** → start+end; and **PUBLIC vs PRIVATE** (board-only visibility,
+  which forces board-only scope). Title + content are always present (content too for polls).
+- Threshold proposals pass per **§4.4** (`isApproved`); polls tally **per option**. Eligible
+  voters + power are **snapshotted at submission**. **Vote change** allowed during the period;
+  the submitter may **move the voting end** but never edit the content while voting.
+  Auto-concludes when the end passes (on any read/vote).
+- **Anchored on-chain** (`anchorResult` subject `internal`, label 80808081) with the
+  `publicId` (`Internal N`), each voter's DRep id + choice, and a **date-independent
+  `docHash` = sha256(title+content)** (the date is deliberately not hashed, since the end can move).
+- Test: `tools/test-internal.cjs`.
+
 ## 5. Voting model
 
 Two **graphically distinct** styles (a badge always shows which is in use):

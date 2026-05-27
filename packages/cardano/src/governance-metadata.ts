@@ -103,7 +103,8 @@ export interface AnchorVote {
 export interface AnchorResultMetadata {
   title: string;
   subject: GovSubject;
-  proposalId?: string; // structured public id (e.g. "R3-P2") when the decision concerns a proposal
+  proposalId?: string; // structured public id (e.g. "R3-P2" or "Internal 4") when about a proposal
+  docHash?: string; // sha256 of the proposal's title+content (internal proposals) — date-independent
   voting: string; // human-readable voting style
   applicant: string; // subject DRep id (admission/removal) or proposal reference (filtering/dv/milestone)
   votes: AnchorVote[];
@@ -122,6 +123,7 @@ export function buildResultMetadata(p: {
   style: VotingStyle;
   applicant: string;
   proposalId?: string | null; // structured public id when the decision concerns a proposal
+  docHash?: string | null; // sha256 of title+content (internal proposals)
   votes: AnchorVote[];
   yes: number;
   no: number;
@@ -140,6 +142,7 @@ export function buildResultMetadata(p: {
     title: SUBJECT_TITLE[p.subject],
     subject: p.subject,
     ...(p.proposalId ? { proposalId: p.proposalId } : {}),
+    ...(p.docHash ? { docHash: p.docHash } : {}),
     voting: STYLE_LABEL[p.style],
     applicant: p.applicant,
     votes: p.votes.map((v) => (v.power == null ? v : { ...v, power: r(v.power) })),

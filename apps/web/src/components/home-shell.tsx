@@ -10,17 +10,19 @@ import { GovernanceSetup } from './governance-setup';
 import { OnChainProofs } from './on-chain-proofs';
 import { TreasuryOverview } from './treasury-overview';
 import { ActiveProposals } from './active-proposals';
+import { InternalProposals } from './internal-proposals';
 import { ProposalDetail } from './proposal-detail';
 import { JoinDaoButton } from './join-dao-button';
 import { NotificationBadge } from './notification-badge';
 import { HealthBadge } from '@/app/health-badge';
 
-type View = 'overview' | 'me' | 'rounds' | 'proposals' | 'proofs' | 'treasury' | 'setup';
+type View = 'overview' | 'me' | 'rounds' | 'proposals' | 'internal' | 'proofs' | 'treasury' | 'setup';
 const NAV: { key: View; label: string; boardOnly?: boolean }[] = [
   { key: 'overview', label: 'DAO Member overview' },
   { key: 'me', label: 'My area' },
   { key: 'rounds', label: 'Rounds' },
-  { key: 'proposals', label: 'Proposals' },
+  { key: 'proposals', label: 'Funding proposals' },
+  { key: 'internal', label: 'Internal proposals' },
   { key: 'proofs', label: 'On-chain proofs' },
   { key: 'treasury', label: 'Treasury' },
   { key: 'setup', label: 'Platform setup', boardOnly: true },
@@ -101,6 +103,8 @@ export function HomeShell() {
           <RoundsSection />
         ) : view === 'proposals' ? (
           <ActiveProposals />
+        ) : view === 'internal' ? (
+          <InternalProposals />
         ) : view === 'proofs' ? (
           <OnChainProofs />
         ) : view === 'treasury' ? (

@@ -331,6 +331,8 @@ model Proposal {
   deliveryDate  DateTime? @map("delivery_date") @db.Timestamptz(6)
   pollOptions   Json?     @map("poll_options")
   thresholdKind String?   @map("threshold_kind")
+  // §10 — PUBLIC by default; PRIVATE makes an internal proposal visible + votable to board only.
+  isPrivate     Boolean   @default(false) @map("is_private")
 
   // common
   votingType           String // ONE_PERSON_ONE_VOTE or BALANCED
