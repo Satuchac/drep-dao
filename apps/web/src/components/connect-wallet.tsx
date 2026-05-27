@@ -12,12 +12,15 @@ export function ConnectWallet() {
   const [error, setError] = useState<string | null>(null);
 
   if (profile) {
-    // §2 — show a single status: Board member, DAO member, else Viewer.
+    // §2 — show a single status. A registered on-chain DRep who hasn't joined the DAO is a
+    // "Registered DRep" (eligible to request membership), distinct from a plain ADA-holder Viewer.
     const status = profile.roles.includes('BOARD')
       ? 'Board member'
       : profile.roles.includes('DAO_MEMBER')
         ? 'DAO member'
-        : 'Viewer';
+        : profile.onchainDrep.registered
+          ? 'Registered DRep'
+          : 'Viewer';
     return (
       <div className="space-y-1.5 text-sm">
         {/* §2 — name on top, role/status beneath. */}
@@ -26,7 +29,10 @@ export function ConnectWallet() {
           <span className="font-medium">{profile.user.displayName ?? 'Signed in'}</span>
         </div>
         <div className="text-xs text-neutral-500">{status}</div>
-        {profile.onchainDrep.drepId ? (
+        {/* Show the DRep ID only when the wallet is actually a registered on-chain DRep. A
+            derivable DRep key on an unregistered wallet (a plain ADA holder) is NOT a DRep
+            identity — showing it here made Viewers look like DReps. */}
+        {profile.onchainDrep.registered && profile.onchainDrep.drepId ? (
           <div className="break-all font-mono text-xs text-neutral-500">{profile.onchainDrep.drepId}</div>
         ) : null}
         <button
