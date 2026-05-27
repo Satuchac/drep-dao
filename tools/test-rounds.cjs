@@ -38,14 +38,19 @@ const throws = async (l, fn, re) => {
   const gov = new GovernanceService(prisma);
 
   console.log('\n=== Governance parameters (board-editable) ===');
+  // INTERNAL_DEFAULT_THRESHOLD_PCT is a platform-wide param no other suite depends on. Snapshot
+  // any existing override so this test never clobbers a live setting.
+  const PARAM = 'INTERNAL_DEFAULT_THRESHOLD_PCT';
+  const prior = await prisma.platformConfig.findUnique({ where: { key: PARAM } });
   const params = await gov.getParams();
-  ok('returns governance params with defaults', params.some((p) => p.key === 'DV_APPROVAL_THRESHOLD_PCT'));
+  ok('returns governance params with defaults', params.some((p) => p.key === PARAM));
   const admin = await prisma.appUser.findFirst(); // any user id for updatedBy
-  await gov.updateParam(admin.id, 'DV_APPROVAL_THRESHOLD_PCT', 70);
-  const after = (await gov.getParams()).find((p) => p.key === 'DV_APPROVAL_THRESHOLD_PCT');
+  await gov.updateParam(admin.id, PARAM, 70);
+  const after = (await gov.getParams()).find((p) => p.key === PARAM);
   ok('update reflected', Number(after.value) === 70, `value=${after.value}`);
   await throws('unknown param rejected', () => gov.updateParam(admin.id, 'NOPE', 1), /unknown governance parameter/i);
-  await prisma.platformConfig.delete({ where: { key: 'DV_APPROVAL_THRESHOLD_PCT' } }).catch(() => {}); // restore default
+  if (prior) await prisma.platformConfig.update({ where: { key: PARAM }, data: { value: prior.value } }); // restore prior override
+  else await prisma.platformConfig.delete({ where: { key: PARAM } }).catch(() => {}); // restore default
 
   console.log('\n=== Round lifecycle gates proposal submission ===');
   const round = await rounds.create({
@@ -83,7 +88,10 @@ const throws = async (l, fn, re) => {
     ok('submit allowed in SUBMISSION', false, e.message);
   }
 
-  await rounds.startStage(round.id, 'FILTERING');
+  // Move the round out of SUBMISSION to verify the submission gate. Set the status directly so
+  // the test doesn't contend with demo rounds for the single global Filtering/D&V slot (§5.1) —
+  // stage-transition mechanics are covered by test-stage-flow.
+  await prisma.round.update({ where: { id: round.id }, data: { status: 'FILTERING' } });
   await throws('submit blocked again in FILTERING', () => proposals.createDraft(bob.id, draft(round.id)), /not accepting submissions/i);
 
   console.log('\n=== Cleanup ===');

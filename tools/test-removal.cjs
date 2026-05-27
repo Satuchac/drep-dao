@@ -41,7 +41,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
 
   // Fresh Heidi → admit her.
   const hu = await prisma.appUser.findUnique({ where: { stakeKeyHash: stakeKeyHashFromBech32(personas.heidi.stakeAddress) } });
-  if (hu) { const d = await prisma.drep.findUnique({ where: { userId: hu.id } }); if (d) { await prisma.drepRemovalVote.deleteMany({ where: { removal: { targetDrepId: d.id } } }); await prisma.drepRemoval.deleteMany({ where: { targetDrepId: d.id } }); await prisma.admissionVote.deleteMany({ where: { drepId: d.id } }); await prisma.drep.delete({ where: { id: d.id } }); } }
+  if (hu) { const d = await prisma.drep.findUnique({ where: { userId: hu.id } }); if (d) { await prisma.drepRemovalVote.deleteMany({ where: { removal: { targetDrepId: d.id } } }); await prisma.drepRemoval.deleteMany({ where: { targetDrepId: d.id } }); await prisma.admissionVote.deleteMany({ where: { drepId: d.id } }); await prisma.roundDrepEligibility.deleteMany({ where: { drepId: d.id } }); await prisma.drep.delete({ where: { id: d.id } }); } }
   const heidi = await login('heidi');
   const app = await drep.apply(heidi, { displayName: 'Heidi' });
   for (const b of [alice, dave, erin]) await drep.voteOnApplication(b, app.id, { choice: 'YES', feedback: 'ok' });

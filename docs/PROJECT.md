@@ -169,10 +169,12 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   reviewing-stage rule still holds — only one round may be in Filtering **or**
   Debate & Vote at a time (conflicts are retried/left for manual launch).
 - **Proposals** move DRAFT → PENDING → ACTIVE → (FILTERING/DEBATE_VOTE) →
-  APPROVED/REJECTED → FUNDING/COMPLETE/FAILED. The Rounds list shows per-status
-  counts per round. **DRAFT and PENDING are private** — visible only to their
-  submitter (excluded from all public listings + `get`); a proposal is public only
-  once its fee is confirmed (ACTIVE+).
+  APPROVED/REJECTED → FUNDING/COMPLETE/FAILED. The Rounds overview (list **and**
+  `get`) shows **per-status counts for every status, including DRAFT and PENDING**,
+  so you can see how a round is filling up. The **content** of a DRAFT/PENDING
+  proposal stays **private** — visible only to its submitter (excluded from the
+  public proposal listings + detail); a proposal becomes publicly browsable only
+  once its fee is confirmed (ACTIVE+). The counts are a tally, not a content leak.
 
 ## 4b. Proposal lifecycle — fees, filtering, D&V, editing, milestones (§7/§8/§11/§12/§16/§20)
 

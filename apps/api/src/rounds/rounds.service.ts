@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DRepStatus, ProposalStatus, RoundStatus, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared';
+import { DRepStatus, RoundStatus, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRoundDto, UpdateRoundDto, CategoryInput, ScheduleInput, ConfirmStageDto, RoundSettingsInput } from './dto';
 
@@ -84,10 +84,11 @@ export class RoundsService {
       orderBy: { number: 'desc' },
       include: { categories: true, _count: { select: { eligibilities: true, proposals: true } } },
     });
-    // §9 — proposal counts per round, grouped by status (DRAFTs stay private).
+    // §9 — proposal counts per round, grouped by status (incl. DRAFT/PENDING — a count only,
+    // proposal content stays private; the board + members see how a round is filling up).
     const grouped = await this.prisma.proposal.groupBy({
       by: ['roundId', 'status'],
-      where: { roundId: { in: rounds.map((r) => r.id) }, status: { not: ProposalStatus.DRAFT } },
+      where: { roundId: { in: rounds.map((r) => r.id) } },
       _count: { _all: true },
     });
     const byRound = new Map<string, Record<string, number>>();

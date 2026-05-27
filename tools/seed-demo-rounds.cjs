@@ -102,7 +102,7 @@ async function waitConfirm(txHash, label) {
     isCommercial: true, requestedAmountAda: 1000, milestones: [{ description: 'Ship the toolkit v1', amountAda: 1000 }],
   });
   await proposals.submit(carol.id, p1.id, { submissionFeeTxHash: 'demo-fee-tx-alpha' });
-  await proposals.confirmFee(p1.id);
+  await proposals.reviewFee(p1.id, { decision: 'APPROVE' });
   log('  proposal submitted, fee confirmed → FILTERING');
   await proposals.updateDraft(carol.id, p1.id, { contentMd: 'A reusable React toolkit for CIP-30 wallet flows.\n\n- connect\n- sign\n- submit\n- (v2) batch & multi-sig support added after reviewer feedback' });
   log('  edited (version snapshot created for the diff view)');
@@ -145,7 +145,7 @@ async function waitConfirm(txHash, label) {
     contentMd: 'A managed, monitored Koios mirror for the DAO with SLAs.',
     isCommercial: true, requestedAmountAda: 120000, milestones: [{ description: 'Deploy + monitor', amountAda: 120000 }],
   });
-  for (const p of [p2, p3]) { await proposals.submit(carol.id, p.id, { submissionFeeTxHash: `demo-fee-${p.id.slice(0, 6)}` }); await proposals.confirmFee(p.id); }
+  for (const p of [p2, p3]) { await proposals.submit(carol.id, p.id, { submissionFeeTxHash: `demo-fee-${p.id.slice(0, 6)}` }); await proposals.reviewFee(p.id, { decision: 'APPROVE' }); }
   // In-progress filtering (no decision yet): one YES on each, a NO+rationale, and comments.
   await drawAndVote(p2.id, 1, 'YES', 'Promising; want to see the audit plan.');
   await comments.create(carol.id, p2.id, 'Audit will be done by a CF-recommended firm — details in the next edit.');

@@ -11,7 +11,8 @@ export const ROUND_STATUS_CLS: Record<string, string> = {
   CLOSED: 'bg-neutral-300 text-neutral-700',
 };
 
-// Proposal statuses (DRAFT stays private and is never counted publicly).
+// Proposal statuses. DRAFT/PENDING are surfaced as a count only (content stays private), so a
+// round's overview shows how it is filling up.
 export const PROPOSAL_STATUS_CLS: Record<string, string> = {
   PENDING: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200',
   ACTIVE: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200',
@@ -21,8 +22,8 @@ export const PROPOSAL_STATUS_CLS: Record<string, string> = {
   FAILED: 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100',
   DRAFT: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300',
 };
-// Order proposal-status chips consistently. DRAFT only appears where the backend includes it
-// (the board's round detail); the public round list never sends a DRAFT count.
+// Order proposal-status chips consistently. The backend (both the round detail and the rounds
+// list) sends counts for every status, including DRAFT/PENDING.
 const STATUS_ORDER = ['DRAFT', 'PENDING', 'ACTIVE', 'APPROVED', 'REJECTED', 'COMPLETE', 'FAILED'];
 
 export function StatusBadge({ status, cls }: { status: string; cls?: Record<string, string> }) {

@@ -59,7 +59,11 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const heidiUser = await prisma.appUser.findUnique({ where: { stakeKeyHash: stakeKeyHashFromBech32(personas.heidi.stakeAddress) } });
   if (heidiUser) {
     const d = await prisma.drep.findUnique({ where: { userId: heidiUser.id } });
-    if (d) { await prisma.admissionVote.deleteMany({ where: { drepId: d.id } }); await prisma.drep.delete({ where: { id: d.id } }); }
+    if (d) {
+      await prisma.admissionVote.deleteMany({ where: { drepId: d.id } });
+      await prisma.roundDrepEligibility.deleteMany({ where: { drepId: d.id } }); // a round may list her as eligible (FK)
+      await prisma.drep.delete({ where: { id: d.id } });
+    }
   }
   const heidi = await login('heidi');
   ok('Heidi: DREP, not DAO_MEMBER, not BOARD',

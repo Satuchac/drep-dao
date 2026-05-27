@@ -71,7 +71,7 @@ const log = (...a) => console.log(...a);
   const submit = async (title, contentMd, ms) => {
     const d = await proposals.createDraft(carol.id, { roundId: gamma.id, categoryId: cat, title, contentMd, isCommercial: false, requestedAmountAda: ms.reduce((s, m) => s + m.amountAda, 0), milestones: ms });
     await proposals.submit(carol.id, d.id, { submissionFeeTxHash: `demo-fee-${d.id.slice(0, 6)}` });
-    await proposals.confirmFee(d.id);
+    await proposals.reviewFee(d.id, { decision: 'APPROVE' });
     return d.id;
   };
   const filterDecide = async (id, choice) => {

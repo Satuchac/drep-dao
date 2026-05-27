@@ -73,7 +73,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   ok('commercial fee = 3% of requested', submitted.submissionFeeAda === 30, `${submitted.submissionFeeAda} ₳`);
   ok('status PENDING after submit', submitted.status === 'PENDING');
   ok('appears in board pending-fee list', (await proposals.listPendingFee()).some((x) => x.id === draft.id));
-  await proposals.confirmFee(draft.id);
+  await proposals.reviewFee(draft.id, { decision: 'APPROVE' });
   let det = await proposals.get(draft.id);
   ok('fee confirmed → ACTIVE + FILTERING', det.status === 'ACTIVE' && det.stage === 'FILTERING');
 
