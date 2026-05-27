@@ -83,6 +83,8 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
             <> · category ask {p.categoryAsk.minAda != null ? `${p.categoryAsk.minAda.toLocaleString()}` : '0'}–{p.categoryAsk.maxAda != null ? `${p.categoryAsk.maxAda.toLocaleString()}` : '∞'} ₳</>
           ) : null}
         </div>
+        {/* Why a proposal was rejected — shown to everyone (submitter + reviewers), not buried. */}
+        {p.status === 'REJECTED' ? <RejectionBanner proposal={p} /> : null}
         <CollapsibleView label="Pitch / summary">
           <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</Markdown>
         </CollapsibleView>
@@ -228,6 +230,29 @@ function MilestonePlan({ milestones }: { milestones: PDetail['milestones'] }) {
         ))}
       </ul>
     </CollapsibleView>
+  );
+}
+
+/**
+ * A prominent red banner explaining WHY a proposal was rejected, visible to the submitter and
+ * reviewers alike. A fee-review rejection records the reason in `feeReviewFeedback` (no stage);
+ * a filtering / Debate & Vote rejection keeps its stage and the reviewers' rationales appear in
+ * those sections below.
+ */
+function RejectionBanner({ proposal: p }: { proposal: PDetail }) {
+  const reason = p.feeReviewFeedback?.trim();
+  const text = reason
+    ? reason
+    : p.stage === 'FILTERING'
+      ? 'Rejected during the Filtering review — see the reviewers’ rationales in the Filtering section below.'
+      : p.stage === 'DEBATE_VOTE'
+        ? 'Rejected at Debate & Vote — see the published tally and rationales below.'
+        : 'No reason was recorded.';
+  return (
+    <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/40">
+      <div className="text-sm font-semibold text-red-800 dark:text-red-300">Proposal rejected</div>
+      <div className="mt-0.5 whitespace-pre-wrap text-sm text-red-700 dark:text-red-300">{text}</div>
+    </div>
   );
 }
 
