@@ -40,7 +40,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
   }
-  return (res.status === 204 ? undefined : await res.json()) as T;
+  // 204, or any response with an empty body, yields undefined — calling res.json() on an
+  // empty body throws "Unexpected end of JSON input", so parse only when there's a body.
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 export const authApi = {
