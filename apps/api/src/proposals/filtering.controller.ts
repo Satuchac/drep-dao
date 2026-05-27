@@ -19,6 +19,13 @@ export class FilteringController {
     return this.filtering.myAssignments(ctx.userId);
   }
 
+  // Count of items awaiting this user in the "Voting & reviews" tab (filtering + D&V + milestone).
+  @UseGuards(JwtAuthGuard)
+  @Get('me/voting-tasks')
+  votingTasks(@CurrentUser() ctx: AuthContext) {
+    return this.filtering.votingTasksCount(ctx.userId);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post('proposals/:id/filter-vote')
   vote(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: FilterVoteDto) {

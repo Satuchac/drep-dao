@@ -1,55 +1,57 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, removalApi, treasuryApi } from '@/lib/api';
+import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, filteringApi, removalApi, treasuryApi } from '@/lib/api';
 
 /**
- * §15.3 — notifications in the login rectangle. A red circle with the total number of board
- * to-dos awaiting this member across BOTH the Actions tab (treasury/fees/payments) and the
- * Applications tab (DRep + Expert applications + removals). Clicking lands on whichever tab has
- * work — Actions first, otherwise Applications. Self-hides when there is nothing to do.
+ * §15.3 — notifications in the login rectangle. A red circle with the total number of to-dos
+ * awaiting this member across the Actions tab (board treasury/fees/payments), the Applications
+ * tab (board DRep/Expert applications + removals), and the Voting & reviews tab (filtering / D&V
+ * / milestone). Clicking lands on whichever tab has work — Actions, then Applications, then
+ * Voting & reviews. Self-hides when there is nothing to do.
  */
-export function NotificationBadge({ onNavigate }: { onNavigate: (tab: 'sign' | 'apps') => void }) {
-  const [counts, setCounts] = useState({ actions: 0, applications: 0 });
+export function NotificationBadge({ isBoard, onNavigate }: { isBoard: boolean; onNavigate: (tab: 'sign' | 'apps' | 'voting') => void }) {
+  const [counts, setCounts] = useState({ actions: 0, applications: 0, voting: 0 });
 
   useEffect(() => {
     let alive = true;
-    const poll = () =>
-      Promise.allSettled([
-        treasuryApi.boardActions(),
-        boardFeeApi.pending(),
-        boardPaymentsApi.pending(),
-        boardApi.listApplications(),
-        boardExpertsApi.applications(),
-        removalApi.list(),
-      ])
-        .then(([a, f, p, dapps, eapps, rem]) => {
-          if (!alive) return;
-          const actions =
-            (a.status === 'fulfilled' ? a.value.count : 0) +
-            (f.status === 'fulfilled' ? f.value.length : 0) +
-            (p.status === 'fulfilled' ? p.value.length : 0);
-          const applications =
-            (dapps.status === 'fulfilled' ? dapps.value.filter((x) => !x.myVote).length : 0) +
-            (eapps.status === 'fulfilled' ? eapps.value.length : 0) +
-            (rem.status === 'fulfilled' ? rem.value.filter((x) => !x.myVote).length : 0);
-          setCounts({ actions, applications });
-        })
-        .catch(() => alive && setCounts({ actions: 0, applications: 0 }));
+    const poll = async () => {
+      const next = { actions: 0, applications: 0, voting: 0 };
+      if (isBoard) {
+        const [a, f, p, dapps, eapps, rem] = await Promise.allSettled([
+          treasuryApi.boardActions(),
+          boardFeeApi.pending(),
+          boardPaymentsApi.pending(),
+          boardApi.listApplications(),
+          boardExpertsApi.applications(),
+          removalApi.list(),
+        ]);
+        next.actions =
+          (a.status === 'fulfilled' ? a.value.count : 0) +
+          (f.status === 'fulfilled' ? f.value.length : 0) +
+          (p.status === 'fulfilled' ? p.value.length : 0);
+        next.applications =
+          (dapps.status === 'fulfilled' ? dapps.value.filter((x) => !x.myVote).length : 0) +
+          (eapps.status === 'fulfilled' ? eapps.value.length : 0) +
+          (rem.status === 'fulfilled' ? rem.value.filter((x) => !x.myVote).length : 0);
+      }
+      try { next.voting = (await filteringApi.votingTasks()).total; } catch { /* leave 0 */ }
+      if (alive) setCounts(next);
+    };
     poll();
-    const id = setInterval(poll, 30_000); // light polling; board to-dos are rare
+    const id = setInterval(poll, 30_000); // light polling; to-dos are rare
     return () => {
       alive = false;
       clearInterval(id);
     };
-  }, []);
+  }, [isBoard]);
 
-  const total = counts.actions + counts.applications;
+  const total = counts.actions + counts.applications + counts.voting;
   if (total <= 0) return null;
 
-  // Land on the tab that actually has work: Actions first, otherwise Applications.
-  const target = counts.actions > 0 ? 'sign' : 'apps';
-  const label = counts.actions > 0 ? 'Actions' : 'Applications';
+  // Land on the tab that actually has work: Actions, then Applications, then Voting & reviews.
+  const target = counts.actions > 0 ? 'sign' : counts.applications > 0 ? 'apps' : 'voting';
+  const label = counts.actions > 0 ? 'Actions' : counts.applications > 0 ? 'Applications' : 'Voting & reviews';
 
   return (
     <button

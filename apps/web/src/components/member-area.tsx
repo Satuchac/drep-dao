@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardApi, boardExpertsApi, removalApi, type MyExpert, type EntryEligibility } from '@/lib/api';
+import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardApi, boardExpertsApi, removalApi, filteringApi, type MyExpert, type EntryEligibility } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -15,6 +15,7 @@ import { RemovalBanner } from './removal-banner';
 import { ProposalSubmit } from './proposal-submit';
 import { FilteringPanel } from './filtering-panel';
 import { VotingPanel } from './voting-panel';
+import { MilestoneReviewsPanel } from './milestone-reviews-panel';
 import { BoardActions } from './board-actions';
 import { RoundStageControls } from './round-stage-controls';
 import { FeeConfirmations } from './fee-confirmations';
@@ -33,7 +34,8 @@ export function MemberArea() {
   useEffect(loadExpert, [loadExpert]);
 
   const isBoard = !!profile?.roles.includes('BOARD');
-  const todo = useBoardTodoCounts(isBoard); // red-circle counts for the Actions + Applications tabs
+  const canVote = !!profile && (profile.roles.includes('DREP') || profile.roles.includes('DAO_MEMBER') || profile.roles.includes('BOARD'));
+  const todo = useTodoCounts(isBoard, canVote); // red-circle counts for Actions / Applications / Voting & reviews
 
   if (loading || !profile) return null;
 
@@ -83,11 +85,13 @@ export function MemberArea() {
     tabs.push({
       key: 'voting',
       label: 'Voting & reviews',
+      badge: todo.voting,
       node: (
         <div className="space-y-6">
           <p className="text-sm text-neutral-500">Everything awaiting your vote or review — filtering juries, Debate &amp; Vote, and milestone reviews.</p>
           <FilteringPanel />
           <VotingPanel />
+          <MilestoneReviewsPanel />
           <EmptyHint text="Nothing is awaiting your vote right now." />
         </div>
       ),
@@ -156,42 +160,47 @@ function ApplicationsTab() {
 }
 
 /**
- * Red-circle counts for the board's Actions + Applications tabs = items still awaiting THIS
- * member: treasury actions / fees / payments, and DRep + Expert applications + removals the
- * member hasn't voted on yet. Light polling, matches the login notification badge.
+ * Red-circle counts for the My-area tabs = items still awaiting THIS member: the board's
+ * Actions (treasury/fees/payments) + Applications (DRep/Expert apps + removals not yet voted),
+ * and the voter's "Voting & reviews" tasks (filtering + D&V + milestone). Light polling.
  */
-function useBoardTodoCounts(enabled: boolean) {
-  const [counts, setCounts] = useState({ actions: 0, applications: 0 });
+function useTodoCounts(isBoard: boolean, canVote: boolean) {
+  const [counts, setCounts] = useState({ actions: 0, applications: 0, voting: 0 });
   useEffect(() => {
-    if (!enabled) return;
+    if (!isBoard && !canVote) return;
     let alive = true;
-    const poll = () =>
-      Promise.allSettled([
-        treasuryApi.boardActions(),
-        boardFeeApi.pending(),
-        boardPaymentsApi.pending(),
-        boardApi.listApplications(),
-        boardExpertsApi.applications(),
-        removalApi.list(),
-      ]).then(([a, f, p, dapps, eapps, rem]) => {
-        if (!alive) return;
-        const actions =
+    const poll = async () => {
+      const next = { actions: 0, applications: 0, voting: 0 };
+      if (isBoard) {
+        const [a, f, p, dapps, eapps, rem] = await Promise.allSettled([
+          treasuryApi.boardActions(),
+          boardFeeApi.pending(),
+          boardPaymentsApi.pending(),
+          boardApi.listApplications(),
+          boardExpertsApi.applications(),
+          removalApi.list(),
+        ]);
+        next.actions =
           (a.status === 'fulfilled' ? a.value.count : 0) +
           (f.status === 'fulfilled' ? f.value.length : 0) +
           (p.status === 'fulfilled' ? p.value.length : 0);
-        const applications =
+        next.applications =
           (dapps.status === 'fulfilled' ? dapps.value.filter((x) => !x.myVote).length : 0) +
           (eapps.status === 'fulfilled' ? eapps.value.length : 0) +
           (rem.status === 'fulfilled' ? rem.value.filter((x) => !x.myVote).length : 0);
-        setCounts({ actions, applications });
-      });
+      }
+      if (canVote) {
+        try { next.voting = (await filteringApi.votingTasks()).total; } catch { /* leave 0 */ }
+      }
+      if (alive) setCounts(next);
+    };
     poll();
     const id = setInterval(poll, 30_000);
     return () => {
       alive = false;
       clearInterval(id);
     };
-  }, [enabled]);
+  }, [isBoard, canVote]);
   return counts;
 }
 

@@ -118,8 +118,8 @@ export function HomeShell() {
       <div className="space-y-2 lg:w-72 lg:shrink-0">
         <div className="space-y-2 rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
           <ConnectWallet />
-          {/* Jump straight to My area → the tab that has work (Actions, else Applications). */}
-          <NotificationBadge onNavigate={(tab) => setParams({ view: 'me', tab, round: null, proposal: null })} />
+          {/* Jump straight to My area → the tab that has work (Actions, then Applications, then Voting). */}
+          <NotificationBadge isBoard={isBoard} onNavigate={(tab) => setParams({ view: 'me', tab, round: null, proposal: null })} />
           <button
             onClick={() => setView('me')}
             className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"

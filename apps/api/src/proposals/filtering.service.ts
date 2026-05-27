@@ -91,7 +91,9 @@ export class FilteringService {
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
     if (!drep) return [];
     const assignments = await this.prisma.filterAssignment.findMany({
-      where: { drepId: drep.id, releasedAt: null, proposal: { stage: ProposalStage.FILTERING } },
+      // Only proposals still open for filtering — a decided one (REJECTED / advanced) is no
+      // longer actionable, so it shouldn't sit in the reviewer's to-do list.
+      where: { drepId: drep.id, releasedAt: null, proposal: { stage: ProposalStage.FILTERING, status: ProposalStatus.ACTIVE } },
       include: { proposal: { select: { id: true, title: true, status: true, stage: true } } },
     });
     const myVotes = await this.prisma.vote.findMany({
@@ -102,6 +104,55 @@ export class FilteringService {
       title: a.proposal.title,
       myVote: myVotes.find((v) => v.proposalId === a.proposalId)?.choice ?? null,
     }));
+  }
+
+  /**
+   * Count the items awaiting THIS user across the "Voting & reviews" tab — open filtering
+   * assignments, open D&V proposals they're eligible for, and open milestone reviews — each
+   * not yet voted on. Powers the tab's red badge + the login notification routing.
+   */
+  async votingTasksCount(userId: string) {
+    const drep = await this.prisma.drep.findUnique({ where: { userId } });
+    if (!drep) return { filtering: 0, dv: 0, milestone: 0, total: 0 };
+
+    const fAssign = await this.prisma.filterAssignment.findMany({
+      where: { drepId: drep.id, releasedAt: null, proposal: { stage: ProposalStage.FILTERING, status: ProposalStatus.ACTIVE } },
+      select: { proposalId: true },
+    });
+    const fVoted = new Set(
+      (await this.prisma.vote.findMany({
+        where: { drepId: drep.id, phase: VotePhase.FILTERING, proposalId: { in: fAssign.map((a) => a.proposalId) } },
+        select: { proposalId: true },
+      })).map((v) => v.proposalId),
+    );
+    const filtering = fAssign.filter((a) => !fVoted.has(a.proposalId)).length;
+
+    const dvEntries = await this.prisma.voteSnapshotEntry.findMany({
+      where: { drepId: drep.id, snapshot: { proposal: { stage: ProposalStage.DEBATE_VOTE, status: ProposalStatus.ACTIVE } } },
+      select: { snapshot: { select: { proposalId: true } } },
+    });
+    const dvProps = [...new Set(dvEntries.map((e) => e.snapshot.proposalId))];
+    const dvVoted = new Set(
+      (await this.prisma.vote.findMany({
+        where: { drepId: drep.id, phase: VotePhase.DEBATE_VOTE, proposalId: { in: dvProps } },
+        select: { proposalId: true },
+      })).map((v) => v.proposalId),
+    );
+    const dv = dvProps.filter((pid) => !dvVoted.has(pid)).length;
+
+    const mAssign = await this.prisma.milestoneAssignment.findMany({
+      where: { reviewerDrepId: drep.id, releasedAt: null, milestone: { status: 'POA_SUBMITTED' } },
+      select: { milestoneId: true },
+    });
+    const mVoted = new Set(
+      (await this.prisma.vote.findMany({
+        where: { drepId: drep.id, phase: VotePhase.MILESTONE, milestoneId: { in: mAssign.map((a) => a.milestoneId) } },
+        select: { milestoneId: true },
+      })).map((v) => v.milestoneId),
+    );
+    const milestone = mAssign.filter((a) => !mVoted.has(a.milestoneId)).length;
+
+    return { filtering, dv, milestone, total: filtering + dv + milestone };
   }
 
   /** §7.2 — assigned reviewer casts/changes a 1p1v filtering vote. NO requires rationale. */

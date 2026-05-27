@@ -547,8 +547,10 @@ export interface FilterResult {
   anchorHash: string | null;
 }
 
+export interface VotingTasksCount { filtering: number; dv: number; milestone: number; total: number }
 export const filteringApi = {
   myAssignments: () => request<FilterAssignment[]>('/me/assignments/filter'),
+  votingTasks: () => request<VotingTasksCount>('/me/voting-tasks'),
   result: (proposalId: string) => request<FilterResult>(`/proposals/${proposalId}/filter-result`),
   vote: (proposalId: string, choice: 'YES' | 'NO' | 'ABSTAIN', rationale?: string) =>
     request<FilterResult>(`/proposals/${proposalId}/filter-vote`, {
