@@ -818,6 +818,7 @@ export interface VoteInternalInput {
 }
 export const internalProposalsApi = {
   list: () => request<InternalProposalSummary[]>('/internal-proposals'),
+  pendingCount: () => request<{ count: number }>('/internal-proposals/pending-count'),
   get: (id: string) => request<InternalProposalDetail>(`/internal-proposals/${id}`),
   submit: (input: CreateInternalInput) =>
     request<InternalProposalDetail>('/internal-proposals', { method: 'POST', body: JSON.stringify(input) }),

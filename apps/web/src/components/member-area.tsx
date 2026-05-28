@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardApi, boardExpertsApi, removalApi, filteringApi, type MyExpert, type EntryEligibility } from '@/lib/api';
+import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, type MyExpert, type EntryEligibility } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -18,6 +18,7 @@ import { VotingPanel } from './voting-panel';
 import { MilestoneReviewsPanel } from './milestone-reviews-panel';
 import { BoardActions } from './board-actions';
 import { RoundStageControls } from './round-stage-controls';
+import { InternalProposals } from './internal-proposals';
 import { FeeConfirmations } from './fee-confirmations';
 import { BoardPayments } from './board-payments';
 import { PreferencesPanel } from './preferences-panel';
@@ -96,6 +97,15 @@ export function MemberArea() {
         </div>
       ),
     });
+    // §10 — internal proposals (DAO governance): submit + browse + vote. Same component as
+    // the left-nav "Internal proposals" view; the tab adds a notification badge for items
+    // awaiting THIS DRep's vote.
+    tabs.push({
+      key: 'internal',
+      label: 'Internal proposals',
+      badge: todo.internal,
+      node: <InternalProposals />,
+    });
   }
 
   tabs.push({
@@ -162,15 +172,16 @@ function ApplicationsTab() {
 /**
  * Red-circle counts for the My-area tabs = items still awaiting THIS member: the board's
  * Actions (treasury/fees/payments) + Applications (DRep/Expert apps + removals not yet voted),
- * and the voter's "Voting & reviews" tasks (filtering + D&V + milestone). Light polling.
+ * the voter's "Voting & reviews" tasks (filtering + D&V + milestone), and the §10 "Internal
+ * proposals" awaiting this DRep's vote. Light polling.
  */
 function useTodoCounts(isBoard: boolean, canVote: boolean) {
-  const [counts, setCounts] = useState({ actions: 0, applications: 0, voting: 0 });
+  const [counts, setCounts] = useState({ actions: 0, applications: 0, voting: 0, internal: 0 });
   useEffect(() => {
     if (!isBoard && !canVote) return;
     let alive = true;
     const poll = async () => {
-      const next = { actions: 0, applications: 0, voting: 0 };
+      const next = { actions: 0, applications: 0, voting: 0, internal: 0 };
       if (isBoard) {
         const [a, f, p, dapps, eapps, rem] = await Promise.allSettled([
           treasuryApi.boardActions(),
@@ -191,6 +202,7 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
       }
       if (canVote) {
         try { next.voting = (await filteringApi.votingTasks()).total; } catch { /* leave 0 */ }
+        try { next.internal = (await internalProposalsApi.pendingCount()).count; } catch { /* 0 */ }
       }
       if (alive) setCounts(next);
     };

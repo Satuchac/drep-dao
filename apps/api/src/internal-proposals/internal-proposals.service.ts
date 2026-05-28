@@ -250,6 +250,42 @@ export class InternalProposalsService {
 
   // ---- listing + detail -----------------------------------------------------
 
+  /**
+   * Count of internal proposals awaiting THIS user's vote: still ACTIVE + end in the future +
+   * this DRep is in the snapshot + no INTERNAL vote yet + visibility allows (PRIVATE → board).
+   * Powers the "Internal proposals" tab badge in My area.
+   */
+  async pendingCount(userId: string): Promise<{ count: number }> {
+    const drep = await this.prisma.drep.findUnique({ where: { userId } });
+    if (!drep) return { count: 0 };
+    const isBoard = await this.isBoardUser(userId);
+    const entries = await this.prisma.voteSnapshotEntry.findMany({
+      where: {
+        drepId: drep.id,
+        snapshot: {
+          proposal: {
+            type: ProposalType.INTERNAL,
+            status: ProposalStatus.ACTIVE,
+            votingEndAt: { gt: new Date() }, // skip those that should auto-finalize on next read
+            ...(isBoard ? {} : { isPrivate: false }),
+          },
+        },
+      },
+      select: { snapshot: { select: { proposalId: true } } },
+    });
+    const proposalIds = [...new Set(entries.map((e) => e.snapshot.proposalId))];
+    if (proposalIds.length === 0) return { count: 0 };
+    const voted = new Set(
+      (
+        await this.prisma.vote.findMany({
+          where: { drepId: drep.id, phase: VotePhase.INTERNAL, proposalId: { in: proposalIds } },
+          select: { proposalId: true },
+        })
+      ).map((v) => v.proposalId),
+    );
+    return { count: proposalIds.filter((pid) => !voted.has(pid)).length };
+  }
+
   async list(viewerUserId: string) {
     const isBoard = await this.isBoardUser(viewerUserId);
     const all = await this.prisma.proposal.findMany({

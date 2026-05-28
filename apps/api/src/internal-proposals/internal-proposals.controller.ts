@@ -16,6 +16,12 @@ export class InternalProposalsController {
     return this.internal.list(c.userId);
   }
 
+  // Static route must come BEFORE @Get(':id') (UUID pipe would reject 'pending-count').
+  @Get('pending-count')
+  pendingCount(@CurrentUser() c: AuthContext) {
+    return this.internal.pendingCount(c.userId);
+  }
+
   @Get(':id')
   get(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.internal.detail(id, c.userId);

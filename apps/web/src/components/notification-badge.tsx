@@ -1,22 +1,23 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, filteringApi, removalApi, treasuryApi } from '@/lib/api';
+import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, filteringApi, internalProposalsApi, removalApi, treasuryApi } from '@/lib/api';
 
 /**
  * §15.3 — notifications in the login rectangle. A red circle with the total number of to-dos
  * awaiting this member across the Actions tab (board treasury/fees/payments), the Applications
- * tab (board DRep/Expert applications + removals), and the Voting & reviews tab (filtering / D&V
- * / milestone). Clicking lands on whichever tab has work — Actions, then Applications, then
- * Voting & reviews. Self-hides when there is nothing to do.
+ * tab (board DRep/Expert applications + removals), the Voting & reviews tab (filtering / D&V /
+ * milestone), and the §10 Internal proposals tab. Clicking lands on whichever tab has work —
+ * Actions, then Applications, then Voting & reviews, then Internal proposals. Self-hides when
+ * there is nothing to do.
  */
-export function NotificationBadge({ isBoard, onNavigate }: { isBoard: boolean; onNavigate: (tab: 'sign' | 'apps' | 'voting') => void }) {
-  const [counts, setCounts] = useState({ actions: 0, applications: 0, voting: 0 });
+export function NotificationBadge({ isBoard, onNavigate }: { isBoard: boolean; onNavigate: (tab: 'sign' | 'apps' | 'voting' | 'internal') => void }) {
+  const [counts, setCounts] = useState({ actions: 0, applications: 0, voting: 0, internal: 0 });
 
   useEffect(() => {
     let alive = true;
     const poll = async () => {
-      const next = { actions: 0, applications: 0, voting: 0 };
+      const next = { actions: 0, applications: 0, voting: 0, internal: 0 };
       if (isBoard) {
         const [a, f, p, dapps, eapps, rem] = await Promise.allSettled([
           treasuryApi.boardActions(),
@@ -36,6 +37,7 @@ export function NotificationBadge({ isBoard, onNavigate }: { isBoard: boolean; o
           (rem.status === 'fulfilled' ? rem.value.filter((x) => !x.myVote).length : 0);
       }
       try { next.voting = (await filteringApi.votingTasks()).total; } catch { /* leave 0 */ }
+      try { next.internal = (await internalProposalsApi.pendingCount()).count; } catch { /* 0 */ }
       if (alive) setCounts(next);
     };
     poll();
@@ -46,12 +48,25 @@ export function NotificationBadge({ isBoard, onNavigate }: { isBoard: boolean; o
     };
   }, [isBoard]);
 
-  const total = counts.actions + counts.applications + counts.voting;
+  const total = counts.actions + counts.applications + counts.voting + counts.internal;
   if (total <= 0) return null;
 
-  // Land on the tab that actually has work: Actions, then Applications, then Voting & reviews.
-  const target = counts.actions > 0 ? 'sign' : counts.applications > 0 ? 'apps' : 'voting';
-  const label = counts.actions > 0 ? 'Actions' : counts.applications > 0 ? 'Applications' : 'Voting & reviews';
+  // Land on the tab that actually has work: Actions, then Applications, then Voting & reviews,
+  // then Internal proposals.
+  const target = counts.actions > 0
+    ? 'sign'
+    : counts.applications > 0
+      ? 'apps'
+      : counts.voting > 0
+        ? 'voting'
+        : 'internal';
+  const label = counts.actions > 0
+    ? 'Actions'
+    : counts.applications > 0
+      ? 'Applications'
+      : counts.voting > 0
+        ? 'Voting & reviews'
+        : 'Internal proposals';
 
   return (
     <button
