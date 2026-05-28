@@ -32,6 +32,7 @@ const SUITES = [
   ['test-category-ask', '§5.2 category min/max ask enforced on submit + §3.4 funding fields (self-cleaning)'],
   ['test-round-counts', '§9 round overview per-status counts incl. DRAFT/PENDING, update as status changes (self-cleaning)'],
   ['test-internal', '§10 internal proposals: submit/threshold/poll/extend/scope/private + on-chain anchor (self-cleaning)'],
+  ['test-internal-election', '§14 board-member election: validation, voting → approval, install authorization, manual + auto install (self-cleaning, restores board)'],
 ];
 
 const failed = [];

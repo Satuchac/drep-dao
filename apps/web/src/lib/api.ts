@@ -790,11 +790,20 @@ export interface InternalProposalSummary {
   isMine: boolean;
   myVotes: string[];
   canVote: boolean;
+  isBoardElection: boolean;
+  boardInstalledAt: string | null;
+}
+export interface BoardCandidate {
+  drepId: string;
+  drepKeyHash: string;
+  drepIdOnchain: string;
+  displayName: string;
 }
 export interface InternalProposalDetail extends InternalProposalSummary {
   contentMd: string;
   submitterDrepId: string | null;
   actors: string[] | null;
+  candidates: BoardCandidate[] | null; // §14 — set when isBoardElection
   deliveryDate: string | null;
   poll: { multiple: boolean; options: string[] } | null;
   votingStartAt: string | null;
@@ -816,6 +825,11 @@ export interface CreateInternalInput {
   pollMultiple?: boolean;
   actors?: string[];
   deliveryDate?: string;
+  // §14 board-member election: when true, candidates (5 admitted-DRep UUIDs) become the new
+  // board on approval + deliveryDate. Voters scope / voting type / threshold are forced by
+  // the server (BOTH / BALANCED / IMPORTANT).
+  isBoardElection?: boolean;
+  candidates?: string[];
 }
 export interface VoteInternalInput {
   choice?: 'YES' | 'NO' | 'ABSTAIN';
@@ -832,4 +846,9 @@ export const internalProposalsApi = {
     request<InternalProposalDetail>(`/internal-proposals/${id}/vote`, { method: 'POST', body: JSON.stringify(input) }),
   extend: (id: string, votingEndAt: string) =>
     request<InternalProposalDetail>(`/internal-proposals/${id}/extend`, { method: 'POST', body: JSON.stringify({ votingEndAt }) }),
+  installBoard: (id: string) =>
+    request<{ id: string; publicId: string | null; boardInstalledAt: string | null }>(
+      `/internal-proposals/${id}/install-board`,
+      { method: 'POST' },
+    ),
 };

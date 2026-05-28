@@ -46,4 +46,10 @@ export class InternalProposalsController {
   finalize(@Param('id', ParseUUIDPipe) id: string) {
     return this.internal.finalize(id);
   }
+
+  // §14 — board member triggers the new-board installation early (after the election is APPROVED).
+  @Post(':id/install-board')
+  installBoard(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.internal.installNewBoard(c.userId, id);
+  }
 }

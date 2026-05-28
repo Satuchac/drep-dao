@@ -11,6 +11,7 @@ import {
   type DaoMember,
   type PublicConfig,
 } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
 import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
@@ -39,6 +40,8 @@ export function InternalProposals() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  // §14 — sub-menu splits the regular DAO-governance proposals from board-member elections.
+  const [subTab, setSubTab] = useState<'regular' | 'election'>('regular');
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -50,15 +53,37 @@ export function InternalProposals() {
     return <InternalDetail id={openId} onBack={() => { setOpenId(null); load(); }} />;
   }
 
-  // Default view = still-open proposals; "Show history" reveals decided ones (APPROVED/REJECTED).
-  const visible = (items ?? []).filter((p) => showHistory || p.status === 'ACTIVE');
+  const all = items ?? [];
+  // Sub-tab filter (regular vs election), then the optional history filter.
+  const inTab = all.filter((p) => (subTab === 'election' ? p.isBoardElection : !p.isBoardElection));
+  const visible = inTab.filter((p) => showHistory || p.status === 'ACTIVE');
+  const isElection = subTab === 'election';
+
+  const subTabBtn = (key: 'regular' | 'election', label: string) => (
+    <button
+      onClick={() => { setSubTab(key); setCreating(false); }}
+      className={`rounded-md px-3 py-1.5 text-sm ${subTab === key ? 'bg-emerald-600 font-medium text-white' : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'}`}
+    >
+      {label}
+    </button>
+  );
 
   return (
     <div className="space-y-4">
+      {/* §14 — sub-menu inside the Internal proposals view. */}
+      <div className="flex flex-wrap gap-1 border-b border-neutral-200 pb-2 dark:border-neutral-800">
+        {subTabBtn('regular', 'Internal proposals')}
+        {subTabBtn('election', 'Board member election')}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold">Internal proposals</h2>
-          <p className="text-sm text-neutral-500">DAO-governance decisions — process changes, parameter changes, board changes, polls. Not tied to a round; voting opens immediately.</p>
+          <h2 className="text-lg font-semibold">{isElection ? 'Board member election' : 'Internal proposals'}</h2>
+          <p className="text-sm text-neutral-500">
+            {isElection
+              ? '§14 — propose a new 5-member board. Approval + the installation date trigger the platform to replace the board automatically.'
+              : 'DAO-governance decisions — process changes, parameter changes, polls. Not tied to a round; voting opens immediately.'}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
@@ -66,7 +91,7 @@ export function InternalProposals() {
             Show history
           </label>
           <button onClick={() => setCreating((v) => !v)} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-            {creating ? 'Close' : 'New internal proposal'}
+            {creating ? 'Close' : isElection ? 'New election' : 'New internal proposal'}
           </button>
         </div>
       </div>
@@ -74,14 +99,16 @@ export function InternalProposals() {
 
       {creating ? (
         <section className={card}>
-          <SubmitInternalForm onDone={() => { setCreating(false); load(); }} />
+          <SubmitInternalForm election={isElection} onDone={() => { setCreating(false); load(); }} />
         </section>
       ) : null}
 
       {items === null ? (
         <p className="text-sm text-neutral-500">Loading…</p>
       ) : visible.length === 0 ? (
-        <p className="text-sm text-neutral-500">{showHistory ? 'No internal proposals yet.' : 'No active internal proposals — toggle "Show history" to see decided ones.'}</p>
+        <p className="text-sm text-neutral-500">{showHistory
+          ? (isElection ? 'No board-member elections yet.' : 'No internal proposals yet.')
+          : (isElection ? 'No active elections — toggle "Show history" to see decided ones.' : 'No active internal proposals — toggle "Show history" to see decided ones.')}</p>
       ) : (
         <ul className="space-y-2">
           {visible.map((p) => (
@@ -131,7 +158,7 @@ function formatMyVote(p: { internalType: string; myVotes: string[] }): string {
   return `you voted ${v[0] === 'ABSTAIN' ? 'Abstain' : v[0]}`;
 }
 
-function SubmitInternalForm({ onDone }: { onDone: () => void }) {
+function SubmitInternalForm({ onDone, election = false }: { onDone: () => void; election?: boolean }) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [internalType, setInternalType] = useState('INFORMATIVE');
@@ -143,6 +170,8 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
   const [pollMultiple, setPollMultiple] = useState(false);
   const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
   const [actors, setActors] = useState<string[]>([]); // selected DRep display names
+  const [candidates, setCandidates] = useState<string[]>([]); // §14 election: 5 DRep UUIDs
+  const [installDate, setInstallDate] = useState(''); // §14 election: datetime-local
   const [deliveryDate, setDeliveryDate] = useState('');
   const [members, setMembers] = useState<DaoMember[]>([]);
   const [cfg, setCfg] = useState<PublicConfig | null>(null);
@@ -165,6 +194,33 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
     setError(null);
     const end = new Date(votingEnd);
     if (Number.isNaN(end.getTime()) || end.getTime() <= Date.now()) { setError('Pick a voting-end date in the future.'); return; }
+
+    if (election) {
+      if (candidates.length !== 5) { setError('Pick exactly 5 candidates.'); return; }
+      const install = new Date(installDate);
+      if (Number.isNaN(install.getTime()) || install.getTime() <= end.getTime()) {
+        setError('The installation date must be later than the voting end.'); return;
+      }
+      const input: CreateInternalInput = {
+        title: title.trim(),
+        contentMd: content,
+        internalType: 'INSTRUCTIVE',
+        // Server forces these for elections — pass safe defaults anyway.
+        votersScope: 'BOTH',
+        thresholdKind: 'IMPORTANT',
+        votingType: 'BALANCED',
+        votingEndAt: end.toISOString(),
+        isBoardElection: true,
+        candidates,
+        deliveryDate: install.toISOString(),
+      };
+      setBusy(true);
+      try { await internalProposalsApi.submit(input); onDone(); }
+      catch (err) { setError(err instanceof Error ? err.message : 'failed'); }
+      finally { setBusy(false); }
+      return;
+    }
+
     const cleanOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
     if (isPoll && cleanOptions.length < 2) { setError('A poll needs at least two options.'); return; }
     const input: CreateInternalInput = {
@@ -193,7 +249,7 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <h3 className="text-base font-semibold">New internal proposal</h3>
+      <h3 className="text-base font-semibold">{election ? 'New board-member election' : 'New internal proposal'}</h3>
 
       <label className="block space-y-1">
         <span className="text-sm font-medium">Title</span>
@@ -204,12 +260,20 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
       <MarkdownEditor value={content} onChange={setContent} title="Content" placeholder="Describe the proposal (markdown)" minRows={5} required />
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <label className="block space-y-1">
-          <span className="text-sm font-medium">Type</span>
-          <select className={field} value={internalType} onChange={(e) => setInternalType(e.target.value)}>
-            {Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </select>
-        </label>
+        {election ? (
+          // §14 — for an election the type is fixed (an INSTRUCTIVE proposal); show it as info.
+          <div className="space-y-1">
+            <span className="text-sm font-medium">Type</span>
+            <div className={`${field} bg-neutral-50 text-neutral-600 dark:bg-neutral-950 dark:text-neutral-400`}>Instructive — board-member election</div>
+          </div>
+        ) : (
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">Type</span>
+            <select className={field} value={internalType} onChange={(e) => setInternalType(e.target.value)}>
+              {Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          </label>
+        )}
         <label className="block space-y-1">
           <span className="text-sm font-medium">Voting ends</span>
           <input type="datetime-local" className={field} value={votingEnd} min={toLocalInput(new Date().toISOString())} onChange={(e) => setVotingEnd(e.target.value)} required />
@@ -217,7 +281,7 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
         </label>
       </div>
 
-      {isPoll ? (
+      {!election && isPoll ? (
         <div className="space-y-2 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
           <div className="text-sm font-medium">Poll options</div>
           {pollOptions.map((o, i) => (
@@ -236,7 +300,7 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
         </div>
       ) : null}
 
-      {isInstructive ? (
+      {!election && isInstructive ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
             <span className="text-sm font-medium">Actors <span className="font-normal text-neutral-400">(optional — who must act if approved)</span></span>
@@ -266,6 +330,56 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
         </div>
       ) : null}
 
+      {election ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1">
+            <span className="text-sm font-medium">Candidates (pick exactly 5 DReps)</span>
+            {/* §14 — the 5 candidates who will become the new board on approval + installation date. */}
+            <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-neutral-300 p-2 dark:border-neutral-700">
+              {members.length === 0 ? (
+                <span className="text-xs text-neutral-400">No DAO members to choose from.</span>
+              ) : (
+                members.map((m) => {
+                  const picked = candidates.includes(m.drepId);
+                  return (
+                    <label key={m.drepId} className={`flex items-center gap-2 text-sm ${!picked && candidates.length >= 5 ? 'opacity-50' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={picked}
+                        disabled={!picked && candidates.length >= 5}
+                        onChange={() => setCandidates((s) => (s.includes(m.drepId) ? s.filter((x) => x !== m.drepId) : [...s, m.drepId]))}
+                      />
+                      {m.displayName}{m.isBoard ? <span className="text-[10px] text-neutral-400"> (board)</span> : null}
+                    </label>
+                  );
+                })
+              )}
+            </div>
+            <span className={`text-xs ${candidates.length === 5 ? 'text-emerald-600' : 'text-neutral-500'}`}>
+              {candidates.length} / 5 selected
+            </span>
+          </div>
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">Installation date <span className="font-normal text-neutral-400">(when the new board takes seats — must be after voting ends)</span></span>
+            <input type="datetime-local" className={field} value={installDate} min={votingEnd || toLocalInput(new Date().toISOString())} onChange={(e) => setInstallDate(e.target.value)} required />
+          </label>
+        </div>
+      ) : null}
+
+      {election ? (
+        <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400">
+          Election defaults are fixed:
+          <ul className="mt-1 list-disc pl-5">
+            <li><span className="font-medium">Who can vote:</span> all DReps (board + others)</li>
+            <li><span className="font-medium">Voting type:</span> adjusted voting power</li>
+            <li><span className="font-medium">Threshold:</span> IMPORTANT{iThresh != null ? ` (${iThresh}%)` : ''}</li>
+            <li><span className="font-medium">Visibility:</span> public</li>
+            <li>When approved + the installation date hits, the platform replaces the board with the 5 elected candidates automatically. Any current board member can also install them earlier from the proposal page.</li>
+          </ul>
+        </div>
+      ) : null}
+
+      {!election ? (
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="block space-y-1">
           <span className="text-sm font-medium">Who can vote</span>
@@ -287,11 +401,14 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
           </select>
         </label>
       </div>
+      ) : null}
 
+      {!election ? (
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
         Private — visible &amp; votable to board members only
       </label>
+      ) : null}
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       <button type="submit" disabled={busy || !title.trim() || !content.trim()} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
@@ -302,6 +419,8 @@ function SubmitInternalForm({ onDone }: { onDone: () => void }) {
 }
 
 function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
+  const { profile } = useAuth();
+  const isBoard = !!profile?.roles.includes('BOARD');
   const { txUrl } = useExplorer();
   const [p, setP] = useState<InternalProposalDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -365,7 +484,15 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</Markdown>
         </div>
 
-        {p.internalType === 'INSTRUCTIVE' && (p.actors?.length || p.deliveryDate) ? (
+        {p.isBoardElection ? (
+          <div className="mt-3 space-y-1 rounded-md border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
+            <div><span className="font-medium">Candidates (5):</span> {p.candidates?.map((c) => c.displayName).join(', ') ?? '—'}</div>
+            <div><span className="font-medium">Installation date:</span> {fmtDateTime(p.deliveryDate)}</div>
+            {p.boardInstalledAt ? (
+              <div className="text-emerald-700 dark:text-emerald-400">✓ Board installed {fmtDateTime(p.boardInstalledAt)}</div>
+            ) : null}
+          </div>
+        ) : p.internalType === 'INSTRUCTIVE' && (p.actors?.length || p.deliveryDate) ? (
           <div className="mt-3 rounded-md border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
             {p.actors?.length ? <div><span className="font-medium">Actors:</span> {p.actors.join(', ')}</div> : null}
             {p.deliveryDate ? <div><span className="font-medium">Delivery date:</span> {fmtDateTime(p.deliveryDate)}</div> : null}
@@ -418,6 +545,26 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <div className="mt-2 text-xs text-neutral-400">on-chain anchor recorded (pending submission)</div>
         ) : null}
       </div>
+
+      {/* §14 — election install: board members can trigger early; otherwise the platform auto-installs at the installation date. */}
+      {p.isBoardElection && p.status === 'APPROVED' && !p.boardInstalledAt ? (
+        <div className={card}>
+          <h3 className="text-base font-semibold">New board ready to install</h3>
+          <p className="text-xs text-neutral-500">
+            Installation date: {fmtDateTime(p.deliveryDate)}. The platform will install the new board automatically when that date arrives.
+            {isBoard ? ' As a current board member, you can install them earlier:' : ''}
+          </p>
+          {isBoard ? (
+            <button
+              disabled={busy}
+              onClick={() => act(() => internalProposalsApi.installBoard(id))}
+              className="mt-2 rounded-md border border-emerald-500 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
+            >
+              {busy ? 'Installing…' : 'Install new board members now'}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Voting */}
       {p.status === 'ACTIVE' && p.canVote ? (

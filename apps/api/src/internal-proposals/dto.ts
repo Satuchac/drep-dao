@@ -43,6 +43,12 @@ export class CreateInternalProposalDto {
   // INSTRUCTIVE only: who is expected to act if approved + the target delivery date.
   @IsOptional() @IsArray() @IsString({ each: true }) actors?: string[];
   @IsOptional() @IsISO8601() deliveryDate?: string;
+
+  // §14 board-member election: when true, the proposal is an INSTRUCTIVE internal proposal
+  // whose `candidates` (exactly 5 admitted-DRep UUIDs) become the new board on approval +
+  // deliveryDate. The submit method forces scope=BOTH / type=BALANCED / threshold=IMPORTANT.
+  @IsOptional() @IsBoolean() isBoardElection?: boolean;
+  @IsOptional() @IsArray() @IsString({ each: true }) candidates?: string[];
 }
 
 /** Cast or change a vote. Threshold proposals use `choice`; polls use `options`. */

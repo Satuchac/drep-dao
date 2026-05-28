@@ -24,6 +24,7 @@ import {
   ProposalType,
 } from '@drep-dao/shared';
 import { GovSubject, VotingStyle } from '@drep-dao/cardano';
+import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnchorService } from '../cardano/anchor.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
@@ -65,9 +66,7 @@ export class InternalProposalsService {
     if (dto.internalType === InternalType.POLL && (!dto.pollOptions || dto.pollOptions.length < 2)) {
       throw new BadRequestException('a poll needs at least two options');
     }
-    // PRIVATE proposals are visible + votable to board members only.
-    const scope = dto.isPrivate ? VotersScope.BOARD_ONLY : dto.votersScope;
-    const thresholdPct = await this.thresholdPct(dto.thresholdKind);
+
     const now = new Date();
     // Submitter picks an end date (the platform derives the days); a days duration is the fallback.
     const end = dto.votingEndAt
@@ -76,6 +75,49 @@ export class InternalProposalsService {
     if (Number.isNaN(end.getTime()) || end.getTime() <= now.getTime()) {
       throw new BadRequestException('the voting end must be a date in the future');
     }
+
+    // §14 — Board-member election: an INSTRUCTIVE internal proposal with forced defaults.
+    // Voters scope / voting type / threshold are NOT submitter-configurable for elections.
+    let internalType = dto.internalType;
+    let scope = dto.isPrivate ? VotersScope.BOARD_ONLY : dto.votersScope;
+    let votingType = dto.votingType;
+    let thresholdKind = dto.thresholdKind;
+    let actorsData: unknown = dto.internalType === InternalType.INSTRUCTIVE && dto.actors?.length ? dto.actors : undefined;
+    let deliveryDate: Date | undefined =
+      dto.internalType === InternalType.INSTRUCTIVE && dto.deliveryDate ? new Date(dto.deliveryDate) : undefined;
+
+    if (dto.isBoardElection) {
+      internalType = InternalType.INSTRUCTIVE;
+      scope = VotersScope.BOTH;
+      votingType = VotingType.BALANCED;
+      thresholdKind = 'IMPORTANT';
+      if (dto.isPrivate) throw new BadRequestException('board-member elections are public — cannot be PRIVATE');
+      if (!dto.candidates || dto.candidates.length !== 5) {
+        throw new BadRequestException('a board-member election must include exactly 5 candidates');
+      }
+      if (new Set(dto.candidates).size !== 5) throw new BadRequestException('candidates must be distinct');
+      if (!dto.deliveryDate) throw new BadRequestException('an installation date (delivery date) is required');
+      deliveryDate = new Date(dto.deliveryDate);
+      if (Number.isNaN(deliveryDate.getTime()) || deliveryDate.getTime() <= end.getTime()) {
+        throw new BadRequestException('the installation date must be later than the voting end');
+      }
+      // Resolve candidates → store {drepId, drepKeyHash, drepIdOnchain, displayName} in actors.
+      const dreps = await this.prisma.drep.findMany({
+        where: { id: { in: dto.candidates }, status: 'ADMITTED' },
+        include: { user: { select: { drepKeyHash: true, displayName: true } } },
+      });
+      if (dreps.length !== 5) throw new BadRequestException('every candidate must be an admitted DRep');
+      const missingKey = dreps.find((d) => !d.user?.drepKeyHash);
+      if (missingKey) throw new BadRequestException('a candidate has no on-chain DRep key — cannot install');
+      actorsData = dreps.map((d) => ({
+        drepId: d.id,
+        drepKeyHash: d.user!.drepKeyHash!,
+        drepIdOnchain: d.drepIdOnchain,
+        displayName: d.user?.displayName ?? '(no name)',
+      }));
+    }
+
+    const thresholdPct = await this.thresholdPct(thresholdKind);
     const publicId = await this.nextPublicId();
 
     const proposal = await this.prisma.proposal.create({
@@ -88,18 +130,18 @@ export class InternalProposalsService {
         submitterDrepId: drep.id,
         title: dto.title.trim(),
         contentMd: dto.contentMd,
-        internalType: dto.internalType,
+        internalType,
         votersScope: scope,
-        thresholdKind: dto.thresholdKind,
-        isPrivate: !!dto.isPrivate,
+        thresholdKind,
+        isPrivate: !!dto.isPrivate && !dto.isBoardElection,
+        isBoardElection: !!dto.isBoardElection,
         pollOptions:
-          dto.internalType === InternalType.POLL
+          internalType === InternalType.POLL
             ? { multiple: !!dto.pollMultiple, options: dto.pollOptions }
             : undefined,
-        actors: dto.internalType === InternalType.INSTRUCTIVE && dto.actors?.length ? dto.actors : undefined,
-        deliveryDate:
-          dto.internalType === InternalType.INSTRUCTIVE && dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
-        votingType: dto.votingType,
+        actors: actorsData as Prisma.InputJsonValue | undefined,
+        deliveryDate,
+        votingType,
         approvalThresholdPct: thresholdPct,
         votingStartAt: now,
         votingEndAt: end,
@@ -107,7 +149,7 @@ export class InternalProposalsService {
       },
     });
     // Freeze the eligible-voter set + power now, so voting can start immediately.
-    await this.buildSnapshot(proposal.id, scope, dto.votingType);
+    await this.buildSnapshot(proposal.id, scope, votingType);
     return this.detail(proposal.id, userId);
   }
 
@@ -320,6 +362,8 @@ export class InternalProposalsService {
     });
     if (!p || p.type !== ProposalType.INTERNAL) throw new NotFoundException('internal proposal not found');
     await this.maybeFinalize(p);
+    // §14 auto-install: an approved election whose installation date has passed → install now.
+    await this.maybeInstallElection(p.id);
     if (p.isPrivate && !ctx.isBoard) throw new ForbiddenException('this internal proposal is private to the board');
 
     const fresh = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
@@ -335,6 +379,14 @@ export class InternalProposalsService {
     const anchor = await this.prisma.anchor.findFirst({ where: { proposalId, kind: 'internal' }, orderBy: { createdAt: 'desc' } });
     const pollCfg = (p.pollOptions ?? null) as { multiple?: boolean; options?: string[] } | null;
 
+    // For elections, `actors` is a JSON array of {drepId, drepKeyHash, drepIdOnchain, displayName};
+    // for plain instructive proposals it's a plain string[] of names.
+    const isElection = !!p.isBoardElection;
+    const rawActors = p.actors as unknown;
+    const candidates = isElection && Array.isArray(rawActors)
+      ? (rawActors as { drepId: string; drepKeyHash: string; drepIdOnchain: string; displayName: string }[])
+      : null;
+    const freshAfterInstall = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
     return {
       id: p.id,
       publicId: p.publicId,
@@ -345,11 +397,15 @@ export class InternalProposalsService {
       thresholdKind: p.thresholdKind,
       votingType: p.votingType,
       isPrivate: p.isPrivate,
-      status: fresh?.status ?? p.status,
+      isBoardElection: isElection,
+      boardInstalledAt: freshAfterInstall?.boardInstalledAt ?? null,
+      status: freshAfterInstall?.status ?? fresh?.status ?? p.status,
       submitter: p.submitterUser?.displayName ?? null,
       submitterDrepId: p.submitterDrep?.drepIdOnchain ?? null,
       isMine: p.submitterUserId === ctx.userId,
-      actors: (p.actors as string[] | null) ?? null,
+      // legacy `actors: string[]` for non-election Instructive proposals
+      actors: !isElection && Array.isArray(rawActors) ? (rawActors as string[]) : null,
+      candidates,
       deliveryDate: p.deliveryDate,
       poll: pollCfg ? { multiple: !!pollCfg.multiple, options: pollCfg.options ?? [] } : null,
       thresholdPct: p.approvalThresholdPct ? Number(p.approvalThresholdPct) : null,
@@ -375,6 +431,8 @@ export class InternalProposalsService {
       votingType: d.votingType,
       thresholdKind: d.thresholdKind,
       isPrivate: d.isPrivate,
+      isBoardElection: d.isBoardElection,
+      boardInstalledAt: d.boardInstalledAt,
       status: d.status,
       submitter: d.submitter,
       votingEndAt: d.votingEndAt,
@@ -459,6 +517,59 @@ export class InternalProposalsService {
     if (p.status !== ProposalStatus.ACTIVE) return;
     if (!p.votingEndAt || p.votingEndAt.getTime() > Date.now()) return;
     await this.finalize(p.id);
+  }
+
+  /**
+   * §14 — auto-install the new board when an approved election's installation date has passed
+   * and we haven't installed yet. Triggered on every detail read so an admin needn't intervene.
+   */
+  private async maybeInstallElection(proposalId: string) {
+    const p = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    if (!p || !p.isBoardElection) return;
+    if (p.status !== ProposalStatus.APPROVED) return;
+    if (p.boardInstalledAt) return;
+    if (!p.deliveryDate || p.deliveryDate.getTime() > Date.now()) return;
+    await this.installBoardFromProposal(p.id);
+  }
+
+  /**
+   * §14 manual install — a current board member triggers the new board's installation early
+   * (i.e. before deliveryDate) once the election was approved. Idempotent (no-op if already installed).
+   */
+  async installNewBoard(userId: string, proposalId: string) {
+    const p = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    if (!p || !p.isBoardElection) throw new NotFoundException('board-election proposal not found');
+    if (p.status !== ProposalStatus.APPROVED) {
+      throw new ConflictException('the election must be APPROVED before the new board can be installed');
+    }
+    if (p.boardInstalledAt) {
+      return { id: p.id, publicId: p.publicId, boardInstalledAt: p.boardInstalledAt };
+    }
+    if (!(await this.isBoardUser(userId))) {
+      throw new ForbiddenException('only a current board member can install the new board');
+    }
+    return this.installBoardFromProposal(p.id);
+  }
+
+  /** Replace the board seats with the proposal's 5 candidates in one transaction, mark installed. */
+  private async installBoardFromProposal(proposalId: string) {
+    const p = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    if (!p) throw new NotFoundException('proposal not found');
+    const candidates = (p.actors as unknown) as { drepKeyHash: string; drepIdOnchain: string; displayName: string }[];
+    if (!Array.isArray(candidates) || candidates.length !== 5) {
+      throw new BadRequestException('election has no valid candidate set');
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.boardSeat.deleteMany({});
+      for (const c of candidates) {
+        await tx.boardSeat.create({
+          data: { drepKeyHash: c.drepKeyHash, drepId: c.drepIdOnchain, displayName: c.displayName },
+        });
+      }
+      await tx.proposal.update({ where: { id: proposalId }, data: { boardInstalledAt: new Date() } });
+    });
+    const fresh = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    return { id: proposalId, publicId: fresh?.publicId ?? null, boardInstalledAt: fresh?.boardInstalledAt ?? null };
   }
 
   /** Conclude voting → APPROVED/REJECTED (threshold) or APPROVED (poll), and anchor on-chain. */
