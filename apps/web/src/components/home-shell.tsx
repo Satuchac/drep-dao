@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { ConnectWallet } from './connect-wallet';
@@ -35,7 +36,21 @@ export function HomeShell() {
   // (and any open proposal) has its own shareable link. Switching the menu clears submenu state.
   const view = (NAV.some((n) => n.key === get('view')) ? get('view') : 'overview') as View;
   const openProposal = get('proposal');
-  const setView = (v: View) => setParams({ view: v, tab: null, round: null, proposal: null });
+  // Switching the menu (or signing in as a different user) clears all sub-navigation —
+  // tab inside My-area, opened round / funding proposal, opened internal proposal (`ip`).
+  const setView = (v: View) => setParams({ view: v, tab: null, round: null, proposal: null, ip: null });
+
+  // Reset sub-navigation whenever the signed-in user changes (login / logout / switch wallet) so
+  // a fresh login never inherits the previous user's open detail page (e.g. an ?ip= internal
+  // proposal). Top-level view is kept — the user lands on the same menu item, just clean.
+  const prevUserIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = profile?.user?.id ?? null;
+    if (prevUserIdRef.current !== id) {
+      prevUserIdRef.current = id;
+      setParams({ tab: null, round: null, proposal: null, ip: null });
+    }
+  }, [profile, setParams]);
 
   // Logged out (or restoring): centered landing with the wallet login.
   if (loading || !profile) {
@@ -119,7 +134,7 @@ export function HomeShell() {
         <div className="space-y-2 rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
           <ConnectWallet />
           {/* Jump straight to My area → the tab that has work (Actions, then Applications, then Voting). */}
-          <NotificationBadge isBoard={isBoard} onNavigate={(tab) => setParams({ view: 'me', tab, round: null, proposal: null })} />
+          <NotificationBadge isBoard={isBoard} onNavigate={(tab) => setParams({ view: 'me', tab, round: null, proposal: null, ip: null })} />
           <button
             onClick={() => setView('me')}
             className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
