@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 /** Shared presentation bits for rounds & proposals (badges, colors, formatting). */
 
 export const ROUND_STATUS_CLS: Record<string, string> = {
@@ -56,4 +58,60 @@ export function toLocalInput(iso: string | null | undefined): string {
   const d = new Date(iso);
   const off = d.getTimezoneOffset();
   return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 16);
+}
+
+/**
+ * Date / datetime-local input that buffers the pick until the user confirms — browsers commit
+ * the native picker's value on every interaction (no built-in Confirm/Cancel), which is easy to
+ * trigger by accident. Confirm/Cancel buttons appear only when there's an unconfirmed change.
+ */
+export function DateField({
+  value,
+  onChange,
+  type = 'datetime-local',
+  min,
+  required,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  type?: 'date' | 'datetime-local';
+  min?: string;
+  required?: boolean;
+  className?: string;
+}) {
+  const [pending, setPending] = useState(value);
+  useEffect(() => setPending(value), [value]);
+  const dirty = pending !== value;
+  const inputCls = className ?? 'w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900';
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <input
+        type={type}
+        className={inputCls}
+        value={pending}
+        min={min}
+        required={required}
+        onChange={(e) => setPending(e.target.value)}
+      />
+      {dirty ? (
+        <>
+          <button
+            type="button"
+            onClick={() => onChange(pending)}
+            className="rounded border border-emerald-500 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950"
+          >
+            Confirm
+          </button>
+          <button
+            type="button"
+            onClick={() => setPending(value)}
+            className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            Cancel
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
 }

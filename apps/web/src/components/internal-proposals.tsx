@@ -13,7 +13,7 @@ import {
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
-import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput } from './round-ui';
+import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput, DateField } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
 
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
@@ -276,7 +276,7 @@ function SubmitInternalForm({ onDone, election = false }: { onDone: () => void; 
         )}
         <label className="block space-y-1">
           <span className="text-sm font-medium">Voting ends</span>
-          <input type="datetime-local" className={field} value={votingEnd} min={toLocalInput(new Date().toISOString())} onChange={(e) => setVotingEnd(e.target.value)} required />
+          <DateField value={votingEnd} onChange={setVotingEnd} min={toLocalInput(new Date().toISOString())} required className={field} />
           <span className="text-xs text-neutral-500">{days > 0 ? `voting will run ${days} day${days === 1 ? '' : 's'} from now` : 'pick a future date'}</span>
         </label>
       </div>
@@ -325,7 +325,7 @@ function SubmitInternalForm({ onDone, election = false }: { onDone: () => void; 
           </div>
           <label className="block space-y-1">
             <span className="text-sm font-medium">Delivery date <span className="font-normal text-neutral-400">(optional)</span></span>
-            <input type="date" className={field} value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
+            <DateField value={deliveryDate} onChange={setDeliveryDate} type="date" className={field} />
           </label>
         </div>
       ) : null}
@@ -361,7 +361,7 @@ function SubmitInternalForm({ onDone, election = false }: { onDone: () => void; 
           </div>
           <label className="block space-y-1">
             <span className="text-sm font-medium">Installation date <span className="font-normal text-neutral-400">(when the new board takes seats — must be after voting ends)</span></span>
-            <input type="datetime-local" className={field} value={installDate} min={votingEnd || toLocalInput(new Date().toISOString())} onChange={(e) => setInstallDate(e.target.value)} required />
+            <DateField value={installDate} onChange={setInstallDate} min={votingEnd || toLocalInput(new Date().toISOString())} required className={field} />
           </label>
         </div>
       ) : null}
@@ -611,7 +611,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <h3 className="text-base font-semibold">Manage voting period</h3>
           <p className="text-xs text-neutral-500">You can move the end of voting (you can&apos;t edit the content while voting is open).</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <input type="datetime-local" className={`${field} sm:w-auto`} value={newEnd || toLocalInput(p.votingEndAt)} onChange={(e) => setNewEnd(e.target.value)} />
+            <DateField value={newEnd || toLocalInput(p.votingEndAt)} onChange={setNewEnd} className={`${field} sm:w-auto`} />
             <button disabled={busy} onClick={() => act(() => internalProposalsApi.extend(id, new Date(newEnd || toLocalInput(p.votingEndAt)).toISOString()))} className="rounded border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800">Update end</button>
           </div>
         </div>

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { boardRoundsApi, roundsApi, type RoundDetail } from '@/lib/api';
-import { ProposalCounts, StatusBadge, fmtDateTime, toLocalInput } from './round-ui';
+import { ProposalCounts, StatusBadge, fmtDateTime, toLocalInput, DateField } from './round-ui';
 import { CreateRoundForm } from './rounds-section';
 
 const STAGE_LABEL: Record<string, string> = {
@@ -136,24 +136,22 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <label className="text-xs text-neutral-500">
+            <div className="flex items-center gap-1 text-xs text-neutral-500">
               starts
-              <input
-                type="datetime-local"
+              <DateField
                 value={startsAt}
-                onChange={(e) => setStartsAt(e.target.value)}
-                className="ml-1 rounded border border-neutral-300 px-1.5 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                onChange={setStartsAt}
+                className="rounded border border-neutral-300 px-1.5 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
               />
-            </label>
-            <label className="text-xs text-neutral-500">
+            </div>
+            <div className="flex items-center gap-1 text-xs text-neutral-500">
               ends
-              <input
-                type="datetime-local"
+              <DateField
                 value={endsAt}
-                onChange={(e) => setEndsAt(e.target.value)}
-                className="ml-1 rounded border border-neutral-300 px-1.5 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                onChange={setEndsAt}
+                className="rounded border border-neutral-300 px-1.5 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
               />
-            </label>
+            </div>
             <label className="flex items-center gap-1 text-xs">
               <input type="checkbox" checked={autoStart} onChange={(e) => setAutoStart(e.target.checked)} />
               auto-start at the planned time

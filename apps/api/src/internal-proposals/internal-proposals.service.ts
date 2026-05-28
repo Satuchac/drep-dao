@@ -102,8 +102,19 @@ export class InternalProposalsService {
         throw new BadRequestException('the installation date must be later than the voting end');
       }
       // Resolve candidates → store {drepId, drepKeyHash, drepIdOnchain, displayName} in actors.
+      // Accept either a `drep.id` UUID (tests/admin tooling) or a `drep_id_onchain` bech32 string
+      // (what `daoApi.members()` returns to the form).
+      const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const ids = dto.candidates.filter((c) => uuidRe.test(c));
+      const bechs = dto.candidates.filter((c) => !uuidRe.test(c));
       const dreps = await this.prisma.drep.findMany({
-        where: { id: { in: dto.candidates }, status: 'ADMITTED' },
+        where: {
+          status: 'ADMITTED',
+          OR: [
+            ...(ids.length ? [{ id: { in: ids } }] : []),
+            ...(bechs.length ? [{ drepIdOnchain: { in: bechs } }] : []),
+          ],
+        },
         include: { user: { select: { drepKeyHash: true, displayName: true } } },
       });
       if (dreps.length !== 5) throw new BadRequestException('every candidate must be an admitted DRep');
