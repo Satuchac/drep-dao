@@ -121,19 +121,47 @@ function FilterAssignmentRow({
     );
   }
 
-  // Quick row: vote inline, or open the full proposal.
+  // Quick row: rationale + YES/NO collapsed by default — the user wants to see at a glance
+  // that they voted, and only open the editor explicitly when they want to vote / change it.
+  return <QuickFilterRow a={a} voteBox={voteBox} onToggle={onToggle} />;
+}
+
+/**
+ * Collapsed-by-default row: title + voted status + a ▸/▾ toggle that reveals the rationale
+ * editor + YES/NO buttons. Not-yet-voted rows still default to closed (consistent presentation),
+ * but a small "Vote ▸" hint makes the next action obvious.
+ */
+function QuickFilterRow({ a, voteBox, onToggle }: { a: { title: string; myVote: string | null }; voteBox: React.ReactNode; onToggle: () => void }) {
+  const [expanded, setExpanded] = useState(false);
+  const toggleLabel = expanded
+    ? '▾ hide vote box'
+    : a.myVote ? '▸ edit your vote' : '▸ vote';
   return (
     <li className="rounded border border-neutral-200 px-3 py-2 dark:border-neutral-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium">{a.title}</span>
         <span className="flex items-center gap-3">
-          {a.myVote ? <span className="text-xs text-emerald-600">voted {a.myVote}</span> : null}
+          {a.myVote ? (
+            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+              voted {a.myVote}
+            </span>
+          ) : (
+            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              not voted yet
+            </span>
+          )}
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            className="text-xs text-emerald-700 hover:underline dark:text-emerald-400"
+          >
+            {toggleLabel}
+          </button>
           <button onClick={onToggle} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">
             View full proposal →
           </button>
         </span>
       </div>
-      {voteBox}
+      {expanded ? voteBox : null}
     </li>
   );
 }
