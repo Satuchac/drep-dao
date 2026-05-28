@@ -13,6 +13,7 @@ import {
 import { useExplorer } from '@/lib/explorer';
 import { ProposalDetail } from './proposal-detail';
 import { MarkdownEditor } from './markdown';
+import { CopyButton } from './copy-button';
 
 type Cat = { id: string; name: string; minAda: number | null; maxAda: number | null; conditions: string | null };
 
@@ -459,7 +460,10 @@ export function ProposalSubmit() {
                   address below and paste the transaction hash; the platform verifies it on-chain and a board member confirms.
                 </div>
                 {cfg?.submissionFeeAddress ? (
-                  <div className="mt-1 break-all font-mono text-[11px] text-neutral-500">{cfg.submissionFeeAddress}</div>
+                  <div className="mt-1 flex items-start gap-2">
+                    <div className="flex-1 break-all font-mono text-[11px] text-neutral-500">{cfg.submissionFeeAddress}</div>
+                    <CopyButton text={cfg.submissionFeeAddress} label="Copy address" />
+                  </div>
                 ) : null}
               </div>
               <input className={`${field} w-full`} placeholder="Submission fee TX hash (needed only to submit)" value={fee} onChange={(e) => setFee(e.target.value)} />
@@ -603,7 +607,12 @@ function MineRow({
           <div className="text-neutral-500">
             Pay the submission fee on-chain, then paste the tx hash. The platform verifies it and a board member confirms.
           </div>
-          {feeAddress ? <div className="break-all font-mono text-[11px] text-neutral-500">{feeAddress}</div> : null}
+          {feeAddress ? (
+            <div className="flex items-start gap-2">
+              <div className="flex-1 break-all font-mono text-[11px] text-neutral-500">{feeAddress}</div>
+              <CopyButton text={feeAddress} label="Copy address" />
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-center gap-2">
             <input className={`${field} flex-1`} placeholder="Submission fee TX hash" value={fee} onChange={(e) => setFee(e.target.value)} />
             <button onClick={submit} disabled={busy} className="rounded bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
