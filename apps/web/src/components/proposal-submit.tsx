@@ -345,6 +345,20 @@ export function ProposalSubmit() {
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <label>Requested ₳ <input type="number" className={`${field} w-32 disabled:opacity-60`} value={amount} onChange={(e) => setAmount(Number(e.target.value))} disabled={amountLocked} /></label>
             <label className="flex items-center gap-1"><input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} disabled={amountLocked} /> Commercial / for profit</label>
+            {/* §12 — live submission-fee preview: updates as the user toggles commercial or
+                changes the requested amount, so the fee is never a surprise at submit time. */}
+            <span
+              className={`rounded px-2 py-0.5 text-xs font-medium ${feeRequired
+                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+                : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}
+              title={feeRequired
+                ? `${feePct}% of the requested amount (capped at ${feeCap.toLocaleString()} ₳).`
+                : 'No fee for this proposal type — it goes live immediately on submit.'}
+            >
+              {feeRequired
+                ? `Submission fee: ${feeEstimate.toLocaleString()} ₳ (${feePct}%${amount * feePct / 100 > feeCap ? ', capped' : ''})`
+                : 'No submission fee'}
+            </span>
           </div>
           {amountLocked ? (
             <div className="text-xs text-neutral-500">
