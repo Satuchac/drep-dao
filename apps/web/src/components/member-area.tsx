@@ -229,7 +229,9 @@ function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.
         {tabs.map((t) => (
           <button
             key={t.key}
-            onClick={() => setParams({ tab: t.key })}
+            // Clear per-tab sub-navigation (e.g. an opened internal proposal `ip`) so clicking
+            // a tab always reliably lands on its top-level list, not a stale detail view.
+            onClick={() => setParams({ tab: t.key, ip: null })}
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm ${
               active === t.key
                 ? 'bg-emerald-600 font-medium text-white'

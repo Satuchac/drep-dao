@@ -13,6 +13,7 @@ import {
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
+import { useUrlNav } from '@/lib/use-url-nav';
 import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput, DateField } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
 
@@ -37,12 +38,15 @@ const VTYPE_LABEL: Record<string, string> = {
 /** §10 — Internal proposals: a unified queue, a submit form, and per-proposal voting. */
 export function InternalProposals() {
   const [items, setItems] = useState<InternalProposalSummary[] | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   // §14 — sub-menu splits the regular DAO-governance proposals from board-member elections.
   const [subTab, setSubTab] = useState<'regular' | 'election'>('regular');
   const [error, setError] = useState<string | null>(null);
+  // The opened proposal lives in the URL (?ip=<id>) so clicking the My-area "Internal proposals"
+  // tab button (which clears `ip`) takes the user back to the list.
+  const { get, setParams } = useUrlNav();
+  const openId = get('ip');
 
   const load = useCallback(() => {
     internalProposalsApi.list().then(setItems).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
@@ -50,7 +54,7 @@ export function InternalProposals() {
   useEffect(load, [load]);
 
   if (openId) {
-    return <InternalDetail id={openId} onBack={() => { setOpenId(null); load(); }} />;
+    return <InternalDetail id={openId} onBack={() => { setParams({ ip: null }); load(); }} />;
   }
 
   const all = items ?? [];
@@ -113,7 +117,7 @@ export function InternalProposals() {
         <ul className="space-y-2">
           {visible.map((p) => (
             <li key={p.id}>
-              <button onClick={() => setOpenId(p.id)} className={`${card} block w-full text-left hover:border-emerald-400`}>
+              <button onClick={() => setParams({ ip: p.id })} className={`${card} block w-full text-left hover:border-emerald-400`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">
                     {p.publicId ? <span className="mr-2 font-mono text-xs text-neutral-500">{p.publicId}</span> : null}
@@ -585,6 +589,40 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <div className="mt-2 text-xs text-neutral-400">on-chain anchor recorded (pending submission)</div>
         ) : null}
       </div>
+
+      {/* Per-voter breakdown — who voted how + their rationale. */}
+      {p.voters.length > 0 ? (
+        <div className={card}>
+          <h3 className="text-base font-semibold">Votes ({p.voters.length})</h3>
+          <ul className="mt-2 space-y-2">
+            {p.voters.map((v, i) => (
+              <li key={`${v.drep}-${i}`} className="rounded-md border border-neutral-200 p-2 text-sm dark:border-neutral-800">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    <span className="font-medium">{v.displayName ?? '(unknown)'}</span>
+                    <span className="ml-2 break-all font-mono text-[10px] text-neutral-400">{v.drep}</span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {p.votingType === 'BALANCED' ? <span className="text-[11px] text-neutral-500">{v.weight} power</span> : null}
+                    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                      v.choice === 'YES'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                        : v.choice === 'NO'
+                          ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+                          : v.choice === 'ABSTAIN'
+                            ? 'bg-neutral-200 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300'
+                            : 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300'
+                    }`}>{v.choice}</span>
+                  </span>
+                </div>
+                {v.rationale ? (
+                  <div className="mt-1 whitespace-pre-wrap text-xs text-neutral-600 dark:text-neutral-400">{v.rationale}</div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {/* §14 — election install: board members can trigger early; otherwise the platform auto-installs at the installation date. */}
       {p.isBoardElection && p.status === 'APPROVED' && !p.boardInstalledAt ? (

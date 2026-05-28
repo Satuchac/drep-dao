@@ -799,6 +799,13 @@ export interface BoardCandidate {
   drepIdOnchain: string;
   displayName: string;
 }
+export interface InternalProposalVoter {
+  drep: string; // on-chain DRep id
+  displayName: string | null;
+  choice: string; // YES | NO | ABSTAIN | <poll option label>
+  weight: number; // final voting power
+  rationale: string | null;
+}
 export interface InternalProposalDetail extends InternalProposalSummary {
   contentMd: string;
   submitterDrepId: string | null;
@@ -808,6 +815,7 @@ export interface InternalProposalDetail extends InternalProposalSummary {
   poll: { multiple: boolean; options: string[] } | null;
   votingStartAt: string | null;
   resultFinalizedAt: string | null;
+  voters: InternalProposalVoter[]; // who voted how + their rationales
   anchorTxHash: string | null;
   anchorHash: string | null;
 }

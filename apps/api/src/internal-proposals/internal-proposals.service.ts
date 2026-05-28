@@ -387,6 +387,10 @@ export class InternalProposalsService {
     const myVotes = myDrep
       ? (await this.prisma.vote.findMany({ where: { proposalId, drepId: myDrep.id, phase: VotePhase.INTERNAL } })).map((v) => v.choice)
       : [];
+    // Per-voter list with the on-chain DRep id, display name, choice (or option label), the
+    // voter's weight (final power), and the optional rationale — shown on the detail page so
+    // viewers can see exactly who voted how and why.
+    const voters = await this.voteList(proposalId);
     const anchor = await this.prisma.anchor.findFirst({ where: { proposalId, kind: 'internal' }, orderBy: { createdAt: 'desc' } });
     const pollCfg = (p.pollOptions ?? null) as { multiple?: boolean; options?: string[] } | null;
 
@@ -425,6 +429,7 @@ export class InternalProposalsService {
       resultFinalizedAt: p.resultFinalizedAt,
       canVote: !!eligibleEntry && (fresh?.status ?? p.status) === ProposalStatus.ACTIVE,
       myVotes,
+      voters,
       tally,
       anchorTxHash: anchor?.txHash ?? null,
       anchorHash: anchor?.hash ?? null,
