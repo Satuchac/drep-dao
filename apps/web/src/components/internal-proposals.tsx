@@ -38,6 +38,7 @@ export function InternalProposals() {
   const [items, setItems] = useState<InternalProposalSummary[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -49,6 +50,9 @@ export function InternalProposals() {
     return <InternalDetail id={openId} onBack={() => { setOpenId(null); load(); }} />;
   }
 
+  // Default view = still-open proposals; "Show history" reveals decided ones (APPROVED/REJECTED).
+  const visible = (items ?? []).filter((p) => showHistory || p.status === 'ACTIVE');
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -56,9 +60,15 @@ export function InternalProposals() {
           <h2 className="text-lg font-semibold">Internal proposals</h2>
           <p className="text-sm text-neutral-500">DAO-governance decisions — process changes, parameter changes, board changes, polls. Not tied to a round; voting opens immediately.</p>
         </div>
-        <button onClick={() => setCreating((v) => !v)} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-          {creating ? 'Close' : 'New internal proposal'}
-        </button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
+            <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
+            Show history
+          </label>
+          <button onClick={() => setCreating((v) => !v)} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+            {creating ? 'Close' : 'New internal proposal'}
+          </button>
+        </div>
       </div>
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
 
@@ -70,11 +80,11 @@ export function InternalProposals() {
 
       {items === null ? (
         <p className="text-sm text-neutral-500">Loading…</p>
-      ) : items.length === 0 ? (
-        <p className="text-sm text-neutral-500">No internal proposals yet.</p>
+      ) : visible.length === 0 ? (
+        <p className="text-sm text-neutral-500">{showHistory ? 'No internal proposals yet.' : 'No active internal proposals — toggle "Show history" to see decided ones.'}</p>
       ) : (
         <ul className="space-y-2">
-          {items.map((p) => (
+          {visible.map((p) => (
             <li key={p.id}>
               <button onClick={() => setOpenId(p.id)} className={`${card} block w-full text-left hover:border-emerald-400`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -83,7 +93,10 @@ export function InternalProposals() {
                     {p.title}
                     {p.isPrivate ? <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">PRIVATE · board</span> : null}
                   </span>
-                  <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} />
+                  <div className="flex items-center gap-2">
+                    <MyVoteBadge p={p} />
+                    <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} />
+                  </div>
                 </div>
                 <div className="mt-1 text-xs text-neutral-500">
                   {TYPE_LABEL[p.internalType] ?? p.internalType} · {SCOPE_LABEL[p.votersScope] ?? p.votersScope} · {VTYPE_LABEL[p.votingType] ?? p.votingType}
@@ -98,6 +111,24 @@ export function InternalProposals() {
       )}
     </div>
   );
+}
+
+/** Right-side chip on each list row: how the current DRep voted (if at all). */
+function MyVoteBadge({ p }: { p: InternalProposalSummary }) {
+  if (!p.myVotes || p.myVotes.length === 0) return null;
+  const label = formatMyVote(p);
+  return (
+    <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+      ✓ {label}
+    </span>
+  );
+}
+
+function formatMyVote(p: { internalType: string; myVotes: string[] }): string {
+  const v = p.myVotes;
+  if (v.length === 1 && v[0] === 'ABSTAIN') return 'you abstained';
+  if (p.internalType === 'POLL') return `you chose ${v.join(', ')}`;
+  return `you voted ${v[0] === 'ABSTAIN' ? 'Abstain' : v[0]}`;
 }
 
 function SubmitInternalForm({ onDone }: { onDone: () => void }) {
@@ -294,11 +325,18 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
   };
   const voteThreshold = (choice: 'YES' | 'NO' | 'ABSTAIN') => act(() => internalProposalsApi.vote(id, { choice, rationale: rationale.trim() || undefined }));
   const votePoll = () => {
-    if (picked.length === 0) { setError('Select at least one option.'); return; }
+    if (picked.length === 0) { setError('Select an option or Abstain.'); return; }
+    // Abstain on a poll is its own choice — sent as { choice: 'ABSTAIN' }, never mixed with options.
+    if (picked.length === 1 && picked[0] === 'ABSTAIN') {
+      return act(() => internalProposalsApi.vote(id, { choice: 'ABSTAIN', rationale: rationale.trim() || undefined }));
+    }
     act(() => internalProposalsApi.vote(id, { options: picked, rationale: rationale.trim() || undefined }));
   };
   const togglePick = (o: string) => {
-    if (p.poll?.multiple) setPicked((s) => (s.includes(o) ? s.filter((x) => x !== o) : [...s, o]));
+    // Abstain is exclusive — picking it clears options; picking an option clears Abstain.
+    if (o === 'ABSTAIN') return setPicked(['ABSTAIN']);
+    const withoutAbstain = (s: string[]) => s.filter((x) => x !== 'ABSTAIN');
+    if (p.poll?.multiple) setPicked((s) => withoutAbstain(s.includes(o) ? s.filter((x) => x !== o) : [...s, o]));
     else setPicked([o]);
   };
 
@@ -356,7 +394,10 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
           </div>
         ) : (
           <div className="mt-1 space-y-1 text-sm">
-            <div className="text-xs text-neutral-500">{p.tally.voted} of {p.tally.eligible} eligible voted{p.poll?.multiple ? ' · multiple choice' : ' · single choice'}</div>
+            <div className="text-xs text-neutral-500">
+              {p.tally.voted} of {p.tally.eligible} eligible voted{p.poll?.multiple ? ' · multiple choice' : ' · single choice'}
+              {p.tally.abstain.voters > 0 ? ` · ${p.tally.abstain.voters} abstain` : ''}
+            </div>
             <ul className="space-y-1">
               {p.tally.options.map((o) => {
                 const max = Math.max(1, ...(p.tally.kind === 'POLL' ? p.tally.options.map((x) => x.power) : [1]));
@@ -391,6 +432,11 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
                   {o}
                 </label>
               ))}
+              {/* §10 — voters may also abstain on a poll (exclusive with the options). */}
+              <label className="flex items-center gap-2 text-sm">
+                <input type="radio" name="pollopt" checked={picked.length === 1 && picked[0] === 'ABSTAIN'} onChange={() => togglePick('ABSTAIN')} />
+                <span className="text-neutral-500">Abstain</span>
+              </label>
             </div>
           ) : null}
           <div className="mt-2">

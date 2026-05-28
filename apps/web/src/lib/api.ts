@@ -765,7 +765,13 @@ export type InternalTally =
       thresholdPct: number;
       approved: boolean;
     }
-  | { kind: 'POLL'; eligible: number; voted: number; options: { option: string; power: number; voters: number }[] };
+  | {
+      kind: 'POLL';
+      eligible: number;
+      voted: number;
+      abstain: { power: number; voters: number };
+      options: { option: string; power: number; voters: number }[];
+    };
 
 export interface InternalProposalSummary {
   id: string;
@@ -781,18 +787,18 @@ export interface InternalProposalSummary {
   votingEndAt: string | null;
   thresholdPct: number | null;
   tally: InternalTally;
+  isMine: boolean;
+  myVotes: string[];
+  canVote: boolean;
 }
 export interface InternalProposalDetail extends InternalProposalSummary {
   contentMd: string;
   submitterDrepId: string | null;
-  isMine: boolean;
   actors: string[] | null;
   deliveryDate: string | null;
   poll: { multiple: boolean; options: string[] } | null;
   votingStartAt: string | null;
   resultFinalizedAt: string | null;
-  canVote: boolean;
-  myVotes: string[];
   anchorTxHash: string | null;
   anchorHash: string | null;
 }

@@ -215,15 +215,21 @@ export class InternalProposalsService {
     // Validate the selection BEFORE touching prior votes, so a rejected re-vote can't wipe a
     // voter's existing valid vote. Vote change is allowed during the period.
     if (fresh.internalType === InternalType.POLL) {
-      const cfg = (fresh.pollOptions ?? {}) as { multiple?: boolean; options?: string[] };
-      const options = cfg.options ?? [];
-      const chosen = dto.options ?? [];
-      if (chosen.length === 0) throw new BadRequestException('select at least one option');
-      if (!cfg.multiple && chosen.length !== 1) throw new BadRequestException('this poll allows exactly one option');
-      for (const o of chosen) if (!options.includes(o)) throw new BadRequestException(`unknown option: ${o}`);
-      await this.prisma.vote.deleteMany({ where: { proposalId, drepId: drep.id, phase: VotePhase.INTERNAL } });
-      for (const o of chosen) {
-        await this.prisma.vote.create({ data: { proposalId, drepId: drep.id, phase: VotePhase.INTERNAL, choice: o, rationale } });
+      // Voters may abstain on a poll (counted toward "voted" but no option). Exclusive with options.
+      if (dto.choice === VoteChoice.ABSTAIN) {
+        await this.prisma.vote.deleteMany({ where: { proposalId, drepId: drep.id, phase: VotePhase.INTERNAL } });
+        await this.prisma.vote.create({ data: { proposalId, drepId: drep.id, phase: VotePhase.INTERNAL, choice: VoteChoice.ABSTAIN, rationale } });
+      } else {
+        const cfg = (fresh.pollOptions ?? {}) as { multiple?: boolean; options?: string[] };
+        const options = cfg.options ?? [];
+        const chosen = dto.options ?? [];
+        if (chosen.length === 0) throw new BadRequestException('select at least one option');
+        if (!cfg.multiple && chosen.length !== 1) throw new BadRequestException('this poll allows exactly one option');
+        for (const o of chosen) if (!options.includes(o)) throw new BadRequestException(`unknown option: ${o}`);
+        await this.prisma.vote.deleteMany({ where: { proposalId, drepId: drep.id, phase: VotePhase.INTERNAL } });
+        for (const o of chosen) {
+          await this.prisma.vote.create({ data: { proposalId, drepId: drep.id, phase: VotePhase.INTERNAL, choice: o, rationale } });
+        }
       }
     } else {
       const choice = dto.choice;
@@ -374,6 +380,9 @@ export class InternalProposalsService {
       votingEndAt: d.votingEndAt,
       thresholdPct: d.thresholdPct,
       tally: d.tally,
+      isMine: d.isMine,
+      myVotes: d.myVotes, // surface "you voted ..." in the list row
+      canVote: d.canVote,
     };
   }
 
@@ -393,8 +402,14 @@ export class InternalProposalsService {
       const counts = new Map<string, { power: number; voters: number }>();
       for (const o of cfg.options ?? []) counts.set(o, { power: 0, voters: 0 });
       const votersSet = new Set<string>();
+      const abstain = { power: 0, voters: 0 };
       for (const v of votes) {
         votersSet.add(v.drepId);
+        if (v.choice === VoteChoice.ABSTAIN) {
+          abstain.power += powerByDrep.get(v.drepId) ?? 0;
+          abstain.voters += 1;
+          continue; // abstain is counted toward "voted" but not toward any option
+        }
         const c = counts.get(v.choice) ?? { power: 0, voters: 0 };
         c.power += powerByDrep.get(v.drepId) ?? 0;
         c.voters += 1;
@@ -404,6 +419,7 @@ export class InternalProposalsService {
         kind: 'POLL' as const,
         eligible,
         voted: votersSet.size,
+        abstain: { power: round2(abstain.power), voters: abstain.voters },
         options: [...counts.entries()].map(([option, c]) => ({ option, power: round2(c.power), voters: c.voters })),
       };
     }

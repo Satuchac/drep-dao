@@ -104,13 +104,19 @@ const created = [];
     await svc.vote(boardUsers[0], poll.id, { options: ['Red'] });
     await svc.vote(boardUsers[1], poll.id, { options: ['Red'] });
     await svc.vote(boardUsers[2], poll.id, { options: ['Green'] });
+    // Abstain on a poll → counted toward "voted" but no option.
+    await svc.vote(boardUsers[3], poll.id, { choice: 'ABSTAIN' });
     let rejectedMulti = false;
     try { await svc.vote(boardUsers[0], poll.id, { options: ['Red', 'Green'] }); } catch { rejectedMulti = true; }
     ok('single-choice poll rejects multiple options', rejectedMulti);
+    // Verify abstain shows in the detail's myVotes (for the "you abstained" list chip).
+    const detAbst = await svc.detail(poll.id, boardUsers[3]);
+    ok('poll abstain recorded as myVote', detAbst.myVotes[0] === 'ABSTAIN', JSON.stringify(detAbst.myVotes));
     const finPoll = await svc.finalize(poll.id);
     ok('poll concludes APPROVED', finPoll.status === 'APPROVED', finPoll.status);
     const red = finPoll.tally.kind === 'POLL' && finPoll.tally.options.find((o) => o.option === 'Red');
     ok('Red has 2 votes', red && red.voters === 2, JSON.stringify(red));
+    ok('poll abstain counted (1 voter)', finPoll.tally.kind === 'POLL' && finPoll.tally.abstain.voters === 1, JSON.stringify(finPoll.tally.kind === 'POLL' && finPoll.tally.abstain));
 
     // 5) Submitter moves the voting end; content stays frozen.
     const p5 = await svc.submit(proposer, {
