@@ -36,6 +36,11 @@ export class CreateProposalDto {
   @IsOptional() @IsString() @MaxLength(20000) revenueSharingMd?: string; // §3.4 (commercial)
   @IsOptional() @IsString() @MaxLength(200) payoutAddress?: string; // Cardano address for refunds / budget payout
   @IsOptional() @IsString() @MaxLength(120) submissionFeeTxHash?: string; // §12 — savable with the draft
+  // §3 — optional refundable pledge. Only meaningful when the round's
+  // pledgeThresholdAda > 0; when promised the amount must be ≥ threshold and a
+  // return-method description is required. Sent on-chain AFTER approval.
+  @IsOptional() @IsInt() @Min(0) pledgeAmountAda?: number;
+  @IsOptional() @IsString() @MaxLength(5000) pledgeReturnMethod?: string;
 
   @IsArray()
   @ArrayMinSize(1)
@@ -56,6 +61,8 @@ export class UpdateProposalDto {
   @IsOptional() @IsString() @MaxLength(20000) revenueSharingMd?: string;
   @IsOptional() @IsString() @MaxLength(200) payoutAddress?: string;
   @IsOptional() @IsString() @MaxLength(120) submissionFeeTxHash?: string;
+  @IsOptional() @IsInt() @Min(0) pledgeAmountAda?: number;
+  @IsOptional() @IsString() @MaxLength(5000) pledgeReturnMethod?: string;
 
   @IsOptional()
   @IsArray()
@@ -63,6 +70,17 @@ export class UpdateProposalDto {
   @ValidateNested({ each: true })
   @Type(() => MilestoneInput)
   milestones?: MilestoneInput[];
+}
+
+/** Team pastes the on-chain pledge payment tx hash (in FUNDING, after approval). */
+export class PledgeTxHashDto {
+  @IsString() @IsNotEmpty() @MaxLength(120) txHash!: string;
+}
+
+/** Board confirms (or rejects) the on-chain pledge payment, like the fee review. */
+export class ReviewPledgeDto {
+  @IsIn(['APPROVE', 'REJECT']) decision!: 'APPROVE' | 'REJECT';
+  @IsOptional() @IsString() @MaxLength(5000) feedback?: string;
 }
 
 export class SubmitProposalDto {

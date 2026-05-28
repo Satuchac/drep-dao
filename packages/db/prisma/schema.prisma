@@ -323,6 +323,11 @@ model Proposal {
   pledgeAmountAda     BigInt?  @map("pledge_amount_ada")
   pledgeReturnMethod  String?  @map("pledge_return_method")
   pledgeTxHash        String?  @map("pledge_tx_hash")
+  // §3 — board confirmation of the on-chain pledge payment. Mirrors fee review:
+  // pledgeConfirmedAt is set when the board approves; pledgeFeedback carries the
+  // board's note (required on reject, optional on approve).
+  pledgeConfirmedAt   DateTime? @map("pledge_confirmed_at") @db.Timestamptz(6)
+  pledgeFeedback      String?   @map("pledge_feedback")
   teamInfo            Json?    @map("team_info")
   costBreakdownMd     String?  @map("cost_breakdown_md")
   revenueSharing      Json?    @map("revenue_sharing")

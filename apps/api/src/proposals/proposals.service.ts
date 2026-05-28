@@ -18,7 +18,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { AnchorService } from '../cardano/anchor.service';
-import { BudgetChangeDto, CreateProposalDto, MilestoneInput, ReviewFeeDto, SubmitProposalDto, UpdateProposalDto } from './dto';
+import { BudgetChangeDto, CreateProposalDto, MilestoneInput, ReviewFeeDto, ReviewPledgeDto, SubmitProposalDto, UpdateProposalDto } from './dto';
 
 const LOVELACE = 1_000_000;
 const toLovelace = (ada: number): bigint => BigInt(Math.round(ada * LOVELACE));
@@ -76,6 +76,7 @@ export class ProposalsService {
       );
     }
     this.assertMilestonesSum(dto.milestones, dto.requestedAmountAda);
+    this.assertPledge(round, dto.pledgeAmountAda, dto.pledgeReturnMethod);
 
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
 
@@ -97,6 +98,9 @@ export class ProposalsService {
         submissionFeeTxHash: dto.submissionFeeTxHash ?? null,
         submissionFeeTxHashes: dto.submissionFeeTxHash ? [dto.submissionFeeTxHash] : [],
         payoutAddress: dto.payoutAddress?.trim() || null,
+        // §3 — optional pledge promise (paid on-chain later, after approval).
+        pledgeAmountAda: dto.pledgeAmountAda ? toLovelace(dto.pledgeAmountAda) : null,
+        pledgeReturnMethod: dto.pledgeAmountAda ? (dto.pledgeReturnMethod?.trim() || null) : null,
         // §3.4 funding fields (stored in the existing Json columns as markdown strings).
         ...(dto.teamInfoMd ? { teamInfo: dto.teamInfoMd } : {}),
         ...(dto.revenueSharingMd ? { revenueSharing: dto.revenueSharingMd } : {}),
@@ -162,6 +166,22 @@ export class ProposalsService {
       const history = hash && !p.submissionFeeTxHashes.includes(hash) ? [...p.submissionFeeTxHashes, hash] : p.submissionFeeTxHashes;
       feeHashData = { submissionFeeTxHash: hash, submissionFeeTxHashes: history };
     }
+    // §3 — pledge promise (amount + return method) editable until the team actually
+    // pays on-chain in FUNDING. Once `pledgeConfirmedAt` is set the pledge is locked.
+    let pledgeData: { pledgeAmountAda?: bigint | null; pledgeReturnMethod?: string | null } = {};
+    if (dto.pledgeAmountAda !== undefined || dto.pledgeReturnMethod !== undefined) {
+      if (p.pledgeConfirmedAt) {
+        throw new ConflictException('the pledge has been confirmed on-chain and can no longer be changed');
+      }
+      const round = await this.prisma.round.findUnique({ where: { id: p.roundId! }, select: { pledgeThresholdAda: true } });
+      const nextAmount = dto.pledgeAmountAda !== undefined ? dto.pledgeAmountAda : Number(p.pledgeAmountAda ?? 0n) / LOVELACE;
+      const nextMethod = dto.pledgeReturnMethod !== undefined ? dto.pledgeReturnMethod : (p.pledgeReturnMethod ?? null);
+      this.assertPledge(round ?? {}, nextAmount, nextMethod);
+      pledgeData = {
+        pledgeAmountAda: nextAmount > 0 ? toLovelace(nextAmount) : null,
+        pledgeReturnMethod: nextAmount > 0 ? (nextMethod?.trim() || null) : null,
+      };
+    }
     await this.prisma.$transaction(async (tx) => {
       if (postSubmission) {
         // Snapshot the version being replaced so reviewers can see what changed.
@@ -181,6 +201,7 @@ export class ProposalsService {
           ...(dto.costBreakdownMd !== undefined ? { costBreakdownMd: dto.costBreakdownMd } : {}),
           ...(dto.payoutAddress !== undefined ? { payoutAddress: dto.payoutAddress || null } : {}),
           ...feeHashData,
+          ...pledgeData,
           ...(dto.teamInfoMd !== undefined ? { teamInfo: dto.teamInfoMd } : {}),
           ...(dto.revenueSharingMd !== undefined ? { revenueSharing: dto.revenueSharingMd } : {}),
           ...(postSubmission ? { version: { increment: 1 } } : {}),
@@ -293,6 +314,121 @@ export class ProposalsService {
       await this.prisma.proposal.update({ where: { id }, data: { status: ProposalStatus.REJECTED, feeReviewFeedback: feedback } });
     }
     return this.get(id);
+  }
+
+  // ===========================================================================
+  // §3 Pledge — paid on-chain AFTER approval, board confirms (mirrors fee flow)
+  // ===========================================================================
+
+  /**
+   * Submitter pastes the on-chain pledge payment tx hash. Allowed once the proposal
+   * is APPROVED (in FUNDING) and a pledge was promised; locked once the board has
+   * confirmed it. Can be re-pasted (board rejected with feedback → fix + repaste).
+   */
+  async submitPledgeTxHash(userId: string, id: string, txHash: string) {
+    const p = await this.prisma.proposal.findUnique({ where: { id } });
+    if (!p) throw new NotFoundException('proposal not found');
+    if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
+    if (!p.pledgeAmountAda || p.pledgeAmountAda === 0n) {
+      throw new ConflictException('no pledge was promised on this proposal');
+    }
+    if (p.status !== ProposalStatus.APPROVED || p.stage !== ProposalStage.FUNDING) {
+      throw new ConflictException('the pledge is paid after the proposal is APPROVED and reaches FUNDING');
+    }
+    if (p.pledgeConfirmedAt) {
+      throw new ConflictException('pledge is already confirmed on-chain');
+    }
+    await this.prisma.proposal.update({
+      where: { id },
+      data: { pledgeTxHash: txHash.trim() || null, pledgeFeedback: null },
+    });
+    return this.get(id, userId);
+  }
+
+  /**
+   * Board confirms (or rejects) the on-chain pledge payment. APPROVE records
+   * pledgeConfirmedAt (now locks the pledge fields). REJECT clears the tx hash so
+   * the team can paste a corrected one, and the (required) feedback is shown.
+   */
+  async reviewPledge(id: string, dto: ReviewPledgeDto) {
+    const p = await this.prisma.proposal.findUnique({ where: { id } });
+    if (!p) throw new NotFoundException('proposal not found');
+    if (!p.pledgeAmountAda || p.pledgeAmountAda === 0n) {
+      throw new ConflictException('no pledge was promised on this proposal');
+    }
+    if (!p.pledgeTxHash) {
+      throw new ConflictException('no pledge tx hash to review — the team has not paid yet');
+    }
+    if (p.pledgeConfirmedAt) {
+      throw new ConflictException('pledge is already confirmed');
+    }
+    const feedback = dto.feedback?.trim() || null;
+    if (dto.decision === 'REJECT' && !feedback) {
+      throw new BadRequestException('a reason is required when rejecting a pledge payment');
+    }
+    if (dto.decision === 'APPROVE') {
+      await this.prisma.proposal.update({
+        where: { id },
+        data: { pledgeConfirmedAt: new Date(), pledgeFeedback: feedback },
+      });
+    } else {
+      await this.prisma.proposal.update({
+        where: { id },
+        data: { pledgeTxHash: null, pledgeFeedback: feedback },
+      });
+    }
+    return this.get(id);
+  }
+
+  /**
+   * §3/§15 — proposals awaiting board pledge confirmation. Each row carries the
+   * pasted tx hash + an ON-CHAIN verification (paid?, paid ADA, found?) against
+   * the configured pledge address so the board can confirm at a glance.
+   */
+  async listPendingPledge() {
+    const rows = await this.prisma.proposal.findMany({
+      where: {
+        status: ProposalStatus.APPROVED,
+        stage: ProposalStage.FUNDING,
+        pledgeAmountAda: { gt: 0n },
+        pledgeTxHash: { not: null },
+        pledgeConfirmedAt: null,
+      },
+      orderBy: { updatedAt: 'asc' },
+      include: {
+        submitterUser: { select: { displayName: true } },
+        category: { select: { name: true } },
+        round: { select: { number: true } },
+      },
+    });
+    const pledgeAddress = this.config.get<string>('PLEDGE_ADDRESS')
+      ?? this.config.get<string>('SUBMISSION_FEE_ADDRESS')
+      ?? this.config.get<string>('TREASURY_ADDRESS')
+      ?? '';
+    return Promise.all(
+      rows.map(async (p) => {
+        const verification = pledgeAddress && p.pledgeTxHash
+          ? await this.cardano.verifyPayment(p.pledgeTxHash, pledgeAddress, p.pledgeAmountAda ?? 0n)
+          : { found: false, paid: false, paidLovelace: 0n };
+        return {
+          id: p.id,
+          publicId: p.publicId,
+          title: p.title,
+          roundNumber: p.round?.number ?? null,
+          categoryName: p.category?.name ?? null,
+          submitter: p.submitterUser?.displayName ?? null,
+          pledgeAmountAda: toAda(p.pledgeAmountAda),
+          pledgeReturnMethod: p.pledgeReturnMethod ?? null,
+          pledgeTxHash: p.pledgeTxHash,
+          pledgeAddress,
+          verification: {
+            found: verification.found,
+            paid: verification.paid,
+            paidAda: toAda(verification.paidLovelace),
+          },
+        };
+      }),
+    );
   }
 
   /**
@@ -557,9 +693,19 @@ export class ProposalsService {
         }
       } else if (status === ProposalStatus.APPROVED && stage === ProposalStage.FUNDING) {
         const active = stopBy.get(p.id);
+        // §3 — pledge gate: if a pledge was promised but not confirmed on-chain by
+        // the board, milestone work is blocked. Surface this clearly in the list.
+        const pledgeRow = p as { pledgeAmountAda?: bigint | null; pledgeTxHash?: string | null; pledgeConfirmedAt?: Date | null };
+        const pledgePromised = !!(pledgeRow.pledgeAmountAda && pledgeRow.pledgeAmountAda > 0n);
+        const pledgeNotPaid = pledgePromised && !pledgeRow.pledgeTxHash;
+        const pledgePending = pledgePromised && !!pledgeRow.pledgeTxHash && !pledgeRow.pledgeConfirmedAt;
         if (active) {
           const yes = active.votes.filter((v) => v.choice === 'YES').length;
           progress = { stage: 'FUNDING', label: `stop-funding open · ${yes}/3 YES`, tone: 'red' };
+        } else if (pledgeNotPaid) {
+          progress = { stage: 'FUNDING', label: 'pledge not paid yet (team)', tone: 'red' };
+        } else if (pledgePending) {
+          progress = { stage: 'FUNDING', label: 'pledge paid, awaiting board confirmation', tone: 'amber' };
         } else {
           const milestones = msByProposal.get(p.id) ?? [];
           if (milestones.length === 0) {
@@ -696,6 +842,12 @@ export class ProposalsService {
       submissionFeeTxHashes: p.submissionFeeTxHashes,
       feeReviewFeedback: p.feeReviewFeedback,
       payoutAddress: p.payoutAddress,
+      // §3 — pledge promise + confirmation state.
+      pledgeAmountAda: toAda(p.pledgeAmountAda),
+      pledgeReturnMethod: p.pledgeReturnMethod,
+      pledgeTxHash: p.pledgeTxHash,
+      pledgeConfirmedAt: p.pledgeConfirmedAt,
+      pledgeFeedback: p.pledgeFeedback,
       subcategoryIds: p.subcategoryIds,
       // §5.2 — the category's funding-request bounds + conditions, for display.
       categoryAsk: {
@@ -837,6 +989,32 @@ export class ProposalsService {
     const sum = milestones.reduce((acc, m) => acc + m.amountAda, 0);
     if (sum !== requestedAda) {
       throw new BadRequestException(`milestone amounts (${sum}) must sum to requested amount (${requestedAda})`);
+    }
+  }
+
+  /**
+   * §3 — pledge validation. Pledges are OPTIONAL: the team decides at proposal
+   * creation whether to provide one. When opting in (pledgeAmountAda > 0):
+   *   - the round's pledgeThresholdAda (or the platform default) sets the MINIMUM
+   *     the team may pledge,
+   *   - a return-method description is required (how the pledge will be repaid).
+   * A pledgeAmountAda of 0 / null means "no pledge promised" — fine if either the
+   * round has pledges disabled OR the team simply chose not to opt in.
+   */
+  private assertPledge(
+    round: { pledgeThresholdAda?: number | null },
+    amountAda: number | null | undefined,
+    returnMethod: string | null | undefined,
+  ) {
+    if (!amountAda) return; // no pledge promised — always allowed
+    const min = round.pledgeThresholdAda ?? ROUND_SETTING_DEFAULTS.pledgeThresholdAda;
+    if (min > 0 && amountAda < min) {
+      throw new BadRequestException(
+        `pledge of ${amountAda.toLocaleString()} ₳ is below the round's minimum of ${min.toLocaleString()} ₳`,
+      );
+    }
+    if (!returnMethod?.trim()) {
+      throw new BadRequestException('a return-method description is required when opting in to a pledge');
     }
   }
 

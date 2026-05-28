@@ -13,7 +13,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { ProposalsService } from './proposals.service';
-import { BudgetChangeDto, CreateProposalDto, SubmitProposalDto, UpdateProposalDto } from './dto';
+import { BudgetChangeDto, CreateProposalDto, PledgeTxHashDto, SubmitProposalDto, UpdateProposalDto } from './dto';
 
 @Controller()
 export class ProposalsController {
@@ -68,5 +68,12 @@ export class ProposalsController {
   @Post('proposals/:id/budget-change')
   budgetChange(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: BudgetChangeDto) {
     return this.proposals.requestBudgetChange(ctx.userId, id, dto);
+  }
+
+  // §3 — submitter pastes the on-chain pledge payment tx hash (FUNDING + promised pledge).
+  @UseGuards(JwtAuthGuard)
+  @Post('proposals/:id/pledge-tx')
+  pledgeTx(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: PledgeTxHashDto) {
+    return this.proposals.submitPledgeTxHash(ctx.userId, id, dto.txHash);
   }
 }

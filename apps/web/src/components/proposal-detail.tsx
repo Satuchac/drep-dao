@@ -15,6 +15,8 @@ import {
   commentsApi,
   boardMilestoneApi,
   boardProposalsApi,
+  boardPledgeApi,
+  configApi,
   type ProposalDetail as PDetail,
   type VoteRationale,
   type ProposalVersionEntry,
@@ -142,6 +144,12 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
       <VersionsSection id={id} />
       {showFiltering ? <FilteringSection id={id} isBoard={isBoard} proposal={p} /> : null}
       {showDv ? <DvSection id={id} isBoard={isBoard} /> : null}
+      {/* §3 — pledge section only when a pledge was promised; visible to everyone (the
+          on-chain payment + the board confirmation are public). Hidden once we drop into
+          FAILED / COMPLETE — past that point the pledge is settled (or moot). */}
+      {p.pledgeAmountAda > 0 && p.stage === 'FUNDING' && !['COMPLETE', 'FAILED'].includes(p.status) ? (
+        <PledgeSection id={id} proposal={p} isBoard={isBoard} isMine={mine} onChange={load} />
+      ) : null}
       {showMilestones ? (
         <MilestonesSection id={id} isBoard={isBoard} isMine={mine} proposal={p} onChange={load} />
       ) : null}
@@ -908,6 +916,150 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
  * payout. The section also surfaces the **stop-funding** flow (reviewer / board
  * proposes → board votes → 3 YES → FAILED).
  */
+/**
+ * §3 — pledge confirmation panel. Appears in FUNDING when a pledge was promised.
+ *   - Submitter view: address + Copy + tx hash input ("Submit pledge tx") + status.
+ *     If the board rejected an earlier attempt, the red feedback box is shown so
+ *     the submitter can paste a corrected hash.
+ *   - Board view: each submitted hash gets an on-chain verification chip (paid/
+ *     not paid / not found) + Approve / Reject buttons. Reject requires feedback;
+ *     Approve sets pledgeConfirmedAt and unlocks milestone POAs.
+ *   - Everyone else: a read-only status badge so the proposal page makes sense.
+ */
+function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string; proposal: PDetail; isBoard: boolean; isMine: boolean; onChange: () => void }) {
+  const { txUrl } = useExplorer();
+  const [pledgeAddress, setPledgeAddress] = useState<string | null>(null);
+  const [tx, setTx] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState('');
+
+  useEffect(() => {
+    configApi.get().then((c) => setPledgeAddress(c.pledgeAddress)).catch(() => setPledgeAddress(null));
+  }, []);
+
+  const confirmed = !!proposal.pledgeConfirmedAt;
+  const paidNotConfirmed = !!proposal.pledgeTxHash && !confirmed;
+  const notPaid = !proposal.pledgeTxHash && !confirmed;
+
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try { await proposalsApi.pledgeTx(id, tx); setTx(''); onChange(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'failed'); }
+    finally { setBusy(false); }
+  };
+
+  const review = async (decision: 'APPROVE' | 'REJECT') => {
+    if (decision === 'REJECT' && !feedback.trim()) { setError('A reason is required when rejecting a pledge.'); return; }
+    setBusy(true); setError(null);
+    try { await boardPledgeApi.review(id, decision, feedback || undefined); setFeedback(''); onChange(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'failed'); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <section className={card}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-semibold">Proposer pledge (§3)</h3>
+        <span className={`rounded px-2 py-0.5 text-[11px] font-medium ${
+          confirmed
+            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+            : paidNotConfirmed
+              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+              : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
+        }`}>
+          {confirmed ? '✓ confirmed on-chain' : paidNotConfirmed ? 'paid, awaiting board confirmation' : 'pledge not paid yet'}
+        </span>
+      </div>
+      <div className="mt-1 text-xs text-neutral-500">
+        Pledge: <strong>{proposal.pledgeAmountAda.toLocaleString()} ₳</strong>
+        {proposal.pledgeReturnMethod ? <> · return method shown below</> : null}
+      </div>
+      {proposal.pledgeReturnMethod ? (
+        <div className="mt-2 rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-800/40">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Return method (set by the team)</div>
+          <Markdown className="mt-0.5 text-neutral-700 dark:text-neutral-300">{proposal.pledgeReturnMethod}</Markdown>
+        </div>
+      ) : null}
+
+      {/* Address (visible to everyone — payment is on-chain, the address is public). */}
+      {!confirmed && pledgeAddress ? (
+        <div className="mt-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Send the pledge to</div>
+          <div className="mt-0.5 flex items-start gap-2">
+            <div className="flex-1 break-all font-mono text-[11px] text-neutral-600 dark:text-neutral-400">{pledgeAddress}</div>
+            <CopyButton text={pledgeAddress} label="Copy address" />
+          </div>
+        </div>
+      ) : null}
+
+      {/* Board's rejection feedback (red box) so the submitter can fix + repaste. */}
+      {proposal.pledgeFeedback && !confirmed ? (
+        <div className="mt-2 rounded border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/30">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Board feedback</div>
+          <div className="mt-0.5 whitespace-pre-wrap text-xs text-red-800 dark:text-red-300">{proposal.pledgeFeedback}</div>
+        </div>
+      ) : null}
+
+      {/* The tx hash on file (link out to the explorer). */}
+      {proposal.pledgeTxHash ? (
+        <div className="mt-2">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Pledge tx</div>
+          <a href={txUrl(proposal.pledgeTxHash)} target="_blank" rel="noreferrer" className="break-all font-mono text-xs text-emerald-700 underline dark:text-emerald-400">
+            {proposal.pledgeTxHash} ↗
+          </a>
+        </div>
+      ) : null}
+
+      {/* Submitter — paste tx hash (always available until confirmed). */}
+      {isMine && !confirmed ? (
+        <div className="mt-3 space-y-1">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+            {notPaid ? 'Paste the on-chain tx hash to send your pledge' : 'Paste a corrected tx hash if the board rejected the previous one'}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={tx}
+              onChange={(e) => setTx(e.target.value)}
+              placeholder="pledge tx hash (e.g. 43bce05db…)"
+              className="flex-1 rounded border border-neutral-300 px-2 py-1 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900"
+            />
+            <button disabled={busy || !tx.trim()} onClick={submit} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">
+              {busy ? '…' : 'Submit pledge tx'}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Board — approve / reject the pasted tx (only when one is pending review). */}
+      {isBoard && paidNotConfirmed ? (
+        <div className="mt-3 space-y-1 rounded border border-amber-300 bg-amber-50 p-2 dark:border-amber-900 dark:bg-amber-950/30">
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Board: confirm the pledge payment</div>
+          <input
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="Feedback (required to reject, optional to approve)"
+            className="w-full rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+          />
+          <div className="flex gap-2">
+            <button disabled={busy} onClick={() => review('APPROVE')} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">
+              Approve (confirm on-chain payment)
+            </button>
+            <button disabled={busy} onClick={() => review('REJECT')} className="rounded border border-red-500 px-2.5 py-1 text-xs text-red-700 disabled:opacity-40 dark:text-red-300">
+              Reject (team re-pastes)
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {error ? <div className="mt-1 text-xs text-red-600">{error}</div> : null}
+      {notPaid && !isMine ? (
+        <div className="mt-2 text-xs text-neutral-500">Milestone POAs are blocked until the pledge is paid and the board confirms it.</div>
+      ) : null}
+    </section>
+  );
+}
+
 function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: string; isBoard: boolean; isMine: boolean; proposal: PDetail; onChange: () => void }) {
   const [ms, setMs] = useState<MilestoneView[] | null>(null);
   const [roundStatus, setRoundStatus] = useState<string | null>(null);

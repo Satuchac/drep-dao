@@ -3,7 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { ProposalsService } from './proposals.service';
-import { ReviewFeeDto, SettlePaymentDto } from './dto';
+import { ReviewFeeDto, ReviewPledgeDto, SettlePaymentDto } from './dto';
 import { FilteringService } from './filtering.service';
 import { DvService } from './dv.service';
 
@@ -27,6 +27,20 @@ export class AdminProposalsController {
   @Post(':id/review-fee')
   reviewFee(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewFeeDto) {
     return this.proposals.reviewFee(id, dto);
+  }
+
+  // §3 — proposals in FUNDING awaiting pledge confirmation (the team pasted a tx,
+  // the platform verifies it on-chain; the board approves or rejects).
+  @Get('pending-pledge')
+  pendingPledge() {
+    return this.proposals.listPendingPledge();
+  }
+
+  // Confirm (→ pledgeConfirmedAt set, milestone POAs unlocked) or reject (→ tx
+  // hash cleared, team re-pastes a corrected one) the pledge payment.
+  @Post(':id/review-pledge')
+  reviewPledge(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewPledgeDto) {
+    return this.proposals.reviewPledge(id, dto);
   }
 
   // §12 — fee settlements (budget-change top-ups / refunds). `?history=1` includes settled ones.

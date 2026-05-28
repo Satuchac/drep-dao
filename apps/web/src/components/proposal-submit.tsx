@@ -41,6 +41,13 @@ export function ProposalSubmit() {
   const [payoutAddress, setPayoutAddress] = useState('');
   const [subcatIds, setSubcatIds] = useState<string[]>([]);
   const [fee, setFee] = useState('');
+  // §3 — optional refundable pledge. Off by default; the team opts in via a checkbox
+  // that appears only when the round's `pledgeThresholdAda > 0`. Amount must be ≥
+  // the threshold; the return-method description (collapsible MarkdownEditor) is
+  // required when the pledge is on.
+  const [pledgeEnabled, setPledgeEnabled] = useState(false);
+  const [pledgeAmount, setPledgeAmount] = useState<number>(0);
+  const [pledgeReturnMethod, setPledgeReturnMethod] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -92,6 +99,14 @@ export function ProposalSubmit() {
   if (ms.some((m) => !(m.title ?? '').trim())) draftMissing.push('give every milestone a title');
   if (ms.some((m) => !m.description.trim())) draftMissing.push('describe every milestone');
   if (!milestonesMatch) draftMissing.push(`milestones must sum to the requested amount (now ${msSum.toLocaleString()} of ${Number(amount).toLocaleString()} ₳)`);
+  // §3 — when the team opts in to a pledge, the amount must clear the round's
+  // threshold and a return-method description is required.
+  if (pledgeEnabled) {
+    const minPledge = roundSettings?.pledgeThresholdAda ?? ROUND_SETTING_DEFAULTS.pledgeThresholdAda;
+    if (!(pledgeAmount > 0)) draftMissing.push('set the pledge amount');
+    else if (minPledge > 0 && pledgeAmount < minPledge) draftMissing.push(`pledge must be ≥ ${minPledge.toLocaleString()} ₳ (round minimum)`);
+    if (!pledgeReturnMethod.trim()) draftMissing.push('describe how the pledge will be returned');
+  }
   const draftReady = draftMissing.length === 0;
 
   const buildInput = () => ({
@@ -108,6 +123,9 @@ export function ProposalSubmit() {
     payoutAddress: payoutAddress.trim() || undefined,
     // Persist the fee tx hash with the draft so it survives a save (verified on-chain at submission).
     submissionFeeTxHash: fee.trim() || undefined,
+    // §3 — pledge promise (0 / undefined means "no pledge").
+    pledgeAmountAda: pledgeEnabled && pledgeAmount > 0 ? pledgeAmount : undefined,
+    pledgeReturnMethod: pledgeEnabled ? (pledgeReturnMethod.trim() || undefined) : undefined,
     milestones: ms.map((m) => ({
       title: m.title?.trim() || undefined,
       description: m.description,
@@ -153,6 +171,9 @@ export function ProposalSubmit() {
     setRevenueSharing('');
     setPayoutAddress('');
     setSubcatIds([]);
+    setPledgeEnabled(false);
+    setPledgeAmount(0);
+    setPledgeReturnMethod('');
     setMs([{ title: '', description: '', acceptanceCriteria: '', amountAda: Number(amount) }]);
   };
 
@@ -184,6 +205,10 @@ export function ProposalSubmit() {
       );
       // Restore the fee tx hash saved with the draft (so it persists across edits).
       setFee(p.submissionFeeTxHash ?? '');
+      // §3 — restore the pledge promise so it survives an edit.
+      setPledgeEnabled((p.pledgeAmountAda ?? 0) > 0);
+      setPledgeAmount(p.pledgeAmountAda ?? 0);
+      setPledgeReturnMethod(p.pledgeReturnMethod ?? '');
       setOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'could not load draft');
@@ -425,6 +450,23 @@ export function ProposalSubmit() {
           <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title="Cost breakdown" hint="optional — how the budget is spent" placeholder="How the budget is spent" minRows={3} defaultCollapsed={!costBreakdown.trim()} />
           <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title="Team info" hint="optional — who is delivering this" placeholder="Who is delivering this, and why you're best suited" minRows={3} defaultCollapsed={!teamInfo.trim()} />
           <MarkdownEditor value={revenueSharing} onChange={setRevenueSharing} title="Revenue sharing" hint="optional — for commercial projects" placeholder="For commercial projects: how the DAO shares in returns" minRows={3} defaultCollapsed={!revenueSharing.trim()} />
+          {/* §3 — optional refundable pledge. Only shown when the round's threshold > 0.
+              Team opts in; amount must be ≥ threshold; return-method description is required.
+              The actual on-chain payment happens later in FUNDING (after approval). */}
+          {(roundSettings?.pledgeThresholdAda ?? ROUND_SETTING_DEFAULTS.pledgeThresholdAda) > 0 ? (
+            <PledgeSection
+              minAda={roundSettings?.pledgeThresholdAda ?? ROUND_SETTING_DEFAULTS.pledgeThresholdAda}
+              enabled={pledgeEnabled}
+              amount={pledgeAmount}
+              returnMethod={pledgeReturnMethod}
+              onEnabled={(v) => {
+                setPledgeEnabled(v);
+                if (v && !pledgeAmount) setPledgeAmount(roundSettings?.pledgeThresholdAda ?? ROUND_SETTING_DEFAULTS.pledgeThresholdAda);
+              }}
+              onAmount={setPledgeAmount}
+              onReturnMethod={setPledgeReturnMethod}
+            />
+          ) : null}
           {/* §5.3/§7.1 — expertise tags drive which DReps are drawn to filter this proposal. */}
           <div>
             <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Expertise areas (helps match filtering reviewers)</div>
@@ -623,5 +665,84 @@ function MineRow({
         </div>
       ) : null}
     </li>
+  );
+}
+
+/**
+ * §3 — optional pledge UI: checkbox + amount + collapsible return-method markdown.
+ * Off by default; only rendered when the round's `pledgeThresholdAda > 0`. When the
+ * checkbox is on, the amount input is shown (with the round minimum as placeholder)
+ * and a MarkdownEditor for "how will the pledge be returned" (per-milestone /
+ * after final milestone / etc.) — collapsible to match the rest of the form.
+ */
+function PledgeSection({
+  minAda,
+  enabled,
+  amount,
+  returnMethod,
+  onEnabled,
+  onAmount,
+  onReturnMethod,
+}: {
+  minAda: number;
+  enabled: boolean;
+  amount: number;
+  returnMethod: string;
+  onEnabled: (v: boolean) => void;
+  onAmount: (v: number) => void;
+  onReturnMethod: (v: string) => void;
+}) {
+  const field = 'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
+  return (
+    <div className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={enabled} onChange={(e) => onEnabled(e.target.checked)} />
+        <span className="font-medium">I will provide a refundable pledge (optional)</span>
+        <span className="text-xs text-neutral-500">— minimum {minAda.toLocaleString()} ₳ (round setting)</span>
+      </label>
+      {enabled ? (
+        <div className="mt-2 space-y-2">
+          <div className="flex flex-wrap items-center gap-3 text-sm">
+            <label className="flex items-center gap-1">
+              Pledge ₳
+              <input
+                type="number"
+                className={`${field} w-32`}
+                min={minAda}
+                value={amount || ''}
+                placeholder={String(minAda)}
+                onChange={(e) => onAmount(Number(e.target.value))}
+              />
+            </label>
+            {amount > 0 && amount < minAda ? (
+              <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-300">
+                Below round minimum ({minAda.toLocaleString()} ₳)
+              </span>
+            ) : amount >= minAda ? (
+              <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                Meets minimum
+              </span>
+            ) : null}
+          </div>
+          <MarkdownEditor
+            value={returnMethod}
+            onChange={onReturnMethod}
+            title="Pledge return method"
+            hint="how + when the pledge will be returned (e.g. a slice at each milestone, or in full after the last)"
+            placeholder="Example: 25% returned after milestone 1, 25% after milestone 2, the rest after the final milestone."
+            minRows={3}
+            defaultCollapsed={!returnMethod.trim()}
+            required
+          />
+          <div className="text-[11px] text-neutral-500">
+            The pledge is paid on-chain <strong>after</strong> the proposal is approved (FUNDING stage), to the address the platform shows you there. A board member confirms the payment.
+          </div>
+        </div>
+      ) : (
+        <div className="mt-1 text-xs text-neutral-500">
+          No pledge by default. If you opt in, you commit here and pay on-chain later in the FUNDING stage.
+        </div>
+      )}
+    </div>
   );
 }

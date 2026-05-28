@@ -257,6 +257,14 @@ export class MilestonesService {
     if (m.proposal.round && m.proposal.round.status !== RoundStatus.FUNDING) {
       throw new ConflictException('the round is not in the FUNDING stage — POAs are closed');
     }
+    // §3 — pledge gate: a promised pledge must be confirmed on-chain by the board
+    // before milestone POAs can be submitted (otherwise the team could draw funds
+    // without ever posting collateral).
+    if (m.proposal.pledgeAmountAda && m.proposal.pledgeAmountAda > 0n && !m.proposal.pledgeConfirmedAt) {
+      throw new ConflictException(
+        'the pledge payment must be confirmed by the board before milestone POAs can be submitted',
+      );
+    }
     if (m.status === 'APPROVED') throw new ConflictException('milestone is already approved');
     if (m.status === 'POA_SUBMITTED') {
       throw new ConflictException('a POA is already under review — wait for the reviewers\' decision; only a REJECTED milestone can be re-submitted');

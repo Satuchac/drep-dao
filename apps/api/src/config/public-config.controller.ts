@@ -27,6 +27,13 @@ export class PublicConfigController {
       network: this.config.get<string>('CARDANO_NETWORK') ?? 'Preprod',
       explorer: String(val('CARDANO_EXPLORER') ?? PLATFORM_CONFIG_DEFAULTS.CARDANO_EXPLORER),
       submissionFeeAddress: this.config.get<string>('SUBMISSION_FEE_ADDRESS') || null,
+      // §3 — pledge payment address (FUNDING-stage on-chain pledge). Defaults to
+      // SUBMISSION_FEE_ADDRESS so a single address can be used in dev/test if no
+      // dedicated PLEDGE_ADDRESS is configured.
+      pledgeAddress:
+        this.config.get<string>('PLEDGE_ADDRESS')
+        || this.config.get<string>('SUBMISSION_FEE_ADDRESS')
+        || null,
       anchorMetadataLabel: 80808081,
       // §10 — internal-proposal thresholds, so the submit form can show the real % values.
       internalThresholds: {

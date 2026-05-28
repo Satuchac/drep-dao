@@ -467,6 +467,8 @@ export interface CreateProposalInput {
   revenueSharingMd?: string;
   payoutAddress?: string;
   submissionFeeTxHash?: string;
+  pledgeAmountAda?: number;
+  pledgeReturnMethod?: string;
   milestones: ProposalMilestoneInput[];
 }
 export interface ProposalProgress {
@@ -508,6 +510,11 @@ export interface ProposalDetail extends ProposalSummary {
   submissionFeeTxHashes: string[];
   feeReviewFeedback: string | null;
   payoutAddress: string | null;
+  pledgeAmountAda: number;
+  pledgeReturnMethod: string | null;
+  pledgeTxHash: string | null;
+  pledgeConfirmedAt: string | null;
+  pledgeFeedback: string | null;
   categoryAsk: { minAda: number | null; maxAda: number | null; conditions: string | null };
   milestones: { id: string; idx: number; title: string | null; description: string; acceptanceCriteria: string | null; amountAda: number; status: string }[];
 }
@@ -522,6 +529,9 @@ export const proposalsApi = {
     request<ProposalDetail>(`/proposals/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   budgetChange: (id: string, input: { requestedAmountAda: number; milestones: ProposalMilestoneInput[] }) =>
     request<ProposalDetail>(`/proposals/${id}/budget-change`, { method: 'POST', body: JSON.stringify(input) }),
+  // §3 — team pastes the on-chain pledge payment tx hash (FUNDING + promised pledge).
+  pledgeTx: (id: string, txHash: string) =>
+    request<ProposalDetail>(`/proposals/${id}/pledge-tx`, { method: 'POST', body: JSON.stringify({ txHash }) }),
   submit: (id: string, submissionFeeTxHash: string) =>
     request<ProposalDetail>(`/proposals/${id}/submit`, {
       method: 'POST',
@@ -622,6 +632,7 @@ export interface PublicConfig {
   network: string;
   explorer: string;
   submissionFeeAddress: string | null;
+  pledgeAddress: string | null;
   anchorMetadataLabel: number;
   internalThresholds: { default: number; important: number };
 }
@@ -771,6 +782,29 @@ export interface PendingFee {
 }
 export const boardFeeApi = {
   pending: () => request<PendingFee[]>('/admin/proposals/pending-fee'),
+};
+
+// §3 — proposals awaiting board pledge confirmation (in FUNDING, paid on-chain).
+export interface PendingPledge {
+  id: string;
+  publicId: string | null;
+  title: string;
+  roundNumber: number | null;
+  categoryName: string | null;
+  submitter: string | null;
+  pledgeAmountAda: number;
+  pledgeReturnMethod: string | null;
+  pledgeTxHash: string | null;
+  pledgeAddress: string;
+  verification: { found: boolean; paid: boolean; paidAda: number };
+}
+export const boardPledgeApi = {
+  pending: () => request<PendingPledge[]>('/admin/proposals/pending-pledge'),
+  review: (id: string, decision: 'APPROVE' | 'REJECT', feedback?: string) =>
+    request<ProposalDetail>(`/admin/proposals/${id}/review-pledge`, {
+      method: 'POST',
+      body: JSON.stringify({ decision, feedback }),
+    }),
 };
 
 // §12 — fee settlements from budget changes (board task: My Area → Payments).

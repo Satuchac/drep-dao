@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, filteringApi, internalProposalsApi, milestonesApi, removalApi, treasuryApi } from '@/lib/api';
+import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, filteringApi, internalProposalsApi, milestonesApi, removalApi, treasuryApi } from '@/lib/api';
 
 /**
  * §15.3 — notifications in the login rectangle. A red circle with the total number of to-dos
@@ -19,7 +19,7 @@ export function NotificationBadge({ isBoard, onNavigate }: { isBoard: boolean; o
     const poll = async () => {
       const next = { actions: 0, applications: 0, voting: 0, internal: 0 };
       if (isBoard) {
-        const [a, f, p, dapps, eapps, rem, stop] = await Promise.allSettled([
+        const [a, f, p, dapps, eapps, rem, stop, pl] = await Promise.allSettled([
           treasuryApi.boardActions(),
           boardFeeApi.pending(),
           boardPaymentsApi.pending(),
@@ -27,12 +27,14 @@ export function NotificationBadge({ isBoard, onNavigate }: { isBoard: boolean; o
           boardExpertsApi.applications(),
           removalApi.list(),
           milestonesApi.pendingStopFunding(), // §11 — stop-funding awaiting THIS board member's vote
+          boardPledgeApi.pending(), // §3 — pledge payments to confirm
         ]);
         next.actions =
           (a.status === 'fulfilled' ? a.value.count : 0) +
           (f.status === 'fulfilled' ? f.value.length : 0) +
           (p.status === 'fulfilled' ? p.value.length : 0) +
-          (stop.status === 'fulfilled' ? stop.value.count : 0);
+          (stop.status === 'fulfilled' ? stop.value.count : 0) +
+          (pl.status === 'fulfilled' ? pl.value.length : 0);
         next.applications =
           (dapps.status === 'fulfilled' ? dapps.value.filter((x) => !x.myVote).length : 0) +
           (eapps.status === 'fulfilled' ? eapps.value.length : 0) +
