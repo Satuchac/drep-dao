@@ -86,8 +86,9 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   console.log('\n=== §7 Filtering: draw + 3 YES → anchored decision ===');
   // The proposal.stage transitions (FILTERING → DEBATE_VOTE → FUNDING) come from the
   // proposal services. §5.1 forbids two rounds in FILTERING/DV at once, and the demo
-  // data holds that slot — so we leave round.status alone and only push the round to
-  // FUNDING (via Prisma) when r56 milestone gating needs it (below).
+  // data holds that slot — so we push round.status directly via Prisma. r65 also
+  // requires round.status === FILTERING for filtering votes to be accepted.
+  await prisma.round.update({ where: { id: round.id }, data: { status: 'FILTERING' } });
   await filtering.drawReviewers(draft.id);
   const assigns = await prisma.filterAssignment.findMany({ where: { proposalId: draft.id, releasedAt: null } });
   let voted = 0;

@@ -417,6 +417,26 @@ export class RoundsService {
           },
         });
       }
+      // §3/§5 — moving out of SUBMISSION: any proposal whose fee was not paid +
+      // confirmed by the board (i.e. still DRAFT or PENDING) is auto-REJECTED
+      // with a clear reason. ACTIVE proposals proceed to FILTERING voting.
+      if (round.status === RoundStatus.SUBMISSION && target !== RoundStatus.SUBMISSION && target !== RoundStatus.PREPARATION) {
+        const stragglers = await tx.proposal.findMany({
+          where: { roundId: id, status: { in: [ProposalStatus.DRAFT, ProposalStatus.PENDING] } },
+          select: { id: true, status: true, submissionFeeTxHash: true },
+        });
+        for (const s of stragglers) {
+          const reason = s.status === ProposalStatus.DRAFT
+            ? 'Not submitted before the SUBMISSION phase ended.'
+            : s.submissionFeeTxHash
+              ? 'Submission fee was not confirmed by the board before the SUBMISSION phase ended.'
+              : 'Submission fee was not paid before the SUBMISSION phase ended.';
+          await tx.proposal.update({
+            where: { id: s.id },
+            data: { status: ProposalStatus.REJECTED, feeReviewFeedback: reason },
+          });
+        }
+      }
     });
     return this.get(id);
   }

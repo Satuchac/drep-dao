@@ -434,7 +434,7 @@ export class ProposalsService {
         category: { select: { name: true } },
         submitterUser: { select: { displayName: true } },
         submitterDrep: { select: { drepIdOnchain: true } },
-        round: { select: { filterReviewerCount: true, filterApprovalVotes: true, milestoneApprovalVotes: true } },
+        round: { select: { status: true, filterReviewerCount: true, filterApprovalVotes: true, milestoneApprovalVotes: true } },
       },
     });
     return this.enrichSummaries(proposals);
@@ -455,7 +455,7 @@ export class ProposalsService {
   private async enrichSummaries(
     proposals: Array<Parameters<ProposalsService['summary']>[0] & {
       feeReviewFeedback?: string | null;
-      round?: { filterReviewerCount: number | null; filterApprovalVotes: number | null; milestoneApprovalVotes: number | null } | null;
+      round?: { status?: string; filterReviewerCount: number | null; filterApprovalVotes: number | null; milestoneApprovalVotes: number | null } | null;
     }>,
   ) {
     if (proposals.length === 0) return [];
@@ -514,11 +514,26 @@ export class ProposalsService {
       // Build the "what's needed now" hint for ACTIVE proposals.
       let progress: { stage: string; label: string; tone: 'amber' | 'emerald' | 'neutral' | 'red' } | null = null;
       if (status === ProposalStatus.PENDING) {
-        progress = { stage: 'FEE', label: 'awaiting board fee confirmation', tone: 'amber' };
+        // §3/§12 — distinguish "fee tx not entered yet" from "fee tx entered, board hasn't
+        // reviewed". Both block the proposal from advancing past SUBMISSION; the second is
+        // a board responsibility, the first is the submitter's.
+        const txHash = (p as { submissionFeeTxHash?: string | null }).submissionFeeTxHash;
+        if (!txHash) {
+          progress = { stage: 'FEE', label: 'submission fee not paid yet (submitter)', tone: 'red' };
+        } else {
+          progress = { stage: 'FEE', label: 'submission fee paid, awaiting board confirmation', tone: 'amber' };
+        }
       } else if (status === ProposalStatus.ACTIVE && stage === ProposalStage.FILTERING) {
         const assigned = fAssignBy.get(p.id) ?? [];
         const votes = fVotesBy.get(p.id) ?? [];
-        if (assigned.length === 0) {
+        const roundStatus = p.round?.status ?? null;
+        // §3 — while the round is still in SUBMISSION the proposal is "ready" but
+        // voting is closed. After SUBMISSION ends (round → FILTERING) the jury votes.
+        if (roundStatus && roundStatus !== 'FILTERING') {
+          progress = assigned.length === 0
+            ? { stage: 'FILTERING', label: 'fee confirmed · awaiting board to assign reviewers', tone: 'amber' }
+            : { stage: 'FILTERING', label: `fee confirmed · ${assigned.length} reviewers pre-assigned · voting opens when round moves to FILTERING`, tone: 'emerald' };
+        } else if (assigned.length === 0) {
           progress = { stage: 'FILTERING', label: 'awaiting reviewer draw (board)', tone: 'amber' };
         } else {
           const voted = new Set(votes.map((v) => v.drepId)).size;

@@ -10,6 +10,7 @@ import {
   ROUND_SETTING_DEFAULTS,
   ProposalStage,
   ProposalStatus,
+  RoundStatus,
   VoteChoice,
   VotePhase,
   VotingType,
@@ -97,7 +98,17 @@ export class FilteringService {
     const assignments = await this.prisma.filterAssignment.findMany({
       where: history
         ? { drepId: drep.id }
-        : { drepId: drep.id, releasedAt: null, proposal: { stage: ProposalStage.FILTERING, status: ProposalStatus.ACTIVE } },
+        : {
+            drepId: drep.id,
+            releasedAt: null,
+            // §3 — only show when the ROUND is in FILTERING; while the round is still in
+            // SUBMISSION the assignment exists (pre-assigned) but the reviewer can't vote.
+            proposal: {
+              stage: ProposalStage.FILTERING,
+              status: ProposalStatus.ACTIVE,
+              round: { status: RoundStatus.FILTERING },
+            },
+          },
       include: { proposal: { select: { id: true, title: true, status: true, stage: true } } },
       orderBy: { assignedAt: 'desc' },
     });
@@ -123,7 +134,18 @@ export class FilteringService {
     if (!drep) return { filtering: 0, dv: 0, milestone: 0, total: 0 };
 
     const fAssign = await this.prisma.filterAssignment.findMany({
-      where: { drepId: drep.id, releasedAt: null, proposal: { stage: ProposalStage.FILTERING, status: ProposalStatus.ACTIVE } },
+      // §3/§5 — only count tasks where the ROUND is in FILTERING (voting open).
+      // During SUBMISSION, reviewers may already be assigned but voting is closed,
+      // so we don't ping DReps to vote until the round actually opens it.
+      where: {
+        drepId: drep.id,
+        releasedAt: null,
+        proposal: {
+          stage: ProposalStage.FILTERING,
+          status: ProposalStatus.ACTIVE,
+          round: { status: RoundStatus.FILTERING },
+        },
+      },
       select: { proposalId: true },
     });
     const fVoted = new Set(
@@ -170,9 +192,20 @@ export class FilteringService {
     if (choice === VoteChoice.NO && !rationale?.trim()) {
       throw new BadRequestException('a NO vote requires written rationale');
     }
-    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      include: { round: { select: { status: true } } },
+    });
     if (!proposal || proposal.stage !== ProposalStage.FILTERING) {
       throw new ConflictException('proposal is not in the FILTERING stage');
+    }
+    // §3/§5 — voting is only open once the ROUND is in the FILTERING stage. During
+    // SUBMISSION, reviewers may be pre-assigned (so juries are ready) but cannot
+    // cast votes yet. The board moves the round to FILTERING when SUBMISSION ends.
+    if (proposal.round && proposal.round.status !== RoundStatus.FILTERING) {
+      throw new ConflictException(
+        `filtering voting is closed — the round is in ${proposal.round.status}, not FILTERING`,
+      );
     }
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
     if (!drep) throw new ForbiddenException('DReps only');

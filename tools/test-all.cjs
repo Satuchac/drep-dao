@@ -30,6 +30,7 @@ const SUITES = [
   ['test-stage-flow', 'Stage flow: budget/schedule validation, confirm/launch/auto-start/close, proposal counts'],
   ['test-proposal-flow', 'Proposal lifecycle: fee, edit/version, filtering+D&V+milestone anchored, comments'],
   ['test-milestone-flow', '§11 milestone: board allocates reviewers (expertise+load), POA immutable, payout auto-prep, stop-funding (1p1v, 3-YES → FAILED + anchor)'],
+  ['test-submission-phase', '§3/§5 SUBMISSION phase: pre-assign reviewers OK, vote blocked, no DRep pings; SUBMISSION→FILTERING auto-rejects unpaid/unsubmitted with clear reason'],
   ['test-category-ask', '§5.2 category min/max ask enforced on submit + §3.4 funding fields (self-cleaning)'],
   ['test-round-counts', '§9 round overview per-status counts incl. DRAFT/PENDING, update as status changes (self-cleaning)'],
   ['test-internal', '§10 internal proposals: submit/threshold/poll/extend/scope/private + on-chain anchor (self-cleaning)'],

@@ -140,7 +140,7 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
       </div>
 
       <VersionsSection id={id} />
-      {showFiltering ? <FilteringSection id={id} isBoard={isBoard} /> : null}
+      {showFiltering ? <FilteringSection id={id} isBoard={isBoard} proposal={p} /> : null}
       {showDv ? <DvSection id={id} isBoard={isBoard} /> : null}
       {showMilestones ? (
         <MilestonesSection id={id} isBoard={isBoard} isMine={mine} proposal={p} onChange={load} />
@@ -422,19 +422,30 @@ function AnchorLink({ txHash }: { txHash: string | null | undefined }) {
   );
 }
 
-function FilteringSection({ id, isBoard }: { id: string; isBoard: boolean }) {
+function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: boolean; proposal: PDetail }) {
   const [r, setR] = useState<FilterResult | null>(null);
+  const [roundStatus, setRoundStatus] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [drawError, setDrawError] = useState<string | null>(null);
   const load = useCallback(() => {
     filteringApi.result(id).then(setR).catch(() => setR(null));
   }, [id]);
   useEffect(load, [load]);
+  useEffect(() => {
+    if (!proposal.roundId) { setRoundStatus(null); return; }
+    roundsApi.get(proposal.roundId).then((rd) => setRoundStatus(rd.status)).catch(() => setRoundStatus(null));
+  }, [proposal.roundId]);
   if (!r) return null;
   // §7 — rationale belongs to the reviewer who wrote it; fold it into that reviewer's row
   // (keyed by on-chain DRep id) so we render exactly the assigned jury, never a duplicate list.
   const rationaleByDrep = new Map((r.votes ?? []).filter((v) => v.rationale).map((v) => [v.drep, v.rationale]));
-  const open = r.status === 'ACTIVE' && r.stage === 'FILTERING';
+  // §3 — voting is open only when the proposal is ACTIVE-in-FILTERING AND the round
+  // is in FILTERING. While the round is in SUBMISSION, juries can be pre-assigned
+  // but no votes are cast yet (server rejects + the UI hides the vote inputs).
+  const inFilteringStage = r.status === 'ACTIVE' && r.stage === 'FILTERING';
+  const roundOpen = !roundStatus || roundStatus === 'FILTERING'; // unknown → assume open (failsafe)
+  const open = inFilteringStage && roundOpen;
+  const submissionPhase = inFilteringStage && roundStatus === 'SUBMISSION';
   const voted = (r.assigned ?? []).filter((a) => a.voted).length;
   const decided = r.yes >= r.threshold || r.no >= r.threshold;
 
@@ -489,6 +500,12 @@ function FilteringSection({ id, isBoard }: { id: string; isBoard: boolean }) {
       <div className="mt-1 text-xs text-neutral-500">
         {r.reviewers} reviewers · {r.yes} YES / {r.no} NO · need {r.threshold} to decide
       </div>
+      {submissionPhase ? (
+        <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <strong>Round in SUBMISSION.</strong> Reviewer voting opens when the board moves the round to FILTERING.
+          Reviewers can already be pre-assigned here.
+        </div>
+      ) : null}
       {r.assigned && r.assigned.length > 0 ? (
         <ul className="mt-2 space-y-1.5">
           {r.assigned.map((a, i) => {

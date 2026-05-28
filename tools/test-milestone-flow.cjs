@@ -96,10 +96,10 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   await proposals.submit(carol.id, draft.id, { submissionFeeTxHash: 'feehash-mf' });
   await proposals.reviewFee(draft.id, { decision: 'APPROVE' });
   // The proposal.stage transitions (FILTERING → DEBATE_VOTE → FUNDING) are driven
-  // directly by the proposal services, independent of round.status. We skip the
-  // RoundsService.startStage flow because §5.1 forbids two rounds in FILTERING/DV
-  // simultaneously and the demo data already holds that slot; for milestone gating
-  // we push the round to FUNDING via Prisma right before allocation (below).
+  // directly by the proposal services. r65 requires round.status === FILTERING for
+  // the filtering vote to be accepted, so push round status via Prisma here
+  // (bypassing §5.1 which the demo data would otherwise trip).
+  await prisma.round.update({ where: { id: round.id }, data: { status: 'FILTERING' } });
   await filtering.drawReviewers(draft.id);
   const fas = await prisma.filterAssignment.findMany({ where: { proposalId: draft.id, releasedAt: null } });
   let v = 0;
