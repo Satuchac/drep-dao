@@ -14,6 +14,7 @@ import {
   roundsApi,
   commentsApi,
   boardMilestoneApi,
+  boardProposalsApi,
   type ProposalDetail as PDetail,
   type VoteRationale,
   type ProposalVersionEntry,
@@ -77,6 +78,8 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
             ) : null}
             {p.stage ? <span>Stage: <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.stage}</span></span> : null}
             <span className="flex items-center gap-1">Status: <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} /></span>
+            {/* §7/§8/§11 — at-a-glance: how many DReps must still vote at the current stage. */}
+            <VotingProgressChip id={id} status={p.status} stage={p.stage} />
           </div>
         </div>
         <div className="mt-1 text-xs text-neutral-500">
@@ -137,7 +140,7 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
       </div>
 
       <VersionsSection id={id} />
-      {showFiltering ? <FilteringSection id={id} /> : null}
+      {showFiltering ? <FilteringSection id={id} isBoard={isBoard} /> : null}
       {showDv ? <DvSection id={id} isBoard={isBoard} /> : null}
       {showMilestones ? (
         <MilestonesSection id={id} isBoard={isBoard} isMine={mine} proposal={p} onChange={load} />
@@ -152,6 +155,100 @@ function BackBtn({ onBack }: { onBack: () => void }) {
     <button onClick={onBack} className="text-xs text-neutral-500 hover:underline">
       ← back to proposals
     </button>
+  );
+}
+
+/**
+ * Inline status chip next to the proposal Status badge: "voting progress" at a glance —
+ * how many DReps have voted vs. how many still need to. Polls the right service for the
+ * current stage (filtering reviewers / D&V snapshot / funding milestones + stop-funding)
+ * and self-hides while still loading or once the proposal is fully decided (COMPLETE /
+ * FAILED / REJECTED). On hover, the title attribute shows a short summary.
+ */
+function VotingProgressChip({ id, status, stage }: { id: string; status: string; stage: string | null }) {
+  type Chip = { label: string; tone: 'amber' | 'emerald' | 'neutral' | 'red'; title: string } | null;
+  const [chip, setChip] = useState<Chip>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const set = (c: Chip) => { if (alive) setChip(c); };
+    (async () => {
+      if (['COMPLETE', 'REJECTED', 'FAILED'].includes(status)) { set(null); return; }
+      if (stage === 'FILTERING' && status === 'ACTIVE') {
+        const r = await filteringApi.result(id).catch(() => null);
+        if (!r) return;
+        if (!r.assigned || r.assigned.length === 0) {
+          set({ label: 'awaiting reviewer draw', tone: 'neutral', title: 'Board has not drawn the filtering jury yet.' });
+        } else {
+          const voted = r.assigned.filter((a) => a.voted).length;
+          const decided = r.yes >= r.threshold || r.no >= r.threshold;
+          set({
+            label: `${voted}/${r.reviewers} voted (need ${r.threshold})`,
+            tone: decided ? 'emerald' : voted === 0 ? 'amber' : 'amber',
+            title: `Filtering: ${voted}/${r.reviewers} reviewers voted · ${r.yes} YES · ${r.no} NO · ${r.threshold} required to decide.`,
+          });
+        }
+      } else if (stage === 'DEBATE_VOTE' && status === 'ACTIVE') {
+        const r = await dvApi.result(id).catch(() => null);
+        if (!r) return;
+        if (!r.open) {
+          set({ label: 'D&V not yet open', tone: 'neutral', title: 'Board hasn\'t opened the Debate & Vote voting window.' });
+        } else {
+          set({
+            label: `${r.cast}/${r.eligible} DReps voted · ${r.approved ? 'passing' : 'short'} (${r.ratioPct}% / ${r.thresholdPct}%)`,
+            tone: r.approved ? 'emerald' : 'amber',
+            title: `D&V: ${r.cast} of ${r.eligible} eligible voted. ${r.ratioPct}% of participating power — needs ${r.thresholdPct}% to pass.`,
+          });
+        }
+      } else if (stage === 'FUNDING' && status === 'APPROVED') {
+        const [ms, stops] = await Promise.all([
+          milestonesApi.forProposal(id).catch(() => [] as MilestoneView[]),
+          milestonesApi.stopFundings(id).catch(() => [] as StopFundingView[]),
+        ]);
+        const active = stops.find((s) => s.status === 'ACTIVE');
+        if (active) {
+          set({
+            label: `stop-funding open · ${active.yes}/${active.threshold} YES`,
+            tone: 'red',
+            title: `Stop-funding ACTIVE — board votes 1p1v, ${active.yes} YES / ${active.no} NO of ${active.threshold} needed.`,
+          });
+          return;
+        }
+        if (ms.length === 0) { set(null); return; }
+        const approved = ms.filter((m) => m.status === 'APPROVED').length;
+        const inReview = ms.filter((m) => m.status === 'POA_SUBMITTED');
+        if (inReview.length > 0) {
+          const m = inReview[0];
+          set({
+            label: `M#${m.idx + 1} in review · ${m.yes}/${m.threshold} YES`,
+            tone: 'amber',
+            title: `Milestone #${m.idx + 1} POA under reviewer vote — ${m.yes} YES / ${m.no} NO of ${m.threshold} needed.`,
+          });
+        } else {
+          set({
+            label: `${approved}/${ms.length} milestones approved`,
+            tone: approved === ms.length ? 'emerald' : 'neutral',
+            title: `${approved} of ${ms.length} milestones approved.`,
+          });
+        }
+      } else {
+        set(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, [id, status, stage]);
+
+  if (!chip) return null;
+  const toneCls = {
+    amber: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200',
+    emerald: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+    neutral: 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300',
+    red: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
+  }[chip.tone];
+  return (
+    <span title={chip.title} className={`rounded px-2 py-0.5 text-[11px] font-medium ${toneCls}`}>
+      {chip.label}
+    </span>
   );
 }
 
@@ -329,21 +426,48 @@ function AnchorLink({ txHash }: { txHash: string | null | undefined }) {
   );
 }
 
-function FilteringSection({ id }: { id: string }) {
+function FilteringSection({ id, isBoard }: { id: string; isBoard: boolean }) {
   const [r, setR] = useState<FilterResult | null>(null);
-  useEffect(() => {
+  const [drawing, setDrawing] = useState(false);
+  const [drawError, setDrawError] = useState<string | null>(null);
+  const load = useCallback(() => {
     filteringApi.result(id).then(setR).catch(() => setR(null));
   }, [id]);
+  useEffect(load, [load]);
   if (!r) return null;
   // §7 — rationale belongs to the reviewer who wrote it; fold it into that reviewer's row
   // (keyed by on-chain DRep id) so we render exactly the assigned jury, never a duplicate list.
   const rationaleByDrep = new Map((r.votes ?? []).filter((v) => v.rationale).map((v) => [v.drep, v.rationale]));
   const open = r.status === 'ACTIVE' && r.stage === 'FILTERING';
+  const voted = (r.assigned ?? []).filter((a) => a.voted).length;
+  const decided = r.yes >= r.threshold || r.no >= r.threshold;
+
+  const draw = async () => {
+    setDrawing(true); setDrawError(null);
+    try { await boardProposalsApi.drawReviewers(id); load(); }
+    catch (e) { setDrawError(e instanceof Error ? e.message : 'failed'); }
+    finally { setDrawing(false); }
+  };
+
   return (
     <section className={card}>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold">Filtering — 1 member · 1 vote</h3>
-        <AnchorLink txHash={r.anchorTxHash} />
+        <div className="flex items-center gap-2">
+          {open ? (
+            <span
+              className={`rounded px-2 py-0.5 text-[11px] font-medium ${decided
+                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                : voted === 0
+                  ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300'
+                  : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'}`}
+              title="Voting progress"
+            >
+              {voted}/{r.reviewers || 0} voted{decided ? ' · decided' : ' · awaiting votes'}
+            </span>
+          ) : null}
+          <AnchorLink txHash={r.anchorTxHash} />
+        </div>
       </div>
       {/* §7.1 — a fixed jury (FILTER_REVIEWER_COUNT) decides; no abstain in filtering. */}
       <div className="mt-1 text-xs text-neutral-500">
@@ -374,6 +498,18 @@ function FilteringSection({ id }: { id: string }) {
             );
           })}
         </ul>
+      ) : isBoard && open ? (
+        // §7.1 — board triggers the jury draw. Once drawn, the reviewer list (with
+        // per-reviewer voting status) replaces this button.
+        <div className="mt-2 space-y-1">
+          <div className="text-xs text-neutral-500">
+            No reviewers drawn yet — the jury is picked by the board (expertise overlap first, then equal participation).
+          </div>
+          <button onClick={draw} disabled={drawing} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950">
+            {drawing ? 'Drawing…' : 'Draw + confirm reviewers'}
+          </button>
+          {drawError ? <div className="text-xs text-red-600">{drawError}</div> : null}
+        </div>
       ) : (
         <div className="mt-2 text-xs text-neutral-400">No reviewers drawn yet.</div>
       )}
