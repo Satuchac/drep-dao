@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 /** Shared presentation bits for rounds & proposals (badges, colors, formatting). */
 
 export const ROUND_STATUS_CLS: Record<string, string> = {
@@ -74,6 +76,18 @@ const MONTHS = [
  * `min` is accepted for API compatibility but not enforced per-field; submit-time validation
  * (and inline warnings the caller renders) cover the constraint.
  */
+function parseValue(value: string, withTime: boolean) {
+  if (!value) return { y: '', m: '', d: '', t: withTime ? '00:00' : '' };
+  const [datePart, timePart] = value.split('T');
+  const [yy = '', mm = '', dd = ''] = (datePart ?? '').split('-');
+  return {
+    y: yy,
+    m: mm ? String(parseInt(mm, 10)) : '',
+    d: dd ? String(parseInt(dd, 10)) : '',
+    t: (timePart ?? '').slice(0, 5) || (withTime ? '00:00' : ''),
+  };
+}
+
 export function DateField({
   value,
   onChange,
@@ -91,25 +105,38 @@ export function DateField({
   className?: string;
 }) {
   const withTime = type === 'datetime-local';
-  // Parse the canonical value ("YYYY-MM-DD" or "YYYY-MM-DDTHH:MM") into the 3-4 sub-fields.
-  const parsed = (() => {
-    if (!value) return { y: '', m: '', d: '', t: withTime ? '00:00' : '' };
-    const [datePart, timePart] = value.split('T');
-    const [yy = '', mm = '', dd = ''] = (datePart ?? '').split('-');
-    return {
-      y: yy,
-      m: mm ? String(parseInt(mm, 10)) : '',
-      d: dd ? String(parseInt(dd, 10)) : '',
-      t: (timePart ?? '').slice(0, 5) || (withTime ? '00:00' : ''),
-    };
-  })();
+  // Sub-fields keep their own state so the user can fill them in any order — the parent's
+  // `value` only updates once month + day + year are all set (otherwise the partial entry
+  // would clear right back to empty and the user couldn't type anything individually).
+  const initial = parseValue(value, withTime);
+  const [y, setY] = useState(initial.y);
+  const [m, setM] = useState(initial.m);
+  const [d, setD] = useState(initial.d);
+  const [t, setT] = useState(initial.t);
 
-  const commit = (y: string, m: string, d: string, t: string) => {
-    if (!y || !m || !d) { onChange(''); return; }
-    const date = `${y.padStart(4, '0')}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
-    if (!withTime) { onChange(date); return; }
-    const tt = (t || '00:00').slice(0, 5);
-    onChange(`${date}T${tt}`);
+  // Re-sync when the parent value changes externally (e.g. form reset, default).
+  useEffect(() => {
+    const p = parseValue(value, withTime);
+    setY(p.y); setM(p.m); setD(p.d); setT(p.t);
+  }, [value, withTime]);
+
+  const commit = (yy: string, mm: string, dd: string, tt: string) => {
+    if (yy && mm && dd) {
+      const date = `${yy.padStart(4, '0')}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}`;
+      onChange(withTime ? `${date}T${(tt || '00:00').slice(0, 5)}` : date);
+    } else if (value) {
+      // A sub-field was cleared — reset parent so the form treats it as empty/invalid.
+      onChange('');
+    }
+  };
+
+  const update = (next: Partial<{ y: string; m: string; d: string; t: string }>) => {
+    const yy = next.y ?? y, mm = next.m ?? m, dd = next.d ?? d, tt = next.t ?? t;
+    if (next.y !== undefined) setY(next.y);
+    if (next.m !== undefined) setM(next.m);
+    if (next.d !== undefined) setD(next.d);
+    if (next.t !== undefined) setT(next.t);
+    commit(yy, mm, dd, tt);
   };
 
   const cell = 'rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900';
@@ -117,9 +144,9 @@ export function DateField({
   return (
     <div className={`flex flex-wrap items-center gap-1.5 ${className ?? ''}`}>
       <select
-        value={parsed.m}
+        value={m}
         required={required}
-        onChange={(e) => commit(parsed.y, e.target.value, parsed.d, parsed.t)}
+        onChange={(e) => update({ m: e.target.value })}
         className={`${cell} min-w-[8.5rem]`}
       >
         <option value="">Month</option>
@@ -132,9 +159,9 @@ export function DateField({
         min={1}
         max={31}
         placeholder="Day"
-        value={parsed.d}
+        value={d}
         required={required}
-        onChange={(e) => commit(parsed.y, parsed.m, e.target.value.replace(/\D/g, ''), parsed.t)}
+        onChange={(e) => update({ d: e.target.value.replace(/\D/g, '') })}
         className={`${cell} w-16`}
       />
       <input
@@ -142,16 +169,16 @@ export function DateField({
         min={2024}
         max={2100}
         placeholder="Year"
-        value={parsed.y}
+        value={y}
         required={required}
-        onChange={(e) => commit(e.target.value.replace(/\D/g, ''), parsed.m, parsed.d, parsed.t)}
+        onChange={(e) => update({ y: e.target.value.replace(/\D/g, '') })}
         className={`${cell} w-24`}
       />
       {withTime ? (
         <input
           type="time"
-          value={parsed.t || '00:00'}
-          onChange={(e) => commit(parsed.y, parsed.m, parsed.d, e.target.value)}
+          value={t || '00:00'}
+          onChange={(e) => update({ t: e.target.value })}
           className={`${cell} w-28`}
         />
       ) : null}
