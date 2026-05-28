@@ -14,7 +14,7 @@ import {
   type RoundSummary,
 } from '@/lib/api';
 import { ProposalList } from './proposal-list';
-import { ProposalCounts, StatusBadge } from './round-ui';
+import { BackButton, ProposalCounts, StatusBadge } from './round-ui';
 
 const STAGE_DEFS = [
   { key: 'submission', label: 'Submission' },
@@ -94,9 +94,7 @@ export function RoundsSection() {
   if (open) {
     return (
       <section className="space-y-3">
-        <button onClick={() => setParams({ round: null })} className="text-xs text-neutral-500 hover:underline">
-          ← all rounds
-        </button>
+        <BackButton onBack={() => setParams({ round: null })} label="all rounds" />
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">
             Round #{open.number}

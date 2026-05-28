@@ -14,7 +14,7 @@ import {
 import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput, DateField, RationaleText } from './round-ui';
+import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput, DateField, RationaleText } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
 
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
@@ -697,7 +697,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
 }
 
 function BackBtn({ onBack }: { onBack: () => void }) {
-  return <button onClick={onBack} className="text-sm text-emerald-700 hover:underline dark:text-emerald-400">← back to internal proposals</button>;
+  return <BackButton onBack={onBack} label="back to internal proposals" />;
 }
 
 /**

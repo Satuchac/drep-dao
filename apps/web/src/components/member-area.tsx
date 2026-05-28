@@ -24,6 +24,7 @@ import { FeeConfirmations } from './fee-confirmations';
 import { BoardPayments } from './board-payments';
 import { PreferencesPanel } from './preferences-panel';
 import { LeaveDao } from './leave-dao';
+import { BackButton } from './round-ui';
 
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
 
@@ -269,7 +270,7 @@ function ApplyOptions({ registeredDRep, onExpertChange }: { registeredDRep: bool
   if (mode === 'dao') {
     return (
       <div className="space-y-2">
-        <button onClick={() => setMode('choose')} className="text-xs text-neutral-500 hover:underline">← back</button>
+        <BackButton onBack={() => setMode('choose')} />
         <DaoJoinBody registeredDRep={registeredDRep} />
       </div>
     );
@@ -277,7 +278,7 @@ function ApplyOptions({ registeredDRep, onExpertChange }: { registeredDRep: bool
   if (mode === 'expert') {
     return (
       <div className="space-y-2">
-        <button onClick={() => setMode('choose')} className="text-xs text-neutral-500 hover:underline">← back</button>
+        <BackButton onBack={() => setMode('choose')} />
         <ExpertApplyForm onChange={onExpertChange} />
       </div>
     );

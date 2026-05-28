@@ -25,7 +25,7 @@ import {
   type FilterResult,
   type DvResult,
 } from '@/lib/api';
-import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, RationaleText } from './round-ui';
+import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, RationaleText } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
 import { CopyButton } from './copy-button';
 
@@ -151,11 +151,7 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
 }
 
 function BackBtn({ onBack }: { onBack: () => void }) {
-  return (
-    <button onClick={onBack} className="text-xs text-neutral-500 hover:underline">
-      ← back to proposals
-    </button>
-  );
+  return <BackButton onBack={onBack} label="back to proposals" />;
 }
 
 /**

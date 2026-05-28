@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { filteringApi, type FilterAssignment } from '@/lib/api';
+import { BackButton } from './round-ui';
 import { ProposalDetail } from './proposal-detail';
 
 /** §7 — a DRep's filtering review assignments, with a full rationale editor + the proposal. */
@@ -104,9 +105,7 @@ function FilterAssignmentRow({
   if (open) {
     return (
       <div className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
-        <button onClick={onToggle} className="text-xs text-neutral-500 hover:underline">
-          ← back to your assignments
-        </button>
+        <BackButton onBack={onToggle} label="back to your assignments" />
         <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/40 p-3 dark:border-emerald-900 dark:bg-emerald-950/20">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm font-medium">Your filtering vote — {a.title}</span>

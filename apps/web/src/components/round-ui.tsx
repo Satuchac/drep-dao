@@ -4,6 +4,24 @@ import { useEffect, useState } from 'react';
 
 /** Shared presentation bits for rounds & proposals (badges, colors, formatting). */
 
+/**
+ * Shared "back to X" button — outlined pill, large enough to be obvious and clickable on
+ * mobile, used at the top of every detail view (proposal, round, internal proposal,
+ * filtering assignment, etc.). Pass `label` without the arrow ("rounds" / "proposals" / …);
+ * the component renders the arrow itself.
+ */
+export function BackButton({ onBack, label = 'back' }: { onBack: () => void; label?: string }) {
+  return (
+    <button
+      onClick={onBack}
+      className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-neutral-700 shadow-sm transition-colors hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200 dark:hover:border-emerald-700 dark:hover:bg-emerald-950 dark:hover:text-emerald-300"
+    >
+      <span aria-hidden className="text-base leading-none">←</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
 export const ROUND_STATUS_CLS: Record<string, string> = {
   PREPARATION: 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200',
   SUBMISSION: 'bg-amber-200 text-amber-900',
