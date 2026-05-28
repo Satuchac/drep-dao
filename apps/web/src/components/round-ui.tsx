@@ -64,33 +64,25 @@ export function toLocalInput(iso: string | null | undefined): string {
 }
 
 /**
- * Voting rationale that collapses to a single short preview line by default — long rationales
- * shouldn't dominate a votes list. Click "Show more" to read the full text, "Show less" to
- * collapse again. Preserves the original line breaks (whitespace-pre-wrap) when expanded.
+ * Voting rationale with a visible **shrink/expand toggle** on every row, so the reader can
+ * always collapse the rationale away — short rationales default to expanded, longer ones
+ * (>50 chars or multi-line) default to collapsed. Preserves original line breaks when expanded.
  */
 export function RationaleText({ text }: { text: string | null | undefined }) {
   const trimmed = (text ?? '').trim();
-  const [open, setOpen] = useState(false);
+  const long = trimmed.length > 50 || trimmed.includes('\n');
+  const [open, setOpen] = useState(!long);
   if (!trimmed) return null;
-  // Show inline if the rationale fits on one short line.
-  const firstLine = trimmed.split('\n', 1)[0];
-  const isLong = firstLine.length > 120 || trimmed.length > firstLine.length;
-  if (!isLong) {
-    return <div className="mt-1 whitespace-pre-wrap text-xs text-neutral-600 dark:text-neutral-400">{trimmed}</div>;
-  }
-  if (open) {
-    return (
-      <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
-        <div className="whitespace-pre-wrap">{trimmed}</div>
-        <button type="button" onClick={() => setOpen(false)} className="mt-0.5 text-emerald-700 hover:underline dark:text-emerald-400">Show less</button>
-      </div>
-    );
-  }
-  const preview = firstLine.length > 120 ? firstLine.slice(0, 120) + '…' : firstLine + (trimmed.length > firstLine.length ? '…' : '');
   return (
     <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
-      <span>{preview}</span>
-      <button type="button" onClick={() => setOpen(true)} className="ml-2 text-emerald-700 hover:underline dark:text-emerald-400">Show more</button>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="text-[11px] text-emerald-700 hover:underline dark:text-emerald-400"
+      >
+        {open ? '▾ rationale (hide)' : `▸ rationale (${trimmed.length} char${trimmed.length === 1 ? '' : 's'} — show)`}
+      </button>
+      {open ? <div className="mt-0.5 whitespace-pre-wrap">{trimmed}</div> : null}
     </div>
   );
 }
