@@ -367,6 +367,9 @@ function SubmitInternalForm({ onDone, election = false }: { onDone: () => void; 
           <label className="block space-y-1">
             <span className="text-sm font-medium">Installation date <span className="font-normal text-neutral-400">(when the new board takes seats — must be after voting ends)</span></span>
             <DateField value={installDate} onChange={setInstallDate} min={votingEnd || toLocalInput(new Date().toISOString())} required className={field} />
+            {installDate && votingEnd && new Date(installDate).getTime() <= new Date(votingEnd).getTime() ? (
+              <span className="text-xs text-red-600">⚠ the installation date must be later than the voting end ({fmtDateTime(votingEnd)})</span>
+            ) : null}
           </label>
         </div>
       ) : null}

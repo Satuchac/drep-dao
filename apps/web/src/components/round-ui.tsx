@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-
 /** Shared presentation bits for rounds & proposals (badges, colors, formatting). */
 
 export const ROUND_STATUS_CLS: Record<string, string> = {
@@ -61,12 +59,11 @@ export function toLocalInput(iso: string | null | undefined): string {
 }
 
 /**
- * Date / datetime-local input. The native picker has no Confirm — the user has to click
- * elsewhere to commit, which is easy to miss. So while the input is **focused** we show
- * Confirm + Cancel buttons (handy alongside the open picker); clicking elsewhere (blur) also
- * commits automatically. Once the date is set, the buttons go away. New date picks default
- * the time to midnight (00:00) so users who only care about the day don't need to touch the
- * time field; subsequent changes to the time are preserved.
+ * Date / datetime-local input. The native picker commits on every interaction (no extra
+ * Confirm/Cancel buttons) — clicking a calendar date or editing the time both commit through
+ * onChange. New date picks default the time to midnight (00:00) so users who only care about
+ * the day don't have to touch the time field. If the user then explicitly changes the time,
+ * the time is preserved on subsequent edits (until they pick a different date again).
  */
 export function DateField({
   value,
@@ -83,61 +80,24 @@ export function DateField({
   required?: boolean;
   className?: string;
 }) {
-  const [pending, setPending] = useState(value);
-  const [focused, setFocused] = useState(false);
-  useEffect(() => setPending(value), [value]);
-
-  /** Date changed (and so did the time, by the browser's auto-fill) → snap the time to 00:00. */
   const normalize = (newVal: string) => {
     if (type !== 'datetime-local' || !newVal) return newVal;
     const prevDate = (value || '').slice(0, 10);
     const newDate = newVal.slice(0, 10);
-    const prevTime = (value || '').slice(11, 16);
-    const newTime = newVal.slice(11, 16);
-    if (newDate !== prevDate && newTime !== prevTime) {
-      return `${newDate}T00:00`;
-    }
+    // Any date change → snap the time to 00:00 (the browser's auto-fill might be current time,
+    // which the user almost never wants). Time-only edits pass through unchanged.
+    if (newDate !== prevDate) return `${newDate}T00:00`;
     return newVal;
   };
-
-  const dirty = pending !== value;
-  const showButtons = focused && dirty;
   const inputCls = className ?? 'w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900';
-
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <input
-        type={type}
-        className={inputCls}
-        value={pending}
-        min={min}
-        required={required}
-        onFocus={() => setFocused(true)}
-        // Commit on blur unless the user is clicking our Confirm/Cancel (those use
-        // onMouseDown→preventDefault so they don't steal focus from the input first).
-        onBlur={() => { setFocused(false); if (pending !== value) onChange(pending); }}
-        onChange={(e) => setPending(normalize(e.target.value))}
-      />
-      {showButtons ? (
-        <>
-          <button
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => { onChange(pending); setFocused(false); }}
-            className="rounded border border-emerald-500 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950"
-          >
-            Confirm
-          </button>
-          <button
-            type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => { setPending(value); setFocused(false); }}
-            className="rounded border border-neutral-300 px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          >
-            Cancel
-          </button>
-        </>
-      ) : null}
-    </div>
+    <input
+      type={type}
+      className={inputCls}
+      value={value}
+      min={min}
+      required={required}
+      onChange={(e) => onChange(normalize(e.target.value))}
+    />
   );
 }
