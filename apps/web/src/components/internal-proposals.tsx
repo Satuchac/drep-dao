@@ -165,7 +165,12 @@ function SubmitInternalForm({ onDone, election = false }: { onDone: () => void; 
   const [votersScope, setVotersScope] = useState('BOTH');
   const [thresholdKind, setThresholdKind] = useState('DEFAULT');
   const [votingType, setVotingType] = useState('BALANCED');
-  const [votingEnd, setVotingEnd] = useState(() => toLocalInput(new Date(Date.now() + 7 * 86400_000).toISOString()));
+  const [votingEnd, setVotingEnd] = useState(() => {
+    // Default to 7 days from now at midnight (local), so users only have to pick a date.
+    const d = new Date(Date.now() + 7 * 86400_000);
+    d.setHours(0, 0, 0, 0);
+    return toLocalInput(d.toISOString());
+  });
   const [isPrivate, setIsPrivate] = useState(false);
   const [pollMultiple, setPollMultiple] = useState(false);
   const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
