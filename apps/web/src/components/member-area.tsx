@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, type MyExpert, type EntryEligibility } from '@/lib/api';
+import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, milestonesApi, type MyExpert, type EntryEligibility } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -17,6 +17,7 @@ import { FilteringPanel } from './filtering-panel';
 import { VotingPanel } from './voting-panel';
 import { MilestoneReviewsPanel } from './milestone-reviews-panel';
 import { BoardActions } from './board-actions';
+import { StopFundingBoardPanel } from './stop-funding-board-panel';
 import { RoundStageControls } from './round-stage-controls';
 import { InternalProposals } from './internal-proposals';
 import { FeeConfirmations } from './fee-confirmations';
@@ -142,6 +143,7 @@ function ActionsTab() {
         </label>
       </div>
       <BoardActions history={showHistory} />
+      <StopFundingBoardPanel />
       <FeeConfirmations />
       <BoardPayments history={showHistory} />
       <EmptyHint text={showHistory ? 'No actions — past or present.' : 'Nothing to do right now.'} />
@@ -183,18 +185,20 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
     const poll = async () => {
       const next = { actions: 0, applications: 0, voting: 0, internal: 0 };
       if (isBoard) {
-        const [a, f, p, dapps, eapps, rem] = await Promise.allSettled([
+        const [a, f, p, dapps, eapps, rem, stop] = await Promise.allSettled([
           treasuryApi.boardActions(),
           boardFeeApi.pending(),
           boardPaymentsApi.pending(),
           boardApi.listApplications(),
           boardExpertsApi.applications(),
           removalApi.list(),
+          milestonesApi.pendingStopFunding(), // §11 — stop-funding awaiting THIS board member's 1p1v vote
         ]);
         next.actions =
           (a.status === 'fulfilled' ? a.value.count : 0) +
           (f.status === 'fulfilled' ? f.value.length : 0) +
-          (p.status === 'fulfilled' ? p.value.length : 0);
+          (p.status === 'fulfilled' ? p.value.length : 0) +
+          (stop.status === 'fulfilled' ? stop.value.count : 0);
         next.applications =
           (dapps.status === 'fulfilled' ? dapps.value.filter((x) => !x.myVote).length : 0) +
           (eapps.status === 'fulfilled' ? eapps.value.length : 0) +

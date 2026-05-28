@@ -38,6 +38,7 @@ model AppUser {
   notifications          Notification[]
   notificationPreference NotificationPreference?
   configUpdates          PlatformConfig[]         @relation("ConfigUpdater")
+  stopFundingsProposed   StopFundingProposal[]    @relation("StopProposerUser")
 
   @@map("app_user")
 }
@@ -75,6 +76,8 @@ model Drep {
   recommendationsMade     DrepRecommendation[]  @relation("RecommendationRecommender")
   admissionVotesReceived  AdmissionVote[]       @relation("AdmissionApplicant")
   admissionVotesCast      AdmissionVote[]       @relation("AdmissionVoter")
+  stopFundingsProposed    StopFundingProposal[] @relation("StopProposer")
+  stopFundingVotesCast    StopFundingVote[]     @relation("StopVoter")
 
   @@map("drep")
 }
@@ -363,6 +366,7 @@ model Proposal {
   quickPollsWon  QuickPoll[]        @relation("QuickPollWinner")
   quickPollVotesFor QuickPollVote[] @relation("QuickPollChoice")
   feeAdjustments FeeAdjustment[]
+  stopFundings   StopFundingProposal[]
 
   @@index([roundId, status])
   @@index([type, status])
@@ -476,6 +480,45 @@ model MilestoneAssignment {
   reviewerExpert Expert?   @relation(fields: [reviewerExpertId], references: [id])
 
   @@map("milestone_assignment")
+}
+
+// §11 — reviewers (or any board member) propose stopping funding of a project still
+// in the FUNDING stage. The board votes 1p1v; on APPROVED the proposal moves to
+// FAILED and is anchored on-chain. One ACTIVE stop per proposal (partial unique index).
+model StopFundingProposal {
+  id              String    @id @default(uuid()) @db.Uuid
+  proposalId      String    @map("proposal_id") @db.Uuid
+  proposerDrepId  String?   @map("proposer_drep_id") @db.Uuid
+  proposerUserId  String?   @map("proposer_user_id") @db.Uuid
+  proposerRole    String    @map("proposer_role") // REVIEWER | BOARD
+  reason          String
+  status          String    @default("ACTIVE") // ACTIVE | APPROVED | REJECTED | WITHDRAWN
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  decidedAt       DateTime? @map("decided_at") @db.Timestamptz(6)
+  anchorTxHash    String?   @map("anchor_tx_hash")
+
+  proposal     Proposal          @relation(fields: [proposalId], references: [id])
+  proposerDrep Drep?             @relation("StopProposer", fields: [proposerDrepId], references: [id])
+  proposerUser AppUser?          @relation("StopProposerUser", fields: [proposerUserId], references: [id])
+  votes        StopFundingVote[]
+
+  @@index([proposalId, status])
+  @@map("stop_funding_proposal")
+}
+
+model StopFundingVote {
+  id          String   @id @default(uuid()) @db.Uuid
+  stopId      String   @map("stop_id") @db.Uuid
+  boardDrepId String   @map("board_drep_id") @db.Uuid
+  choice      String   // YES | NO
+  rationale   String?
+  castAt      DateTime @default(now()) @map("cast_at") @db.Timestamptz(6)
+
+  stop  StopFundingProposal @relation(fields: [stopId], references: [id])
+  voter Drep                @relation("StopVoter", fields: [boardDrepId], references: [id])
+
+  @@unique([stopId, boardDrepId])
+  @@map("stop_funding_vote")
 }
 
 // ===========================================================================

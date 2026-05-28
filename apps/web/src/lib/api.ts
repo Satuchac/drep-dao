@@ -668,6 +668,7 @@ export const commentsApi = {
 };
 
 // -------- Milestones (§11) --------
+export interface MilestoneReviewer { drepIdOnchain: string | null; displayName: string | null }
 export interface MilestoneView {
   id: string;
   idx: number;
@@ -676,8 +677,9 @@ export interface MilestoneView {
   acceptanceCriteria: string | null;
   amountAda: number;
   status: string;
-  reviewers: (string | null)[];
+  reviewers: MilestoneReviewer[];
   latestPoa: { contentMd: string | null; submittedAt: string; attempt: number } | null;
+  poaCount: number;
   yes: number;
   no: number;
   threshold: number;
@@ -691,6 +693,28 @@ export interface MilestoneAssignmentView {
   milestoneIdx: number;
   myVote: string | null;
 }
+export interface StopFundingView {
+  id: string;
+  proposerRole: 'REVIEWER' | 'BOARD' | string;
+  proposerName: string | null;
+  proposerDrep: string | null;
+  reason: string;
+  status: 'ACTIVE' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN' | string;
+  createdAt: string;
+  decidedAt: string | null;
+  anchorTxHash: string | null;
+  threshold: number;
+  yes: number;
+  no: number;
+  votes: { drep: string | null; displayName: string | null; choice: string; rationale: string | null }[];
+}
+export interface ActiveStopFunding extends StopFundingView {
+  proposalId: string;
+  proposalTitle: string;
+  proposalPublicId: string | null;
+  roundLabel: string | null;
+  myChoice: 'YES' | 'NO' | null;
+}
 export const milestonesApi = {
   forProposal: (proposalId: string) => request<MilestoneView[]>(`/proposals/${proposalId}/milestones`),
   myAssignments: () => request<MilestoneAssignmentView[]>('/me/assignments/milestone'),
@@ -698,6 +722,15 @@ export const milestonesApi = {
     request<unknown>(`/milestones/${milestoneId}/poa`, { method: 'POST', body: JSON.stringify({ contentMd }) }),
   vote: (milestoneId: string, choice: 'YES' | 'NO', rationale?: string) =>
     request<unknown>(`/milestones/${milestoneId}/vote`, { method: 'POST', body: JSON.stringify({ choice, rationale }) }),
+  // §11 — stop funding (reviewer or board can propose; board votes 1p1v).
+  stopFundings: (proposalId: string) => request<StopFundingView[]>(`/proposals/${proposalId}/stop-fundings`),
+  proposeStop: (proposalId: string, reason: string) =>
+    request<StopFundingView>(`/proposals/${proposalId}/stop-funding`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  withdrawStop: (stopId: string) =>
+    request<StopFundingView>(`/stop-fundings/${stopId}/withdraw`, { method: 'POST' }),
+  voteStop: (stopId: string, choice: 'YES' | 'NO', rationale?: string) =>
+    request<StopFundingView>(`/stop-fundings/${stopId}/vote`, { method: 'POST', body: JSON.stringify({ choice, rationale }) }),
+  pendingStopFunding: () => request<{ count: number }>('/me/pending-stop-funding'),
 };
 
 // -------- Board: submission-fee confirmations (§16) + milestone admin --------
@@ -746,9 +779,30 @@ export const boardPaymentsApi = {
   settle: (id: string, txHash: string) =>
     request<{ status: string }>(`/admin/proposals/payments/${id}/settle`, { method: 'POST', body: JSON.stringify({ txHash }) }),
 };
+export interface MilestoneCandidate {
+  drepId: string;
+  drepIdOnchain: string;
+  displayName: string | null;
+  subcategoryIds: string[];
+  expertiseMatch: boolean;
+  loadInRound: number;
+}
 export const boardMilestoneApi = {
-  drawReviewers: (proposalId: string) => request<MilestoneView[]>(`/admin/proposals/${proposalId}/draw-milestone-reviewers`, { method: 'POST' }),
+  /** Ranked candidate DReps with expertise + per-round milestone-review load count. */
+  candidates: (proposalId: string) =>
+    request<MilestoneCandidate[]>(`/admin/proposals/${proposalId}/milestone-candidates`),
+  /** Board selects exactly `milestoneReviewerCount` DReps for the proposal. */
+  assign: (proposalId: string, drepIds: string[]) =>
+    request<MilestoneView[]>(`/admin/proposals/${proposalId}/assign-milestone-reviewers`, {
+      method: 'POST',
+      body: JSON.stringify({ drepIds }),
+    }),
+  /** Release the currently-assigned reviewers (only before any POA has been submitted). */
+  release: (proposalId: string) =>
+    request<{ released: boolean }>(`/admin/proposals/${proposalId}/release-milestone-reviewers`, { method: 'POST' }),
   terminate: (proposalId: string) => request<{ status: string }>(`/admin/proposals/${proposalId}/terminate`, { method: 'POST' }),
+  /** Board-wide list of every ACTIVE stop-funding awaiting board votes. */
+  activeStopFundings: () => request<ActiveStopFunding[]>('/admin/stop-fundings/active'),
 };
 
 // -------- §10 Internal proposals --------

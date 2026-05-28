@@ -84,6 +84,10 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   ok('prior content snapshotted', versions.length === 2 && versions[0].contentMd === 'Original pitch.' && versions[1].current === true);
 
   console.log('\n=== §7 Filtering: draw + 3 YES → anchored decision ===');
+  // The proposal.stage transitions (FILTERING → DEBATE_VOTE → FUNDING) come from the
+  // proposal services. §5.1 forbids two rounds in FILTERING/DV at once, and the demo
+  // data holds that slot — so we leave round.status alone and only push the round to
+  // FUNDING (via Prisma) when r56 milestone gating needs it (below).
   await filtering.drawReviewers(draft.id);
   const assigns = await prisma.filterAssignment.findMany({ where: { proposalId: draft.id, releasedAt: null } });
   let voted = 0;
@@ -122,8 +126,15 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const dvVotes = (dAnchor?.preimage?.votes) ?? [];
   ok('anchor preimage carries per-vote power + total', dvVotes.some((v) => (v.weight ?? 0) > 0) && (fin.totalPower ?? 0) > 0);
 
-  console.log('\n=== §11 Milestones: POA + 2 YES each → COMPLETE ===');
-  await milestones.drawReviewers(draft.id);
+  console.log('\n=== §11 Milestones: board allocates reviewers + POA + 2 YES each → COMPLETE ===');
+  // Push the round to FUNDING via Prisma (bypasses §5.1 single-Filtering rule which
+  // would block round.startStage when the demo round holds the slot).
+  await prisma.round.update({ where: { id: round.id }, data: { status: 'FUNDING' } });
+  // §11.1 — board picks the milestone reviewers (the default is 3, hardcoded in the
+  // service helper). Pick the first three eligible board DReps (excludes the submitter,
+  // who is Carol — not a DRep — so any 3 of 5 board are valid).
+  const milestoneJury = boardDreps.slice(0, 3).map((d) => d.id);
+  await milestones.assignReviewers(draft.id, milestoneJury, boardDreps[0].user.id);
   for (const m of await milestones.forProposal(draft.id)) {
     await milestones.submitPoa(carol.id, m.id, `Delivered milestone ${m.idx + 1}`);
     const massign = await prisma.milestoneAssignment.findMany({ where: { milestoneId: m.id, releasedAt: null } });
@@ -155,6 +166,9 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   await prisma.voteSnapshot.deleteMany({ where: { proposalId: draft.id } });
   await prisma.proposalVersion.deleteMany({ where: { proposalId: draft.id } });
   await prisma.anchor.deleteMany({ where: { proposalId: draft.id } });
+  // Auto-prepared PROJECT_FUNDING multisig actions (one per APPROVED milestone) — no
+  // FK to proposal so we match by the unique description tag the service writes.
+  await prisma.multisigAction.deleteMany({ where: { kind: 'PROJECT_FUNDING', description: { contains: `${det.publicId ?? draft.id}` } } });
   await prisma.proposal.delete({ where: { id: draft.id } });
   await prisma.roundDrepEligibility.deleteMany({ where: { roundId: round.id } });
   await prisma.roundSchedule.deleteMany({ where: { roundId: round.id } });

@@ -11,12 +11,15 @@ import {
   filteringApi,
   dvApi,
   milestonesApi,
+  roundsApi,
   commentsApi,
   boardMilestoneApi,
   type ProposalDetail as PDetail,
   type VoteRationale,
   type ProposalVersionEntry,
   type MilestoneView,
+  type MilestoneCandidate,
+  type StopFundingView,
   type CommentNode,
   type FilterResult,
   type DvResult,
@@ -137,7 +140,7 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
       {showFiltering ? <FilteringSection id={id} /> : null}
       {showDv ? <DvSection id={id} isBoard={isBoard} /> : null}
       {showMilestones ? (
-        <MilestonesSection id={id} isBoard={isBoard} isMine={mine} onChange={load} />
+        <MilestonesSection id={id} isBoard={isBoard} isMine={mine} proposal={p} onChange={load} />
       ) : null}
       <CommentsSection id={id} title={p.title} canPost={!!profile} />
     </div>
@@ -728,40 +731,298 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
   );
 }
 
-function MilestonesSection({ id, isBoard, isMine, onChange }: { id: string; isBoard: boolean; isMine: boolean; onChange: () => void }) {
+/**
+ * §11 — funding-stage milestone review. The board allocates a reviewer set (one panel
+ * for the whole proposal — every milestone shares the same 3 reviewers); the submitter
+ * posts a POA per milestone (immutable once submitted; resubmit only after REJECTED);
+ * reviewers vote 1p1v. Approved milestones auto-prepare a board PROJECT_FUNDING
+ * payout. The section also surfaces the **stop-funding** flow (reviewer / board
+ * proposes → board votes → 3 YES → FAILED).
+ */
+function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: string; isBoard: boolean; isMine: boolean; proposal: PDetail; onChange: () => void }) {
   const [ms, setMs] = useState<MilestoneView[] | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [roundStatus, setRoundStatus] = useState<string | null>(null);
   const load = useCallback(() => {
     milestonesApi.forProposal(id).then(setMs).catch(() => setMs([]));
   }, [id]);
   useEffect(load, [load]);
+  useEffect(() => {
+    if (!proposal.roundId) { setRoundStatus(null); return; }
+    roundsApi.get(proposal.roundId).then((r) => setRoundStatus(r.status)).catch(() => setRoundStatus(null));
+  }, [proposal.roundId]);
   if (!ms) return null;
   const noReviewers = ms.every((m) => m.reviewers.length === 0);
+  const inFunding = (proposal.stage === 'FUNDING') && (proposal.status === 'APPROVED') && (roundStatus === 'FUNDING');
+  const stoppedOrDone = ['COMPLETE', 'FAILED'].includes(proposal.status);
 
+  // Anyone reviewer or board (not the submitter) can see stop-funding controls — but
+  // server-side gates which user is actually allowed to propose. The button itself is
+  // surfaced inside <StopFundingPanel/>.
   return (
     <section className={card}>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold">Funding — milestones (§11)</h3>
-        {isBoard && noReviewers ? (
-          <button
-            disabled={busy}
-            onClick={async () => { setBusy(true); try { await boardMilestoneApi.drawReviewers(id); load(); } finally { setBusy(false); } }}
-            className="rounded border border-neutral-400 px-2.5 py-1 text-xs hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-600 dark:hover:bg-neutral-800"
-          >
-            {busy ? 'Drawing…' : 'Draw + confirm reviewers'}
-          </button>
+        {!inFunding && !stoppedOrDone ? (
+          <span className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            Round is not in the FUNDING stage — POAs are closed
+          </span>
         ) : null}
       </div>
+
+      {/* Reviewer allocation panel (board only) — shown before any POA is submitted. */}
+      {isBoard && noReviewers && inFunding ? <ReviewerAllocationPanel id={id} onChange={() => { load(); onChange(); }} /> : null}
+      {isBoard && !noReviewers && !ms.some((m) => m.poaCount > 0) ? (
+        <div className="mt-2 flex items-center gap-2 text-xs text-neutral-500">
+          <span>{ms[0]?.reviewers.length ?? 0} reviewer(s) assigned · no POA submitted yet.</span>
+          <ReleaseReviewersButton id={id} onChange={() => { load(); onChange(); }} />
+        </div>
+      ) : null}
+
+      {/* Stop-funding panel (reviewers + board may propose; board votes). */}
+      <StopFundingPanel proposalId={id} canShowProposeButton={inFunding && !stoppedOrDone} isBoard={isBoard} onChange={() => { load(); onChange(); }} />
+
       <ul className="mt-2 space-y-2">
         {ms.map((m) => (
-          <MilestoneRow key={m.id} m={m} isMine={isMine} onChange={() => { load(); onChange(); }} />
+          <MilestoneRow key={m.id} m={m} isMine={isMine} canPoa={inFunding} onChange={() => { load(); onChange(); }} />
         ))}
       </ul>
     </section>
   );
 }
 
-function MilestoneRow({ m, isMine, onChange }: { m: MilestoneView; isMine: boolean; onChange: () => void }) {
+/**
+ * §11.1 — board's allocation UI. Pulls the candidate DReps with their **expertise match**
+ * (subcategory overlap with the proposal) + **load this round** (how many milestone
+ * reviews they're already on). Board ticks exactly the required number (per-round
+ * override of `milestoneReviewerCount`) and confirms — the same set is assigned to every
+ * milestone of the proposal.
+ */
+function ReviewerAllocationPanel({ id, onChange }: { id: string; onChange: () => void }) {
+  const [cands, setCands] = useState<MilestoneCandidate[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [target, setTarget] = useState<number | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    boardMilestoneApi.candidates(id).then(setCands).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
+  }, [id]);
+  // Derive the target count from the round settings (read indirectly through `forProposal`'s
+  // first milestone's threshold isn't quite right — the board sees a hint instead). We rely on
+  // the server's exact validation; the UI defaults to 3 (platform default).
+  useEffect(() => {
+    if (target == null) setTarget(3);
+  }, [target]);
+
+  const toggle = (drepId: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(drepId)) next.delete(drepId);
+      else next.add(drepId);
+      return next;
+    });
+  const confirm = async () => {
+    setBusy(true); setError(null);
+    try {
+      await boardMilestoneApi.assign(id, [...picked]);
+      setPicked(new Set());
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!cands) return <div className="mt-2 text-xs text-neutral-500">Loading candidate reviewers…</div>;
+  if (cands.length === 0) return <div className="mt-2 text-xs text-amber-700">No admitted DReps are eligible to review this round.</div>;
+
+  return (
+    <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-medium">Allocate milestone reviewers</div>
+        <div className="text-xs text-neutral-500">
+          Pick {target ?? '3'} DRep{(target ?? 3) === 1 ? '' : 's'} · {picked.size} selected
+        </div>
+      </div>
+      <p className="mt-0.5 text-xs text-neutral-500">
+        ⭐ = expertise match (overlapping subcategories) · &nbsp;<span className="text-neutral-700 dark:text-neutral-300">load N</span> = how many milestone reviews this DRep is already on in this round.
+      </p>
+      <ul className="mt-2 max-h-72 overflow-y-auto rounded border border-neutral-200 dark:border-neutral-800">
+        {cands.map((c) => {
+          const sel = picked.has(c.drepId);
+          return (
+            <li key={c.drepId} className={`flex items-center justify-between gap-2 border-b border-neutral-200 px-2 py-1.5 text-xs last:border-b-0 dark:border-neutral-800 ${sel ? 'bg-emerald-50 dark:bg-emerald-950/40' : ''}`}>
+              <label className="flex flex-1 cursor-pointer items-center gap-2">
+                <input type="checkbox" checked={sel} onChange={() => toggle(c.drepId)} />
+                <span className="font-medium">{c.displayName ?? c.drepIdOnchain.slice(0, 18) + '…'}</span>
+                {c.expertiseMatch ? <span title="Subcategory overlap with the proposal" className="text-amber-600">⭐ expertise</span> : null}
+              </label>
+              <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] tabular-nums text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">load {c.loadInRound}</span>
+            </li>
+          );
+        })}
+      </ul>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          onClick={confirm}
+          disabled={busy || picked.size === 0}
+          className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300"
+        >
+          {busy ? 'Assigning…' : `Confirm ${picked.size} reviewer${picked.size === 1 ? '' : 's'}`}
+        </button>
+        {error ? <span className="text-xs text-red-600">{error}</span> : null}
+      </div>
+    </div>
+  );
+}
+
+function ReleaseReviewersButton({ id, onChange }: { id: string; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const click = async () => {
+    if (!confirm('Release the current reviewers and pick a new set? (Only allowed if no POA has been submitted yet.)')) return;
+    setBusy(true); setErr(null);
+    try { await boardMilestoneApi.release(id); onChange(); } catch (e) { setErr(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
+  };
+  return (
+    <>
+      <button onClick={click} disabled={busy} className="rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
+        {busy ? '…' : 're-allocate'}
+      </button>
+      {err ? <span className="text-[11px] text-red-600">{err}</span> : null}
+    </>
+  );
+}
+
+/**
+ * §11 — stop-funding panel: every proposal shows the current/history of stop-funding
+ * proposals, a propose-button for assigned reviewers AND any board member (the server
+ * enforces who is authorized), and per-row board YES/NO voting (board only). One
+ * ACTIVE stop-funding per proposal at a time.
+ */
+function StopFundingPanel({ proposalId, canShowProposeButton, isBoard, onChange }: { proposalId: string; canShowProposeButton: boolean; isBoard: boolean; onChange: () => void }) {
+  const [items, setItems] = useState<StopFundingView[]>([]);
+  const [showHist, setShowHist] = useState(false);
+  const [reason, setReason] = useState('');
+  const [proposing, setProposing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(() => {
+    milestonesApi.stopFundings(proposalId).then(setItems).catch(() => setItems([]));
+  }, [proposalId]);
+  useEffect(load, [load]);
+  const active = items.find((s) => s.status === 'ACTIVE');
+  const history = items.filter((s) => s.status !== 'ACTIVE');
+
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try { await milestonesApi.proposeStop(proposalId, reason); setReason(''); setProposing(false); load(); onChange(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'failed'); }
+    finally { setBusy(false); }
+  };
+
+  if (items.length === 0 && !canShowProposeButton) return null;
+
+  return (
+    <div className="mt-3 rounded-md border border-red-200 bg-red-50/50 p-3 text-sm dark:border-red-900 dark:bg-red-950/30">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-medium text-red-800 dark:text-red-200">⛔ Stop funding</div>
+        {canShowProposeButton && !active && !proposing ? (
+          <button onClick={() => setProposing(true)} className="rounded border border-red-400 px-2 py-0.5 text-xs text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950">
+            Propose stopping funding
+          </button>
+        ) : null}
+      </div>
+      <p className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">
+        Any assigned reviewer or any board member may propose stopping a project mid-funding. The board votes 1 member · 1 vote — {items[0]?.threshold ?? 3} YES → project FAILED + on-chain anchor.
+      </p>
+
+      {proposing ? (
+        <div className="mt-2 space-y-1">
+          <textarea
+            rows={3}
+            placeholder="Reason for stopping funding (required, ≥ 10 chars) — what did the project fail to deliver, what concrete evidence supports it?"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className="w-full rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+          />
+          <div className="flex items-center gap-2">
+            <button onClick={submit} disabled={busy || reason.trim().length < 10} className="rounded border border-red-500 px-2 py-0.5 text-xs text-red-700 disabled:opacity-40 dark:text-red-300">
+              {busy ? 'Proposing…' : 'Open stop-funding vote'}
+            </button>
+            <button onClick={() => { setProposing(false); setReason(''); setError(null); }} className="rounded border border-neutral-300 px-2 py-0.5 text-xs dark:border-neutral-700">
+              Cancel
+            </button>
+            {error ? <span className="text-xs text-red-600">{error}</span> : null}
+          </div>
+        </div>
+      ) : null}
+
+      {active ? <StopFundingRow s={active} isBoard={isBoard} onChange={() => { load(); onChange(); }} /> : null}
+      {history.length > 0 ? (
+        <div className="mt-2">
+          <button onClick={() => setShowHist((v) => !v)} className="text-[11px] text-neutral-600 underline hover:text-neutral-800 dark:text-neutral-400">
+            {showHist ? `▾ hide history (${history.length})` : `▸ show history (${history.length})`}
+          </button>
+          {showHist ? (
+            <ul className="mt-1 space-y-1">
+              {history.map((s) => <StopFundingRow key={s.id} s={s} isBoard={false} onChange={() => { /* read-only */ }} />)}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function StopFundingRow({ s, isBoard, onChange }: { s: StopFundingView; isBoard: boolean; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [rationale, setRationale] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const vote = async (choice: 'YES' | 'NO') => {
+    setBusy(true); setError(null);
+    try { await milestonesApi.voteStop(s.id, choice, rationale || undefined); onChange(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'failed'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="mt-2 rounded border border-neutral-300 bg-white p-2 text-xs dark:border-neutral-700 dark:bg-neutral-900">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span>
+          <StatusBadge status={s.status} cls={PROPOSAL_STATUS_CLS} />
+          <span className="ml-2">Proposed by <span className="font-medium">{s.proposerName ?? s.proposerDrep ?? 'unknown'}</span> ({s.proposerRole === 'BOARD' ? 'board' : 'reviewer'})</span>
+          <span className="ml-2 text-neutral-500">{fmtDateTime(s.createdAt)}</span>
+        </span>
+        <span className="tabular-nums text-neutral-500">
+          {s.yes} YES / {s.no} NO (need {s.threshold}) <AnchorLink txHash={s.anchorTxHash} />
+        </span>
+      </div>
+      <div className="mt-1 whitespace-pre-wrap rounded bg-neutral-100 p-1.5 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"><strong>Reason:</strong> {s.reason}</div>
+      {s.votes.length > 0 ? <div className="mt-1"><Votes votes={s.votes} /></div> : null}
+      {isBoard && s.status === 'ACTIVE' ? (
+        <div className="mt-2 space-y-1">
+          <input
+            value={rationale}
+            onChange={(e) => setRationale(e.target.value)}
+            placeholder="rationale (required for NO)"
+            className="w-full rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+          />
+          <div className="flex gap-2">
+            <button disabled={busy} onClick={() => vote('YES')} className="rounded border border-red-500 px-2 py-0.5 text-xs text-red-700 disabled:opacity-40 dark:text-red-300">
+              YES — stop funding
+            </button>
+            <button disabled={busy} onClick={() => vote('NO')} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">
+              NO — continue
+            </button>
+          </div>
+          {error ? <div className="text-xs text-red-600">{error}</div> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function MilestoneRow({ m, isMine, canPoa, onChange }: { m: MilestoneView; isMine: boolean; canPoa: boolean; onChange: () => void }) {
   const [poa, setPoa] = useState('');
   const [rationale, setRationale] = useState('');
   const [busy, setBusy] = useState(false);
@@ -770,16 +1031,29 @@ function MilestoneRow({ m, isMine, onChange }: { m: MilestoneView; isMine: boole
     setError(null); setBusy(true);
     try { await fn(); onChange(); } catch (e) { setError(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
   };
+  // POA is allowed iff: round is in FUNDING, milestone is not APPROVED, and it's NOT currently
+  // under review (POA_SUBMITTED is immutable until the reviewers decide). REJECTED → may resubmit.
+  const submitterCanPoa = isMine && canPoa && m.status !== 'APPROVED' && m.status !== 'POA_SUBMITTED';
   return (
     <li className="rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">
       <div className="flex items-center justify-between">
-        <span className="font-medium">Milestone #{m.idx + 1}{m.title ? ` — ${m.title}` : ''} <span className="text-neutral-500">· {m.amountAda.toLocaleString()} ₳</span></span>
+        <span className="font-medium">
+          Milestone #{m.idx + 1}{m.title ? ` — ${m.title}` : ''}
+          <span className="text-neutral-500"> · {m.amountAda.toLocaleString()} ₳</span>
+        </span>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-neutral-500">{m.yes} YES / {m.no} NO (need {m.threshold})</span>
+          <span className="text-xs text-neutral-500">
+            {m.reviewers.length} reviewer{m.reviewers.length === 1 ? '' : 's'} · {m.yes} YES / {m.no} NO (need {m.threshold})
+          </span>
           <StatusBadge status={m.status} cls={PROPOSAL_STATUS_CLS} />
           <AnchorLink txHash={m.anchorTxHash} />
         </div>
       </div>
+      {m.reviewers.length > 0 ? (
+        <div className="mt-0.5 text-[11px] text-neutral-500">
+          Reviewers: {m.reviewers.map((r) => r.displayName ?? r.drepIdOnchain?.slice(0, 14) + '…').join(', ')}
+        </div>
+      ) : null}
       {m.description ? <Markdown className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">{m.description}</Markdown> : null}
       {m.acceptanceCriteria ? (
         <div className="mt-1">
@@ -789,29 +1063,34 @@ function MilestoneRow({ m, isMine, onChange }: { m: MilestoneView; isMine: boole
       ) : null}
       {m.latestPoa ? (
         <div className="mt-1 rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-800/50">
-          <div className="font-medium">Proof of Achievement (attempt {m.latestPoa.attempt})</div>
-          <div className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-400">{m.latestPoa.contentMd}</div>
+          <div className="font-medium">Proof of Achievement (attempt {m.latestPoa.attempt}{m.status === 'REJECTED' ? ' — REJECTED, may resubmit' : m.status === 'POA_SUBMITTED' ? ' — under review' : ''})</div>
+          <Markdown className="mt-0.5 text-neutral-600 dark:text-neutral-400">{m.latestPoa.contentMd ?? ''}</Markdown>
         </div>
       ) : null}
       {m.votes.length > 0 ? <div className="mt-1"><Votes votes={m.votes} /></div> : null}
 
-      {/* Submitter posts/updates the POA while not yet approved. */}
-      {isMine && m.status !== 'APPROVED' ? (
+      {/* Submitter posts the POA. Once submitted it's immutable until reviewers decide; only a
+          REJECTED milestone allows another attempt (so the next POA can address the feedback). */}
+      {submitterCanPoa ? (
         <div className="mt-2 space-y-1">
-          <textarea className="w-full rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900" rows={2} placeholder="Proof of Achievement (markdown + links)" value={poa} onChange={(e) => setPoa(e.target.value)} />
+          <MarkdownEditor value={poa} onChange={setPoa} placeholder={m.status === 'REJECTED' ? 'New Proof of Achievement — address the reviewers\' feedback above' : 'Proof of Achievement (markdown + links)'} minRows={4} />
           <button disabled={busy || !poa.trim()} onClick={() => run(() => milestonesApi.submitPoa(m.id, poa))} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">
-            Submit POA
+            {m.status === 'REJECTED' ? `Submit attempt ${m.poaCount + 1}` : 'Submit POA'}
           </button>
         </div>
+      ) : isMine && m.status === 'POA_SUBMITTED' ? (
+        <div className="mt-2 text-xs text-neutral-500">Your POA is under review — you can resubmit only if the reviewers reject it.</div>
+      ) : isMine && !canPoa && m.status !== 'APPROVED' ? (
+        <div className="mt-2 text-xs text-amber-700">POA submission is closed (round is not in the FUNDING stage).</div>
       ) : null}
 
       {/* Assigned reviewer votes when a POA is in review. */}
       {!isMine && m.status === 'POA_SUBMITTED' ? (
         <div className="mt-2 space-y-1">
-          <input className="w-full rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900" placeholder="feedback (required for NO)" value={rationale} onChange={(e) => setRationale(e.target.value)} />
+          <MarkdownEditor value={rationale} onChange={setRationale} placeholder="feedback (required for NO)" minRows={3} />
           <div className="flex gap-2">
-            <button disabled={busy} onClick={() => run(() => milestonesApi.vote(m.id, 'YES', rationale || undefined))} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">YES</button>
-            <button disabled={busy} onClick={() => run(() => milestonesApi.vote(m.id, 'NO', rationale))} className="rounded border border-red-500 px-2 py-0.5 text-xs text-red-700 disabled:opacity-40 dark:text-red-300">NO</button>
+            <button disabled={busy} onClick={() => run(() => milestonesApi.vote(m.id, 'YES', rationale || undefined))} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">YES — approve</button>
+            <button disabled={busy} onClick={() => run(() => milestonesApi.vote(m.id, 'NO', rationale))} className="rounded border border-red-500 px-2 py-0.5 text-xs text-red-700 disabled:opacity-40 dark:text-red-300">NO — reject (resubmit needed)</button>
           </div>
         </div>
       ) : null}

@@ -32,6 +32,7 @@ export const GovSubject = {
   REMOVAL: 'removal',
   INTERNAL: 'internal',
   SUBMISSION: 'submission', // a funding proposal accepted into the round (fee paid / not required)
+  STOP_FUNDING: 'stop_funding', // §11 — board decision to terminate a funded proposal
 } as const;
 export type GovSubject = (typeof GovSubject)[keyof typeof GovSubject];
 
@@ -84,6 +85,7 @@ export const SUBJECT_TITLE: Record<GovSubject, string> = {
   dv: 'Debate & Vote (funding)',
   internal: 'Internal proposal',
   submission: 'Funding proposal accepted',
+  stop_funding: 'Stop funding of a project',
 };
 export const STYLE_LABEL: Record<VotingStyle, string> = {
   '1P1V': '1 member, 1 vote',
