@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { proposalsApi, type ProposalSummary } from '@/lib/api';
+import { proposalsApi, type ProposalSummary, type ProposalProgress } from '@/lib/api';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { StatusBadge, PROPOSAL_STATUS_CLS } from './round-ui';
 
@@ -45,6 +45,7 @@ export function ProposalList({ roundId }: { roundId: string }) {
                 {p.publicId ? <span>ID: <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{p.publicId}</span></span> : null}
                 {p.stage ? <span>Stage: <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.stage}</span></span> : null}
                 <span className="flex items-center gap-1">Status: <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} /></span>
+                {p.progress ? <ProgressChip p={p.progress} /> : null}
               </div>
             </div>
             <div className="mt-1 text-xs text-neutral-500">
@@ -52,9 +53,44 @@ export function ProposalList({ roundId }: { roundId: string }) {
               {p.requestedAmountAda ? ` · ${p.requestedAmountAda.toLocaleString()} ₳` : ''}
               {p.isCommercial != null ? ` · ${p.isCommercial ? 'commercial' : 'open-source'}` : ''}
             </div>
+            {/* §16/§7/§8 — show WHY a proposal was rejected (fee feedback OR the NO rationales
+                from the filtering / D&V vote that decided it). Avoids opening the detail just to
+                find out why. */}
+            {p.rejectionReasons && p.rejectionReasons.length > 0 ? (
+              <div className="mt-2 rounded border border-red-200 bg-red-50/50 p-2 text-xs dark:border-red-900 dark:bg-red-950/30">
+                <div className="font-medium text-red-800 dark:text-red-200">
+                  Rejected — {p.rejectionReasons.length === 1 ? '1 reason' : `${p.rejectionReasons.length} reasons`}
+                </div>
+                <ul className="mt-1 space-y-0.5">
+                  {p.rejectionReasons.slice(0, 3).map((r, i) => (
+                    <li key={i} className="text-neutral-700 dark:text-neutral-300">
+                      <span className="text-[11px] text-neutral-500">
+                        {r.stage === 'FEE' ? 'Board (fee review)' : `${r.stage} · ${r.from ?? 'DRep'}`}:
+                      </span>
+                      {' '}
+                      <span className="line-clamp-2 whitespace-pre-wrap">{r.rationale}</span>
+                    </li>
+                  ))}
+                  {p.rejectionReasons.length > 3 ? (
+                    <li className="text-[11px] text-neutral-500">+ {p.rejectionReasons.length - 3} more — open the proposal to see all</li>
+                  ) : null}
+                </ul>
+                <div className="mt-1 text-[11px] text-neutral-500">Open the proposal to read the full rationale.</div>
+              </div>
+            ) : null}
           </button>
         </li>
       ))}
     </ul>
   );
+}
+
+function ProgressChip({ p }: { p: ProposalProgress }) {
+  const toneCls = {
+    amber: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200',
+    emerald: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+    neutral: 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300',
+    red: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
+  }[p.tone];
+  return <span title={p.label} className={`rounded px-2 py-0.5 text-[11px] font-medium ${toneCls}`}>{p.label}</span>;
 }

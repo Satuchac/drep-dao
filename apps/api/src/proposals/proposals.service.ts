@@ -24,6 +24,18 @@ const LOVELACE = 1_000_000;
 const toLovelace = (ada: number): bigint => BigInt(Math.round(ada * LOVELACE));
 const toAda = (l: bigint | null): number => (l == null ? 0 : Number(l) / LOVELACE);
 
+/** Group an iterable into a Map<key, items[]> for cheap per-id lookup. */
+function group<T, K>(items: T[], key: (t: T) => K): Map<K, T[]> {
+  const out = new Map<K, T[]>();
+  for (const it of items) {
+    const k = key(it);
+    const arr = out.get(k);
+    if (arr) arr.push(it);
+    else out.set(k, [it]);
+  }
+  return out;
+}
+
 @Injectable()
 export class ProposalsService {
   constructor(
@@ -418,9 +430,164 @@ export class ProposalsService {
     const proposals = await this.prisma.proposal.findMany({
       where: { roundId, status: statusFilter },
       orderBy: { createdAt: 'asc' },
-      include: { category: { select: { name: true } }, submitterUser: { select: { displayName: true } }, submitterDrep: { select: { drepIdOnchain: true } } },
+      include: {
+        category: { select: { name: true } },
+        submitterUser: { select: { displayName: true } },
+        submitterDrep: { select: { drepIdOnchain: true } },
+        round: { select: { filterReviewerCount: true, filterApprovalVotes: true, milestoneApprovalVotes: true } },
+      },
     });
-    return proposals.map((p) => this.summary(p));
+    return this.enrichSummaries(proposals);
+  }
+
+  /**
+   * §26.2 — enrich each list row with stage-specific context so a viewer of the
+   * round's proposals can see at a glance "what's needed now": for ACTIVE rows in
+   * FILTERING — assigned/voted/threshold (or "awaiting reviewer draw"); for ACTIVE
+   * in DEBATE_VOTE — eligible/cast snapshot count; for APPROVED in FUNDING — the
+   * milestone progress + any open stop-funding. For REJECTED rows — the NO
+   * rationales (filtering / D&V) and the fee-rejection feedback (if any), so the
+   * reader sees WHY without having to open the proposal.
+   *
+   * Batches the per-stage queries so the list is one round-trip per data type, not
+   * one per proposal.
+   */
+  private async enrichSummaries(
+    proposals: Array<Parameters<ProposalsService['summary']>[0] & {
+      feeReviewFeedback?: string | null;
+      round?: { filterReviewerCount: number | null; filterApprovalVotes: number | null; milestoneApprovalVotes: number | null } | null;
+    }>,
+  ) {
+    if (proposals.length === 0) return [];
+    const ids = proposals.map((p) => p.id);
+
+    // Batch queries.
+    const filterAssign = await this.prisma.filterAssignment.findMany({
+      where: { proposalId: { in: ids }, releasedAt: null },
+      select: { proposalId: true, drepId: true },
+    });
+    const filterVotes = await this.prisma.vote.findMany({
+      where: { proposalId: { in: ids }, phase: 'FILTERING' },
+      include: { drep: { select: { drepIdOnchain: true, user: { select: { displayName: true } } } } },
+      orderBy: { castAt: 'asc' },
+    });
+    const dvSnapshots = await this.prisma.voteSnapshot.findMany({
+      where: { proposalId: { in: ids } },
+      orderBy: { takenAt: 'desc' },
+      include: { entries: { select: { drepId: true } } },
+    });
+    const dvVotes = await this.prisma.vote.findMany({
+      where: { proposalId: { in: ids }, phase: 'DEBATE_VOTE' },
+      include: { drep: { select: { drepIdOnchain: true, user: { select: { displayName: true } } } } },
+    });
+    const ms = await this.prisma.milestone.findMany({
+      where: { proposalId: { in: ids } },
+      select: { id: true, idx: true, proposalId: true, status: true },
+    });
+    const msVotes = await this.prisma.vote.findMany({
+      where: { milestoneId: { in: ms.map((m) => m.id) }, phase: 'MILESTONE' },
+      select: { milestoneId: true, choice: true },
+    });
+    const activeStops = await this.prisma.stopFundingProposal.findMany({
+      where: { proposalId: { in: ids }, status: 'ACTIVE' },
+      include: { votes: { select: { choice: true } } },
+    });
+
+    // Index per proposal.
+    const fAssignBy = group(filterAssign, (a) => a.proposalId);
+    const fVotesBy = group(filterVotes, (v) => v.proposalId);
+    const dvSnapBy = new Map<string, (typeof dvSnapshots)[number]>();
+    for (const s of dvSnapshots) if (!dvSnapBy.has(s.proposalId)) dvSnapBy.set(s.proposalId, s);
+    const dvVotesBy = group(dvVotes, (v) => v.proposalId);
+    const msByProposal = group(ms, (m) => m.proposalId);
+    const msVotesById = group(msVotes, (v) => v.milestoneId ?? '');
+    const stopBy = new Map(activeStops.map((s) => [s.proposalId, s]));
+
+    return proposals.map((p) => {
+      const base = this.summary(p);
+      const status = p.status as ProposalStatus;
+      const stage = p.stage as ProposalStage | null;
+      const filterThreshold = p.round?.filterApprovalVotes ?? ROUND_SETTING_DEFAULTS.filterApprovalVotes;
+      const filterWantCount = p.round?.filterReviewerCount ?? ROUND_SETTING_DEFAULTS.filterReviewerCount;
+      const milestoneThreshold = p.round?.milestoneApprovalVotes ?? ROUND_SETTING_DEFAULTS.milestoneApprovalVotes;
+
+      // Build the "what's needed now" hint for ACTIVE proposals.
+      let progress: { stage: string; label: string; tone: 'amber' | 'emerald' | 'neutral' | 'red' } | null = null;
+      if (status === ProposalStatus.PENDING) {
+        progress = { stage: 'FEE', label: 'awaiting board fee confirmation', tone: 'amber' };
+      } else if (status === ProposalStatus.ACTIVE && stage === ProposalStage.FILTERING) {
+        const assigned = fAssignBy.get(p.id) ?? [];
+        const votes = fVotesBy.get(p.id) ?? [];
+        if (assigned.length === 0) {
+          progress = { stage: 'FILTERING', label: 'awaiting reviewer draw (board)', tone: 'amber' };
+        } else {
+          const voted = new Set(votes.map((v) => v.drepId)).size;
+          const yes = votes.filter((v) => v.choice === 'YES').length;
+          const no = votes.filter((v) => v.choice === 'NO').length;
+          const decided = yes >= filterThreshold || no >= filterThreshold;
+          progress = {
+            stage: 'FILTERING',
+            label: `${voted}/${assigned.length} reviewers voted · need ${filterThreshold} to decide`,
+            tone: decided ? 'emerald' : voted === 0 ? 'amber' : 'amber',
+          };
+        }
+      } else if (status === ProposalStatus.ACTIVE && stage === ProposalStage.DEBATE_VOTE) {
+        const snap = dvSnapBy.get(p.id);
+        if (!snap) {
+          progress = { stage: 'DV', label: 'awaiting board to open Debate & Vote', tone: 'amber' };
+        } else {
+          const eligible = snap.entries.length;
+          const cast = new Set((dvVotesBy.get(p.id) ?? []).map((v) => v.drepId)).size;
+          progress = { stage: 'DV', label: `${cast}/${eligible} DReps voted`, tone: cast >= eligible ? 'emerald' : 'amber' };
+        }
+      } else if (status === ProposalStatus.APPROVED && stage === ProposalStage.FUNDING) {
+        const active = stopBy.get(p.id);
+        if (active) {
+          const yes = active.votes.filter((v) => v.choice === 'YES').length;
+          progress = { stage: 'FUNDING', label: `stop-funding open · ${yes}/3 YES`, tone: 'red' };
+        } else {
+          const milestones = msByProposal.get(p.id) ?? [];
+          if (milestones.length === 0) {
+            progress = { stage: 'FUNDING', label: 'no milestones defined', tone: 'neutral' };
+          } else {
+            const approved = milestones.filter((m) => m.status === 'APPROVED').length;
+            const inReview = milestones.find((m) => m.status === 'POA_SUBMITTED');
+            if (inReview) {
+              const v = msVotesById.get(inReview.id) ?? [];
+              const yes = v.filter((x) => x.choice === 'YES').length;
+              progress = { stage: 'FUNDING', label: `M#${inReview.idx + 1} POA under review · ${yes}/${milestoneThreshold} YES`, tone: 'amber' };
+            } else {
+              progress = {
+                stage: 'FUNDING',
+                label: `${approved}/${milestones.length} milestones approved`,
+                tone: approved === milestones.length ? 'emerald' : 'neutral',
+              };
+            }
+          }
+        }
+      }
+
+      // Build the "why was this rejected" snippets for REJECTED proposals.
+      let rejectionReasons: { stage: string; from: string | null; rationale: string }[] | null = null;
+      if (status === ProposalStatus.REJECTED) {
+        const reasons: { stage: string; from: string | null; rationale: string }[] = [];
+        // Fee rejection feedback comes from the board, not a DRep.
+        if (!p.stage && p.feeReviewFeedback) {
+          reasons.push({ stage: 'FEE', from: 'board (fee review)', rationale: p.feeReviewFeedback });
+        } else if (p.stage === 'FILTERING') {
+          for (const v of (fVotesBy.get(p.id) ?? []).filter((x) => x.choice === 'NO' && x.rationale)) {
+            reasons.push({ stage: 'FILTERING', from: v.drep.user?.displayName ?? v.drep.drepIdOnchain ?? null, rationale: v.rationale ?? '' });
+          }
+        } else if (p.stage === 'DEBATE_VOTE') {
+          for (const v of (dvVotesBy.get(p.id) ?? []).filter((x) => x.choice === 'NO' && x.rationale)) {
+            reasons.push({ stage: 'DV', from: v.drep.user?.displayName ?? v.drep.drepIdOnchain ?? null, rationale: v.rationale ?? '' });
+          }
+        }
+        if (reasons.length > 0) rejectionReasons = reasons;
+      }
+
+      return { ...base, progress, rejectionReasons };
+    });
   }
 
   /**

@@ -467,6 +467,16 @@ export interface CreateProposalInput {
   submissionFeeTxHash?: string;
   milestones: ProposalMilestoneInput[];
 }
+export interface ProposalProgress {
+  stage: string;
+  label: string;
+  tone: 'amber' | 'emerald' | 'neutral' | 'red';
+}
+export interface ProposalRejectionReason {
+  stage: string;
+  from: string | null;
+  rationale: string;
+}
 export interface ProposalSummary {
   id: string;
   publicId: string | null;
@@ -480,6 +490,10 @@ export interface ProposalSummary {
   requestedAmountAda: number;
   submissionFeeTxHash: string | null;
   submitter: string | null;
+  /** §26.2 — "what's needed now" for ACTIVE rows (filtering reviewers, D&V, milestones). */
+  progress?: ProposalProgress | null;
+  /** §7/§8/§16 — DRep / board rationales that decided a REJECTED proposal. */
+  rejectionReasons?: ProposalRejectionReason[] | null;
 }
 export interface ProposalDetail extends ProposalSummary {
   categoryId: string;
