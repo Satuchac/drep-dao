@@ -419,9 +419,41 @@ function SubmitInternalForm({ onDone, election = false }: { onDone: () => void; 
       ) : null}
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
-      <button type="submit" disabled={busy || !title.trim() || !content.trim()} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-        {busy ? 'Submitting…' : 'Submit (opens voting now)'}
-      </button>
+      {(() => {
+        // Tell the user exactly what's still missing — and disable the button until it's fixed.
+        const missing: string[] = [];
+        if (!title.trim()) missing.push('title');
+        if (!content.trim()) missing.push('content');
+        const endMs = new Date(votingEnd).getTime();
+        if (!votingEnd || Number.isNaN(endMs) || endMs <= Date.now()) missing.push('voting end must be in the future');
+        if (election) {
+          if (candidates.length !== 5) missing.push(`pick exactly 5 candidates (${candidates.length} so far)`);
+          if (!installDate) missing.push('installation date');
+          else if (!Number.isNaN(new Date(installDate).getTime()) && !Number.isNaN(endMs) && new Date(installDate).getTime() <= endMs) {
+            missing.push('installation date must be later than the voting end');
+          }
+        } else if (isPoll) {
+          const opts = pollOptions.map((o) => o.trim()).filter(Boolean);
+          if (opts.length < 2) missing.push('at least two poll options');
+        }
+        const ready = missing.length === 0;
+        return (
+          <div className="space-y-1">
+            {!ready ? (
+              <div className="text-xs text-neutral-500">
+                Still needed before submit: <span className="text-amber-600">{missing.join(' · ')}</span>
+              </div>
+            ) : null}
+            <button
+              type="submit"
+              disabled={busy || !ready}
+              className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {busy ? 'Submitting…' : 'Submit (opens voting now)'}
+            </button>
+          </div>
+        );
+      })()}
     </form>
   );
 }
