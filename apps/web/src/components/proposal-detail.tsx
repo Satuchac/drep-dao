@@ -445,12 +445,32 @@ function FilteringSection({ id, isBoard }: { id: string; isBoard: boolean }) {
     finally { setDrawing(false); }
   };
 
+  // §7.4 — once filtering is decided the proposal either advances (status=ACTIVE,
+  // stage moved past FILTERING — D&V or further) or is REJECTED (status=REJECTED
+  // with the stage frozen on FILTERING). Show a clear outcome chip in both cases.
+  const advanced = r.status === 'ACTIVE' && r.stage !== 'FILTERING' && r.stage !== null;
+  const rejectedAtFiltering = r.status === 'REJECTED' && r.stage === 'FILTERING';
+  const outcomeChip = advanced
+    ? { label: '✓ Filtering passed — advanced to Debate & Vote', tone: 'emerald' as const }
+    : rejectedAtFiltering
+      ? { label: '✗ Rejected at filtering', tone: 'red' as const }
+      : null;
+
   return (
     <section className={card}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold">Filtering — 1 member · 1 vote</h3>
         <div className="flex items-center gap-2">
-          {open ? (
+          {outcomeChip ? (
+            <span
+              className={`rounded px-2 py-0.5 text-[11px] font-medium ${outcomeChip.tone === 'emerald'
+                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'}`}
+              title={outcomeChip.label}
+            >
+              {outcomeChip.label}
+            </span>
+          ) : open ? (
             <span
               className={`rounded px-2 py-0.5 text-[11px] font-medium ${decided
                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
@@ -459,7 +479,7 @@ function FilteringSection({ id, isBoard }: { id: string; isBoard: boolean }) {
                   : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'}`}
               title="Voting progress"
             >
-              {voted}/{r.reviewers || 0} voted{decided ? ' · decided' : ' · awaiting votes'}
+              {voted}/{r.reviewers || 0} voted{decided ? ' · passed (advancing)' : ' · awaiting votes'}
             </span>
           ) : null}
           <AnchorLink txHash={r.anchorTxHash} />

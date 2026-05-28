@@ -95,12 +95,14 @@ export function RoundsSection() {
     return (
       <section className="space-y-3">
         <BackButton onBack={() => setParams({ round: null })} label="all rounds" />
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-semibold">
             Round #{open.number}
             {open.name ? ` — ${open.name}` : ''}
           </h2>
+          <span className="text-xs text-neutral-500">Round stage:</span>
           <StatusBadge status={open.status} />
+          <ProposalCounts counts={open.proposalCounts} activeStage={open.activeStageCounts} />
         </div>
         <RoundSettingsView roundId={open.id} />
         <ProposalList roundId={open.id} />
@@ -143,6 +145,7 @@ export function RoundsSection() {
                     <span className={`text-xs font-medium ${r.active ? 'text-emerald-600' : 'text-neutral-400'}`}>
                       {r.status === 'CLOSED' ? 'complete' : r.active ? 'active' : 'preparing'}
                     </span>
+                    <span className="text-xs text-neutral-500">Round stage:</span>
                     <StatusBadge status={r.status} />
                   </span>
                 </div>
@@ -151,7 +154,7 @@ export function RoundsSection() {
                   {r.categoryCount} categories · {r.eligibleCount} eligible DReps
                 </div>
                 <div className="mt-1.5">
-                  <ProposalCounts counts={r.proposalCounts} />
+                  <ProposalCounts counts={r.proposalCounts} activeStage={r.activeStageCounts} />
                 </div>
               </button>
             </li>

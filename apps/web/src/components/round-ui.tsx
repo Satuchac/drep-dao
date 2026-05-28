@@ -51,16 +51,31 @@ export function StatusBadge({ status, cls }: { status: string; cls?: Record<stri
   return <span className={`rounded px-2 py-0.5 text-xs ${map[status] ?? 'bg-neutral-200 text-neutral-700'}`}>{status}</span>;
 }
 
-/** Per-status proposal count chips, e.g. "2 ACTIVE · 1 APPROVED". */
-export function ProposalCounts({ counts }: { counts?: Record<string, number> }) {
+/**
+ * Per-status proposal count chips, e.g. "2 ACTIVE (1 filtering · 1 D&V) · 1 APPROVED".
+ * When `activeStage` is supplied (a breakdown of ACTIVE by stage), the ACTIVE chip is
+ * suffixed with the stage breakdown so the reader sees what's currently in motion.
+ */
+const ACTIVE_STAGE_LABEL: Record<string, string> = {
+  FILTERING: 'filtering',
+  DEBATE_VOTE: 'D&V',
+  FUNDING: 'funding',
+};
+export function ProposalCounts({ counts, activeStage }: { counts?: Record<string, number>; activeStage?: Record<string, number> }) {
   const c = counts ?? {};
   const entries = STATUS_ORDER.filter((s) => (c[s] ?? 0) > 0).map((s) => [s, c[s]] as const);
   if (entries.length === 0) return <span className="text-xs text-neutral-400">no proposals yet</span>;
+  const activeParts = activeStage
+    ? Object.entries(activeStage)
+        .filter(([, n]) => (n ?? 0) > 0)
+        .map(([stage, n]) => `${n} ${ACTIVE_STAGE_LABEL[stage] ?? stage.toLowerCase()}`)
+    : [];
   return (
     <div className="flex flex-wrap gap-1">
       {entries.map(([s, n]) => (
         <span key={s} className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${PROPOSAL_STATUS_CLS[s] ?? ''}`}>
           {n} {s.toLowerCase()}
+          {s === 'ACTIVE' && activeParts.length > 0 ? <span className="ml-1 font-normal opacity-70">({activeParts.join(' · ')})</span> : null}
         </span>
       ))}
     </div>

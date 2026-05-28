@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DRepStatus, RoundStatus, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared';
+import { DRepStatus, ProposalStatus, RoundStatus, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRoundDto, UpdateRoundDto, CategoryInput, ScheduleInput, ConfirmStageDto, RoundSettingsInput } from './dto';
 
@@ -98,6 +98,20 @@ export class RoundsService {
       m[g.status] = g._count._all;
       byRound.set(g.roundId, m);
     }
+    // ACTIVE proposals further split by stage (filtering / debate_vote / funding) so the
+    // round overview shows what's currently in motion, not just "X active".
+    const activeGrouped = await this.prisma.proposal.groupBy({
+      by: ['roundId', 'stage'],
+      where: { roundId: { in: rounds.map((r) => r.id) }, status: ProposalStatus.ACTIVE },
+      _count: { _all: true },
+    });
+    const activeByRound = new Map<string, Record<string, number>>();
+    for (const g of activeGrouped) {
+      if (!g.roundId || !g.stage) continue;
+      const m = activeByRound.get(g.roundId) ?? {};
+      m[g.stage] = g._count._all;
+      activeByRound.set(g.roundId, m);
+    }
     return rounds.map((r) => {
       const counts = byRound.get(r.id) ?? {};
       const total = Object.values(counts).reduce((s, n) => s + n, 0);
@@ -113,6 +127,7 @@ export class RoundsService {
         eligibleCount: r._count.eligibilities,
         proposalCount: total,
         proposalCounts: counts,
+        activeStageCounts: activeByRound.get(r.id) ?? {},
         createdAt: r.createdAt,
         endedAt: r.endedAt,
       };
@@ -147,6 +162,17 @@ export class RoundsService {
     });
     const proposalCounts: Record<string, number> = {};
     for (const g of grouped) proposalCounts[g.status] = g._count._all;
+    // ACTIVE proposals broken down by stage (filtering / debate_vote / funding) so the
+    // round detail can show "2 active (1 filtering · 1 D&V)" instead of just "2 active".
+    const activeStageGrouped = await this.prisma.proposal.groupBy({
+      by: ['stage'],
+      where: { roundId: id, status: ProposalStatus.ACTIVE },
+      _count: { _all: true },
+    });
+    const activeStageCounts: Record<string, number> = {};
+    for (const g of activeStageGrouped) {
+      if (g.stage) activeStageCounts[g.stage] = g._count._all;
+    }
     const schedule = r.schedule.map((s) => ({
       stageKey: s.stageKey,
       startsAt: s.startsAt,
@@ -168,6 +194,7 @@ export class RoundsService {
       eligibleCount: r._count.eligibilities,
       proposalCount: r._count.proposals,
       proposalCounts,
+      activeStageCounts,
       categories: r.categories.map((c) => ({
         id: c.id,
         name: c.name,

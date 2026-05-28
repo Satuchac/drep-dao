@@ -385,6 +385,8 @@ export interface RoundSummary {
   eligibleCount: number;
   proposalCount: number;
   proposalCounts: Record<string, number>;
+  /** ACTIVE proposals broken down by stage (FILTERING / DEBATE_VOTE / FUNDING). */
+  activeStageCounts?: Record<string, number>;
 }
 export interface RoundScheduleEntry {
   stageKey: string;
