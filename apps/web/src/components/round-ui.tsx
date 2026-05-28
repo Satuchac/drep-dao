@@ -61,17 +61,24 @@ export function toLocalInput(iso: string | null | undefined): string {
   return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 16);
 }
 
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+];
+
 /**
- * Date / datetime-local input. The native picker commits on every interaction (no extra
- * Confirm/Cancel buttons) — clicking a calendar date or editing the time both commit through
- * onChange. New date picks default the time to midnight (00:00) so users who only care about
- * the day don't have to touch the time field. If the user then explicitly changes the time,
- * the time is preserved on subsequent edits (until they pick a different date again).
+ * Date / datetime-local picker that shows the **month as a name** (a <select> of "January…
+ * December") + numeric day + numeric year + (for datetime) a time input. Native
+ * `<input type="datetime-local">` always shows MM/DD/YYYY (or DD/MM/YYYY in non-en locales),
+ * which is easy to mis-read, so this custom widget makes the month unambiguous in every browser.
+ * `min` is accepted for API compatibility but not enforced per-field; submit-time validation
+ * (and inline warnings the caller renders) cover the constraint.
  */
 export function DateField({
   value,
   onChange,
   type = 'datetime-local',
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   min,
   required,
   className,
@@ -83,30 +90,71 @@ export function DateField({
   required?: boolean;
   className?: string;
 }) {
-  const normalize = (newVal: string) => {
-    if (type !== 'datetime-local' || !newVal) return newVal;
-    const prevDate = (value || '').slice(0, 10);
-    const newDate = newVal.slice(0, 10);
-    // Any date change → snap the time to 00:00 (the browser's auto-fill might be current time,
-    // which the user almost never wants). Time-only edits pass through unchanged.
-    if (newDate !== prevDate) return `${newDate}T00:00`;
-    return newVal;
+  const withTime = type === 'datetime-local';
+  // Parse the canonical value ("YYYY-MM-DD" or "YYYY-MM-DDTHH:MM") into the 3-4 sub-fields.
+  const parsed = (() => {
+    if (!value) return { y: '', m: '', d: '', t: withTime ? '00:00' : '' };
+    const [datePart, timePart] = value.split('T');
+    const [yy = '', mm = '', dd = ''] = (datePart ?? '').split('-');
+    return {
+      y: yy,
+      m: mm ? String(parseInt(mm, 10)) : '',
+      d: dd ? String(parseInt(dd, 10)) : '',
+      t: (timePart ?? '').slice(0, 5) || (withTime ? '00:00' : ''),
+    };
+  })();
+
+  const commit = (y: string, m: string, d: string, t: string) => {
+    if (!y || !m || !d) { onChange(''); return; }
+    const date = `${y.padStart(4, '0')}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    if (!withTime) { onChange(date); return; }
+    const tt = (t || '00:00').slice(0, 5);
+    onChange(`${date}T${tt}`);
   };
-  const inputCls = className ?? 'w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900';
-  // Browser inputs always render dates as MM/DD/YYYY (en-US) or DD/MM/YYYY (others) — easy to
-  // mis-read. Show the parsed date with the month NAME beneath the input so it's unambiguous.
-  const hint = value ? (type === 'date' ? fmtDate(value) : fmtDateTime(value)) : '';
+
+  const cell = 'rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900';
+
   return (
-    <div>
-      <input
-        type={type}
-        className={inputCls}
-        value={value}
-        min={min}
+    <div className={`flex flex-wrap items-center gap-1.5 ${className ?? ''}`}>
+      <select
+        value={parsed.m}
         required={required}
-        onChange={(e) => onChange(normalize(e.target.value))}
+        onChange={(e) => commit(parsed.y, e.target.value, parsed.d, parsed.t)}
+        className={`${cell} min-w-[8.5rem]`}
+      >
+        <option value="">Month</option>
+        {MONTHS.map((label, i) => (
+          <option key={i + 1} value={String(i + 1)}>{label}</option>
+        ))}
+      </select>
+      <input
+        type="number"
+        min={1}
+        max={31}
+        placeholder="Day"
+        value={parsed.d}
+        required={required}
+        onChange={(e) => commit(parsed.y, parsed.m, e.target.value.replace(/\D/g, ''), parsed.t)}
+        className={`${cell} w-16`}
       />
-      {hint ? <div className="mt-0.5 text-[11px] text-neutral-500">{hint}</div> : null}
+      <input
+        type="number"
+        min={2024}
+        max={2100}
+        placeholder="Year"
+        value={parsed.y}
+        required={required}
+        onChange={(e) => commit(e.target.value.replace(/\D/g, ''), parsed.m, parsed.d, parsed.t)}
+        className={`${cell} w-24`}
+      />
+      {withTime ? (
+        <input
+          type="time"
+          value={parsed.t || '00:00'}
+          onChange={(e) => commit(parsed.y, parsed.m, parsed.d, e.target.value)}
+          className={`${cell} w-28`}
+        />
+      ) : null}
     </div>
   );
 }

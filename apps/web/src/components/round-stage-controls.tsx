@@ -138,19 +138,11 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1 text-xs text-neutral-500">
               starts
-              <DateField
-                value={startsAt}
-                onChange={setStartsAt}
-                className="rounded border border-neutral-300 px-1.5 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-              />
+              <DateField value={startsAt} onChange={setStartsAt} />
             </div>
             <div className="flex items-center gap-1 text-xs text-neutral-500">
               ends
-              <DateField
-                value={endsAt}
-                onChange={setEndsAt}
-                className="rounded border border-neutral-300 px-1.5 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-              />
+              <DateField value={endsAt} onChange={setEndsAt} />
             </div>
             <label className="flex items-center gap-1 text-xs">
               <input type="checkbox" checked={autoStart} onChange={(e) => setAutoStart(e.target.checked)} />

@@ -281,7 +281,7 @@ function SubmitInternalForm({ onDone, election = false }: { onDone: () => void; 
         )}
         <label className="block space-y-1">
           <span className="text-sm font-medium">Voting ends</span>
-          <DateField value={votingEnd} onChange={setVotingEnd} min={toLocalInput(new Date().toISOString())} required className={field} />
+          <DateField value={votingEnd} onChange={setVotingEnd} min={toLocalInput(new Date().toISOString())} required />
           <span className="text-xs text-neutral-500">{days > 0 ? `voting will run ${days} day${days === 1 ? '' : 's'} from now` : 'pick a future date'}</span>
         </label>
       </div>
@@ -330,7 +330,7 @@ function SubmitInternalForm({ onDone, election = false }: { onDone: () => void; 
           </div>
           <label className="block space-y-1">
             <span className="text-sm font-medium">Delivery date <span className="font-normal text-neutral-400">(optional)</span></span>
-            <DateField value={deliveryDate} onChange={setDeliveryDate} type="date" className={field} />
+            <DateField value={deliveryDate} onChange={setDeliveryDate} type="date" />
           </label>
         </div>
       ) : null}
@@ -366,7 +366,7 @@ function SubmitInternalForm({ onDone, election = false }: { onDone: () => void; 
           </div>
           <label className="block space-y-1">
             <span className="text-sm font-medium">Installation date <span className="font-normal text-neutral-400">(when the new board takes seats — must be after voting ends)</span></span>
-            <DateField value={installDate} onChange={setInstallDate} min={votingEnd || toLocalInput(new Date().toISOString())} required className={field} />
+            <DateField value={installDate} onChange={setInstallDate} min={votingEnd || toLocalInput(new Date().toISOString())} required />
             {installDate && votingEnd && new Date(installDate).getTime() <= new Date(votingEnd).getTime() ? (
               <span className="text-xs text-red-600">⚠ the installation date must be later than the voting end ({fmtDateTime(votingEnd)})</span>
             ) : null}
@@ -619,7 +619,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <h3 className="text-base font-semibold">Manage voting period</h3>
           <p className="text-xs text-neutral-500">You can move the end of voting (you can&apos;t edit the content while voting is open).</p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <DateField value={newEnd || toLocalInput(p.votingEndAt)} onChange={setNewEnd} className={`${field} sm:w-auto`} />
+            <DateField value={newEnd || toLocalInput(p.votingEndAt)} onChange={setNewEnd} />
             <button disabled={busy} onClick={() => act(() => internalProposalsApi.extend(id, new Date(newEnd || toLocalInput(p.votingEndAt)).toISOString()))} className="rounded border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800">Update end</button>
           </div>
         </div>
