@@ -105,6 +105,7 @@ export interface AnchorResultMetadata {
   subject: GovSubject;
   proposalId?: string; // structured public id (e.g. "R3-P2" or "Internal 4") when about a proposal
   docHash?: string; // sha256 of the proposal's title+content (internal proposals) — date-independent
+  electedBoard?: { drep: string; name: string }[]; // §14 — the elected candidates on a board election
   voting: string; // human-readable voting style
   applicant: string; // subject DRep id (admission/removal) or proposal reference (filtering/dv/milestone)
   votes: AnchorVote[];
@@ -124,6 +125,7 @@ export function buildResultMetadata(p: {
   applicant: string;
   proposalId?: string | null; // structured public id when the decision concerns a proposal
   docHash?: string | null; // sha256 of title+content (internal proposals)
+  electedBoard?: { drep: string; name: string }[] | null; // §14 — set for board-election anchors
   votes: AnchorVote[];
   yes: number;
   no: number;
@@ -143,6 +145,7 @@ export function buildResultMetadata(p: {
     subject: p.subject,
     ...(p.proposalId ? { proposalId: p.proposalId } : {}),
     ...(p.docHash ? { docHash: p.docHash } : {}),
+    ...(p.electedBoard && p.electedBoard.length ? { electedBoard: p.electedBoard } : {}),
     voting: STYLE_LABEL[p.style],
     applicant: p.applicant,
     votes: p.votes.map((v) => (v.power == null ? v : { ...v, power: r(v.power) })),

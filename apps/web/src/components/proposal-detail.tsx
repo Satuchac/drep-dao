@@ -21,7 +21,7 @@ import {
   type FilterResult,
   type DvResult,
 } from '@/lib/api';
-import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime } from './round-ui';
+import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, RationaleText } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
 import { CopyButton } from './copy-button';
 
@@ -309,7 +309,7 @@ function Votes({ votes }: { votes: VoteRationale[] }) {
               {v.weight != null ? ` · ${v.weight.toLocaleString()} power` : ''}
             </span>
           </div>
-          {v.rationale ? <div className="mt-1 whitespace-pre-wrap text-neutral-600 dark:text-neutral-400">{v.rationale}</div> : null}
+          <RationaleText text={v.rationale} />
         </li>
       ))}
     </ul>
@@ -366,7 +366,7 @@ function FilteringSection({ id }: { id: string }) {
                     <span className="text-amber-600">{open ? 'pending' : 'not voted'}</span>
                   )}
                 </div>
-                {rationale ? <div className="mt-1 whitespace-pre-wrap text-neutral-600 dark:text-neutral-400">{rationale}</div> : null}
+                <RationaleText text={rationale} />
               </li>
             );
           })}

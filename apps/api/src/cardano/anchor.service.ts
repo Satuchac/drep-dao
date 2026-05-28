@@ -182,6 +182,7 @@ export class AnchorService implements OnModuleInit {
     proposalId?: string | null; // Anchor.proposalId (proposal row or applicant drep row)
     publicId?: string | null; // structured proposal id (e.g. "R3-P2", "Internal 4") embedded on-chain
     docHash?: string | null; // sha256 of title+content (internal proposals) — date-independent
+    electedBoard?: { drep: string; name: string }[] | null; // §14 — set on a board-election anchor
     roundId?: string | null;
     votes: { drep: string; vote: string; power?: number }[];
     outcome: string;
@@ -197,6 +198,7 @@ export class AnchorService implements OnModuleInit {
       ref: params.ref,
       ...(params.publicId ? { publicId: params.publicId } : {}),
       ...(params.docHash ? { docHash: params.docHash } : {}),
+      ...(params.electedBoard?.length ? { electedBoard: params.electedBoard } : {}),
       votes: params.preimageVotes ?? params.votes,
       result: { outcome: params.outcome, yes: params.yes, no: params.no, threshold: params.threshold },
     };
@@ -209,6 +211,7 @@ export class AnchorService implements OnModuleInit {
       applicant: params.ref,
       proposalId: params.publicId ?? null,
       docHash: params.docHash ?? null,
+      electedBoard: params.electedBoard ?? null,
       votes: params.votes,
       yes: params.yes,
       no: params.no,
@@ -387,6 +390,7 @@ export class AnchorService implements OnModuleInit {
       ref?: string;
       publicId?: string;
       docHash?: string;
+      electedBoard?: { drep: string; name: string }[];
       votes?: { drep?: string; vote?: string; choice?: string; power?: number; weight?: number }[];
       result?: { outcome?: string; yes?: number; no?: number; threshold?: number; totalPower?: number };
       // submission-anchor preimage fields
@@ -421,6 +425,7 @@ export class AnchorService implements OnModuleInit {
       applicant: p.ref ?? '',
       proposalId: p.publicId ?? null,
       docHash: p.docHash ?? null,
+      electedBoard: p.electedBoard ?? null,
       votes,
       yes: r.yes ?? 0,
       no: r.no ?? 0,

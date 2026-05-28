@@ -615,6 +615,15 @@ export class InternalProposalsService {
       t.kind === 'POLL'
         ? `CONCLUDED — ${t.options.map((o) => `${o.option}: ${balanced ? o.power : o.voters}`).join(', ')}`
         : status;
+    // §14 — for a board-member election, include the elected candidates on-chain so anyone
+    // parsing the anchor JSON can see who took the seats (the platform also installs them).
+    let electedBoard: { drep: string; name: string }[] | null = null;
+    if (p.isBoardElection && status === ProposalStatus.APPROVED && Array.isArray(p.actors)) {
+      const raw = p.actors as unknown as { drepIdOnchain?: string; displayName?: string }[];
+      electedBoard = raw
+        .filter((c) => c && typeof c.drepIdOnchain === 'string')
+        .map((c) => ({ drep: c.drepIdOnchain as string, name: c.displayName ?? '(unknown)' }));
+    }
     await this.anchor.anchorResult({
       kind: 'internal',
       subject: GovSubject.INTERNAL,
@@ -622,6 +631,7 @@ export class InternalProposalsService {
       ref: p.title,
       publicId: p.publicId,
       docHash,
+      electedBoard,
       proposalId,
       roundId: null,
       votes: voteList.map((v) => ({ drep: v.drep, vote: v.choice, power: balanced ? v.weight : undefined })),

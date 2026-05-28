@@ -63,6 +63,38 @@ export function toLocalInput(iso: string | null | undefined): string {
   return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 16);
 }
 
+/**
+ * Voting rationale that collapses to a single short preview line by default — long rationales
+ * shouldn't dominate a votes list. Click "Show more" to read the full text, "Show less" to
+ * collapse again. Preserves the original line breaks (whitespace-pre-wrap) when expanded.
+ */
+export function RationaleText({ text }: { text: string | null | undefined }) {
+  const trimmed = (text ?? '').trim();
+  const [open, setOpen] = useState(false);
+  if (!trimmed) return null;
+  // Show inline if the rationale fits on one short line.
+  const firstLine = trimmed.split('\n', 1)[0];
+  const isLong = firstLine.length > 120 || trimmed.length > firstLine.length;
+  if (!isLong) {
+    return <div className="mt-1 whitespace-pre-wrap text-xs text-neutral-600 dark:text-neutral-400">{trimmed}</div>;
+  }
+  if (open) {
+    return (
+      <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
+        <div className="whitespace-pre-wrap">{trimmed}</div>
+        <button type="button" onClick={() => setOpen(false)} className="mt-0.5 text-emerald-700 hover:underline dark:text-emerald-400">Show less</button>
+      </div>
+    );
+  }
+  const preview = firstLine.length > 120 ? firstLine.slice(0, 120) + '…' : firstLine + (trimmed.length > firstLine.length ? '…' : '');
+  return (
+    <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
+      <span>{preview}</span>
+      <button type="button" onClick={() => setOpen(true)} className="ml-2 text-emerald-700 hover:underline dark:text-emerald-400">Show more</button>
+    </div>
+  );
+}
+
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',

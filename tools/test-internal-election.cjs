@@ -124,6 +124,20 @@ const created = [];
     const fin = await svc.finalize(election.id);
     ok('election approved (5 YES)', fin.status === 'APPROVED', fin.status);
 
+    // 4b) On-chain anchor includes the elected board (drep id + name) alongside the voters,
+    //     proposal id and document hash.
+    const a = await db.anchor.findFirst({ where: { proposalId: election.id, kind: 'internal' }, orderBy: { createdAt: 'desc' } });
+    ok('election anchor recorded', !!a && a.metadataLabel === 80808081);
+    ok('anchor preimage has publicId', a?.preimage?.publicId === election.publicId);
+    ok('anchor preimage has docHash', typeof a?.preimage?.docHash === 'string' && a.preimage.docHash.length === 64);
+    const elected = a?.preimage?.electedBoard;
+    ok('anchor preimage has 5 elected board members', Array.isArray(elected) && elected.length === 5, JSON.stringify(elected?.map((x) => x.name)));
+    const electedDreps = new Set((elected ?? []).map((e) => e.drep));
+    const candidateDreps = new Set(election.candidates.map((c) => c.drepIdOnchain));
+    ok('elected drep ids match the candidates', electedDreps.size === 5 && [...candidateDreps].every((d) => electedDreps.has(d)));
+    const voterCount = Array.isArray(a?.preimage?.votes) ? a.preimage.votes.length : 0;
+    ok('anchor preimage records each voter (drep + choice)', voterCount === 5, `${voterCount} votes`);
+
     // 5) AUTHORIZATION — non-board user cannot install.
     if (nonBoardDrep?.user?.id) {
       let nbBlocked = false;

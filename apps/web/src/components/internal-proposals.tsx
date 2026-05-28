@@ -14,7 +14,7 @@ import {
 import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput, DateField } from './round-ui';
+import { StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput, DateField, RationaleText } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
 
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
@@ -615,9 +615,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
                     }`}>{v.choice}</span>
                   </span>
                 </div>
-                {v.rationale ? (
-                  <div className="mt-1 whitespace-pre-wrap text-xs text-neutral-600 dark:text-neutral-400">{v.rationale}</div>
-                ) : null}
+                <RationaleText text={v.rationale} />
               </li>
             ))}
           </ul>
