@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { boardProofsApi, daoApi, type OnChainProof } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
+import { fmtDateTime } from './round-ui';
 
 /** Everything the platform has anchored on-chain — human-readable + verifiable. */
 export function OnChainProofs() {
@@ -85,7 +86,7 @@ export function OnChainProofs() {
             <li key={p.id} className="rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-medium">{p.title}</span>
-                <span className="text-xs text-neutral-500">{new Date(p.createdAt).toLocaleString()}</span>
+                <span className="text-xs text-neutral-500">{fmtDateTime(p.createdAt)}</span>
               </div>
               {p.detail ? <div className="text-neutral-600 dark:text-neutral-400">{p.detail}</div> : null}
               <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-neutral-500">

@@ -7,6 +7,7 @@ import { adminApi, type AdminHealth, type AuditRow } from '@/lib/admin-api';
 import { AdminGenesis } from '@/components/admin/admin-genesis';
 import { AdminsPanel } from '@/components/admin/admins-panel';
 import { WalletPanel } from '@/components/admin/wallet-panel';
+import { fmtDateTime } from '@/components/round-ui';
 
 export default function AdminDashboard() {
   const { admin, loading, logout } = useAdminAuth();
@@ -78,7 +79,7 @@ export default function AdminDashboard() {
         <ul className="space-y-1 font-mono text-xs">
           {audit.map((e, i) => (
             <li key={i} className="flex flex-wrap gap-x-2 text-slate-300">
-              <span className="text-slate-500">{new Date(e.occurredAt).toLocaleString()}</span>
+              <span className="text-slate-500">{fmtDateTime(e.occurredAt)}</span>
               <span className="text-amber-400">{e.action}</span>
               {e.adminUsername ? <span>{e.adminUsername}</span> : null}
               {e.target ? <span className="text-slate-500">{e.target}</span> : null}

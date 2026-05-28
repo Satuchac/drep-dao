@@ -49,6 +49,9 @@ export function ProposalCounts({ counts }: { counts?: Record<string, number> }) 
 
 export const fmtDateTime = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+/** Same as fmtDateTime but date only — used wherever the time isn't meaningful (board install date, etc.). */
+export const fmtDate = (iso: string | null | undefined) =>
+  iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium' }) : '—';
 
 /** Convert an ISO string to the value a <input type="datetime-local"> expects. */
 export function toLocalInput(iso: string | null | undefined): string {
@@ -90,14 +93,20 @@ export function DateField({
     return newVal;
   };
   const inputCls = className ?? 'w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900';
+  // Browser inputs always render dates as MM/DD/YYYY (en-US) or DD/MM/YYYY (others) — easy to
+  // mis-read. Show the parsed date with the month NAME beneath the input so it's unambiguous.
+  const hint = value ? (type === 'date' ? fmtDate(value) : fmtDateTime(value)) : '';
   return (
-    <input
-      type={type}
-      className={inputCls}
-      value={value}
-      min={min}
-      required={required}
-      onChange={(e) => onChange(normalize(e.target.value))}
-    />
+    <div>
+      <input
+        type={type}
+        className={inputCls}
+        value={value}
+        min={min}
+        required={required}
+        onChange={(e) => onChange(normalize(e.target.value))}
+      />
+      {hint ? <div className="mt-0.5 text-[11px] text-neutral-500">{hint}</div> : null}
+    </div>
   );
 }

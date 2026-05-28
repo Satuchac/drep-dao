@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { boardPaymentsApi, type FeePayment } from '@/lib/api';
 import { CopyButton } from './copy-button';
+import { fmtDate } from './round-ui';
 
 /**
  * §12 — board task list for submission-fee settlements created by budget changes:
@@ -97,7 +98,7 @@ function PaymentRow({ p, onSettled }: { p: FeePayment; onSettled: () => void }) 
       ) : null}
       {settled ? (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-          <span className="text-emerald-700 dark:text-emerald-400">✓ Settled{p.settledAt ? ` ${new Date(p.settledAt).toLocaleDateString()}` : ''}</span>
+          <span className="text-emerald-700 dark:text-emerald-400">✓ Settled{p.settledAt ? ` ${fmtDate(p.settledAt)}` : ''}</span>
           {p.txHash ? (
             <>
               <span>· tx</span>

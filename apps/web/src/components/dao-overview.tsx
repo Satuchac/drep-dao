@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { daoApi, type DaoMember, type DaoExpert } from '@/lib/api';
+import { fmtDate } from './round-ui';
 
 const SUBCAT_LABEL: Record<string, string> = Object.fromEntries(DEFAULT_SUBCATEGORIES.map((s) => [s.id, s.label]));
 
@@ -135,7 +136,7 @@ export function DaoOverview() {
                   <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
                     {m.since ? (
                       <span title={m.isBoard ? 'Installed on the board' : 'Approved by the board'}>
-                        {new Date(m.since).toLocaleDateString()}
+                        {fmtDate(m.since)}
                       </span>
                     ) : (
                       '—'
