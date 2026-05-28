@@ -12,7 +12,7 @@ import {
 } from '@/lib/api';
 import { ProposalDetail } from './proposal-detail';
 
-export function VotingPanel() {
+export function VotingPanel({ history = false }: { history?: boolean }) {
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
   const isDrep = profile?.roles.includes('DREP') ?? false;
@@ -21,8 +21,15 @@ export function VotingPanel() {
   const load = useCallback(async () => {
     const rounds = await roundsApi.list().catch(() => []);
     const lists = await Promise.all(rounds.map((r) => proposalsApi.byRound(r.id).catch(() => [])));
-    setItems(lists.flat().filter((p) => p.stage === 'DEBATE_VOTE'));
-  }, []);
+    // Default: only proposals currently in DEBATE_VOTE (the to-do list). History also
+    // includes proposals that passed through D&V — APPROVED / REJECTED / COMPLETE /
+    // FAILED — so the voter can recall past decisions (the row still links to detail).
+    const all = lists.flat();
+    const pred = history
+      ? (p: ProposalSummary) => p.stage === 'DEBATE_VOTE' || ['APPROVED', 'REJECTED', 'COMPLETE', 'FAILED'].includes(p.status)
+      : (p: ProposalSummary) => p.stage === 'DEBATE_VOTE';
+    setItems(all.filter(pred));
+  }, [history]);
   useEffect(() => {
     void load();
   }, [load]);
@@ -31,7 +38,7 @@ export function VotingPanel() {
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-      <h3 className="text-base font-semibold">Debate &amp; Vote ({items.length})</h3>
+      <h3 className="text-base font-semibold">Debate &amp; Vote ({items.length}){history ? ' — with history' : ''}</h3>
       <p className="text-xs text-neutral-500">Balanced voting power (§4); rationale ≥ 200 chars.</p>
       <ul className="mt-2 space-y-3">
         {items.map((p) => (

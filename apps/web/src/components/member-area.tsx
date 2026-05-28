@@ -89,15 +89,7 @@ export function MemberArea() {
       key: 'voting',
       label: 'Voting & reviews',
       badge: todo.voting,
-      node: (
-        <div className="space-y-6">
-          <p className="text-sm text-neutral-500">Everything awaiting your vote or review — filtering juries, Debate &amp; Vote, and milestone reviews.</p>
-          <FilteringPanel />
-          <VotingPanel />
-          <MilestoneReviewsPanel />
-          <EmptyHint text="Nothing is awaiting your vote right now." />
-        </div>
-      ),
+      node: <VotingReviewsTab />,
     });
     // §10 — internal proposals (DAO governance): submit + browse + vote. Same component as
     // the left-nav "Internal proposals" view; the tab adds a notification badge for items
@@ -127,6 +119,30 @@ export function MemberArea() {
   }
 
   return <MemberTabs tabs={tabs} />;
+}
+
+/**
+ * "Voting & reviews" tab for DReps / DAO members / experts — filtering juries, D&V,
+ * milestone reviews. Mirrors the Actions/Applications pattern with a "Show history"
+ * switch that also reveals decided assignments (passed → APPROVED/REJECTED rounds).
+ */
+function VotingReviewsTab() {
+  const [showHistory, setShowHistory] = useState(false);
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-neutral-500">Everything awaiting your vote or review — filtering juries, Debate &amp; Vote, and milestone reviews.</p>
+        <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
+          <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
+          Show history
+        </label>
+      </div>
+      <FilteringPanel history={showHistory} />
+      <VotingPanel history={showHistory} />
+      <MilestoneReviewsPanel history={showHistory} />
+      <EmptyHint text={showHistory ? 'No votes — past or present.' : 'Nothing is awaiting your vote right now.'} />
+    </div>
+  );
 }
 
 /** Board "Actions" tab: the to-do panels + a "Show history" switch that also reveals done items. */

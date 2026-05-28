@@ -205,13 +205,20 @@ export class MilestonesService {
     );
   }
 
-  /** Reviewer's open milestone assignments (POA submitted, not yet voted by them). */
-  async myAssignments(userId: string) {
+  /**
+   * Reviewer's milestone assignments. Default: only those with a POA currently under
+   * review (the to-do list). `history=true`: every milestone the reviewer was ever
+   * assigned to, so they can recall how they voted on closed ones.
+   */
+  async myAssignments(userId: string, history = false) {
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
     if (!drep) return [];
     const assignments = await this.prisma.milestoneAssignment.findMany({
-      where: { reviewerDrepId: drep.id, releasedAt: null, milestone: { status: 'POA_SUBMITTED' } },
+      where: history
+        ? { reviewerDrepId: drep.id }
+        : { reviewerDrepId: drep.id, releasedAt: null, milestone: { status: 'POA_SUBMITTED' } },
       include: { milestone: { include: { proposal: { select: { id: true, title: true } } } } },
+      orderBy: { assignedAt: 'desc' },
     });
     const myVotes = await this.prisma.vote.findMany({
       where: { drepId: drep.id, phase: VotePhase.MILESTONE, milestoneId: { in: assignments.map((a) => a.milestoneId) } },
@@ -221,6 +228,7 @@ export class MilestonesService {
       proposalId: a.milestone.proposal.id,
       proposalTitle: a.milestone.proposal.title,
       milestoneIdx: a.milestone.idx,
+      milestoneStatus: a.milestone.status,
       myVote: myVotes.find((v) => v.milestoneId === a.milestoneId)?.choice ?? null,
     }));
   }

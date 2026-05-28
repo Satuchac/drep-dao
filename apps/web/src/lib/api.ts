@@ -531,6 +531,8 @@ export interface FilterAssignment {
   proposalId: string;
   title: string;
   myVote: string | null;
+  proposalStatus?: string;
+  proposalStage?: string | null;
 }
 /** A vote with its public rationale (filtering / D&V / milestone). */
 export interface VoteRationale {
@@ -563,7 +565,7 @@ export interface FilterResult {
 
 export interface VotingTasksCount { filtering: number; dv: number; milestone: number; total: number }
 export const filteringApi = {
-  myAssignments: () => request<FilterAssignment[]>('/me/assignments/filter'),
+  myAssignments: (history = false) => request<FilterAssignment[]>(`/me/assignments/filter${history ? '?history=1' : ''}`),
   votingTasks: () => request<VotingTasksCount>('/me/voting-tasks'),
   result: (proposalId: string) => request<FilterResult>(`/proposals/${proposalId}/filter-result`),
   vote: (proposalId: string, choice: 'YES' | 'NO' | 'ABSTAIN', rationale?: string) =>
@@ -706,6 +708,7 @@ export interface MilestoneAssignmentView {
   proposalTitle: string;
   milestoneIdx: number;
   myVote: string | null;
+  milestoneStatus?: string;
 }
 export interface StopFundingView {
   id: string;
@@ -731,7 +734,7 @@ export interface ActiveStopFunding extends StopFundingView {
 }
 export const milestonesApi = {
   forProposal: (proposalId: string) => request<MilestoneView[]>(`/proposals/${proposalId}/milestones`),
-  myAssignments: () => request<MilestoneAssignmentView[]>('/me/assignments/milestone'),
+  myAssignments: (history = false) => request<MilestoneAssignmentView[]>(`/me/assignments/milestone${history ? '?history=1' : ''}`),
   submitPoa: (milestoneId: string, contentMd: string) =>
     request<unknown>(`/milestones/${milestoneId}/poa`, { method: 'POST', body: JSON.stringify({ contentMd }) }),
   vote: (milestoneId: string, choice: 'YES' | 'NO', rationale?: string) =>

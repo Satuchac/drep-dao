@@ -6,14 +6,14 @@ import { BackButton } from './round-ui';
 import { ProposalDetail } from './proposal-detail';
 
 /** §7 — a DRep's filtering review assignments, with a full rationale editor + the proposal. */
-export function FilteringPanel() {
+export function FilteringPanel({ history = false }: { history?: boolean }) {
   const [assignments, setAssignments] = useState<FilterAssignment[]>([]);
   // When a proposal is opened, we show ONLY that one (its detail + its own vote box),
   // not the other assignments — a reviewer votes on one proposal at a time.
   const [openId, setOpenId] = useState<string | null>(null);
   const load = useCallback(() => {
-    filteringApi.myAssignments().then(setAssignments).catch(() => setAssignments([]));
-  }, []);
+    filteringApi.myAssignments(history).then(setAssignments).catch(() => setAssignments([]));
+  }, [history]);
   useEffect(load, [load]);
 
   if (assignments.length === 0) return null;
@@ -21,7 +21,7 @@ export function FilteringPanel() {
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-      <h3 className="text-base font-semibold">Filtering — your assignments ({assignments.length})</h3>
+      <h3 className="text-base font-semibold">Filtering — {history ? 'all past assignments' : 'your assignments'} ({assignments.length})</h3>
       <p className="text-xs text-neutral-500">1 person = 1 vote · a NO requires a written rationale. Rationale supports Markdown.</p>
       {openRow ? (
         <div className="mt-3">

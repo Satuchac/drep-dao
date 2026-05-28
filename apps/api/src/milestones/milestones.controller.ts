@@ -1,5 +1,5 @@
 import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
@@ -55,8 +55,8 @@ export class MilestonesController {
   // ---- reviewer / submitter ----
   @UseGuards(JwtAuthGuard)
   @Get('me/assignments/milestone')
-  mine(@CurrentUser() ctx: AuthContext) {
-    return this.milestones.myAssignments(ctx.userId);
+  mine(@CurrentUser() ctx: AuthContext, @Query('history') history?: string) {
+    return this.milestones.myAssignments(ctx.userId, history === '1' || history === 'true');
   }
 
   @UseGuards(JwtAuthGuard)

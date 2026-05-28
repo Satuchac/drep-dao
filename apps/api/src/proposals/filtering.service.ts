@@ -87,14 +87,19 @@ export class FilteringService {
     return this.result(proposalId);
   }
 
-  async myAssignments(userId: string) {
+  async myAssignments(userId: string, history = false) {
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
     if (!drep) return [];
+    // Default view: only proposals still open for filtering — a decided one (REJECTED /
+    // advanced) is no longer actionable, so it shouldn't sit in the reviewer's to-do
+    // list. `history=true` returns ALL of the reviewer's past filtering assignments so
+    // they can recall how they voted on a closed round's proposals.
     const assignments = await this.prisma.filterAssignment.findMany({
-      // Only proposals still open for filtering — a decided one (REJECTED / advanced) is no
-      // longer actionable, so it shouldn't sit in the reviewer's to-do list.
-      where: { drepId: drep.id, releasedAt: null, proposal: { stage: ProposalStage.FILTERING, status: ProposalStatus.ACTIVE } },
+      where: history
+        ? { drepId: drep.id }
+        : { drepId: drep.id, releasedAt: null, proposal: { stage: ProposalStage.FILTERING, status: ProposalStatus.ACTIVE } },
       include: { proposal: { select: { id: true, title: true, status: true, stage: true } } },
+      orderBy: { assignedAt: 'desc' },
     });
     const myVotes = await this.prisma.vote.findMany({
       where: { drepId: drep.id, phase: VotePhase.FILTERING, proposalId: { in: assignments.map((a) => a.proposalId) } },
@@ -103,6 +108,8 @@ export class FilteringService {
       proposalId: a.proposalId,
       title: a.proposal.title,
       myVote: myVotes.find((v) => v.proposalId === a.proposalId)?.choice ?? null,
+      proposalStatus: a.proposal.status,
+      proposalStage: a.proposal.stage,
     }));
   }
 

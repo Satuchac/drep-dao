@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { FilteringService } from './filtering.service';
@@ -15,8 +15,8 @@ export class FilteringController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me/assignments/filter')
-  mine(@CurrentUser() ctx: AuthContext) {
-    return this.filtering.myAssignments(ctx.userId);
+  mine(@CurrentUser() ctx: AuthContext, @Query('history') history?: string) {
+    return this.filtering.myAssignments(ctx.userId, history === '1' || history === 'true');
   }
 
   // Count of items awaiting this user in the "Voting & reviews" tab (filtering + D&V + milestone).
