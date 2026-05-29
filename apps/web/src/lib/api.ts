@@ -571,11 +571,22 @@ export interface VoteRationale {
   weight?: number;
 }
 export interface FilterAssignee {
+  drepId: string;
   drep: string | null;
   displayName: string | null;
   voted: boolean;
   choice: string | null;
   expertiseMatch: boolean;
+}
+export interface FilterCandidate {
+  drepId: string;
+  drepIdOnchain: string;
+  displayName: string | null;
+  subcategoryIds: string[];
+  expertiseMatch: boolean;
+  loadInRound: number;
+  alreadyAssigned: boolean;
+  alreadyVoted: boolean;
 }
 export interface FilterResult {
   reviewers: number;
@@ -609,6 +620,16 @@ export const boardProposalsApi = {
     request<ProposalDetail>(`/admin/proposals/${id}/review-fee`, { method: 'POST', body: JSON.stringify({ decision, feedback }) }),
   drawReviewers: (id: string) =>
     request<FilterResult>(`/admin/proposals/${id}/draw-reviewers`, { method: 'POST' }),
+  // §7.1 — list candidate DReps for the board's "Change reviewer" picker.
+  filterCandidates: (id: string) =>
+    request<FilterCandidate[]>(`/admin/proposals/${id}/filter-candidates`),
+  // §7.1 — swap one assigned filtering reviewer for another (blocked if the old
+  // reviewer has already voted).
+  replaceFilterReviewer: (id: string, oldDrepId: string, newDrepId: string) =>
+    request<FilterResult>(`/admin/proposals/${id}/replace-reviewer`, {
+      method: 'POST',
+      body: JSON.stringify({ oldDrepId, newDrepId }),
+    }),
   openDvVote: (id: string) =>
     request<DvResult>(`/admin/proposals/${id}/open-dv-vote`, { method: 'POST' }),
   finalizeDv: (id: string) =>

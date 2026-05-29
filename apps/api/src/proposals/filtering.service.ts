@@ -318,6 +318,7 @@ export class FilteringService {
     const propSubs = new Set(proposal?.subcategoryIds ?? []);
     // §7.1 — who is assigned, whether they've voted yet, and if they matched the expertise.
     const assigned = assignments.map((a) => ({
+      drepId: a.drepId, // internal UUID — used by the board's "Change" action
       drep: a.drep.drepIdOnchain,
       displayName: a.drep.user?.displayName ?? null,
       voted: choiceByDrep.has(a.drepId),
@@ -337,5 +338,138 @@ export class FilteringService {
       anchorTxHash: anchor?.txHash ?? null,
       anchorHash: anchor?.hash ?? null,
     };
+  }
+
+  /**
+   * §7.1 — board view: every admitted DRep eligible to filter this proposal, with
+   * (a) expertise overlap with the proposal's subcategories, (b) the DRep's load
+   * across the round so far (how many filterings they're already on), (c) whether
+   * they're currently assigned to THIS proposal, and (d) whether they've already
+   * voted (vote is final — can't be reassigned). The submitter is excluded. Used
+   * by the board's "Change reviewer" picker on the proposal page.
+   */
+  async candidates(proposalId: string) {
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      select: { id: true, subcategoryIds: true, submitterDrepId: true, roundId: true },
+    });
+    if (!proposal) throw new NotFoundException('proposal not found');
+
+    const eligible = await this.prisma.roundDrepEligibility.findMany({
+      where: { roundId: proposal.roundId ?? undefined, drep: { status: 'ADMITTED' } },
+      include: { drep: { select: { id: true, drepIdOnchain: true, subcategoryIds: true, user: { select: { displayName: true } } } } },
+    });
+
+    // Load count = how many filtering assignments the DRep has across the round.
+    const roundProposalIds = (await this.prisma.proposal.findMany({
+      where: { roundId: proposal.roundId ?? undefined },
+      select: { id: true },
+    })).map((p) => p.id);
+    const loadRows = await this.prisma.filterAssignment.groupBy({
+      by: ['drepId'],
+      where: { proposalId: { in: roundProposalIds }, releasedAt: null },
+      _count: { _all: true },
+    });
+    const load = new Map(loadRows.map((r) => [r.drepId, r._count._all]));
+
+    // Currently-assigned + voted state for THIS proposal only.
+    const active = await this.prisma.filterAssignment.findMany({
+      where: { proposalId, releasedAt: null },
+      select: { drepId: true },
+    });
+    const activeSet = new Set(active.map((a) => a.drepId));
+    const votes = await this.prisma.vote.findMany({
+      where: { proposalId, phase: VotePhase.FILTERING },
+      select: { drepId: true },
+    });
+    const votedSet = new Set(votes.map((v) => v.drepId));
+
+    const propSubs = new Set(proposal.subcategoryIds ?? []);
+    const out = eligible
+      .filter((e) => e.drepId !== proposal.submitterDrepId)
+      .map((e) => {
+        const match = propSubs.size > 0 && e.drep.subcategoryIds.some((s) => propSubs.has(s));
+        return {
+          drepId: e.drep.id,
+          drepIdOnchain: e.drep.drepIdOnchain,
+          displayName: e.drep.user?.displayName ?? null,
+          subcategoryIds: e.drep.subcategoryIds,
+          expertiseMatch: !!match,
+          loadInRound: load.get(e.drep.id) ?? 0,
+          alreadyAssigned: activeSet.has(e.drep.id),
+          alreadyVoted: votedSet.has(e.drep.id),
+        };
+      })
+      .sort((a, b) =>
+        Number(b.expertiseMatch) - Number(a.expertiseMatch) ||
+        a.loadInRound - b.loadInRound ||
+        (a.displayName ?? '').localeCompare(b.displayName ?? ''),
+      );
+    return out;
+  }
+
+  /**
+   * §7.1 — board swaps one assigned reviewer for another on a proposal still in
+   * FILTERING. Gated: the old reviewer must currently be assigned AND must not
+   * have voted yet (a cast vote is final); the new DRep must be eligible for the
+   * round, not the submitter, and not already on this proposal. Soft-releases the
+   * old assignment (`releasedAt = now`, `replacedBy = newDrepId`) and creates a
+   * fresh assignment for the new DRep.
+   */
+  async replaceReviewer(proposalId: string, oldDrepId: string, newDrepId: string, _userId: string) {
+    void _userId;
+    if (oldDrepId === newDrepId) {
+      throw new BadRequestException('the replacement DRep must be different');
+    }
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      select: { id: true, status: true, stage: true, roundId: true, submitterDrepId: true },
+    });
+    if (!proposal) throw new NotFoundException('proposal not found');
+    if (proposal.stage !== ProposalStage.FILTERING || proposal.status !== ProposalStatus.ACTIVE) {
+      throw new ConflictException('proposal is not in the FILTERING stage');
+    }
+
+    const oldAssignment = await this.prisma.filterAssignment.findFirst({
+      where: { proposalId, drepId: oldDrepId, releasedAt: null },
+    });
+    if (!oldAssignment) {
+      throw new ConflictException('that DRep is not currently assigned to this proposal');
+    }
+    // Vote is final — can't swap a reviewer who's already cast it.
+    const alreadyVoted = await this.prisma.vote.findFirst({
+      where: { proposalId, drepId: oldDrepId, phase: VotePhase.FILTERING },
+    });
+    if (alreadyVoted) {
+      throw new ConflictException('this reviewer has already voted — their vote is final and cannot be replaced');
+    }
+    // The replacement must be eligible for the round + not the submitter + not already on this proposal.
+    if (newDrepId === proposal.submitterDrepId) {
+      throw new BadRequestException('the submitter cannot review their own proposal');
+    }
+    const eligibleRow = await this.prisma.roundDrepEligibility.findUnique({
+      where: { roundId_drepId: { roundId: proposal.roundId!, drepId: newDrepId } },
+      include: { drep: { select: { status: true } } },
+    });
+    if (!eligibleRow || eligibleRow.drep.status !== 'ADMITTED') {
+      throw new BadRequestException('replacement is not an admitted DRep eligible for this round');
+    }
+    const conflict = await this.prisma.filterAssignment.findFirst({
+      where: { proposalId, drepId: newDrepId, releasedAt: null },
+    });
+    if (conflict) {
+      throw new BadRequestException('that DRep is already assigned to this proposal');
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.filterAssignment.update({
+        where: { id: oldAssignment.id },
+        data: { releasedAt: new Date(), replacedBy: newDrepId },
+      }),
+      this.prisma.filterAssignment.create({
+        data: { proposalId, drepId: newDrepId, acceptedAt: new Date() },
+      }),
+    ]);
+    return this.result(proposalId);
   }
 }

@@ -1,9 +1,15 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { IsUUID } from 'class-validator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { ProposalsService } from './proposals.service';
 import { ReviewFeeDto, ReviewPledgeDto, SettlePaymentDto } from './dto';
+
+export class ReplaceReviewerDto {
+  @IsUUID() oldDrepId!: string;
+  @IsUUID() newDrepId!: string;
+}
 import { FilteringService } from './filtering.service';
 import { DvService } from './dv.service';
 
@@ -59,6 +65,24 @@ export class AdminProposalsController {
   @Post(':id/draw-reviewers')
   drawReviewers(@Param('id', ParseUUIDPipe) id: string) {
     return this.filtering.drawReviewers(id);
+  }
+
+  // §7.1 — board's "Change reviewer" picker on a proposal in FILTERING. Returns
+  // every eligible DRep with expertise + load + alreadyAssigned/alreadyVoted flags.
+  @Get(':id/filter-candidates')
+  filterCandidates(@Param('id', ParseUUIDPipe) id: string) {
+    return this.filtering.candidates(id);
+  }
+
+  // §7.1 — board swaps one filtering reviewer for another (blocked if the old
+  // reviewer has already cast a vote).
+  @Post(':id/replace-reviewer')
+  replaceReviewer(
+    @CurrentUser() ctx: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ReplaceReviewerDto,
+  ) {
+    return this.filtering.replaceReviewer(id, dto.oldDrepId, dto.newDrepId, ctx.userId);
   }
 
   // §4.3/§8 — snapshot voting power and open D&V voting.

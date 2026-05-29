@@ -25,6 +25,7 @@ import {
   type StopFundingView,
   type CommentNode,
   type FilterResult,
+  type FilterCandidate,
   type DvResult,
 } from '@/lib/api';
 import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, RationaleText } from './round-ui';
@@ -471,6 +472,10 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
   const [roundStatus, setRoundStatus] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [drawError, setDrawError] = useState<string | null>(null);
+  // §7.1 — which assigned reviewer the board is currently swapping (UUID of the
+  // old DRep); null = no picker open. The ChangeReviewerPicker fetches candidates
+  // when shown and calls boardProposalsApi.replaceFilterReviewer on click.
+  const [changingDrepId, setChangingDrepId] = useState<string | null>(null);
   const load = useCallback(() => {
     filteringApi.result(id).then(setR).catch(() => setR(null));
   }, [id]);
@@ -554,22 +559,44 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
         <ul className="mt-2 space-y-1.5">
           {r.assigned.map((a, i) => {
             const rationale = a.drep ? rationaleByDrep.get(a.drep) : null;
+            // Board can replace a reviewer who hasn't cast a vote yet AND while the
+            // proposal is still actively in FILTERING (not after the decision).
+            const canChange = isBoard && !a.voted && inFilteringStage;
             return (
               <li key={i} className="rounded border border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <span className="flex items-center gap-1.5">
                     <span className="font-medium">{a.displayName ?? (a.drep ? `${a.drep.slice(0, 16)}…` : 'DRep')}</span>
                     {a.expertiseMatch ? (
-                      <span className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title="matched the proposal's expertise areas">expertise</span>
+                      <span className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title="matched the proposal's expertise areas">⭐ expertise</span>
+                    ) : (
+                      <span className="rounded bg-neutral-200 px-1 py-0.5 text-[10px] text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300" title="no expertise overlap with the proposal's categories — picked at random">random pick</span>
+                    )}
+                  </span>
+                  <span className="flex items-center gap-2">
+                    {a.voted ? (
+                      <span className={`font-semibold ${choiceCls[a.choice ?? ''] ?? ''}`}>{a.choice}</span>
+                    ) : (
+                      // §5 — "pending" only while filtering is open; otherwise the reviewer simply didn't vote.
+                      <span className="text-amber-600">{open ? 'pending' : 'not voted'}</span>
+                    )}
+                    {canChange ? (
+                      <button
+                        onClick={() => setChangingDrepId(changingDrepId === a.drepId ? null : a.drepId)}
+                        className="rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                      >
+                        {changingDrepId === a.drepId ? 'Cancel' : 'Change'}
+                      </button>
                     ) : null}
                   </span>
-                  {a.voted ? (
-                    <span className={`font-semibold ${choiceCls[a.choice ?? ''] ?? ''}`}>{a.choice}</span>
-                  ) : (
-                    // §5 — "pending" only while filtering is open; otherwise the reviewer simply didn't vote.
-                    <span className="text-amber-600">{open ? 'pending' : 'not voted'}</span>
-                  )}
                 </div>
+                {changingDrepId === a.drepId ? (
+                  <ChangeReviewerPicker
+                    proposalId={id}
+                    oldDrepId={a.drepId}
+                    onDone={() => { setChangingDrepId(null); load(); }}
+                  />
+                ) : null}
                 <RationaleText text={rationale} />
               </li>
             );
@@ -591,6 +618,64 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
         <div className="mt-2 text-xs text-neutral-400">No reviewers drawn yet.</div>
       )}
     </section>
+  );
+}
+
+/**
+ * §7.1 — board's inline reviewer picker. Lazily fetches the candidate list (every
+ * eligible DRep with expertise + load + alreadyAssigned/alreadyVoted flags),
+ * sorts expertise-matched first, then by load; clicking a row calls
+ * `replaceFilterReviewer` and bubbles the refresh.
+ */
+function ChangeReviewerPicker({ proposalId, oldDrepId, onDone }: { proposalId: string; oldDrepId: string; onDone: () => void }) {
+  const [cands, setCands] = useState<FilterCandidate[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    boardProposalsApi.filterCandidates(proposalId).then(setCands).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
+  }, [proposalId]);
+
+  const pick = async (newDrepId: string) => {
+    setBusy(true); setError(null);
+    try { await boardProposalsApi.replaceFilterReviewer(proposalId, oldDrepId, newDrepId); onDone(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'failed'); }
+    finally { setBusy(false); }
+  };
+
+  if (!cands) return <div className="mt-1.5 text-[11px] text-neutral-500">{error ?? 'Loading candidates…'}</div>;
+  const pickable = cands.filter((c) => !c.alreadyAssigned && !c.alreadyVoted);
+  if (pickable.length === 0) {
+    return <div className="mt-1.5 text-[11px] text-amber-700">No other eligible DReps available — every other admitted reviewer is already assigned or has voted on this proposal.</div>;
+  }
+  return (
+    <div className="mt-2 rounded-md border border-neutral-200 bg-neutral-50 p-2 text-xs dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="mb-1 text-[11px] text-neutral-500">Pick a replacement (expertise-matched first, then equal participation):</div>
+      <ul className="max-h-56 space-y-0.5 overflow-y-auto">
+        {pickable.map((c) => (
+          <li key={c.drepId} className="flex items-center justify-between gap-2 rounded border border-neutral-200 px-2 py-1 dark:border-neutral-800">
+            <span className="flex items-center gap-1.5">
+              <span className="font-medium">{c.displayName ?? `${c.drepIdOnchain.slice(0, 16)}…`}</span>
+              {c.expertiseMatch ? (
+                <span title="Subcategory overlap with the proposal" className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">⭐ expertise</span>
+              ) : (
+                <span title="No expertise overlap — would be a random pick" className="rounded bg-neutral-200 px-1 py-0.5 text-[10px] text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">random pick</span>
+              )}
+            </span>
+            <span className="flex items-center gap-2">
+              <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] tabular-nums text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">load {c.loadInRound}</span>
+              <button
+                onClick={() => pick(c.drepId)}
+                disabled={busy}
+                className="rounded border border-emerald-500 px-1.5 py-0.5 text-[11px] text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
+              >
+                {busy ? '…' : 'Assign'}
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+      {error ? <div className="mt-1 text-xs text-red-600">{error}</div> : null}
+    </div>
   );
 }
 
