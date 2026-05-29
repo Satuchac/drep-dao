@@ -69,9 +69,11 @@ export class AdminProposalsController {
 
   // §7.1 — board's "Change reviewer" picker on a proposal in FILTERING. Returns
   // every eligible DRep with expertise + load + alreadyAssigned/alreadyVoted flags.
+  // With ?all=1 also includes admitted DReps NOT in this round's eligibility —
+  // picking one auto-adds them to the round on assignment.
   @Get(':id/filter-candidates')
-  filterCandidates(@Param('id', ParseUUIDPipe) id: string) {
-    return this.filtering.candidates(id);
+  filterCandidates(@Param('id', ParseUUIDPipe) id: string, @Query('all') all?: string) {
+    return this.filtering.candidates(id, { includeOutsideRound: all === '1' || all === 'true' });
   }
 
   // §7.1 — board swaps one filtering reviewer for another (blocked if the old

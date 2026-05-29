@@ -587,6 +587,9 @@ export interface FilterCandidate {
   loadInRound: number;
   alreadyAssigned: boolean;
   alreadyVoted: boolean;
+  /** False = DRep is admitted but not yet in this round's eligibility list;
+   *  picking them on assignment auto-adds them to the round. */
+  inRound: boolean;
 }
 export interface FilterResult {
   reviewers: number;
@@ -621,8 +624,11 @@ export const boardProposalsApi = {
   drawReviewers: (id: string) =>
     request<FilterResult>(`/admin/proposals/${id}/draw-reviewers`, { method: 'POST' }),
   // §7.1 — list candidate DReps for the board's "Change reviewer" picker.
-  filterCandidates: (id: string) =>
-    request<FilterCandidate[]>(`/admin/proposals/${id}/filter-candidates`),
+  // `all=true` also includes admitted DReps outside this round's eligibility
+  // list (each carries `inRound: false`); picking them auto-adds them to the
+  // round on assignment.
+  filterCandidates: (id: string, all = false) =>
+    request<FilterCandidate[]>(`/admin/proposals/${id}/filter-candidates${all ? '?all=1' : ''}`),
   // §7.1 — swap one assigned filtering reviewer for another (blocked if the old
   // reviewer has already voted).
   replaceFilterReviewer: (id: string, oldDrepId: string, newDrepId: string) =>

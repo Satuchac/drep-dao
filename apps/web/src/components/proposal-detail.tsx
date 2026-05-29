@@ -638,11 +638,15 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
  */
 function ChangeReviewerPicker({ proposalId, oldDrepId, onDone }: { proposalId: string; oldDrepId: string; onDone: () => void }) {
   const [cands, setCands] = useState<FilterCandidate[] | null>(null);
+  const [showAll, setShowAll] = useState(false); // include admitted DReps outside this round's eligibility
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    boardProposalsApi.filterCandidates(proposalId).then(setCands).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
-  }, [proposalId]);
+    setCands(null);
+    boardProposalsApi.filterCandidates(proposalId, showAll)
+      .then(setCands)
+      .catch((e) => setError(e instanceof Error ? e.message : 'failed'));
+  }, [proposalId, showAll]);
 
   const pick = async (newDrepId: string) => {
     setBusy(true); setError(null);
@@ -653,36 +657,54 @@ function ChangeReviewerPicker({ proposalId, oldDrepId, onDone }: { proposalId: s
 
   if (!cands) return <div className="mt-1.5 text-[11px] text-neutral-500">{error ?? 'Loading candidates…'}</div>;
   const pickable = cands.filter((c) => !c.alreadyAssigned && !c.alreadyVoted);
-  if (pickable.length === 0) {
-    return <div className="mt-1.5 text-[11px] text-amber-700">No other eligible DReps available — every other admitted reviewer is already assigned or has voted on this proposal.</div>;
-  }
   return (
     <div className="mt-2 rounded-md border border-neutral-200 bg-neutral-50 p-2 text-xs dark:border-neutral-800 dark:bg-neutral-900">
-      <div className="mb-1 text-[11px] text-neutral-500">Pick a replacement (expertise-matched first, then equal participation):</div>
-      <ul className="max-h-56 space-y-0.5 overflow-y-auto">
-        {pickable.map((c) => (
-          <li key={c.drepId} className="flex items-center justify-between gap-2 rounded border border-neutral-200 px-2 py-1 dark:border-neutral-800">
-            <span className="flex items-center gap-1.5">
-              <span className="font-medium">{c.displayName ?? `${c.drepIdOnchain.slice(0, 16)}…`}</span>
-              {c.expertiseMatch ? (
-                <span title="Subcategory overlap with the proposal" className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">⭐ expertise</span>
-              ) : (
-                <span title="No expertise overlap — would be a random pick" className="rounded bg-neutral-200 px-1 py-0.5 text-[10px] text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">random pick</span>
-              )}
-            </span>
-            <span className="flex items-center gap-2">
-              <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] tabular-nums text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">load {c.loadInRound}</span>
-              <button
-                onClick={() => pick(c.drepId)}
-                disabled={busy}
-                className="rounded border border-emerald-500 px-1.5 py-0.5 text-[11px] text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
-              >
-                {busy ? '…' : 'Assign'}
-              </button>
-            </span>
-          </li>
-        ))}
-      </ul>
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[11px] text-neutral-500">
+          {showAll
+            ? 'Pick a replacement (in-round first, then expertise-matched, then equal participation):'
+            : 'Pick a replacement (expertise-matched first, then equal participation):'}
+        </span>
+        <button
+          type="button"
+          onClick={() => setShowAll((v) => !v)}
+          className="rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          title={showAll ? 'Show only DReps already eligible for this round' : 'Show every admitted DRep in the DAO; picking one outside the round auto-adds them to it'}
+        >
+          {showAll ? '↩ Show round-eligible only' : '🌐 Show all admitted DReps'}
+        </button>
+      </div>
+      {pickable.length === 0 ? (
+        <div className="text-[11px] text-amber-700">No other DReps available — every other admitted reviewer is already assigned or has voted on this proposal.{!showAll ? ' Click "Show all admitted DReps" above to broaden the search.' : ''}</div>
+      ) : (
+        <ul className="max-h-72 space-y-0.5 overflow-y-auto">
+          {pickable.map((c) => (
+            <li key={c.drepId} className="flex items-center justify-between gap-2 rounded border border-neutral-200 px-2 py-1 dark:border-neutral-800">
+              <span className="flex items-center gap-1.5">
+                <span className="font-medium">{c.displayName ?? `${c.drepIdOnchain.slice(0, 16)}…`}</span>
+                {c.expertiseMatch ? (
+                  <span title="Subcategory overlap with the proposal" className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">⭐ expertise</span>
+                ) : (
+                  <span title="No expertise overlap — would be a random pick" className="rounded bg-neutral-200 px-1 py-0.5 text-[10px] text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">random pick</span>
+                )}
+                {!c.inRound ? (
+                  <span title="Not in this round's eligibility yet; will be added on assignment" className="rounded bg-amber-100 px-1 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950 dark:text-amber-300">not in round (auto-add)</span>
+                ) : null}
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] tabular-nums text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">load {c.loadInRound}</span>
+                <button
+                  onClick={() => pick(c.drepId)}
+                  disabled={busy}
+                  className="rounded border border-emerald-500 px-1.5 py-0.5 text-[11px] text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                >
+                  {busy ? '…' : 'Assign'}
+                </button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       {error ? <div className="mt-1 text-xs text-red-600">{error}</div> : null}
     </div>
   );

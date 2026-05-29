@@ -16,6 +16,7 @@ import {
   VotingType,
 } from '@drep-dao/shared';
 import { GovSubject, VotingStyle } from '@drep-dao/cardano';
+import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnchorService } from '../cardano/anchor.service';
 
@@ -348,7 +349,13 @@ export class FilteringService {
    * voted (vote is final — can't be reassigned). The submitter is excluded. Used
    * by the board's "Change reviewer" picker on the proposal page.
    */
-  async candidates(proposalId: string) {
+  /**
+   * §7.1 — board view. Default = every admitted DRep eligible for the round.
+   * With `{ includeOutsideRound: true }` the result also includes admitted DReps
+   * NOT yet in this round's eligibility (each carries `inRound: false`); picking
+   * one auto-adds them to the round on assignment (see replaceReviewer).
+   */
+  async candidates(proposalId: string, options: { includeOutsideRound?: boolean } = {}) {
     const proposal = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
       select: { id: true, subcategoryIds: true, submitterDrepId: true, roundId: true },
@@ -359,6 +366,15 @@ export class FilteringService {
       where: { roundId: proposal.roundId ?? undefined, drep: { status: 'ADMITTED' } },
       include: { drep: { select: { id: true, drepIdOnchain: true, subcategoryIds: true, user: { select: { displayName: true } } } } },
     });
+    // The full set of admitted DReps in the DAO, when the board wants to pick one
+    // who is not yet in this round's eligibility list.
+    const eligibleSet = new Set(eligible.map((e) => e.drepId));
+    const outside = options.includeOutsideRound
+      ? await this.prisma.drep.findMany({
+          where: { status: 'ADMITTED', id: { notIn: [...eligibleSet] } },
+          select: { id: true, drepIdOnchain: true, subcategoryIds: true, user: { select: { displayName: true } } },
+        })
+      : [];
 
     // Load count = how many filtering assignments the DRep has across the round.
     const roundProposalIds = (await this.prisma.proposal.findMany({
@@ -385,7 +401,7 @@ export class FilteringService {
     const votedSet = new Set(votes.map((v) => v.drepId));
 
     const propSubs = new Set(proposal.subcategoryIds ?? []);
-    const out = eligible
+    const inRoundRows = eligible
       .filter((e) => e.drepId !== proposal.submitterDrepId)
       .map((e) => {
         const match = propSubs.size > 0 && e.drep.subcategoryIds.some((s) => propSubs.has(s));
@@ -398,13 +414,32 @@ export class FilteringService {
           loadInRound: load.get(e.drep.id) ?? 0,
           alreadyAssigned: activeSet.has(e.drep.id),
           alreadyVoted: votedSet.has(e.drep.id),
+          inRound: true,
         };
-      })
-      .sort((a, b) =>
-        Number(b.expertiseMatch) - Number(a.expertiseMatch) ||
-        a.loadInRound - b.loadInRound ||
-        (a.displayName ?? '').localeCompare(b.displayName ?? ''),
-      );
+      });
+    const outsideRows = outside
+      .filter((d) => d.id !== proposal.submitterDrepId)
+      .map((d) => {
+        const match = propSubs.size > 0 && d.subcategoryIds.some((s) => propSubs.has(s));
+        return {
+          drepId: d.id,
+          drepIdOnchain: d.drepIdOnchain,
+          displayName: d.user?.displayName ?? null,
+          subcategoryIds: d.subcategoryIds,
+          expertiseMatch: !!match,
+          loadInRound: 0,
+          alreadyAssigned: false,
+          alreadyVoted: false,
+          inRound: false,
+        };
+      });
+    const out = [...inRoundRows, ...outsideRows].sort((a, b) =>
+      // In-round first, then expertise-matched first, then least-drawn, then by name.
+      Number(b.inRound) - Number(a.inRound) ||
+      Number(b.expertiseMatch) - Number(a.expertiseMatch) ||
+      a.loadInRound - b.loadInRound ||
+      (a.displayName ?? '').localeCompare(b.displayName ?? ''),
+    );
     return out;
   }
 
@@ -443,17 +478,20 @@ export class FilteringService {
     if (alreadyVoted) {
       throw new ConflictException('this reviewer has already voted — their vote is final and cannot be replaced');
     }
-    // The replacement must be eligible for the round + not the submitter + not already on this proposal.
+    // The replacement must be an admitted DRep + not the submitter + not already on this proposal.
     if (newDrepId === proposal.submitterDrepId) {
       throw new BadRequestException('the submitter cannot review their own proposal');
     }
+    const newDrep = await this.prisma.drep.findUnique({
+      where: { id: newDrepId },
+      select: { id: true, status: true },
+    });
+    if (!newDrep || newDrep.status !== 'ADMITTED') {
+      throw new BadRequestException('replacement is not an admitted DRep');
+    }
     const eligibleRow = await this.prisma.roundDrepEligibility.findUnique({
       where: { roundId_drepId: { roundId: proposal.roundId!, drepId: newDrepId } },
-      include: { drep: { select: { status: true } } },
     });
-    if (!eligibleRow || eligibleRow.drep.status !== 'ADMITTED') {
-      throw new BadRequestException('replacement is not an admitted DRep eligible for this round');
-    }
     const conflict = await this.prisma.filterAssignment.findFirst({
       where: { proposalId, drepId: newDrepId, releasedAt: null },
     });
@@ -461,7 +499,10 @@ export class FilteringService {
       throw new BadRequestException('that DRep is already assigned to this proposal');
     }
 
-    await this.prisma.$transaction([
+    // If the new DRep isn't yet in this round's eligibility list, add them — the
+    // board explicitly chose them, so we widen the round's pool by one. Existing
+    // assignments / votes elsewhere in the round are untouched.
+    const writes: Prisma.PrismaPromise<unknown>[] = [
       this.prisma.filterAssignment.update({
         where: { id: oldAssignment.id },
         data: { releasedAt: new Date(), replacedBy: newDrepId },
@@ -469,7 +510,15 @@ export class FilteringService {
       this.prisma.filterAssignment.create({
         data: { proposalId, drepId: newDrepId, acceptedAt: new Date() },
       }),
-    ]);
+    ];
+    if (!eligibleRow) {
+      writes.push(
+        this.prisma.roundDrepEligibility.create({
+          data: { roundId: proposal.roundId!, drepId: newDrepId },
+        }),
+      );
+    }
+    await this.prisma.$transaction(writes);
     return this.result(proposalId);
   }
 }
