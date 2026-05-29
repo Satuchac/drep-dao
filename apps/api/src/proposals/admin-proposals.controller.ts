@@ -29,6 +29,16 @@ export class AdminProposalsController {
     return this.proposals.listPendingFee();
   }
 
+  // §16 — board's fee-decision history (approved + fee-rejected), paginated.
+  // ?limit=20&offset=0 → newest first; UI uses the count to render a pager.
+  @Get('fee-history')
+  feeHistory(@Query('limit') limit?: string, @Query('offset') offset?: string) {
+    return this.proposals.listFeeHistory(
+      limit ? Number(limit) : undefined,
+      offset ? Number(offset) : undefined,
+    );
+  }
+
   // Approve (→ ACTIVE/Filtering) or reject (→ REJECTED, reason required) the submission fee.
   @Post(':id/review-fee')
   reviewFee(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewFeeDto) {

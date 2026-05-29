@@ -162,7 +162,7 @@ function ActionsTab() {
       </div>
       <BoardActions history={showHistory} />
       <StopFundingBoardPanel />
-      <FeeConfirmations />
+      <FeeConfirmations history={showHistory} />
       <PledgeConfirmations />
       <BoardPayments history={showHistory} />
       <EmptyHint text={showHistory ? 'No actions — past or present.' : 'Nothing to do right now.'} />

@@ -35,7 +35,10 @@ export function ProposalSubmit() {
   const [content, setContent] = useState('');
   const [amount, setAmount] = useState(50000);
   const [commercial, setCommercial] = useState(false);
-  const [ms, setMs] = useState<ProposalMilestoneInput[]>([{ title: '', description: '', acceptanceCriteria: '', amountAda: 50000 }]);
+  // Milestone amounts start empty (0) — the team must enter them explicitly so
+  // they don't drift with the requested amount. A subsequent change to
+  // "Requested" won't quietly update the milestone budgets behind the team's back.
+  const [ms, setMs] = useState<ProposalMilestoneInput[]>([{ title: '', description: '', acceptanceCriteria: '', amountAda: 0 }]);
   const [costBreakdown, setCostBreakdown] = useState('');
   const [teamInfo, setTeamInfo] = useState('');
   const [revenueSharing, setRevenueSharing] = useState('');
@@ -186,7 +189,9 @@ export function ProposalSubmit() {
     setPledgeEnabled(false);
     setPledgeAmount(0);
     setPledgeReturnMethod('');
-    setMs([{ title: '', description: '', acceptanceCriteria: '', amountAda: Number(amount) }]);
+    // Milestone amount stays empty after a reset too — don't pre-fill with the
+    // (carried-over) requested amount; the team enters each milestone budget.
+    setMs([{ title: '', description: '', acceptanceCriteria: '', amountAda: 0 }]);
   };
 
   // Load an existing DRAFT into the form for editing (all fields, incl. milestones).
@@ -310,6 +315,16 @@ export function ProposalSubmit() {
   // §12 — once submitted (PENDING), the budget + commercial flag are locked (they set the fee);
   // a budget change then goes through the active proposal's "Request a budget change".
   const amountLocked = editingStatus === 'PENDING';
+
+  // §3 — additional checks that block SUBMIT but not SAVE-AS-DRAFT: payout
+  // address is mandatory to submit (refunds + budget payout go there); when the
+  // round charges a fee, the on-chain check must have come back fully-paid.
+  const submitMissing: string[] = [];
+  if (!payoutAddress.trim()) submitMissing.push('add a payout / refund address (Cardano)');
+  if (feeRequired && !feeVerification?.fullyPaid) {
+    submitMissing.push('verify the submission-fee payment on-chain (paste the tx hash, click Verify, and wait for the ✓)');
+  }
+  const submitReady = draftReady && submitMissing.length === 0;
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
@@ -652,16 +667,21 @@ export function ProposalSubmit() {
           {/* What's still missing before this can be saved/submitted (so a disabled button is never a mystery). */}
           {!draftReady ? (
             <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-              <div className="font-medium">Still needed before you can submit or save:</div>
+              <div className="font-medium">Still needed before you can save the draft (and submit):</div>
               <ul className="mt-0.5 list-disc pl-4">
                 {draftMissing.map((m) => (
                   <li key={m}>{m}</li>
                 ))}
               </ul>
             </div>
-          ) : feeRequired && !fee.trim() ? (
-            <div className="text-xs text-neutral-500">
-              Ready to save as a draft. To <strong>submit</strong>, also paste the submission-fee transaction hash above.
+          ) : submitMissing.length > 0 ? (
+            <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+              <div className="font-medium">Ready to save as a draft. Still needed before you can <strong>submit</strong>:</div>
+              <ul className="mt-0.5 list-disc pl-4">
+                {submitMissing.map((m) => (
+                  <li key={m}>{m}</li>
+                ))}
+              </ul>
             </div>
           ) : null}
           {/* §3 — privacy + the two ways out of the form. */}
@@ -677,7 +697,12 @@ export function ProposalSubmit() {
               </button>
             ) : (
               <>
-                <button type="submit" disabled={busy || !draftReady || (feeRequired && !fee.trim())} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+                <button
+                  type="submit"
+                  disabled={busy || !submitReady}
+                  title={submitMissing.length > 0 ? `Still needed: ${submitMissing.join(' · ')}` : undefined}
+                  className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
                   {busy ? 'Working…' : editingStatus === 'REJECTED' ? 'Re-submit' : feeRequired ? 'Submit' : 'Submit (no fee)'}
                 </button>
                 <button type="button" onClick={saveDraft} disabled={busy || !draftReady} className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800">

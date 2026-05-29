@@ -1,16 +1,24 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { boardFeeApi, boardProposalsApi, type PendingFee } from '@/lib/api';
+import { boardFeeApi, boardProposalsApi, type FeeHistoryPage, type PendingFee } from '@/lib/api';
 import { useExplorer } from '@/lib/explorer';
+import { fmtDateTime } from './round-ui';
+import { useUrlNav } from '@/lib/use-url-nav';
+
+const HISTORY_PAGE = 20;
 
 /**
  * §16 — board reviews submission-fee payments. The submitter pays the fee to the dedicated
  * address and provides the tx hash (they may have entered several — all are shown, each
  * verified on-chain). The reviewer **Approves** (→ Filtering, public) or **Rejects** (→
- * REJECTED) with feedback the submitter sees in a red FEEDBACK box. Self-hides when empty.
+ * REJECTED) with feedback the submitter sees in a red FEEDBACK box.
+ *
+ * With `history` enabled, also renders the **decided** fee reviews (approved + fee-rejected)
+ * with a pager (default 20/page, newest first) — so the board can look back at past
+ * decisions without scrolling the live proposal pages.
  */
-export function FeeConfirmations({ onChange }: { onChange?: () => void }) {
+export function FeeConfirmations({ onChange, history = false }: { onChange?: () => void; history?: boolean }) {
   const [pending, setPending] = useState<PendingFee[]>([]);
 
   const load = useCallback(() => {
@@ -18,21 +26,117 @@ export function FeeConfirmations({ onChange }: { onChange?: () => void }) {
   }, []);
   useEffect(load, [load]);
 
-  if (pending.length === 0) return null;
+  if (pending.length === 0 && !history) return null;
 
   return (
-    <section className="space-y-2 rounded-lg border border-amber-300 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
-      <h3 className="text-base font-semibold">Submission fees to confirm</h3>
-      <p className="text-xs text-neutral-500">
-        The platform checks each fee tx <strong>on-chain</strong> (did the paid amount reach the fee address?).
-        <strong> Approve</strong> to admit the proposal into Filtering (public), or <strong>Reject</strong> with a
-        reason the submitter will see.
-      </p>
-      <ul className="space-y-2">
-        {pending.map((p) => (
-          <PendingFeeRow key={p.id} p={p} onReviewed={() => { load(); onChange?.(); }} />
-        ))}
-      </ul>
+    <>
+      {pending.length > 0 ? (
+        <section className="space-y-2 rounded-lg border border-amber-300 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+          <h3 className="text-base font-semibold">Submission fees to confirm</h3>
+          <p className="text-xs text-neutral-500">
+            The platform checks each fee tx <strong>on-chain</strong> (did the paid amount reach the fee address?).
+            <strong> Approve</strong> to admit the proposal into Filtering (public), or <strong>Reject</strong> with a
+            reason the submitter will see.
+          </p>
+          <ul className="space-y-2">
+            {pending.map((p) => (
+              <PendingFeeRow key={p.id} p={p} onReviewed={() => { load(); onChange?.(); }} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      {history ? <FeeHistory /> : null}
+    </>
+  );
+}
+
+/**
+ * Paginated history of decided fee reviews (approved + fee-rejected). Default
+ * page size is 20 (matches the user's request); pager appears once total > 20.
+ */
+function FeeHistory() {
+  const { setParams } = useUrlNav();
+  const { txUrl } = useExplorer();
+  const [page, setPage] = useState<FeeHistoryPage | null>(null);
+  const [offset, setOffset] = useState(0);
+  useEffect(() => {
+    boardFeeApi.history(HISTORY_PAGE, offset).then(setPage).catch(() => setPage(null));
+  }, [offset]);
+  if (!page) return null;
+
+  const start = page.rows.length === 0 ? 0 : page.offset + 1;
+  const end = page.offset + page.rows.length;
+  const last = Math.floor((page.total - 1) / HISTORY_PAGE) * HISTORY_PAGE;
+
+  return (
+    <section className="space-y-2 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-semibold">Submission-fee history</h3>
+        <span className="text-xs text-neutral-500">
+          {page.total === 0 ? 'No decisions yet.' : `Showing ${start}–${end} of ${page.total}`}
+        </span>
+      </div>
+      {page.rows.length === 0 ? null : (
+        <ul className="space-y-2">
+          {page.rows.map((r) => (
+            <li key={r.id} className={`rounded-md border p-3 text-sm ${
+              r.decision === 'APPROVED'
+                ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20'
+                : 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'
+            }`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <button onClick={() => setParams({ proposal: r.id })} className="font-medium text-emerald-700 hover:underline dark:text-emerald-400">
+                  {r.title}
+                </button>
+                <span className="flex items-center gap-2 text-xs text-neutral-500">
+                  {r.publicId ? <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{r.publicId}</span> : null}
+                  {r.roundNumber != null ? <span>round #{r.roundNumber}</span> : null}
+                  <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${
+                    r.decision === 'APPROVED'
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                      : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
+                  }`}>
+                    {r.decision === 'APPROVED' ? '✓ APPROVED' : '✗ REJECTED'}
+                  </span>
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-neutral-500">
+                fee {r.submissionFeeAda.toLocaleString()} ₳ · {r.isCommercial ? 'commercial' : 'open-source'}
+                {r.submitter ? ` · by ${r.submitter}` : ''}
+                {r.submittedAt ? ` · submitted ${fmtDateTime(r.submittedAt)}` : ''}
+              </div>
+              {r.submissionFeeTxHash ? (
+                <div className="mt-1 text-xs">
+                  <span className="text-neutral-500">tx: </span>
+                  <a href={txUrl(r.submissionFeeTxHash)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">
+                    {r.submissionFeeTxHash} ↗
+                  </a>
+                </div>
+              ) : null}
+              {r.feedback ? (
+                <div className="mt-2 rounded border border-neutral-200 bg-white/60 p-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900/60">
+                  <div className="text-[10px] font-bold uppercase tracking-wide text-neutral-500">
+                    {r.decision === 'APPROVED' ? 'Approval note' : 'Rejection reason'}
+                  </div>
+                  <div className="mt-0.5 whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">{r.feedback}</div>
+                </div>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      {page.total > HISTORY_PAGE ? (
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex gap-1">
+            <button onClick={() => setOffset(0)} disabled={offset === 0} className="rounded border border-neutral-300 px-2 py-0.5 disabled:opacity-40 dark:border-neutral-700">⏮ First</button>
+            <button onClick={() => setOffset(Math.max(0, offset - HISTORY_PAGE))} disabled={offset === 0} className="rounded border border-neutral-300 px-2 py-0.5 disabled:opacity-40 dark:border-neutral-700">◀ Previous</button>
+          </div>
+          <div className="flex gap-1">
+            <button onClick={() => setOffset(Math.min(last, offset + HISTORY_PAGE))} disabled={offset >= last} className="rounded border border-neutral-300 px-2 py-0.5 disabled:opacity-40 dark:border-neutral-700">Next ▶</button>
+            <button onClick={() => setOffset(last)} disabled={offset >= last} className="rounded border border-neutral-300 px-2 py-0.5 disabled:opacity-40 dark:border-neutral-700">Last ⏭</button>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }

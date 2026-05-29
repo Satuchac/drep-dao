@@ -832,8 +832,31 @@ export interface PendingFee {
   // Summary on-chain verification (paid if ANY entered tx covered the fee).
   feeVerified: { found: boolean; paid: boolean; paidAda: number };
 }
+export interface FeeHistoryRow {
+  id: string;
+  publicId: string | null;
+  title: string;
+  roundNumber: number | null;
+  categoryName: string | null;
+  isCommercial: boolean | null;
+  submitter: string | null;
+  submittedAt: string | null;
+  submissionFeeAda: number;
+  submissionFeeTxHash: string | null;
+  decision: 'APPROVED' | 'REJECTED';
+  feedback: string | null;
+}
+export interface FeeHistoryPage {
+  total: number;
+  limit: number;
+  offset: number;
+  rows: FeeHistoryRow[];
+}
 export const boardFeeApi = {
   pending: () => request<PendingFee[]>('/admin/proposals/pending-fee'),
+  // §16 — paginated history of decided fee reviews (approved + fee-rejected).
+  history: (limit = 20, offset = 0) =>
+    request<FeeHistoryPage>(`/admin/proposals/fee-history?limit=${limit}&offset=${offset}`),
 };
 
 // §3 — proposals awaiting board pledge confirmation (in FUNDING, paid on-chain).

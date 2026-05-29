@@ -260,6 +260,12 @@ export class ProposalsService {
    */
   async submit(userId: string, id: string, dto: SubmitProposalDto) {
     const p = await this.ownDraft(userId, id);
+    // §3 — payout / refund address is required to submit (the DAO needs an
+    // address to send fee refunds + the funded budget to). Drafts can be
+    // saved without it; submission can't.
+    if (!p.payoutAddress?.trim()) {
+      throw new BadRequestException('a payout / refund address is required to submit (the DAO needs somewhere to send refunds and the funded budget)');
+    }
     const fee = await this.computeFee(toAda(p.requestedAmountAda), p.isCommercial ?? false, p.roundId);
     if (fee <= 0) {
       // No fee for this proposal type → admit immediately, no board fee confirmation.
@@ -334,16 +340,25 @@ export class ProposalsService {
     if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
     const feeAddress = this.config.get<string>('SUBMISSION_FEE_ADDRESS')
       ?? this.config.get<string>('TREASURY_ADDRESS') ?? '';
-    const requiredAda = toAda(p.submissionFeeAda);
+    // The stored fee only exists once the team has submitted. While the proposal
+    // is still a DRAFT we compute the EXPECTED fee from the form's current state
+    // (requested amount + commercial flag + round settings) so the on-chain
+    // verify is meaningful before submission. Without this, requiredAda would
+    // be 0 and "0 ≥ 0" would falsely report `fullyPaid` for any pasted hash.
+    const requiredAda = p.submissionFeeAda
+      ? toAda(p.submissionFeeAda)
+      : await this.computeFee(toAda(p.requestedAmountAda), p.isCommercial ?? false, p.roundId);
     const hashes = p.submissionFeeTxHashes.length
       ? p.submissionFeeTxHashes
       : (p.submissionFeeTxHash ? [p.submissionFeeTxHash] : []);
-    if (!feeAddress || hashes.length === 0 || !requiredAda) {
+    if (!feeAddress || hashes.length === 0 || requiredAda <= 0) {
       return {
         requiredAda,
         paidAda: 0,
         missingAda: requiredAda,
-        fullyPaid: requiredAda === 0,
+        // Only "fully paid by default" when the round genuinely has no fee for
+        // this proposal (requiredAda actually 0) AND no hashes were entered.
+        fullyPaid: requiredAda === 0 && hashes.length === 0,
         koiosAvailable: true,
         txs: [] as { hash: string; found: boolean; paidAda: number; koiosAvailable: boolean }[],
       };
@@ -864,6 +879,59 @@ export class ProposalsService {
         };
       }),
     );
+  }
+
+  /**
+   * §16 — board fee-review HISTORY: every proposal whose fee has been decided
+   * (approved → status moved past PENDING with a real `submittedAt`; or
+   * rejected at fee → status REJECTED + stage=null + feeReviewFeedback set).
+   * Paged so the panel can scale to many rounds. Newest decision first.
+   */
+  async listFeeHistory(limit = 20, offset = 0) {
+    const safeLimit = Math.min(Math.max(1, limit), 50);
+    const safeOffset = Math.max(0, offset);
+    const where = {
+      OR: [
+        // Approved: it left PENDING and made it to ACTIVE / advanced further.
+        { status: { in: [ProposalStatus.ACTIVE, ProposalStatus.APPROVED, ProposalStatus.COMPLETE, ProposalStatus.FAILED] }, submittedAt: { not: null } },
+        // Rejected AT THE FEE STAGE — stage is still null, feedback is set.
+        { status: ProposalStatus.REJECTED, stage: null, feeReviewFeedback: { not: null } },
+      ],
+    };
+    const [rows, total] = await Promise.all([
+      this.prisma.proposal.findMany({
+        where,
+        orderBy: { submittedAt: 'desc' },
+        take: safeLimit,
+        skip: safeOffset,
+        include: {
+          submitterUser: { select: { displayName: true } },
+          category: { select: { name: true } },
+          round: { select: { number: true } },
+        },
+      }),
+      this.prisma.proposal.count({ where }),
+    ]);
+    return {
+      total,
+      limit: safeLimit,
+      offset: safeOffset,
+      rows: rows.map((p) => ({
+        id: p.id,
+        publicId: p.publicId,
+        title: p.title,
+        roundNumber: p.round?.number ?? null,
+        categoryName: p.category?.name ?? null,
+        isCommercial: p.isCommercial,
+        submitter: p.submitterUser?.displayName ?? null,
+        submittedAt: p.submittedAt,
+        submissionFeeAda: toAda(p.submissionFeeAda),
+        submissionFeeTxHash: p.submissionFeeTxHash,
+        // Decision: status REJECTED + stage=null = fee REJECTED, else APPROVED.
+        decision: (p.status === ProposalStatus.REJECTED && p.stage === null) ? 'REJECTED' as const : 'APPROVED' as const,
+        feedback: p.feeReviewFeedback,
+      })),
+    };
   }
 
   async listMine(userId: string) {
