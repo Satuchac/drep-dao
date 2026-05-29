@@ -49,6 +49,7 @@ model Drep {
   drepIdOnchain      String    @unique @map("drep_id_onchain")
   status             String // PENDING_ADMISSION, ADMITTED, REMOVED
   bio                String?
+  photo              String? // user-uploaded profile photo as a data URL; overrides the CIP-119 on-chain image
   socials            Json?
   contact            Json?
   subcategoryIds     String[]  @map("subcategory_ids")

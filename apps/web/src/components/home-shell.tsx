@@ -7,6 +7,7 @@ import { ConnectWallet } from './connect-wallet';
 import { MemberArea } from './member-area';
 import { RoundsSection } from './rounds-section';
 import { DaoOverview } from './dao-overview';
+import { DaoMembersDirectory } from './dao-members-directory';
 import { GovernanceSetup } from './governance-setup';
 import { OnChainProofs } from './on-chain-proofs';
 import { TreasuryOverview } from './treasury-overview';
@@ -17,9 +18,10 @@ import { JoinDaoButton } from './join-dao-button';
 import { NotificationBadge } from './notification-badge';
 import { HealthBadge } from '@/app/health-badge';
 
-type View = 'overview' | 'me' | 'rounds' | 'proposals' | 'internal' | 'proofs' | 'treasury' | 'setup';
+type View = 'overview' | 'members' | 'me' | 'rounds' | 'proposals' | 'internal' | 'proofs' | 'treasury' | 'setup';
 const NAV: { key: View; label: string; boardOnly?: boolean }[] = [
   { key: 'overview', label: 'DAO Member overview' },
+  { key: 'members', label: 'DAO members' },
   { key: 'me', label: 'My area' },
   { key: 'rounds', label: 'Rounds' },
   { key: 'proposals', label: 'Funding proposals' },
@@ -112,6 +114,8 @@ export function HomeShell() {
           </section>
         ) : view === 'overview' ? (
           <DaoOverview />
+        ) : view === 'members' ? (
+          <DaoMembersDirectory />
         ) : view === 'me' ? (
           <MemberArea />
         ) : view === 'rounds' ? (

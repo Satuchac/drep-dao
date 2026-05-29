@@ -47,9 +47,9 @@ export class DrepService {
     // yet), plus admitted DReps still registered on-chain. Keyed by drep id.
     // `since` = when they became a member: board install date (board_seat.addedAt)
     // for board members, board-approval date (drep.admittedAt) for admitted DReps.
-    interface Row { drepId: string; displayName: string; isBoard: boolean; drepRowId?: string; stakeAddress?: string; since: Date | null }
+    interface Row { drepId: string; displayName: string; isBoard: boolean; drepRowId?: string; stakeAddress?: string; since: Date | null; photo: string | null }
     const byId = new Map<string, Row>();
-    for (const s of seats) byId.set(s.drepId, { drepId: s.drepId, displayName: s.displayName, isBoard: true, since: s.addedAt });
+    for (const s of seats) byId.set(s.drepId, { drepId: s.drepId, displayName: s.displayName, isBoard: true, since: s.addedAt, photo: null });
     for (const d of admitted) {
       const isBoard = d.user.drepKeyHash ? boardKeys.has(d.user.drepKeyHash) : false;
       if (!isBoard && !d.user.drepRegistered) continue; // skip lapsed non-board members
@@ -58,6 +58,7 @@ export class DrepService {
         existing.drepRowId = d.id;
         existing.stakeAddress = d.user.stakeAddress;
         if (d.user.displayName) existing.displayName = d.user.displayName; // prefer self-set name
+        existing.photo = d.photo;
         // keep the board-install date for board members
       } else {
         byId.set(d.drepIdOnchain, {
@@ -67,6 +68,7 @@ export class DrepService {
           drepRowId: d.id,
           stakeAddress: d.user.stakeAddress,
           since: d.admittedAt,
+          photo: d.photo,
         });
       }
     }
@@ -122,7 +124,8 @@ export class DrepService {
         return {
           drepId: r.drepId,
           displayName: m?.name ?? r.displayName,
-          image: m?.image ?? null,
+          // User-uploaded photo overrides the on-chain CIP-119 image when set.
+          image: r.photo ?? m?.image ?? null,
           isBoard: r.isBoard,
           votingPowerAda: Math.round(Number(power.votingPowerLovelace) / 1_000_000),
           delegators: power.delegators,
@@ -137,6 +140,45 @@ export class DrepService {
     );
     members.sort((a, b) => b.adjustedPower - a.adjustedPower || (b.isBoard ? 1 : 0) - (a.isBoard ? 1 : 0));
     return members;
+  }
+
+  /**
+   * Per-DRep public profile for the DAO members directory: the list-row fields, plus
+   * the bio / socials / contact and a count of admission votes cast (board members
+   * only — non-board members never get to vote on join applications).
+   */
+  async getDaoMemberDetail(drepIdOnchain: string) {
+    const list = await this.listDaoMembers();
+    const summary = list.find((m) => m.drepId === drepIdOnchain);
+    if (!summary) throw new NotFoundException('not a current DAO member');
+
+    // Bio/socials/contact + the Drep row id (needed for the admission-vote count).
+    // A board member without a Drep row (genesis-seated, never logged in) has no
+    // bio and no votes to count yet.
+    const drep = await this.prisma.drep.findUnique({
+      where: { drepIdOnchain },
+      select: { id: true, bio: true, socials: true, contact: true, subcategoryIds: true },
+    });
+
+    const admissionVotes = drep
+      ? await this.prisma.admissionVote.groupBy({
+          by: ['choice'],
+          where: { boardDrepId: drep.id },
+          _count: { _all: true },
+        })
+      : [];
+    const yes = admissionVotes.find((g) => g.choice === 'YES')?._count._all ?? 0;
+    const no = admissionVotes.find((g) => g.choice === 'NO')?._count._all ?? 0;
+
+    return {
+      ...summary,
+      bio: drep?.bio ?? null,
+      socials: (drep?.socials as Record<string, string> | null) ?? null,
+      contact: (drep?.contact as Record<string, string> | null) ?? null,
+      subcategoryIds: drep?.subcategoryIds ?? [],
+      // Admission votes the member cast as a board reviewer (only board has any).
+      admissionVotesCast: { yes, no, total: yes + no },
+    };
   }
 
   /** Everything the platform has anchored on-chain, newest first, human-readable. */
@@ -298,6 +340,7 @@ export class DrepService {
       status: drep.status,
       drepIdOnchain: drep.drepIdOnchain,
       bio: drep.bio,
+      photo: drep.photo,
       socials: drep.socials,
       contact: drep.contact,
       subcategoryIds: drep.subcategoryIds,
@@ -406,10 +449,15 @@ export class DrepService {
       await this.prisma.appUser.update({ where: { id: userId }, data: { displayName: dto.displayName } });
     }
 
+    if (dto.photo !== undefined && dto.photo !== '' && !/^data:image\/(png|jpe?g|webp|gif);base64,/.test(dto.photo)) {
+      throw new ConflictException('photo must be a data URL (data:image/<type>;base64,…)');
+    }
+
     return this.prisma.drep.update({
       where: { id: drep.id },
       data: {
         ...(dto.bio !== undefined ? { bio: dto.bio } : {}),
+        ...(dto.photo !== undefined ? { photo: dto.photo === '' ? null : dto.photo } : {}),
         ...(dto.socials !== undefined ? { socials: dto.socials as Prisma.InputJsonValue } : {}),
         ...(dto.contact !== undefined ? { contact: dto.contact as Prisma.InputJsonValue } : {}),
         ...(dto.subcategoryIds !== undefined ? { subcategoryIds: dto.subcategoryIds } : {}),

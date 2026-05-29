@@ -67,6 +67,9 @@ export interface DrepApplicationInput {
   // wallet's CIP-95 DRep key and verifies on-chain registration.
   displayName?: string;
   bio?: string;
+  // Optional profile photo, sent as a data URL ("data:image/<png|jpeg|webp|gif>;base64,…").
+  // Empty string clears the photo (falls back to the on-chain CIP-119 image).
+  photo?: string;
   subcategoryIds?: string[];
   socials?: Record<string, string>;
   contact?: Record<string, string>;
@@ -80,6 +83,7 @@ export interface MyDrep {
   status: string;
   drepIdOnchain: string;
   bio: string | null;
+  photo: string | null; // self-uploaded profile photo (data URL); overrides the CIP-119 on-chain image
   socials: Record<string, string> | null;
   contact: Record<string, string> | null;
   subcategoryIds: string[];
@@ -119,8 +123,18 @@ export interface OnChainProof {
   createdAt: string;
 }
 
+export interface DaoMemberDetail extends DaoMember {
+  bio: string | null;
+  socials: Record<string, string> | null;
+  contact: Record<string, string> | null;
+  subcategoryIds: string[];
+  // Admission votes the member cast as a board reviewer (non-board members are 0).
+  admissionVotesCast: { yes: number; no: number; total: number };
+}
+
 export const daoApi = {
   members: () => request<DaoMember[]>('/dao/members'),
+  member: (drepId: string) => request<DaoMemberDetail>(`/dao/members/${encodeURIComponent(drepId)}`),
   experts: () => request<DaoExpert[]>('/dao/experts'),
   proofs: () => request<OnChainProof[]>('/dao/proofs'),
 };

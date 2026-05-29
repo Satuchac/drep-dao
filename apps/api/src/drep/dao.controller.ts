@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DrepService } from './drep.service';
 
@@ -11,6 +11,11 @@ export class DaoController {
   @Get('members')
   members() {
     return this.drep.listDaoMembers();
+  }
+
+  @Get('members/:drepId')
+  member(@Param('drepId') drepId: string) {
+    return this.drep.getDaoMemberDetail(drepId);
   }
 
   @Get('experts')

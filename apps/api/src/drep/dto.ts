@@ -32,6 +32,10 @@ export class DrepApplicationDto {
 export class UpdateDrepDto {
   @IsOptional() @IsString() @MaxLength(100) displayName?: string;
   @IsOptional() @IsString() @MaxLength(5000) bio?: string;
+  // Profile photo as a data URL ("data:image/png;base64,…"). Capped at ~360k chars
+  // ≈ 256 KB binary — enough for a small avatar, small enough to keep in Postgres.
+  // Empty string clears the photo (falls back to the on-chain CIP-119 image).
+  @IsOptional() @IsString() @MaxLength(360_000) photo?: string;
   @IsOptional() @IsObject() socials?: Record<string, unknown>;
   @IsOptional() @IsObject() contact?: Record<string, unknown>;
   @IsOptional() @IsArray() @IsString({ each: true }) subcategoryIds?: string[];
