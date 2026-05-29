@@ -446,6 +446,9 @@ export const boardRoundsApi = {
     }),
   launchNext: (id: string) => request<RoundDetail>(`/admin/rounds/${id}/launch-next`, { method: 'POST' }),
   close: (id: string) => request<RoundDetail>(`/admin/rounds/${id}/close`, { method: 'POST' }),
+  // §6 — shorten or extend the currently-running stage's end (start is frozen).
+  updateCurrentStage: (id: string, endsAt: string) =>
+    request<RoundDetail>(`/admin/rounds/${id}/current-stage`, { method: 'PATCH', body: JSON.stringify({ endsAt }) }),
 };
 
 export interface ProposalMilestoneInput {

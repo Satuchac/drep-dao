@@ -76,6 +76,12 @@ export class ConfirmStageDto {
   @IsOptional() @IsDateString() endsAt?: string;
 }
 
+// §6 — board shortens or extends the currently-running stage's end. Start is
+// frozen (the stage already started), and a new end can't fall behind "now".
+export class UpdateCurrentStageDto {
+  @IsDateString() endsAt!: string;
+}
+
 export class ScheduleInput {
   @IsIn(ROUND_STAGE_KEYS) stageKey!: (typeof ROUND_STAGE_KEYS)[number];
   @IsDateString() startsAt!: string;

@@ -339,6 +339,42 @@ export class RoundsService {
     return this.get(id);
   }
 
+  /**
+   * §6 — shorten or extend the **current** stage. The start is frozen (the stage
+   * already entered), so only `endsAt` is updatable. The new end must be in the
+   * future and not push past the planned next stage's start (we'd need to shift
+   * that too, which the board does separately via confirmStage).
+   */
+  async updateCurrentStageWindow(id: string, dto: { endsAt: string }, _userId: string) {
+    void _userId;
+    const round = await this.prisma.round.findUnique({ where: { id }, include: { schedule: true } });
+    if (!round) throw new NotFoundException('round not found');
+    const key = STAGE_KEY_FOR_STATUS[round.status];
+    if (!key) throw new ConflictException('the round is not currently in a scheduled stage');
+    const row = round.schedule.find((s) => s.stageKey === key);
+    if (!row) throw new ConflictException('no schedule row for the current stage — nothing to edit');
+
+    const newEnd = new Date(dto.endsAt);
+    if (Number.isNaN(newEnd.getTime())) throw new BadRequestException('invalid end date');
+    if (newEnd <= new Date()) throw new BadRequestException('the new end must be in the future');
+    if (newEnd <= row.startsAt) throw new BadRequestException('the new end must be after the stage start');
+    // P7 — keep schedule ordered. If the next stage is already confirmed and its
+    // start is earlier than the new current-end, ask the board to push it first.
+    const nextStatus = this.nextStatusOf(round.status);
+    const nextKey = nextStatus ? STAGE_KEY_FOR_STATUS[nextStatus] : undefined;
+    const nextRow = nextKey ? round.schedule.find((s) => s.stageKey === nextKey) : undefined;
+    if (nextRow && newEnd > nextRow.startsAt) {
+      throw new BadRequestException(
+        `the new end (${newEnd.toISOString()}) would overlap the planned ${nextKey} start — push that stage first`,
+      );
+    }
+    await this.prisma.roundSchedule.update({
+      where: { roundId_stageKey: { roundId: id, stageKey: key } },
+      data: { endsAt: newEnd },
+    });
+    return this.get(id);
+  }
+
   /** §8 — manually launch the next stage now (a board member's explicit action). */
   async launchNextStage(id: string, userId: string) {
     const round = await this.prisma.round.findUnique({ where: { id } });

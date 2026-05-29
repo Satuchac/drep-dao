@@ -48,11 +48,33 @@ export function RoundStageControls() {
   );
 }
 
+// Map of round.status → round.schedule.stageKey so the UI can pick the row for the
+// currently-running stage. PREPARATION has no schedule row.
+const CURRENT_STAGE_KEY: Record<string, string | null> = {
+  PREPARATION: null,
+  SUBMISSION: 'submission',
+  FILTERING: 'filtering',
+  DV: 'debate_vote',
+  FUNDING: 'funding',
+  CLOSED: null,
+};
+const STAGE_LABEL_BY_KEY: Record<string, string> = {
+  submission: 'Submission',
+  filtering: 'Filtering',
+  debate_vote: 'Debate & Vote',
+  funding: 'Funding',
+};
+
 function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () => void }) {
   const next = round.nextStage;
   const [autoStart, setAutoStart] = useState(next?.autoStart ?? false);
   const [startsAt, setStartsAt] = useState(toLocalInput(next?.planned?.startsAt));
   const [endsAt, setEndsAt] = useState(toLocalInput(next?.planned?.endsAt));
+  // §6 — the currently-running stage's end is editable (shorten or extend); start
+  // is frozen because the stage already entered.
+  const curKey = CURRENT_STAGE_KEY[round.status] ?? null;
+  const curRow = curKey ? round.schedule.find((s) => s.stageKey === curKey) : undefined;
+  const [curEndsAt, setCurEndsAt] = useState(curRow ? toLocalInput(curRow.endsAt) : '');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -103,6 +125,36 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
         <div className="text-xs text-neutral-500">Proposals (verify readiness before advancing):</div>
         <div className="mt-1"><ProposalCounts counts={round.proposalCounts} /></div>
       </div>
+
+      {/* §6 — the currently-running stage: start is frozen, end is editable so the
+          board can shorten / extend (e.g. give submitters one more week). */}
+      {curRow ? (
+        <div className="mt-3 rounded border border-neutral-200 p-2 dark:border-neutral-800">
+          <div className="text-xs">
+            Current stage: <span className="font-medium">{STAGE_LABEL_BY_KEY[curRow.stageKey] ?? curRow.stageKey}</span>
+            {' · '}
+            <span className="text-neutral-500">started {fmtDateTime(curRow.startsAt)} (frozen)</span>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1 text-xs text-neutral-500">
+              ends
+              <DateField value={curEndsAt} onChange={setCurEndsAt} />
+            </div>
+            <button
+              onClick={() =>
+                run(
+                  () => boardRoundsApi.updateCurrentStage(round.id, new Date(curEndsAt).toISOString()),
+                  'updateCurrent',
+                )
+              }
+              disabled={busy !== null || !curEndsAt}
+              className="rounded border border-neutral-400 px-2.5 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:hover:bg-neutral-800"
+            >
+              {busy === 'updateCurrent' ? 'Saving…' : 'Save new end date'}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {!next ? (
         <div className="mt-2 text-xs text-neutral-500">Round complete.</div>

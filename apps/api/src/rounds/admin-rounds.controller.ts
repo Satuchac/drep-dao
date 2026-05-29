@@ -3,7 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { RoundsService } from './rounds.service';
-import { CreateRoundDto, UpdateRoundDto, ConfirmStageDto } from './dto';
+import { CreateRoundDto, UpdateRoundDto, ConfirmStageDto, UpdateCurrentStageDto } from './dto';
 
 // §26.5 — board-only round configuration (Round Preparation, §6).
 @Controller('admin/rounds')
@@ -35,6 +35,16 @@ export class AdminRoundsController {
     @Body() dto: ConfirmStageDto,
   ) {
     return this.rounds.confirmStage(id, stageKey, dto, ctx.userId);
+  }
+
+  // §6 — board shortens or extends the currently-running stage (start is frozen).
+  @Patch(':id/current-stage')
+  updateCurrentStage(
+    @CurrentUser() ctx: AuthContext,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateCurrentStageDto,
+  ) {
+    return this.rounds.updateCurrentStageWindow(id, dto, ctx.userId);
   }
 
   // §8 — launch the next stage now (board member's explicit early/on-time action).
