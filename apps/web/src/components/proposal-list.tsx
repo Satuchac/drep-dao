@@ -30,11 +30,22 @@ export function ProposalList({ roundId }: { roundId: string }) {
 
   return (
     <ul className="space-y-2">
-      {proposals.map((p) => (
+      {proposals.map((p) => {
+        // Row colour per the user's spec:
+        //   yellow → status PENDING (waiting for the platform/board)
+        //   red    → REJECTED / FAILED (submitter may need to fix something)
+        //   white  → everything else (ACTIVE / APPROVED / COMPLETE — ready or in-flight)
+        const tint =
+          p.status === 'PENDING'
+            ? 'border-amber-300 bg-amber-50/70 hover:border-amber-500 dark:border-amber-900 dark:bg-amber-950/30'
+            : p.status === 'REJECTED' || p.status === 'FAILED'
+              ? 'border-red-300 bg-red-50/60 hover:border-red-500 dark:border-red-900 dark:bg-red-950/30'
+              : 'border-neutral-200 hover:border-emerald-400 dark:border-neutral-800';
+        return (
         <li key={p.id}>
           <button
             onClick={() => setParams({ proposal: p.id })}
-            className="block w-full rounded-md border border-neutral-200 px-3 py-2 text-left text-sm hover:border-emerald-400 dark:border-neutral-800"
+            className={`block w-full rounded-md border px-3 py-2 text-left text-sm ${tint}`}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium">
@@ -80,7 +91,8 @@ export function ProposalList({ roundId }: { roundId: string }) {
             ) : null}
           </button>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }

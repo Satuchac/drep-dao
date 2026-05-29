@@ -597,15 +597,22 @@ export class ProposalsService {
     }
   }
 
-  // §16 — a proposal is public only once its fee is confirmed; DRAFT (private) and
-  // PENDING (submitted, fee not yet confirmed) are never shown in public listings.
-  private static readonly PRIVATE_STATUSES: ProposalStatus[] = [ProposalStatus.DRAFT, ProposalStatus.PENDING];
+  // §16 — DRAFTs are private (submitter is still drafting, never submitted).
+  // PENDING (submitted, fee not yet confirmed) and everything past it are PUBLIC
+  // in the round listing — the title + status + sub-status (e.g. "awaiting
+  // board fee confirmation") are visible so the round overview matches the
+  // count chip ("1 pending"). The detail page still gates PENDING content to
+  // the owner via PRIVATE_DETAIL_STATUSES below.
+  private static readonly LIST_HIDDEN_STATUSES: ProposalStatus[] = [ProposalStatus.DRAFT];
+  private static readonly PRIVATE_DETAIL_STATUSES: ProposalStatus[] = [ProposalStatus.DRAFT, ProposalStatus.PENDING];
+  /** @deprecated kept for backwards-compatibility in the detail-access check. */
+  private static readonly PRIVATE_STATUSES = ProposalsService.PRIVATE_DETAIL_STATUSES;
 
   async listByRound(roundId: string, status?: string) {
     const statusFilter =
-      status && !ProposalsService.PRIVATE_STATUSES.includes(status as ProposalStatus)
+      status && !ProposalsService.LIST_HIDDEN_STATUSES.includes(status as ProposalStatus)
         ? status
-        : { notIn: ProposalsService.PRIVATE_STATUSES };
+        : { notIn: ProposalsService.LIST_HIDDEN_STATUSES };
     const proposals = await this.prisma.proposal.findMany({
       where: { roundId, status: statusFilter },
       orderBy: { createdAt: 'asc' },
