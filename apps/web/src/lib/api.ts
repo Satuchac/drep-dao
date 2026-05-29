@@ -486,7 +486,10 @@ export interface FeeVerification {
   paidAda: number;
   missingAda: number;
   fullyPaid: boolean;
-  txs: { hash: string; found: boolean; paidAda: number }[];
+  /** False when the on-chain check itself couldn't run (Koios down / throttling)
+   *  — the UI should say "can't reach the chain right now", not "tx not found". */
+  koiosAvailable: boolean;
+  txs: { hash: string; found: boolean; paidAda: number; koiosAvailable: boolean }[];
 }
 export interface ProposalRejectionReason {
   stage: string;

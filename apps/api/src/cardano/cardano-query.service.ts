@@ -92,8 +92,9 @@ export class CardanoQueryService {
     txHash: string,
     toAddress: string,
     minLovelace: bigint,
-  ): Promise<{ found: boolean; paid: boolean; paidLovelace: bigint }> {
-    const miss = { found: false, paid: false, paidLovelace: 0n };
+  ): Promise<{ found: boolean; paid: boolean; paidLovelace: bigint; koiosAvailable: boolean }> {
+    const unavail = { found: false, paid: false, paidLovelace: 0n, koiosAvailable: false };
+    const miss = { found: false, paid: false, paidLovelace: 0n, koiosAvailable: true };
     if (!txHash || !toAddress) return miss;
     try {
       const res = await fetch(`${this.base}/tx_info`, {
@@ -102,9 +103,11 @@ export class CardanoQueryService {
         body: JSON.stringify({ _tx_hashes: [txHash] }),
         signal: AbortSignal.timeout(15000),
       });
-      if (!res.ok) return miss;
+      // 429 / 5xx / timeout = we can't tell what's on-chain right now.
+      if (!res.ok) return unavail;
       const rows = (await res.json()) as { outputs?: { payment_addr?: { bech32?: string }; value?: string }[] }[];
       const tx = rows[0];
+      // Empty rows array = Koios responded fine but the tx really doesn't exist (not unavailable).
       if (!tx) return miss;
       let paid = 0n;
       for (const o of tx.outputs ?? []) {
@@ -112,10 +115,10 @@ export class CardanoQueryService {
           try { paid += BigInt(o.value ?? '0'); } catch { /* ignore */ }
         }
       }
-      return { found: true, paid: paid >= minLovelace, paidLovelace: paid };
+      return { found: true, paid: paid >= minLovelace, paidLovelace: paid, koiosAvailable: true };
     } catch (e) {
       this.logger.warn(`tx_info verify: ${e instanceof Error ? e.message : e}`);
-      return miss;
+      return unavail;
     }
   }
 

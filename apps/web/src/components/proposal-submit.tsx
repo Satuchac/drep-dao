@@ -564,6 +564,7 @@ export function ProposalSubmit() {
                 onChange={(v) => { setFee(v); setFeeVerification(null); }}
                 locked={feeVerification?.fullyPaid === true}
                 verifying={verifying}
+                hasResult={feeVerification !== null}
                 onVerify={async () => {
                   const trimmed = fee.trim();
                   if (!/^[0-9a-f]{64}$/i.test(trimmed)) return; // safety; button disabled anyway
@@ -599,15 +600,21 @@ export function ProposalSubmit() {
                   className={`rounded border p-2 text-xs ${
                     feeVerification.fullyPaid
                       ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200'
-                      : feeVerification.paidAda > 0
-                        ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200'
-                        : 'border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200'
+                      : !feeVerification.koiosAvailable
+                        ? 'border-neutral-300 bg-neutral-50 text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
+                        : feeVerification.paidAda > 0
+                          ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200'
+                          : 'border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200'
                   }`}
                 >
                   {feeVerification.fullyPaid ? (
                     <span>
                       <strong>✓ Fully paid</strong> — {feeVerification.paidAda.toLocaleString()} ₳ received at the fee address (required {feeVerification.requiredAda.toLocaleString()} ₳).
                       The TX hash field is locked. You can now submit.
+                    </span>
+                  ) : !feeVerification.koiosAvailable ? (
+                    <span>
+                      <strong>⚠ Couldn&apos;t reach the chain right now</strong> — Koios is throttling our requests. Your hash is saved; the platform will keep retrying every ~10 s and the answer will appear here as soon as it gets through. (This is an external service issue, not a problem with your tx.)
                     </span>
                   ) : feeVerification.paidAda > 0 ? (
                     <span>
@@ -616,8 +623,8 @@ export function ProposalSubmit() {
                       (required {feeVerification.requiredAda.toLocaleString()} ₳).
                       Send the rest in a new tx, paste the new hash here, and click Verify again — both txs will be counted.
                     </span>
-                  ) : feeVerification.txs[0]?.found === false ? (
-                    <span>✗ The tx hash wasn&apos;t found on-chain yet. If you just submitted it, wait ~30 seconds for the next block and try again.</span>
+                  ) : feeVerification.txs.every((t) => t.koiosAvailable && !t.found) ? (
+                    <span>✗ The tx hash wasn&apos;t found on-chain yet. The platform re-checks every ~10 s — leave the form open and the answer will update as soon as the next block lands.</span>
                   ) : (
                     <span>✗ This tx didn&apos;t pay the fee address. Did you send to the right address?</span>
                   )}
@@ -627,7 +634,7 @@ export function ProposalSubmit() {
                       {feeVerification.txs.map((t) => (
                         <li key={t.hash} className="break-all">
                           <span className="font-mono">{t.hash.slice(0, 16)}…</span>{' '}
-                          {t.paidAda > 0 ? `→ ${t.paidAda.toLocaleString()} ₳ paid` : t.found ? '→ 0 ₳ to the fee address' : '→ not found on-chain'}
+                          {!t.koiosAvailable ? '→ chain check failed' : t.paidAda > 0 ? `→ ${t.paidAda.toLocaleString()} ₳ paid` : t.found ? '→ 0 ₳ to the fee address' : '→ not found on-chain'}
                         </li>
                       ))}
                     </ul>
@@ -894,12 +901,16 @@ function FeeTxInput({
   onChange,
   locked,
   verifying,
+  hasResult,
   onVerify,
 }: {
   fee: string;
   onChange: (v: string) => void;
   locked: boolean;
   verifying: boolean;
+  /** True when feeVerification is set for the current hash — used to skip the
+   *  first-paste 700 ms auto-verify and switch to the 10 s polling cadence. */
+  hasResult: boolean;
   onVerify: () => Promise<void> | void;
 }) {
   const fld = 'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
@@ -924,16 +935,24 @@ function FeeTxInput({
     hint = { text: '✓ looks like a valid tx hash — checking on-chain…', tone: 'emerald' };
   }
 
-  // Auto-verify ~700 ms after a fresh, valid-looking hash settles. We only fire
-  // when the format check passes and we're not already verifying / locked, and
-  // we cancel on every change so rapid typing doesn't queue extra calls.
+  // Auto-verify cadence:
+  //   - first time the hash becomes a valid 64-hex string AND we have no result
+  //     yet → fire after ~700 ms (debounced; cancels on every keystroke so
+  //     rapid typing doesn't queue extra calls).
+  //   - once a result is in but the tx wasn't found yet (or Koios was
+  //     unavailable) → re-check every 10 s. The user said ~block time, and
+  //     Preprod/Mainnet block intervals are ~20 s so 10 s is one re-try per
+  //     block on average.
+  //   - stop when locked (fully paid).
+  // The previous version re-fired on every state change because `verifying`
+  // flipping false re-triggered the effect → infinite loop / "blinking".
   useEffect(() => {
     if (!validFormat || verifying || locked) return;
-    const t = setTimeout(() => { void onVerify(); }, 700);
+    const delay = hasResult ? 10_000 : 700;
+    const t = setTimeout(() => { void onVerify(); }, delay);
     return () => clearTimeout(t);
-    // Re-trigger on the trimmed value so identical hashes re-verify cleanly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trimmed, validFormat, verifying, locked]);
+  }, [trimmed, validFormat, verifying, locked, hasResult]);
 
   return (
     <div className="space-y-1">

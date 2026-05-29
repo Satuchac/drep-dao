@@ -339,22 +339,33 @@ export class ProposalsService {
       ? p.submissionFeeTxHashes
       : (p.submissionFeeTxHash ? [p.submissionFeeTxHash] : []);
     if (!feeAddress || hashes.length === 0 || !requiredAda) {
-      return { requiredAda, paidAda: 0, missingAda: requiredAda, fullyPaid: requiredAda === 0, txs: [] as { hash: string; found: boolean; paidAda: number }[] };
+      return {
+        requiredAda,
+        paidAda: 0,
+        missingAda: requiredAda,
+        fullyPaid: requiredAda === 0,
+        koiosAvailable: true,
+        txs: [] as { hash: string; found: boolean; paidAda: number; koiosAvailable: boolean }[],
+      };
     }
     const txs = await Promise.all(
       hashes.map(async (h) => {
         // Pass 0n so verifyPayment returns the actual paid amount without applying a
         // pass/fail threshold — we sum across txs ourselves.
         const v = await this.cardano.verifyPayment(h, feeAddress, 0n);
-        return { hash: h, found: v.found, paidAda: toAda(v.paidLovelace) };
+        return { hash: h, found: v.found, paidAda: toAda(v.paidLovelace), koiosAvailable: v.koiosAvailable };
       }),
     );
     const paidAda = txs.reduce((s, t) => s + t.paidAda, 0);
+    // If every tx couldn't be checked on-chain right now, surface that to the UI
+    // — "tx not found" vs "Koios is down/throttling" are very different fixes.
+    const koiosAvailable = txs.some((t) => t.koiosAvailable);
     return {
       requiredAda,
       paidAda,
       missingAda: Math.max(0, requiredAda - paidAda),
       fullyPaid: paidAda >= requiredAda,
+      koiosAvailable,
       txs,
     };
   }
