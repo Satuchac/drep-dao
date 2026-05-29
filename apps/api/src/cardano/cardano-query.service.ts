@@ -15,6 +15,12 @@ export interface DRepStatus {
 export class CardanoQueryService {
   private readonly logger = new Logger(CardanoQueryService.name);
   private readonly base: string;
+  // Short-TTL in-memory cache for the per-DRep voting-power lookups. Without it
+  // every page view of the overview re-hits Koios for N DReps + their delegators
+  // and hammers the free-tier rate limit (we saw 429s after a heavy test run).
+  // Single process, so a plain Map is enough; lost on restart by design.
+  private readonly vpCache = new Map<string, { value: { votingPowerLovelace: bigint; delegators: number }; expiresAt: number }>();
+  private readonly VP_TTL_MS = 10 * 60 * 1000;
 
   constructor(config: ConfigService) {
     const net = config.get<string>('CARDANO_NETWORK') ?? 'Preprod';
@@ -158,34 +164,53 @@ export class CardanoQueryService {
   async drepVotingPower(
     drepIds: string[],
   ): Promise<Map<string, { votingPowerLovelace: bigint; delegators: number }>> {
-    const out = new Map(drepIds.map((id) => [id, { votingPowerLovelace: 0n, delegators: 0 }]));
+    const out = new Map<string, { votingPowerLovelace: bigint; delegators: number }>();
     if (drepIds.length === 0) return out;
+
+    // Serve from cache where we can; only hit Koios for entries that are stale.
+    const now = Date.now();
+    const miss: string[] = [];
+    for (const id of drepIds) {
+      const c = this.vpCache.get(id);
+      if (c && c.expiresAt > now) out.set(id, c.value);
+      else miss.push(id);
+    }
+    if (miss.length === 0) return out;
 
     const addrsByDrep = new Map<string, string[]>();
     const allAddrs = new Set<string>();
+    let anyKoiosFailure = false;
     await Promise.all(
-      drepIds.map(async (id) => {
+      miss.map(async (id) => {
         try {
           const res = await fetch(`${this.base}/drep_delegators?_drep_id=${encodeURIComponent(id)}`, {
             signal: AbortSignal.timeout(15000),
           });
-          if (!res.ok) return;
+          if (!res.ok) { anyKoiosFailure = true; return; }
           const rows = (await res.json()) as { stake_address: string }[];
           const addrs = rows.map((r) => r.stake_address).filter(Boolean);
           addrsByDrep.set(id, addrs);
           addrs.forEach((a) => allAddrs.add(a));
         } catch (e) {
+          anyKoiosFailure = true;
           this.logger.warn(`drep_delegators ${id}: ${e instanceof Error ? e.message : e}`);
         }
       }),
     );
 
     const stake = await this.accountStake([...allAddrs]);
-    for (const id of drepIds) {
+    for (const id of miss) {
       const addrs = addrsByDrep.get(id) ?? [];
       let sum = 0n;
       for (const a of addrs) sum += stake.get(a) ?? 0n;
-      out.set(id, { votingPowerLovelace: sum, delegators: addrs.length });
+      const value = { votingPowerLovelace: sum, delegators: addrs.length };
+      out.set(id, value);
+      // Cache only fully-successful lookups for this DRep — a Koios failure
+      // should not bake "0" into the cache and shadow real data when the rate
+      // limit recovers.
+      if (!anyKoiosFailure || addrsByDrep.has(id)) {
+        this.vpCache.set(id, { value, expiresAt: now + this.VP_TTL_MS });
+      }
     }
     return out;
   }
