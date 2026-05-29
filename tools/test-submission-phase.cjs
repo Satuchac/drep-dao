@@ -11,6 +11,7 @@
  * Self-cleaning (deletes its throwaway round + proposals + child rows).
  *   node tools/test-submission-phase.cjs
  */
+require('./_test-env.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = '/home/satucha/projects/drep-dao';

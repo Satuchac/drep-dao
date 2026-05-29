@@ -6,6 +6,7 @@
  *
  *   node tools/test-genesis.cjs
  */
+require('./_test-env.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 

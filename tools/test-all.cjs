@@ -1,11 +1,15 @@
 /**
- * Runs the whole DRep DAO service-level test suite, in order, against the dev DB
- * + live Koios (Preprod). Each suite cleans up after itself; the dev DB is left
- * with the 5-member board seated and no leftover test applicants.
+ * Runs the whole DRep DAO service-level test suite, in order, against the
+ * isolated `drepdao_test` database (NOT the dev DB) + live Koios (Preprod).
  *
- * Prereqs: infra up (pnpm infra:up), an admin (pnpm admin:create), the cast
- * seeded/registered, and the built dist (the dev server keeps it fresh; otherwise
- * run `pnpm build`).
+ * Each test file `require()`s `tools/_test-env.cjs` first, which redirects
+ * DATABASE_URL to the test DB so the dev DB is never touched. This runner
+ * additionally:
+ *   1. Bootstraps `drepdao_test` (creates it + runs `prisma migrate deploy`).
+ *   2. TRUNCATEs every table before the run for a deterministic starting state.
+ *
+ * Prereqs: infra up (pnpm infra:up) and the built dist (the dev server keeps
+ * it fresh; otherwise run `pnpm build`).
  *
  *   node tools/test-all.cjs   (or: pnpm test:e2e)
  */
@@ -16,6 +20,12 @@ const path = require('node:path');
 if (!fs.existsSync(path.join(__dirname, '..', 'apps/api/dist/drep/drep.service.js'))) {
   console.error('apps/api/dist is missing — run `pnpm build` (or start `pnpm dev`) first.');
   process.exit(1);
+}
+
+const setup = spawnSync(process.execPath, [path.join(__dirname, 'setup-test-db.cjs'), '--reset'], { stdio: 'inherit' });
+if (setup.status !== 0) {
+  console.error('test-db setup failed.');
+  process.exit(setup.status ?? 1);
 }
 
 // Order matters: genesis leaves the 5-board seated; the rest build on it.

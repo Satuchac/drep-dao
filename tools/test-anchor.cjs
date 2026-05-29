@@ -6,6 +6,7 @@
  *
  *   node tools/test-anchor.cjs    (needs ANCHOR_MNEMONIC in .env + funded wallet)
  */
+require('./_test-env.cjs');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');

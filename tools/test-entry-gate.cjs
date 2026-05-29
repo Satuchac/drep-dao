@@ -12,6 +12,7 @@
  *
  *   node tools/test-entry-gate.cjs
  */
+require('./_test-env.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const root = '/home/satucha/projects/drep-dao';

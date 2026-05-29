@@ -12,6 +12,7 @@
  *
  *   node tools/test-cast.cjs
  */
+require('./_test-env.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 

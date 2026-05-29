@@ -6,6 +6,7 @@
  *
  *   node tools/test-internal.cjs
  */
+require('./_test-env.cjs');
 const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
