@@ -403,7 +403,15 @@ export function ProposalSubmit() {
               the budget, use <strong>Request a budget change</strong> on the proposal once it&apos;s active.
             </div>
           ) : null}
-          <MarkdownEditor value={content} onChange={setContent} title="Pitch / summary" placeholder="What you'll build and why (markdown)" minRows={5} required />
+          <MarkdownEditor
+            value={content}
+            onChange={setContent}
+            title="Pitch / summary"
+            subtitle="What are you proposing to build, and why? Who is it for, what does it solve, and what makes it the right project at the right time?"
+            placeholder="What you'll build and why (markdown)"
+            minRows={5}
+            required
+          />
           {/* §3.4 — additional optional context, collapsed by default to keep the form short. */}
           <MarkdownEditor
             value={ecosystemImpact}
