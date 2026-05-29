@@ -104,6 +104,8 @@ export class ProposalsService {
         // §3.4 funding fields (stored in the existing Json columns as markdown strings).
         ...(dto.teamInfoMd ? { teamInfo: dto.teamInfoMd } : {}),
         ...(dto.revenueSharingMd ? { revenueSharing: dto.revenueSharingMd } : {}),
+        ...(dto.ecosystemImpactMd ? { ecosystemImpactMd: dto.ecosystemImpactMd } : {}),
+        ...(dto.successMetricsMd ? { successMetricsMd: dto.successMetricsMd } : {}),
         votingType: VotingType.ONE_PERSON_ONE_VOTE,
         milestones: {
           create: dto.milestones.map((m, idx) => ({
@@ -204,6 +206,8 @@ export class ProposalsService {
           ...pledgeData,
           ...(dto.teamInfoMd !== undefined ? { teamInfo: dto.teamInfoMd } : {}),
           ...(dto.revenueSharingMd !== undefined ? { revenueSharing: dto.revenueSharingMd } : {}),
+          ...(dto.ecosystemImpactMd !== undefined ? { ecosystemImpactMd: dto.ecosystemImpactMd } : {}),
+          ...(dto.successMetricsMd !== undefined ? { successMetricsMd: dto.successMetricsMd } : {}),
           ...(postSubmission ? { version: { increment: 1 } } : {}),
           updatedAt: new Date(),
         },
@@ -837,6 +841,8 @@ export class ProposalsService {
       // §3.4 — stored as markdown strings in the Json columns.
       teamInfoMd: typeof p.teamInfo === 'string' ? p.teamInfo : null,
       revenueSharingMd: typeof p.revenueSharing === 'string' ? p.revenueSharing : null,
+      ecosystemImpactMd: p.ecosystemImpactMd,
+      successMetricsMd: p.successMetricsMd,
       submissionFeeAda: toAda(p.submissionFeeAda),
       submissionFeeTxHash: p.submissionFeeTxHash,
       submissionFeeTxHashes: p.submissionFeeTxHashes,

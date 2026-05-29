@@ -38,6 +38,9 @@ export function ProposalSubmit() {
   const [costBreakdown, setCostBreakdown] = useState('');
   const [teamInfo, setTeamInfo] = useState('');
   const [revenueSharing, setRevenueSharing] = useState('');
+  // §3.4 — Expected ecosystem impact + Success metrics / KPIs.
+  const [ecosystemImpact, setEcosystemImpact] = useState('');
+  const [successMetrics, setSuccessMetrics] = useState('');
   const [payoutAddress, setPayoutAddress] = useState('');
   const [subcatIds, setSubcatIds] = useState<string[]>([]);
   const [fee, setFee] = useState('');
@@ -120,6 +123,8 @@ export function ProposalSubmit() {
     costBreakdownMd: costBreakdown.trim() || undefined,
     teamInfoMd: teamInfo.trim() || undefined,
     revenueSharingMd: revenueSharing.trim() || undefined,
+    ecosystemImpactMd: ecosystemImpact.trim() || undefined,
+    successMetricsMd: successMetrics.trim() || undefined,
     payoutAddress: payoutAddress.trim() || undefined,
     // Persist the fee tx hash with the draft so it survives a save (verified on-chain at submission).
     submissionFeeTxHash: fee.trim() || undefined,
@@ -169,6 +174,8 @@ export function ProposalSubmit() {
     setCostBreakdown('');
     setTeamInfo('');
     setRevenueSharing('');
+    setEcosystemImpact('');
+    setSuccessMetrics('');
     setPayoutAddress('');
     setSubcatIds([]);
     setPledgeEnabled(false);
@@ -196,6 +203,8 @@ export function ProposalSubmit() {
       setCostBreakdown(p.costBreakdownMd ?? '');
       setTeamInfo(p.teamInfoMd ?? '');
       setRevenueSharing(p.revenueSharingMd ?? '');
+      setEcosystemImpact(p.ecosystemImpactMd ?? '');
+      setSuccessMetrics(p.successMetricsMd ?? '');
       setPayoutAddress(p.payoutAddress ?? '');
       setSubcatIds(p.subcategoryIds ?? []);
       setMs(
@@ -367,7 +376,9 @@ export function ProposalSubmit() {
             <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title</span>
             <input className={`${field} mt-0.5 w-full`} placeholder="Proposal title" value={title} onChange={(e) => setTitle(e.target.value)} required />
           </label>
-          <MarkdownEditor value={content} onChange={setContent} title="Pitch / summary" placeholder="What you'll build and why (markdown)" minRows={5} required />
+          {/* Requested amount + commercial flag sit right under the title (they set the
+              fee + cap the proposal's category fit) so the submitter sees the cost of
+              the ask before writing the pitch. */}
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <label>Requested ₳ <input type="number" className={`${field} w-32 disabled:opacity-60`} value={amount} onChange={(e) => setAmount(Number(e.target.value))} disabled={amountLocked} /></label>
             <label className="flex items-center gap-1"><input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} disabled={amountLocked} /> Commercial / for profit</label>
@@ -392,6 +403,26 @@ export function ProposalSubmit() {
               the budget, use <strong>Request a budget change</strong> on the proposal once it&apos;s active.
             </div>
           ) : null}
+          <MarkdownEditor value={content} onChange={setContent} title="Pitch / summary" placeholder="What you'll build and why (markdown)" minRows={5} required />
+          {/* §3.4 — additional optional context, collapsed by default to keep the form short. */}
+          <MarkdownEditor
+            value={ecosystemImpact}
+            onChange={setEcosystemImpact}
+            title="Expected ecosystem impact"
+            hint="optional — what changes for the ecosystem if this is built?"
+            placeholder="Who benefits, what changes — short-term and longer-term."
+            minRows={3}
+            defaultCollapsed={!ecosystemImpact.trim()}
+          />
+          <MarkdownEditor
+            value={successMetrics}
+            onChange={setSuccessMetrics}
+            title="Success metrics / KPIs"
+            hint="optional — how will you measure success?"
+            placeholder="e.g. number of users, txs, integrations, on-chain volume — with targets where you can."
+            minRows={3}
+            defaultCollapsed={!successMetrics.trim()}
+          />
           {/* §5.2 — the selected category's per-proposal ask range + conditions. */}
           {selectedCat && (selectedCat.minAda != null || selectedCat.maxAda != null || selectedCat.conditions) ? (
             <div className="rounded border border-neutral-200 p-2 text-xs dark:border-neutral-800">

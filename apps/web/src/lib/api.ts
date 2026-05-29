@@ -465,6 +465,8 @@ export interface CreateProposalInput {
   costBreakdownMd?: string;
   teamInfoMd?: string;
   revenueSharingMd?: string;
+  ecosystemImpactMd?: string;
+  successMetricsMd?: string;
   payoutAddress?: string;
   submissionFeeTxHash?: string;
   pledgeAmountAda?: number;
@@ -505,6 +507,8 @@ export interface ProposalDetail extends ProposalSummary {
   costBreakdownMd: string | null;
   teamInfoMd: string | null;
   revenueSharingMd: string | null;
+  ecosystemImpactMd: string | null;
+  successMetricsMd: string | null;
   subcategoryIds: string[];
   submissionFeeAda: number;
   submissionFeeTxHashes: string[];
@@ -670,6 +674,8 @@ export const proposalEditApi = {
       costBreakdownMd?: string;
       teamInfoMd?: string;
       revenueSharingMd?: string;
+      ecosystemImpactMd?: string;
+      successMetricsMd?: string;
       subcategoryIds?: string[];
       payoutAddress?: string;
       submissionFeeTxHash?: string;

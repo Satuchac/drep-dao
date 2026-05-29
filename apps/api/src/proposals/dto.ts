@@ -34,6 +34,8 @@ export class CreateProposalDto {
   @IsOptional() @IsString() @MaxLength(20000) costBreakdownMd?: string;
   @IsOptional() @IsString() @MaxLength(20000) teamInfoMd?: string; // §3.4
   @IsOptional() @IsString() @MaxLength(20000) revenueSharingMd?: string; // §3.4 (commercial)
+  @IsOptional() @IsString() @MaxLength(20000) ecosystemImpactMd?: string; // §3.4
+  @IsOptional() @IsString() @MaxLength(20000) successMetricsMd?: string; // §3.4
   @IsOptional() @IsString() @MaxLength(200) payoutAddress?: string; // Cardano address for refunds / budget payout
   @IsOptional() @IsString() @MaxLength(120) submissionFeeTxHash?: string; // §12 — savable with the draft
   // §3 — optional refundable pledge. Only meaningful when the round's
@@ -59,6 +61,8 @@ export class UpdateProposalDto {
   @IsOptional() @IsString() @MaxLength(20000) costBreakdownMd?: string;
   @IsOptional() @IsString() @MaxLength(20000) teamInfoMd?: string;
   @IsOptional() @IsString() @MaxLength(20000) revenueSharingMd?: string;
+  @IsOptional() @IsString() @MaxLength(20000) ecosystemImpactMd?: string;
+  @IsOptional() @IsString() @MaxLength(20000) successMetricsMd?: string;
   @IsOptional() @IsString() @MaxLength(200) payoutAddress?: string;
   @IsOptional() @IsString() @MaxLength(120) submissionFeeTxHash?: string;
   @IsOptional() @IsInt() @Min(0) pledgeAmountAda?: number;

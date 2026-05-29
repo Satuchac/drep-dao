@@ -99,6 +99,8 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
         {/* Milestone plan (read-only). The board's milestone-review workflow replaces it in FUNDING. */}
         {!showMilestones && p.milestones.length > 0 ? <MilestonePlan milestones={p.milestones} /> : null}
         {/* §3.4 — every funding field from the form is shown (collapsible); empty ones collapse with an "empty" marker. */}
+        <DetailBlock label="Expected ecosystem impact" md={p.ecosystemImpactMd} hint="what changes if this is built" />
+        <DetailBlock label="Success metrics / KPIs" md={p.successMetricsMd} hint="how success will be measured" />
         <DetailBlock label="Cost breakdown" md={p.costBreakdownMd} hint="how the budget is spent" />
         <DetailBlock label="Team info" md={p.teamInfoMd} hint="who is delivering this" />
         <DetailBlock label="Revenue sharing" md={p.revenueSharingMd} hint="for commercial projects" />
@@ -744,6 +746,8 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
   const [costBreakdown, setCostBreakdown] = useState(proposal.costBreakdownMd ?? '');
   const [teamInfo, setTeamInfo] = useState(proposal.teamInfoMd ?? '');
   const [revenueSharing, setRevenueSharing] = useState(proposal.revenueSharingMd ?? '');
+  const [ecosystemImpact, setEcosystemImpact] = useState(proposal.ecosystemImpactMd ?? '');
+  const [successMetrics, setSuccessMetrics] = useState(proposal.successMetricsMd ?? '');
   const [payoutAddress, setPayoutAddress] = useState(proposal.payoutAddress ?? '');
   const [subcatIds, setSubcatIds] = useState<string[]>(proposal.subcategoryIds ?? []);
   const [busy, setBusy] = useState(false);
@@ -764,6 +768,8 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
         costBreakdownMd: costBreakdown,
         teamInfoMd: teamInfo,
         revenueSharingMd: revenueSharing,
+        ecosystemImpactMd: ecosystemImpact,
+        successMetricsMd: successMetrics,
         payoutAddress,
         subcategoryIds: subcatIds,
       });
@@ -790,6 +796,8 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
         <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={title} onChange={(e) => setTitle(e.target.value)} />
       </label>
       <MarkdownEditor value={content} onChange={setContent} title="Pitch / summary" placeholder="Proposal pitch (markdown)" minRows={6} />
+      <MarkdownEditor value={ecosystemImpact} onChange={setEcosystemImpact} title="Expected ecosystem impact" hint="optional" placeholder="Who benefits, what changes — short- and long-term." minRows={3} defaultCollapsed={!ecosystemImpact.trim()} />
+      <MarkdownEditor value={successMetrics} onChange={setSuccessMetrics} title="Success metrics / KPIs" hint="optional" placeholder="How will success be measured (with targets where you can)" minRows={3} defaultCollapsed={!successMetrics.trim()} />
       <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title="Cost breakdown" hint="optional" placeholder="How the budget is spent" minRows={3} defaultCollapsed={!costBreakdown.trim()} />
       <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title="Team info" hint="optional" placeholder="Who is delivering this" minRows={3} defaultCollapsed={!teamInfo.trim()} />
       <MarkdownEditor value={revenueSharing} onChange={setRevenueSharing} title="Revenue sharing" hint="optional" placeholder="For commercial projects: how the DAO shares in returns" minRows={3} defaultCollapsed={!revenueSharing.trim()} />

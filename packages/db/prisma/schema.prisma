@@ -331,6 +331,9 @@ model Proposal {
   teamInfo            Json?    @map("team_info")
   costBreakdownMd     String?  @map("cost_breakdown_md")
   revenueSharing      Json?    @map("revenue_sharing")
+  // §3.4 — additional optional proposal sections (markdown, collapsible in the form/detail).
+  ecosystemImpactMd   String?  @map("ecosystem_impact_md")
+  successMetricsMd    String?  @map("success_metrics_md")
 
   // internal
   internalType  String?   @map("internal_type")
