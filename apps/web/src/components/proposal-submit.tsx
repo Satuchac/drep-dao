@@ -409,7 +409,7 @@ export function ProposalSubmit() {
             value={ecosystemImpact}
             onChange={setEcosystemImpact}
             title="Expected ecosystem impact"
-            hint="optional — what changes for the ecosystem if this is built?"
+            subtitle="What specific benefit will the project have for the ecosystem? Who will the result serve, what problem does it solve and why should it be funded from community funds?"
             placeholder="Who benefits, what changes — short-term and longer-term."
             minRows={3}
             defaultCollapsed={!ecosystemImpact.trim()}
@@ -418,7 +418,7 @@ export function ProposalSubmit() {
             value={successMetrics}
             onChange={setSuccessMetrics}
             title="Success metrics / KPIs"
-            hint="optional — how will you measure success?"
+            subtitle="What measurable indicators will you use to evaluate the success of the project? Specify the target values, time frame and method of verification."
             placeholder="e.g. number of users, txs, integrations, on-chain volume — with targets where you can."
             minRows={3}
             defaultCollapsed={!successMetrics.trim()}
@@ -728,7 +728,7 @@ function PledgeSection({
     <div className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={enabled} onChange={(e) => onEnabled(e.target.checked)} />
-        <span className="font-medium">I will provide a refundable pledge (optional)</span>
+        <span className="font-medium">Skin in the game (refundable pledge — optional)</span>
         <span className="text-xs text-neutral-500">— minimum {minAda.toLocaleString()} ₳ (round setting)</span>
       </label>
       {enabled ? (
@@ -759,14 +759,14 @@ function PledgeSection({
             value={returnMethod}
             onChange={onReturnMethod}
             title="Pledge return method"
-            hint="how + when the pledge will be returned (e.g. a slice at each milestone, or in full after the last)"
+            subtitle="How and when will the pledge be returned? Common patterns: a slice with each milestone, or the full amount only after the final milestone. The team may propose another scheme — describe it here."
             placeholder="Example: 25% returned after milestone 1, 25% after milestone 2, the rest after the final milestone."
             minRows={3}
             defaultCollapsed={!returnMethod.trim()}
             required
           />
           <div className="text-[11px] text-neutral-500">
-            The pledge is paid on-chain <strong>after</strong> the proposal is approved (FUNDING stage), to the address the platform shows you there. A board member confirms the payment.
+            You commit here. The pledge is paid on-chain <strong>after</strong> the proposal is approved (FUNDING stage): the platform shows the pledge address + you paste the tx hash, a board member confirms it. While unpaid/unconfirmed the proposal stays <strong>PENDING</strong> and milestone POAs are blocked.
           </div>
         </div>
       ) : (

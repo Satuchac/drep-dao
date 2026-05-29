@@ -80,6 +80,16 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
             ) : null}
             {p.stage ? <span>Stage: <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.stage}</span></span> : null}
             <span className="flex items-center gap-1">Status: <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} /></span>
+            {/* §3 — once in FUNDING, a promised-but-unconfirmed pledge holds the
+                proposal effectively PENDING (milestone POAs blocked). Surface that
+                explicitly so the team / reviewers see the gating without scrolling. */}
+            {p.stage === 'FUNDING' && p.status === 'APPROVED' && p.pledgeAmountAda > 0 ? (
+              p.pledgeConfirmedAt ? (
+                <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">ACTIVE · pledge confirmed</span>
+              ) : (
+                <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">PENDING · awaiting pledge confirmation</span>
+              )
+            ) : null}
             {/* §7/§8/§11 — at-a-glance: how many DReps must still vote at the current stage. */}
             <VotingProgressChip id={id} status={p.status} stage={p.stage} />
           </div>
@@ -796,8 +806,8 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
         <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={title} onChange={(e) => setTitle(e.target.value)} />
       </label>
       <MarkdownEditor value={content} onChange={setContent} title="Pitch / summary" placeholder="Proposal pitch (markdown)" minRows={6} />
-      <MarkdownEditor value={ecosystemImpact} onChange={setEcosystemImpact} title="Expected ecosystem impact" hint="optional" placeholder="Who benefits, what changes — short- and long-term." minRows={3} defaultCollapsed={!ecosystemImpact.trim()} />
-      <MarkdownEditor value={successMetrics} onChange={setSuccessMetrics} title="Success metrics / KPIs" hint="optional" placeholder="How will success be measured (with targets where you can)" minRows={3} defaultCollapsed={!successMetrics.trim()} />
+      <MarkdownEditor value={ecosystemImpact} onChange={setEcosystemImpact} title="Expected ecosystem impact" subtitle="What specific benefit will the project have for the ecosystem? Who will the result serve, what problem does it solve and why should it be funded from community funds?" placeholder="Who benefits, what changes — short- and long-term." minRows={3} defaultCollapsed={!ecosystemImpact.trim()} />
+      <MarkdownEditor value={successMetrics} onChange={setSuccessMetrics} title="Success metrics / KPIs" subtitle="What measurable indicators will you use to evaluate the success of the project? Specify the target values, time frame and method of verification." placeholder="How will success be measured (with targets where you can)" minRows={3} defaultCollapsed={!successMetrics.trim()} />
       <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title="Cost breakdown" hint="optional" placeholder="How the budget is spent" minRows={3} defaultCollapsed={!costBreakdown.trim()} />
       <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title="Team info" hint="optional" placeholder="Who is delivering this" minRows={3} defaultCollapsed={!teamInfo.trim()} />
       <MarkdownEditor value={revenueSharing} onChange={setRevenueSharing} title="Revenue sharing" hint="optional" placeholder="For commercial projects: how the DAO shares in returns" minRows={3} defaultCollapsed={!revenueSharing.trim()} />

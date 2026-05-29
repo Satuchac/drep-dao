@@ -71,6 +71,7 @@ export function MarkdownEditor({
   onChange,
   title,
   hint,
+  subtitle,
   placeholder,
   minRows = 3,
   required,
@@ -80,6 +81,10 @@ export function MarkdownEditor({
   onChange: (v: string) => void;
   title?: string;
   hint?: string;
+  /** Longer help text shown on its own line below the title — for fields that
+   *  need explaining (e.g. KPIs, ecosystem impact). Use `hint` for a short
+   *  inline suffix; use `subtitle` for one-or-two sentences of guidance. */
+  subtitle?: string;
   placeholder?: string;
   minRows?: number;
   required?: boolean;
@@ -94,21 +99,24 @@ export function MarkdownEditor({
   // Collapsed: show only the field name (+ a "filled" hint) and an Expand button.
   if (!open) {
     return (
-      <div className="flex items-center gap-2 rounded-md border border-neutral-300 px-2 py-1.5 dark:border-neutral-700">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="flex flex-1 items-center gap-1 text-left text-sm font-medium text-neutral-700 hover:text-neutral-900 dark:text-neutral-300"
-        >
-          <span className="text-neutral-400">▸</span>
-          {title ?? 'Field'}
-          {hint ? <span className="font-normal text-neutral-400"> — {hint}</span> : null}
-          {required && !filled ? <span className="text-red-500">*</span> : null}
-        </button>
-        <span className="text-xs text-neutral-400">{filled ? '✓ filled' : 'empty'}</span>
-        <button type="button" onClick={() => setOpen(true)} className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700">
-          ⤢ Expand
-        </button>
+      <div className="rounded-md border border-neutral-300 px-2 py-1.5 dark:border-neutral-700">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="flex flex-1 items-center gap-1 text-left text-sm font-medium text-neutral-700 hover:text-neutral-900 dark:text-neutral-300"
+          >
+            <span className="text-neutral-400">▸</span>
+            {title ?? 'Field'}
+            {hint ? <span className="font-normal text-neutral-400"> — {hint}</span> : null}
+            {required && !filled ? <span className="text-red-500">*</span> : null}
+          </button>
+          <span className="text-xs text-neutral-400">{filled ? '✓ filled' : 'empty'}</span>
+          <button type="button" onClick={() => setOpen(true)} className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700">
+            ⤢ Expand
+          </button>
+        </div>
+        {subtitle ? <p className="mt-0.5 pl-5 text-[11px] italic text-neutral-500 dark:text-neutral-400">{subtitle}</p> : null}
       </div>
     );
   }
@@ -138,18 +146,21 @@ export function MarkdownEditor({
 
   return (
     <div className="rounded-md border border-neutral-300 dark:border-neutral-700">
-      {/* Field name + the collapse ("Shrink to name") control. */}
+      {/* Field name + optional subtitle + the collapse ("Shrink to name") control. */}
       {title ? (
-        <div className="flex items-center gap-2 border-b border-neutral-200 px-2 py-1 dark:border-neutral-700">
-          <button type="button" onClick={() => setOpen(false)} className="flex flex-1 items-center gap-1 text-left text-sm font-medium text-neutral-700 dark:text-neutral-300">
-            <span className="text-neutral-400">▾</span>
-            {title}
-            {hint ? <span className="font-normal text-neutral-400"> — {hint}</span> : null}
-            {required && !filled ? <span className="text-red-500">*</span> : null}
-          </button>
-          <button type="button" onClick={() => setOpen(false)} className={btn} title="Collapse to just the field name">
-            ▣ Shrink
-          </button>
+        <div className="border-b border-neutral-200 px-2 py-1 dark:border-neutral-700">
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setOpen(false)} className="flex flex-1 items-center gap-1 text-left text-sm font-medium text-neutral-700 dark:text-neutral-300">
+              <span className="text-neutral-400">▾</span>
+              {title}
+              {hint ? <span className="font-normal text-neutral-400"> — {hint}</span> : null}
+              {required && !filled ? <span className="text-red-500">*</span> : null}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} className={btn} title="Collapse to just the field name">
+              ▣ Shrink
+            </button>
+          </div>
+          {subtitle ? <p className="mt-0.5 pl-5 text-[11px] italic text-neutral-500 dark:text-neutral-400">{subtitle}</p> : null}
         </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-0.5 border-b border-neutral-200 bg-neutral-50 px-1 py-1 dark:border-neutral-700 dark:bg-neutral-800/60">
