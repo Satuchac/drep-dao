@@ -1014,6 +1014,7 @@ export class ProposalsService {
       submissionFeeTxHash: p.submissionFeeTxHash,
       submissionFeeTxHashes: p.submissionFeeTxHashes,
       feeReviewFeedback: p.feeReviewFeedback,
+      submittedAt: p.submittedAt,
       payoutAddress: p.payoutAddress,
       // §3 — pledge promise + confirmation state.
       pledgeAmountAda: toAda(p.pledgeAmountAda),

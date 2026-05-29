@@ -526,6 +526,7 @@ export interface ProposalDetail extends ProposalSummary {
   submissionFeeAda: number;
   submissionFeeTxHashes: string[];
   feeReviewFeedback: string | null;
+  submittedAt: string | null;
   payoutAddress: string | null;
   pledgeAmountAda: number;
   pledgeReturnMethod: string | null;

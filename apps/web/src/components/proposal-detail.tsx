@@ -393,6 +393,10 @@ function RejectionBanner({ proposal: p }: { proposal: PDetail }) {
  * (status moved past fee-review), red when the board rejected (status=REJECTED, stage=null —
  * a fee-stage rejection). A PENDING proposal (fee paid but no board decision yet) shows a
  * yellow "waiting for payment confirmation" banner above the tx list.
+ *
+ * Non-fee rejections (e.g. "Not submitted before the SUBMISSION phase ended.") carry their
+ * reason in `feeReviewFeedback` too — they render as a separate sibling block OUTSIDE the
+ * fee box. A draft that was never submitted has `submittedAt == null`; that's our signal.
  */
 function FeeBlock({ proposal }: { proposal: PDetail }) {
   const { txUrl } = useExplorer();
@@ -401,52 +405,67 @@ function FeeBlock({ proposal }: { proposal: PDetail }) {
     : proposal.submissionFeeTxHash
       ? [proposal.submissionFeeTxHash]
       : [];
-  if (hashes.length === 0 && !proposal.feeReviewFeedback) return null;
-  // A fee-stage rejection: status=REJECTED with no stage set (the proposal never
-  // entered Filtering). Filtering / D&V rejections come with a stage value, and
-  // their reason lives in the rationale rows — not in feeReviewFeedback.
-  const feeRejected = proposal.status === 'REJECTED' && proposal.stage == null;
+  const rejected = proposal.status === 'REJECTED' && proposal.stage == null;
+  // A rejection whose reason is the fee itself: the proposal had been submitted
+  // (submittedAt set), so the failure was at fee review or fee non-confirmation.
+  // A draft that was never submitted carries a non-fee reason; we render it as
+  // a sibling block outside the fee box.
+  const feeRejected = rejected && proposal.submittedAt != null;
+  const nonFeeRejection = rejected && proposal.submittedAt == null && proposal.feeReviewFeedback;
+  const feedbackInBox = proposal.feeReviewFeedback && !nonFeeRejection;
   const awaitingFeeConfirmation = proposal.status === 'PENDING' && hashes.length > 0;
+  const showBox = hashes.length > 0 || awaitingFeeConfirmation || feedbackInBox;
+  if (!showBox && !nonFeeRejection) return null;
   return (
-    <div className="mt-3 rounded border border-neutral-200 p-2 dark:border-neutral-800">
-      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-        Submission fee{proposal.submissionFeeAda ? ` · ${proposal.submissionFeeAda.toLocaleString()} ₳` : ''}
-      </div>
-      {/* §16 — submitter has paid (tx hash entered) but the board hasn't reviewed yet. */}
-      {awaitingFeeConfirmation ? (
-        <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 dark:border-amber-900 dark:bg-amber-950/30">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">Waiting for payment confirmation</div>
-          <div className="mt-0.5 text-xs text-amber-800 dark:text-amber-200">
-            A board member will verify your on-chain payment to the submission-fee address. Once approved your proposal moves to Filtering and becomes public.
+    <>
+      {showBox ? (
+        <div className="mt-3 rounded border border-neutral-200 p-2 dark:border-neutral-800">
+          <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            Submission fee{proposal.submissionFeeAda ? ` · ${proposal.submissionFeeAda.toLocaleString()} ₳` : ''}
           </div>
-        </div>
-      ) : null}
-      {hashes.length > 0 ? (
-        <div className="mt-1 space-y-0.5">
-          {hashes.map((h, i) => (
-            <div key={h} className="text-xs">
-              <a href={txUrl(h)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">
-                {h} ↗
-              </a>
-              {hashes.length > 1 && i === hashes.length - 1 ? <span className="ml-1 text-[10px] uppercase text-neutral-400">latest</span> : null}
+          {/* §16 — submitter has paid (tx hash entered) but the board hasn't reviewed yet. */}
+          {awaitingFeeConfirmation ? (
+            <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 dark:border-amber-900 dark:bg-amber-950/30">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">Waiting for payment confirmation</div>
+              <div className="mt-0.5 text-xs text-amber-800 dark:text-amber-200">
+                A board member will verify your on-chain payment to the submission-fee address. Once approved your proposal moves to Filtering and becomes public.
+              </div>
             </div>
-          ))}
+          ) : null}
+          {hashes.length > 0 ? (
+            <div className="mt-1 space-y-0.5">
+              {hashes.map((h, i) => (
+                <div key={h} className="text-xs">
+                  <a href={txUrl(h)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">
+                    {h} ↗
+                  </a>
+                  {hashes.length > 1 && i === hashes.length - 1 ? <span className="ml-1 text-[10px] uppercase text-neutral-400">latest</span> : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {feedbackInBox ? (
+            feeRejected ? (
+              <div className="mt-2 rounded border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/30">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Rejected — feedback</div>
+                <div className="mt-0.5 whitespace-pre-wrap text-xs text-red-800 dark:text-red-300">{proposal.feeReviewFeedback}</div>
+              </div>
+            ) : (
+              <div className="mt-2 rounded border border-emerald-300 bg-emerald-50 p-2 dark:border-emerald-900 dark:bg-emerald-950/30">
+                <div className="text-[11px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Approved — feedback</div>
+                <div className="mt-0.5 whitespace-pre-wrap text-xs text-emerald-800 dark:text-emerald-200">{proposal.feeReviewFeedback}</div>
+              </div>
+            )
+          ) : null}
         </div>
       ) : null}
-      {proposal.feeReviewFeedback ? (
-        feeRejected ? (
-          <div className="mt-2 rounded border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/30">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Rejected — feedback</div>
-            <div className="mt-0.5 whitespace-pre-wrap text-xs text-red-800 dark:text-red-300">{proposal.feeReviewFeedback}</div>
-          </div>
-        ) : (
-          <div className="mt-2 rounded border border-emerald-300 bg-emerald-50 p-2 dark:border-emerald-900 dark:bg-emerald-950/30">
-            <div className="text-[11px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Approved — feedback</div>
-            <div className="mt-0.5 whitespace-pre-wrap text-xs text-emerald-800 dark:text-emerald-200">{proposal.feeReviewFeedback}</div>
-          </div>
-        )
+      {nonFeeRejection ? (
+        <div className="mt-3 rounded border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/30">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Rejected — feedback</div>
+          <div className="mt-0.5 whitespace-pre-wrap text-xs text-red-800 dark:text-red-300">{proposal.feeReviewFeedback}</div>
+        </div>
       ) : null}
-    </div>
+    </>
   );
 }
 
