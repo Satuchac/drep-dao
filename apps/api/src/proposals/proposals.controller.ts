@@ -70,6 +70,15 @@ export class ProposalsController {
     return this.proposals.requestBudgetChange(ctx.userId, id, dto);
   }
 
+  // §12 — submitter checks on-chain how much of the submission fee landed so far
+  // (cumulative across every tx hash saved on the proposal). Lets the team test
+  // with a small tx before sending the rest.
+  @UseGuards(JwtAuthGuard)
+  @Get('proposals/:id/verify-fee')
+  verifyFee(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.proposals.verifyFeeOnChain(id, ctx.userId);
+  }
+
   // §3 — submitter pastes the on-chain pledge payment tx hash (FUNDING + promised pledge).
   @UseGuards(JwtAuthGuard)
   @Post('proposals/:id/pledge-tx')

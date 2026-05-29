@@ -320,6 +320,45 @@ export class ProposalsService {
     return this.get(id);
   }
 
+  /**
+   * §12 — let the submitter verify on-chain how much of the submission fee has been
+   * paid so far across all the tx hashes saved on the proposal. Useful before
+   * actually submitting: "send 1 ADA as a test → click Verify → see 1 paid / 499
+   * missing → send the rest → click Verify again → fully paid → submit." Sums the
+   * amount each saved tx sent to the configured fee address; cumulative so a team
+   * can split the payment across several txs.
+   */
+  async verifyFeeOnChain(id: string, userId: string) {
+    const p = await this.prisma.proposal.findUnique({ where: { id } });
+    if (!p) throw new NotFoundException('proposal not found');
+    if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
+    const feeAddress = this.config.get<string>('SUBMISSION_FEE_ADDRESS')
+      ?? this.config.get<string>('TREASURY_ADDRESS') ?? '';
+    const requiredAda = toAda(p.submissionFeeAda);
+    const hashes = p.submissionFeeTxHashes.length
+      ? p.submissionFeeTxHashes
+      : (p.submissionFeeTxHash ? [p.submissionFeeTxHash] : []);
+    if (!feeAddress || hashes.length === 0 || !requiredAda) {
+      return { requiredAda, paidAda: 0, missingAda: requiredAda, fullyPaid: requiredAda === 0, txs: [] as { hash: string; found: boolean; paidAda: number }[] };
+    }
+    const txs = await Promise.all(
+      hashes.map(async (h) => {
+        // Pass 0n so verifyPayment returns the actual paid amount without applying a
+        // pass/fail threshold — we sum across txs ourselves.
+        const v = await this.cardano.verifyPayment(h, feeAddress, 0n);
+        return { hash: h, found: v.found, paidAda: toAda(v.paidLovelace) };
+      }),
+    );
+    const paidAda = txs.reduce((s, t) => s + t.paidAda, 0);
+    return {
+      requiredAda,
+      paidAda,
+      missingAda: Math.max(0, requiredAda - paidAda),
+      fullyPaid: paidAda >= requiredAda,
+      txs,
+    };
+  }
+
   // ===========================================================================
   // §3 Pledge — paid on-chain AFTER approval, board confirms (mirrors fee flow)
   // ===========================================================================

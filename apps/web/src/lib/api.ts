@@ -481,6 +481,13 @@ export interface ProposalProgress {
   label: string;
   tone: 'amber' | 'emerald' | 'neutral' | 'red';
 }
+export interface FeeVerification {
+  requiredAda: number;
+  paidAda: number;
+  missingAda: number;
+  fullyPaid: boolean;
+  txs: { hash: string; found: boolean; paidAda: number }[];
+}
 export interface ProposalRejectionReason {
   stage: string;
   from: string | null;
@@ -539,6 +546,8 @@ export const proposalsApi = {
   // §3 — team pastes the on-chain pledge payment tx hash (FUNDING + promised pledge).
   pledgeTx: (id: string, txHash: string) =>
     request<ProposalDetail>(`/proposals/${id}/pledge-tx`, { method: 'POST', body: JSON.stringify({ txHash }) }),
+  // §12 — submitter verifies the cumulative submission-fee payment on-chain.
+  verifyFee: (id: string) => request<FeeVerification>(`/proposals/${id}/verify-fee`),
   submit: (id: string, submissionFeeTxHash: string) =>
     request<ProposalDetail>(`/proposals/${id}/submit`, {
       method: 'POST',

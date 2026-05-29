@@ -5,6 +5,7 @@ import { DEFAULT_SUBCATEGORIES, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared'
 import {
   proposalsApi,
   roundsApi,
+  type FeeVerification,
   type ProposalMilestoneInput,
   type ProposalSummary,
   type RoundDetail,
@@ -54,6 +55,10 @@ export function ProposalSubmit() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // §12 — on-chain submission-fee verification result. Set when the submitter
+  // clicks Verify next to the fee tx input; cumulative across all saved hashes.
+  const [verifying, setVerifying] = useState(false);
+  const [feeVerification, setFeeVerification] = useState<FeeVerification | null>(null);
 
   const loadMine = () => proposalsApi.mine().then(setMine).catch(() => undefined);
   useEffect(() => {
@@ -547,7 +552,86 @@ export function ProposalSubmit() {
                   </div>
                 ) : null}
               </div>
-              <input className={`${field} w-full`} placeholder="Submission fee TX hash (needed only to submit)" value={fee} onChange={(e) => setFee(e.target.value)} />
+              {/* TX hash input + Verify button. Verify needs a saved draft (so the
+                  pasted hash gets persisted and added to the cumulative tally) and
+                  the entered hash; once the on-chain total covers the fee, the input
+                  locks so the team doesn't accidentally overwrite a confirmed hash. */}
+              <div className="flex flex-wrap items-stretch gap-2">
+                <input
+                  className={`${field} flex-1 disabled:bg-emerald-50 disabled:text-emerald-700 dark:disabled:bg-emerald-950/30 dark:disabled:text-emerald-300`}
+                  placeholder="Submission fee TX hash (needed only to submit)"
+                  value={fee}
+                  onChange={(e) => { setFee(e.target.value); setFeeVerification(null); }}
+                  disabled={feeVerification?.fullyPaid === true}
+                />
+                <button
+                  type="button"
+                  disabled={verifying || !editingId || !fee.trim() || feeVerification?.fullyPaid === true}
+                  title={
+                    !editingId
+                      ? 'Save the draft first — the tx hash is recorded with the proposal so the on-chain check can be cumulative across several payments.'
+                      : 'Check on-chain how much has been paid to the fee address (cumulative across all entered txs).'
+                  }
+                  onClick={async () => {
+                    if (!editingId) return;
+                    setVerifying(true); setError(null);
+                    try {
+                      // Persist the latest hash first so it's part of the history the
+                      // backend sums across (you can paste several to cover the fee).
+                      await proposalsApi.update(editingId, { submissionFeeTxHash: fee.trim() || undefined });
+                      const v = await proposalsApi.verifyFee(editingId);
+                      setFeeVerification(v);
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'verification failed');
+                    } finally {
+                      setVerifying(false);
+                    }
+                  }}
+                  className="rounded-md border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                >
+                  {verifying ? 'Verifying…' : 'Verify on-chain'}
+                </button>
+              </div>
+              {feeVerification ? (
+                <div
+                  className={`rounded border p-2 text-xs ${
+                    feeVerification.fullyPaid
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200'
+                      : feeVerification.paidAda > 0
+                        ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200'
+                        : 'border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200'
+                  }`}
+                >
+                  {feeVerification.fullyPaid ? (
+                    <span>
+                      <strong>✓ Fully paid</strong> — {feeVerification.paidAda.toLocaleString()} ₳ received at the fee address (required {feeVerification.requiredAda.toLocaleString()} ₳).
+                      The TX hash field is locked. You can now submit.
+                    </span>
+                  ) : feeVerification.paidAda > 0 ? (
+                    <span>
+                      <strong>Partial payment:</strong> {feeVerification.paidAda.toLocaleString()} ₳ received,{' '}
+                      <strong>{feeVerification.missingAda.toLocaleString()} ₳ still missing</strong>{' '}
+                      (required {feeVerification.requiredAda.toLocaleString()} ₳).
+                      Send the rest in a new tx, paste the new hash here, and click Verify again — both txs will be counted.
+                    </span>
+                  ) : feeVerification.txs[0]?.found === false ? (
+                    <span>✗ The tx hash wasn&apos;t found on-chain yet. If you just submitted it, wait ~30 seconds for the next block and try again.</span>
+                  ) : (
+                    <span>✗ This tx didn&apos;t pay the fee address. Did you send to the right address?</span>
+                  )}
+                  {/* Per-tx breakdown when there are several. */}
+                  {feeVerification.txs.length > 1 ? (
+                    <ul className="mt-1 space-y-0.5 text-[11px]">
+                      {feeVerification.txs.map((t) => (
+                        <li key={t.hash} className="break-all">
+                          <span className="font-mono">{t.hash.slice(0, 16)}…</span>{' '}
+                          {t.paidAda > 0 ? `→ ${t.paidAda.toLocaleString()} ₳ paid` : t.found ? '→ 0 ₳ to the fee address' : '→ not found on-chain'}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
             </>
           ) : (
             <div className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
