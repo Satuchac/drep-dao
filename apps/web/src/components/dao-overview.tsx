@@ -8,8 +8,9 @@ import { fmtDate } from './round-ui';
 const SUBCAT_LABEL: Record<string, string> = Object.fromEntries(DEFAULT_SUBCATEGORIES.map((s) => [s.id, s.label]));
 
 // Sortable columns of the member table; `num` distinguishes numeric vs text/date sort.
-type SortKey = 'displayName' | 'since' | 'votingPowerAda' | 'delegators' | 'basePower' | 'merit' | 'meritMultiplier' | 'adjustedPower';
-const COLUMNS: { key: SortKey; label: string; right?: boolean; num?: boolean }[] = [
+type SortKey = 'isBoard' | 'displayName' | 'since' | 'votingPowerAda' | 'delegators' | 'basePower' | 'merit' | 'meritMultiplier' | 'adjustedPower';
+const COLUMNS: { key: SortKey; label: string; right?: boolean; num?: boolean; center?: boolean }[] = [
+  { key: 'isBoard', label: 'Board', center: true },
   { key: 'displayName', label: 'Member' },
   { key: 'since', label: 'Member since' },
   { key: 'votingPowerAda', label: 'Voting power (ADA)', right: true, num: true },
@@ -39,8 +40,9 @@ export function DaoOverview() {
   const [members, setMembers] = useState<DaoMember[] | null>(null);
   const [experts, setExperts] = useState<DaoExpert[]>([]);
   const [error, setError] = useState<string | null>(null);
-  // Default: highest adjusted power first (matches the prior server order).
-  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'adjustedPower', dir: 'desc' });
+  // Default: board members first (so the table makes the 5-of-N board obvious),
+  // then highest adjusted power within each group.
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'isBoard', dir: 'desc' });
 
   useEffect(() => {
     daoApi
@@ -56,6 +58,12 @@ export function DaoOverview() {
     const { key, dir } = sort;
     const f = dir === 'asc' ? 1 : -1;
     arr.sort((a, b) => {
+      if (key === 'isBoard') {
+        // Group: board first (or last on asc), then within-group by adjusted power desc.
+        const ba = Number(!!a.isBoard), bb = Number(!!b.isBoard);
+        if (ba !== bb) return f * (ba - bb);
+        return b.adjustedPower - a.adjustedPower;
+      }
       if (key === 'displayName') return f * (a.displayName ?? '').localeCompare(b.displayName ?? '');
       if (key === 'since') return f * ((a.since ? new Date(a.since).getTime() : 0) - (b.since ? new Date(b.since).getTime() : 0));
       return f * ((a[key] as number) - (b[key] as number));
@@ -69,13 +77,20 @@ export function DaoOverview() {
   return (
     <div className="space-y-3">
       <div>
-        <h2 className="text-lg font-semibold">DAO Member overview</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-semibold">DAO Member overview</h2>
+          {members ? (
+            <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+              <strong>{members.filter((m) => m.isBoard).length}</strong> board · <strong>{members.length}</strong> members total
+            </span>
+          ) : null}
+        </div>
         <p className="text-sm text-neutral-500">
           Adjusted power (§4) = log₁₀(on-chain DRep voting power in ADA) × (1 + merit/200). Voting power is
           ADA delegated to the DRep (CIP-1694 vote delegation — not stake-pool delegation).
         </p>
         {members && members.length > 1 ? (
-          <p className="mt-1 text-xs text-neutral-400">Tip: click any column header to sort (click again to reverse).</p>
+          <p className="mt-1 text-xs text-neutral-400">Tip: click any column header to sort (click again to reverse). Board members are highlighted + shown first by default.</p>
         ) : null}
       </div>
 
@@ -92,7 +107,7 @@ export function DaoOverview() {
                 {COLUMNS.map((c) => {
                   const active = sort.key === c.key;
                   return (
-                    <th key={c.key} className={`px-3 py-2 ${c.right ? 'text-right' : ''}`}>
+                    <th key={c.key} className={`px-3 py-2 ${c.right ? 'text-right' : c.center ? 'text-center' : ''}`}>
                       <button
                         onClick={() => onSort(c.key)}
                         className={`inline-flex cursor-pointer select-none items-center gap-1 rounded px-1 py-0.5 uppercase hover:bg-neutral-200/70 dark:hover:bg-neutral-700/70 ${
@@ -112,16 +127,24 @@ export function DaoOverview() {
             </thead>
             <tbody>
               {(sorted ?? []).map((m) => (
-                <tr key={m.drepId} className="border-t border-neutral-200 dark:border-neutral-800">
+                <tr key={m.drepId} className={`border-t border-neutral-200 dark:border-neutral-800 ${m.isBoard ? 'bg-indigo-50/40 dark:bg-indigo-950/20' : ''}`}>
+                  {/* §14 — dedicated BOARD column so the 5-of-N composition is unmistakable. */}
+                  <td className="px-3 py-2 text-center">
+                    {m.isBoard ? (
+                      <span
+                        title="Founding board seat"
+                        className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                      >
+                        BOARD
+                      </span>
+                    ) : (
+                      <span className="text-neutral-400">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <Avatar name={m.displayName} image={m.image} />
                       <span className="font-medium">{m.displayName}</span>
-                      {m.isBoard ? (
-                        <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
-                          BOARD
-                        </span>
-                      ) : null}
                       {/* §14.1 — fell below the entry power/delegator minimum, but stays a full voting member. */}
                       {!m.meetsEntryRequirements ? (
                         <span
