@@ -33,6 +33,10 @@ import { Markdown, MarkdownEditor } from './markdown';
 import { CopyButton } from './copy-button';
 
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
+// Subtle blue tint on platform-managed governance sections (Filtering jury, D&V,
+// Pledge, Milestones) so the reader can tell at a glance these blocks are
+// platform information / actions, not content the team wrote.
+const platformCard = 'rounded-lg border border-blue-200 bg-blue-50/40 p-4 dark:border-blue-900 dark:bg-blue-950/20';
 const SUBCAT_LABEL: Record<string, string> = Object.fromEntries(DEFAULT_SUBCATEGORIES.map((s) => [s.id, s.label]));
 const choiceCls: Record<string, string> = {
   YES: 'text-emerald-600',
@@ -517,7 +521,7 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
       : null;
 
   return (
-    <section className={card}>
+    <section className={platformCard}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold">Filtering — 1 member · 1 vote</h3>
         <div className="flex items-center gap-2">
@@ -708,7 +712,7 @@ function DvSection({ id, isBoard }: { id: string; isBoard: boolean }) {
   };
 
   return (
-    <section className={card}>
+    <section className={platformCard}>
       <div className="flex items-center justify-between">
         <h3 className="text-base font-semibold">Debate &amp; Vote — balanced voting power</h3>
         <AnchorLink txHash={r.anchorTxHash} />
@@ -1090,7 +1094,7 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
   };
 
   return (
-    <section className={card}>
+    <section className={platformCard}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold">Proposer pledge (§3)</h3>
         <span className={`rounded px-2 py-0.5 text-[11px] font-medium ${
@@ -1212,7 +1216,7 @@ function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: st
   // server-side gates which user is actually allowed to propose. The button itself is
   // surfaced inside <StopFundingPanel/>.
   return (
-    <section className={card}>
+    <section className={platformCard}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold">Funding — milestones (§11)</h3>
         {!inFunding && !stoppedOrDone ? (
