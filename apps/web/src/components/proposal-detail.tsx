@@ -374,7 +374,10 @@ function RejectionBanner({ proposal: p }: { proposal: PDetail }) {
 
 /**
  * §12/§16 — the submitter's view of the submission fee: every tx hash they entered, plus the
- * board's review feedback in a red FEEDBACK box (shown next to the tx, on approve or reject).
+ * board's review feedback. **Color signals the decision**: green when the board approved
+ * (status moved past fee-review), red when the board rejected (status=REJECTED, stage=null —
+ * a fee-stage rejection). A PENDING proposal (fee paid but no board decision yet) shows a
+ * yellow "waiting for payment confirmation" banner above the tx list.
  */
 function FeeBlock({ proposal }: { proposal: PDetail }) {
   const { txUrl } = useExplorer();
@@ -384,11 +387,25 @@ function FeeBlock({ proposal }: { proposal: PDetail }) {
       ? [proposal.submissionFeeTxHash]
       : [];
   if (hashes.length === 0 && !proposal.feeReviewFeedback) return null;
+  // A fee-stage rejection: status=REJECTED with no stage set (the proposal never
+  // entered Filtering). Filtering / D&V rejections come with a stage value, and
+  // their reason lives in the rationale rows — not in feeReviewFeedback.
+  const feeRejected = proposal.status === 'REJECTED' && proposal.stage == null;
+  const awaitingFeeConfirmation = proposal.status === 'PENDING' && hashes.length > 0;
   return (
     <div className="mt-3 rounded border border-neutral-200 p-2 dark:border-neutral-800">
       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
         Submission fee{proposal.submissionFeeAda ? ` · ${proposal.submissionFeeAda.toLocaleString()} ₳` : ''}
       </div>
+      {/* §16 — submitter has paid (tx hash entered) but the board hasn't reviewed yet. */}
+      {awaitingFeeConfirmation ? (
+        <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 dark:border-amber-900 dark:bg-amber-950/30">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">Waiting for payment confirmation</div>
+          <div className="mt-0.5 text-xs text-amber-800 dark:text-amber-200">
+            A board member will verify your on-chain payment to the submission-fee address. Once approved your proposal moves to Filtering and becomes public.
+          </div>
+        </div>
+      ) : null}
       {hashes.length > 0 ? (
         <div className="mt-1 space-y-0.5">
           {hashes.map((h, i) => (
@@ -402,10 +419,17 @@ function FeeBlock({ proposal }: { proposal: PDetail }) {
         </div>
       ) : null}
       {proposal.feeReviewFeedback ? (
-        <div className="mt-2 rounded border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/30">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Feedback</div>
-          <div className="mt-0.5 whitespace-pre-wrap text-xs text-red-800 dark:text-red-300">{proposal.feeReviewFeedback}</div>
-        </div>
+        feeRejected ? (
+          <div className="mt-2 rounded border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/30">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Rejected — feedback</div>
+            <div className="mt-0.5 whitespace-pre-wrap text-xs text-red-800 dark:text-red-300">{proposal.feeReviewFeedback}</div>
+          </div>
+        ) : (
+          <div className="mt-2 rounded border border-emerald-300 bg-emerald-50 p-2 dark:border-emerald-900 dark:bg-emerald-950/30">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Approved — feedback</div>
+            <div className="mt-0.5 whitespace-pre-wrap text-xs text-emerald-800 dark:text-emerald-200">{proposal.feeReviewFeedback}</div>
+          </div>
+        )
       ) : null}
     </div>
   );
