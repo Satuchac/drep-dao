@@ -8,9 +8,8 @@ import { fmtDate } from './round-ui';
 const SUBCAT_LABEL: Record<string, string> = Object.fromEntries(DEFAULT_SUBCATEGORIES.map((s) => [s.id, s.label]));
 
 // Sortable columns of the member table; `num` distinguishes numeric vs text/date sort.
-type SortKey = 'isBoard' | 'displayName' | 'since' | 'votingPowerAda' | 'delegators' | 'basePower' | 'merit' | 'meritMultiplier' | 'adjustedPower';
-const COLUMNS: { key: SortKey; label: string; right?: boolean; num?: boolean; center?: boolean }[] = [
-  { key: 'isBoard', label: 'Board', center: true },
+type SortKey = 'displayName' | 'since' | 'votingPowerAda' | 'delegators' | 'basePower' | 'merit' | 'meritMultiplier' | 'adjustedPower';
+const COLUMNS: { key: SortKey; label: string; right?: boolean; num?: boolean }[] = [
   { key: 'displayName', label: 'Member' },
   { key: 'since', label: 'Member since' },
   { key: 'votingPowerAda', label: 'Voting power (ADA)', right: true, num: true },
@@ -40,9 +39,8 @@ export function DaoOverview() {
   const [members, setMembers] = useState<DaoMember[] | null>(null);
   const [experts, setExperts] = useState<DaoExpert[]>([]);
   const [error, setError] = useState<string | null>(null);
-  // Default: board members first (so the table makes the 5-of-N board obvious),
-  // then highest adjusted power within each group.
-  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'isBoard', dir: 'desc' });
+  // Default: highest adjusted power first (matches the prior server order).
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'adjustedPower', dir: 'desc' });
 
   useEffect(() => {
     daoApi
@@ -58,12 +56,6 @@ export function DaoOverview() {
     const { key, dir } = sort;
     const f = dir === 'asc' ? 1 : -1;
     arr.sort((a, b) => {
-      if (key === 'isBoard') {
-        // Group: board first (or last on asc), then within-group by adjusted power desc.
-        const ba = Number(!!a.isBoard), bb = Number(!!b.isBoard);
-        if (ba !== bb) return f * (ba - bb);
-        return b.adjustedPower - a.adjustedPower;
-      }
       if (key === 'displayName') return f * (a.displayName ?? '').localeCompare(b.displayName ?? '');
       if (key === 'since') return f * ((a.since ? new Date(a.since).getTime() : 0) - (b.since ? new Date(b.since).getTime() : 0));
       return f * ((a[key] as number) - (b[key] as number));
@@ -90,7 +82,7 @@ export function DaoOverview() {
           ADA delegated to the DRep (CIP-1694 vote delegation — not stake-pool delegation).
         </p>
         {members && members.length > 1 ? (
-          <p className="mt-1 text-xs text-neutral-400">Tip: click any column header to sort (click again to reverse). Board members are highlighted + shown first by default.</p>
+          <p className="mt-1 text-xs text-neutral-400">Tip: click any column header to sort (click again to reverse).</p>
         ) : null}
       </div>
 
@@ -107,7 +99,7 @@ export function DaoOverview() {
                 {COLUMNS.map((c) => {
                   const active = sort.key === c.key;
                   return (
-                    <th key={c.key} className={`px-3 py-2 ${c.right ? 'text-right' : c.center ? 'text-center' : ''}`}>
+                    <th key={c.key} className={`px-3 py-2 ${c.right ? 'text-right' : ''}`}>
                       <button
                         onClick={() => onSort(c.key)}
                         className={`inline-flex cursor-pointer select-none items-center gap-1 rounded px-1 py-0.5 uppercase hover:bg-neutral-200/70 dark:hover:bg-neutral-700/70 ${
@@ -127,24 +119,29 @@ export function DaoOverview() {
             </thead>
             <tbody>
               {(sorted ?? []).map((m) => (
-                <tr key={m.drepId} className={`border-t border-neutral-200 dark:border-neutral-800 ${m.isBoard ? 'bg-indigo-50/40 dark:bg-indigo-950/20' : ''}`}>
-                  {/* §14 — dedicated BOARD column so the 5-of-N composition is unmistakable. */}
-                  <td className="px-3 py-2 text-center">
-                    {m.isBoard ? (
-                      <span
-                        title="Founding board seat"
-                        className="rounded bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
-                      >
-                        BOARD
-                      </span>
-                    ) : (
-                      <span className="text-neutral-400">—</span>
-                    )}
-                  </td>
+                <tr key={m.drepId} className="border-t border-neutral-200 dark:border-neutral-800">
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <Avatar name={m.displayName} image={m.image} />
                       <span className="font-medium">{m.displayName}</span>
+                      {/* §14 — inline role flag. Blue BOARD for seated members, green MEMBER for
+                          the rest of the DAO (every row in this table is at least a DAO member,
+                          so each gets one of the two flags). */}
+                      {m.isBoard ? (
+                        <span
+                          title="Founding board seat"
+                          className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300"
+                        >
+                          BOARD
+                        </span>
+                      ) : (
+                        <span
+                          title="Admitted DAO member"
+                          className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                        >
+                          MEMBER
+                        </span>
+                      )}
                       {/* §14.1 — fell below the entry power/delegator minimum, but stays a full voting member. */}
                       {!m.meetsEntryRequirements ? (
                         <span
