@@ -552,46 +552,48 @@ export function ProposalSubmit() {
                   </div>
                 ) : null}
               </div>
-              {/* TX hash input + Verify button. Verify needs a saved draft (so the
-                  pasted hash gets persisted and added to the cumulative tally) and
-                  the entered hash; once the on-chain total covers the fee, the input
-                  locks so the team doesn't accidentally overwrite a confirmed hash. */}
-              <div className="flex flex-wrap items-stretch gap-2">
-                <input
-                  className={`${field} flex-1 disabled:bg-emerald-50 disabled:text-emerald-700 dark:disabled:bg-emerald-950/30 dark:disabled:text-emerald-300`}
-                  placeholder="Submission fee TX hash (needed only to submit)"
-                  value={fee}
-                  onChange={(e) => { setFee(e.target.value); setFeeVerification(null); }}
-                  disabled={feeVerification?.fullyPaid === true}
-                />
-                <button
-                  type="button"
-                  disabled={verifying || !editingId || !fee.trim() || feeVerification?.fullyPaid === true}
-                  title={
-                    !editingId
-                      ? 'Save the draft first — the tx hash is recorded with the proposal so the on-chain check can be cumulative across several payments.'
-                      : 'Check on-chain how much has been paid to the fee address (cumulative across all entered txs).'
-                  }
-                  onClick={async () => {
-                    if (!editingId) return;
-                    setVerifying(true); setError(null);
-                    try {
-                      // Persist the latest hash first so it's part of the history the
-                      // backend sums across (you can paste several to cover the fee).
-                      await proposalsApi.update(editingId, { submissionFeeTxHash: fee.trim() || undefined });
-                      const v = await proposalsApi.verifyFee(editingId);
-                      setFeeVerification(v);
-                    } catch (e) {
-                      setError(e instanceof Error ? e.message : 'verification failed');
-                    } finally {
-                      setVerifying(false);
+              {/* TX hash input + Verify button. Cardano tx hashes are 32-byte
+                  blake2b → 64 hex chars; we validate the format inline (whitespace
+                  / wrong length / non-hex chars get a clear message) before the
+                  button is enabled. Verify auto-saves the draft first if needed
+                  (so the hash is persisted + added to the cumulative tally) and
+                  re-fires automatically when the user pastes a fresh valid-looking
+                  hash. The input locks once the on-chain total covers the fee. */}
+              <FeeTxInput
+                fee={fee}
+                onChange={(v) => { setFee(v); setFeeVerification(null); }}
+                locked={feeVerification?.fullyPaid === true}
+                verifying={verifying}
+                onVerify={async () => {
+                  const trimmed = fee.trim();
+                  if (!/^[0-9a-f]{64}$/i.test(trimmed)) return; // safety; button disabled anyway
+                  setVerifying(true); setError(null);
+                  try {
+                    // Auto-save the draft if we don't have one yet — Verify is most
+                    // useful BEFORE the team submits, so the cost of an extra
+                    // create+update is fine for the UX win.
+                    let id = editingId;
+                    if (!id) {
+                      if (!draftReady) {
+                        setError('Fill in the proposal fields above first — the hash is recorded with the saved draft.');
+                        return;
+                      }
+                      const created = await proposalsApi.create({ ...buildInput(), submissionFeeTxHash: trimmed });
+                      id = created.id;
+                      setEditingId(id);
+                      setEditingStatus(created.status);
+                    } else {
+                      await proposalsApi.update(id, { submissionFeeTxHash: trimmed });
                     }
-                  }}
-                  className="rounded-md border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
-                >
-                  {verifying ? 'Verifying…' : 'Verify on-chain'}
-                </button>
-              </div>
+                    const v = await proposalsApi.verifyFee(id);
+                    setFeeVerification(v);
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : 'verification failed');
+                  } finally {
+                    setVerifying(false);
+                  }
+                }}
+              />
               {feeVerification ? (
                 <div
                   className={`rounded border p-2 text-xs ${
@@ -866,6 +868,108 @@ function PledgeSection({
           No pledge by default. If you opt in, you commit here and pay on-chain later in the FUNDING stage.
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * §12 — submission-fee tx-hash input with inline format validation + auto-verify.
+ *
+ * A Cardano tx hash is the 32-byte blake2b digest of the tx body, i.e. exactly
+ * 64 hex characters. We surface the format issue inline so the user doesn't
+ * click Verify and wait for a roundtrip just to learn they pasted whitespace:
+ *   - empty            → neutral helper "paste your fee-payment tx hash"
+ *   - whitespace       → "remove the leading/trailing whitespace"
+ *   - wrong length     → "X chars (need 64)"
+ *   - non-hex chars    → "contains non-hex characters"
+ *   - 64 hex chars     → "✓ looks like a valid tx hash" + Verify enabled
+ *
+ * Once the format is valid AND the user pauses typing for ~700 ms, the
+ * on-chain check fires automatically (the user said "even if user does not
+ * click the button explicitly, the on-chain check could be automatic").
+ * Clicking Verify still works to retry immediately.
+ */
+function FeeTxInput({
+  fee,
+  onChange,
+  locked,
+  verifying,
+  onVerify,
+}: {
+  fee: string;
+  onChange: (v: string) => void;
+  locked: boolean;
+  verifying: boolean;
+  onVerify: () => Promise<void> | void;
+}) {
+  const fld = 'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
+  const trimmed = fee.trim();
+  const validFormat = /^[0-9a-f]{64}$/i.test(trimmed);
+  let hint: { text: string; tone: 'neutral' | 'red' | 'emerald' } | null = null;
+  if (locked) {
+    hint = { text: '✓ fully paid — locked', tone: 'emerald' };
+  } else if (verifying) {
+    hint = { text: 'verifying on-chain…', tone: 'neutral' };
+  } else if (fee.length === 0) {
+    hint = { text: 'Paste your fee-payment tx hash (64 hex characters).', tone: 'neutral' };
+  } else if (fee !== trimmed) {
+    hint = { text: 'Remove the leading/trailing whitespace.', tone: 'red' };
+  } else if (/\s/.test(fee)) {
+    hint = { text: 'Tx hashes don\'t contain spaces — paste a single hex string.', tone: 'red' };
+  } else if (!/^[0-9a-fA-F]*$/.test(fee)) {
+    hint = { text: 'Contains non-hex characters — a tx hash is hex only (0-9, a-f).', tone: 'red' };
+  } else if (fee.length !== 64) {
+    hint = { text: `${fee.length} characters (need 64). Did the paste cut something off?`, tone: 'red' };
+  } else if (validFormat) {
+    hint = { text: '✓ looks like a valid tx hash — checking on-chain…', tone: 'emerald' };
+  }
+
+  // Auto-verify ~700 ms after a fresh, valid-looking hash settles. We only fire
+  // when the format check passes and we're not already verifying / locked, and
+  // we cancel on every change so rapid typing doesn't queue extra calls.
+  useEffect(() => {
+    if (!validFormat || verifying || locked) return;
+    const t = setTimeout(() => { void onVerify(); }, 700);
+    return () => clearTimeout(t);
+    // Re-trigger on the trimmed value so identical hashes re-verify cleanly.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trimmed, validFormat, verifying, locked]);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-stretch gap-2">
+        <input
+          className={`${fld} flex-1 disabled:bg-emerald-50 disabled:text-emerald-700 dark:disabled:bg-emerald-950/30 dark:disabled:text-emerald-300`}
+          placeholder="Submission fee TX hash (64 hex chars — paste, the platform verifies it on-chain)"
+          value={fee}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={locked}
+        />
+        <button
+          type="button"
+          disabled={verifying || locked || !validFormat}
+          onClick={() => { void onVerify(); }}
+          className="rounded-md border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
+          title={
+            locked ? 'Already fully paid — the field is locked.'
+              : validFormat ? 'Re-check on-chain now (auto-fires shortly after paste).'
+              : 'A Cardano tx hash is 64 hex characters — fix the format first.'
+          }
+        >
+          {verifying ? 'Verifying…' : 'Verify on-chain'}
+        </button>
+      </div>
+      {hint ? (
+        <div className={`text-[11px] ${
+          hint.tone === 'red'
+            ? 'text-red-600 dark:text-red-400'
+            : hint.tone === 'emerald'
+              ? 'text-emerald-700 dark:text-emerald-400'
+              : 'text-neutral-500'
+        }`}>
+          {hint.text}
+        </div>
+      ) : null}
     </div>
   );
 }
