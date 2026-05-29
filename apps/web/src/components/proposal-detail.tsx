@@ -602,12 +602,14 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
             );
           })}
         </ul>
-      ) : isBoard && open ? (
-        // §7.1 — board triggers the jury draw. Once drawn, the reviewer list (with
-        // per-reviewer voting status) replaces this button.
+      ) : isBoard && inFilteringStage ? (
+        // §7.1 — board triggers the jury draw. Allowed during SUBMISSION (pre-assign)
+        // and during FILTERING. Once drawn, the reviewer list (with per-reviewer
+        // voting status) replaces this button.
         <div className="mt-2 space-y-1">
           <div className="text-xs text-neutral-500">
             No reviewers drawn yet — the jury is picked by the board (expertise overlap first, then equal participation).
+            {submissionPhase ? ' Pre-assigning now is fine; their votes open once the round moves to FILTERING.' : ''}
           </div>
           <button onClick={draw} disabled={drawing} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950">
             {drawing ? 'Drawing…' : 'Draw + confirm reviewers'}
