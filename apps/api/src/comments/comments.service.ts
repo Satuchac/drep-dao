@@ -55,14 +55,23 @@ export class CommentsService {
       // Edit / Delete controls. False when no viewer is supplied.
       isMine: viewerUserId != null && c.authorUserId === viewerUserId,
     });
-    const tops = rows.filter((c) => !c.parentId).map(view);
-    const repliesByParent = new Map<string, ReturnType<typeof view>[]>();
-    for (const c of rows.filter((c) => c.parentId)) {
-      const arr = repliesByParent.get(c.parentId!) ?? [];
-      arr.push(view(c));
-      repliesByParent.set(c.parentId!, arr);
+    // §20.1 — replies nest indefinitely. Group every comment by parentId, then
+    // recursively attach so a reply-to-a-reply (and deeper) carries its own
+    // `replies` array. Top-level rows have parentId === null.
+    const repliesByParent = new Map<string, (typeof rows)[number][]>();
+    for (const c of rows) {
+      if (c.parentId) {
+        const arr = repliesByParent.get(c.parentId) ?? [];
+        arr.push(c);
+        repliesByParent.set(c.parentId, arr);
+      }
     }
-    return tops.map((t) => ({ ...t, replies: repliesByParent.get(t.id) ?? [] }));
+    type Node = ReturnType<typeof view> & { replies: Node[] };
+    const attach = (c: (typeof rows)[number]): Node => ({
+      ...view(c),
+      replies: (repliesByParent.get(c.id) ?? []).map(attach),
+    });
+    return rows.filter((c) => !c.parentId).map(attach);
   }
 
   async create(userId: string, proposalId: string, contentMd: string, parentId?: string) {
@@ -71,7 +80,8 @@ export class CommentsService {
     if (parentId) {
       const parent = await this.prisma.comment.findUnique({ where: { id: parentId } });
       if (!parent || parent.proposalId !== proposalId) throw new BadRequestException('parent comment not found on this proposal');
-      if (parent.parentId) throw new BadRequestException('replies are only one level deep');
+      // §20.1 — replies can nest indefinitely. The frontend renders each level
+      // with an added left border + padding so the thread tree stays readable.
     }
     const c = await this.prisma.comment.create({
       data: { proposalId, authorUserId: userId, contentMd, parentId: parentId ?? null },

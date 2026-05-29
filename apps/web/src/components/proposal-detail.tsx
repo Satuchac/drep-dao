@@ -1697,7 +1697,7 @@ function CommentsSection({ id, title, canPost }: { id: string; title: string; ca
             onToggle={() => setOpen(c.id, !isOpen(c.id))}
             replyOpen={(rid) => isOpen(rid)}
             replyOnToggle={(rid) => setOpen(rid, !isOpen(rid))}
-            onReply={(t) => post(t, c.id)}
+            post={post}
             onChange={load}
           />
         ))}
@@ -1731,7 +1731,7 @@ function CommentItem({
   onToggle,
   replyOpen,
   replyOnToggle,
-  onReply,
+  post,
   onChange,
 }: {
   c: CommentNode;
@@ -1740,7 +1740,9 @@ function CommentItem({
   onToggle: () => void;
   replyOpen: (id: string) => boolean;
   replyOnToggle: (id: string) => void;
-  onReply: (t: string) => void;
+  /** §20.1 — `post(text, parentId)` so each comment can be its own reply target;
+   *  nested replies attach to THEIR parent (not the top-level), arbitrary depth. */
+  post: (text: string, parentId?: string) => void | Promise<void>;
   onChange: () => void;
 }) {
   const [replying, setReplying] = useState(false);
@@ -1804,7 +1806,7 @@ function CommentItem({
           )}
 
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
-            {canPost && !c.deleted && !c.parentId ? (
+            {canPost && !c.deleted ? (
               <button onClick={() => setReplying((v) => !v)} className="text-neutral-500 hover:underline">
                 {replying ? 'cancel reply' : 'reply'}
               </button>
@@ -1821,7 +1823,7 @@ function CommentItem({
             <div className="mt-1">
               <MarkdownEditor value={replyText} onChange={setReplyText} title="Reply" placeholder="Reply…" minRows={2} />
               <button
-                onClick={() => { onReply(replyText); setReplyText(''); setReplying(false); }}
+                onClick={() => { post(replyText, c.id); setReplyText(''); setReplying(false); }}
                 disabled={!replyText.trim()}
                 className="mt-1 rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300"
               >
@@ -1841,7 +1843,7 @@ function CommentItem({
                   onToggle={() => replyOnToggle(r.id)}
                   replyOpen={replyOpen}
                   replyOnToggle={replyOnToggle}
-                  onReply={onReply}
+                  post={post}
                   onChange={onChange}
                 />
               ))}
