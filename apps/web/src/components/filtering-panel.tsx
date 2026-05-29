@@ -126,21 +126,31 @@ function FilterAssignmentRow({
 }
 
 /**
- * Collapsed-by-default row: title + voted status + a ▸/▾ toggle that reveals the rationale
- * editor + YES/NO buttons. Not-yet-voted rows still default to closed (consistent presentation),
- * but a small "Vote ▸" hint makes the next action obvious.
+ * Collapsed-by-default row.
+ * - Status chip on the right: 🟦 QUEUED (pre-assigned during SUBMISSION — vote
+ *   opens when the round moves to FILTERING), 🟢 voted YES/NO, 🟡 not voted yet.
+ * - A real <button>Vote</button> (or <button>Edit vote</button>) on the right
+ *   that opens the rationale + YES/NO box below the row. Disabled when QUEUED
+ *   with a tooltip explaining the wait.
+ * - View full proposal → still available as a small text link.
  */
-function QuickFilterRow({ a, voteBox, onToggle }: { a: { title: string; myVote: string | null }; voteBox: React.ReactNode; onToggle: () => void }) {
+function QuickFilterRow({ a, voteBox, onToggle }: { a: FilterAssignment; voteBox: React.ReactNode; onToggle: () => void }) {
   const [expanded, setExpanded] = useState(false);
-  const toggleLabel = expanded
-    ? '▾ hide vote box'
-    : a.myVote ? '▸ edit your vote' : '▸ vote';
+  const queued = !!a.queued;
+  const label = a.myVote ? 'Edit vote' : 'Vote';
   return (
     <li className="rounded border border-neutral-200 px-3 py-2 dark:border-neutral-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium">{a.title}</span>
-        <span className="flex items-center gap-3">
-          {a.myVote ? (
+        <span className="flex items-center gap-2">
+          {queued ? (
+            <span
+              title="Pre-assigned during SUBMISSION. Voting opens when the board moves the round to FILTERING."
+              className="rounded bg-sky-100 px-1.5 py-0.5 text-[11px] font-medium text-sky-800 dark:bg-sky-950 dark:text-sky-200"
+            >
+              QUEUED
+            </span>
+          ) : a.myVote ? (
             <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
               voted {a.myVote}
             </span>
@@ -151,16 +161,29 @@ function QuickFilterRow({ a, voteBox, onToggle }: { a: { title: string; myVote: 
           )}
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="text-xs text-emerald-700 hover:underline dark:text-emerald-400"
+            disabled={queued}
+            title={queued
+              ? 'Voting opens when the board moves the round to FILTERING.'
+              : expanded ? 'Hide the vote box' : 'Open the vote box'}
+            className={`rounded-md border px-3 py-1 text-sm font-medium ${
+              queued
+                ? 'border-neutral-200 text-neutral-400 cursor-not-allowed dark:border-neutral-800'
+                : 'border-emerald-500 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950'
+            }`}
           >
-            {toggleLabel}
+            {expanded ? '▾ Close' : `▸ ${label}`}
           </button>
           <button onClick={onToggle} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">
             View full proposal →
           </button>
         </span>
       </div>
-      {expanded ? voteBox : null}
+      {expanded && !queued ? voteBox : null}
+      {queued && expanded ? (
+        <div className="mt-2 rounded border border-sky-200 bg-sky-50 p-2 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+          <strong>Queued.</strong> This proposal is pre-assigned to you but its round is still in SUBMISSION. The vote opens automatically when the board moves the round to FILTERING; you&apos;ll see the Vote button enable here and the bell badge will bump up.
+        </div>
+      ) : null}
     </li>
   );
 }

@@ -29,11 +29,24 @@ export function MilestoneReviewsPanel({ history = false }: { history?: boolean }
               <span className="font-medium">{m.proposalTitle}</span>
               <span className="ml-2 text-xs text-neutral-500">milestone #{m.milestoneIdx + 1}</span>
               {m.milestoneStatus && history ? <span className="ml-2 text-[11px] text-neutral-500">[{m.milestoneStatus}]</span> : null}
-              {m.myVote ? <span className="ml-2 text-xs text-emerald-600">voted {m.myVote}</span> : null}
             </span>
-            <button onClick={() => setParams({ proposal: m.proposalId })} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">
-              Open to review →
-            </button>
+            <span className="flex items-center gap-2">
+              {m.myVote ? (
+                <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                  voted {m.myVote}
+                </span>
+              ) : (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                  not voted yet
+                </span>
+              )}
+              <button
+                onClick={() => setParams({ proposal: m.proposalId })}
+                className="rounded-md border border-emerald-500 px-3 py-1 text-sm font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950"
+              >
+                {m.myVote ? '▸ Edit vote' : '▸ Vote'}
+              </button>
+            </span>
           </li>
         ))}
       </ul>

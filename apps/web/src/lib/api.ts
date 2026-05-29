@@ -564,6 +564,8 @@ export interface FilterAssignment {
   myVote: string | null;
   proposalStatus?: string;
   proposalStage?: string | null;
+  /** True = pre-assigned during SUBMISSION; voting opens when the round moves to FILTERING. */
+  queued?: boolean;
 }
 /** A vote with its public rationale (filtering / D&V / milestone). */
 export interface VoteRationale {

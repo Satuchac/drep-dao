@@ -102,15 +102,25 @@ export class FilteringService {
         : {
             drepId: drep.id,
             releasedAt: null,
-            // §3 — only show when the ROUND is in FILTERING; while the round is still in
-            // SUBMISSION the assignment exists (pre-assigned) but the reviewer can't vote.
+            // §3 — include round.SUBMISSION too so the reviewer SEES pre-assignments
+            // with a QUEUED badge ("you'll be asked to vote once the round opens"),
+            // not just an empty panel. votingTasksCount continues to gate the badge
+            // count on round.status=FILTERING — see below — so the bell only pings
+            // when there's something to actually vote on.
             proposal: {
               stage: ProposalStage.FILTERING,
               status: ProposalStatus.ACTIVE,
-              round: { status: RoundStatus.FILTERING },
+              round: { status: { in: [RoundStatus.SUBMISSION, RoundStatus.FILTERING] } },
             },
           },
-      include: { proposal: { select: { id: true, title: true, status: true, stage: true } } },
+      include: {
+        proposal: {
+          select: {
+            id: true, title: true, status: true, stage: true,
+            round: { select: { status: true } },
+          },
+        },
+      },
       orderBy: { assignedAt: 'desc' },
     });
     const myVotes = await this.prisma.vote.findMany({
@@ -122,6 +132,9 @@ export class FilteringService {
       myVote: myVotes.find((v) => v.proposalId === a.proposalId)?.choice ?? null,
       proposalStatus: a.proposal.status,
       proposalStage: a.proposal.stage,
+      // True = pre-assigned but the round hasn't opened FILTERING yet → UI shows
+      // a QUEUED badge and disables the Vote action until the round moves.
+      queued: a.proposal.round?.status === RoundStatus.SUBMISSION,
     }));
   }
 
