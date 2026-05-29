@@ -847,6 +847,8 @@ export interface FeeHistoryRow {
   submissionFeeTxHash: string | null;
   decision: 'APPROVED' | 'REJECTED';
   feedback: string | null;
+  /** True = the round is still in SUBMISSION; the board may flip the decision. */
+  canChange: boolean;
 }
 export interface FeeHistoryPage {
   total: number;

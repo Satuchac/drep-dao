@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { boardFeeApi, boardProposalsApi, type FeeHistoryPage, type PendingFee } from '@/lib/api';
+import { boardFeeApi, boardProposalsApi, type FeeHistoryPage, type FeeHistoryRow, type PendingFee } from '@/lib/api';
 import { useExplorer } from '@/lib/explorer';
 import { fmtDateTime } from './round-ui';
 import { useUrlNav } from '@/lib/use-url-nav';
@@ -79,49 +79,12 @@ function FeeHistory() {
       {page.rows.length === 0 ? null : (
         <ul className="space-y-2">
           {page.rows.map((r) => (
-            <li key={r.id} className={`rounded-md border p-3 text-sm ${
-              r.decision === 'APPROVED'
-                ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20'
-                : 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'
-            }`}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <button onClick={() => setParams({ proposal: r.id })} className="font-medium text-emerald-700 hover:underline dark:text-emerald-400">
-                  {r.title}
-                </button>
-                <span className="flex items-center gap-2 text-xs text-neutral-500">
-                  {r.publicId ? <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{r.publicId}</span> : null}
-                  {r.roundNumber != null ? <span>round #{r.roundNumber}</span> : null}
-                  <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${
-                    r.decision === 'APPROVED'
-                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
-                      : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
-                  }`}>
-                    {r.decision === 'APPROVED' ? '✓ APPROVED' : '✗ REJECTED'}
-                  </span>
-                </span>
-              </div>
-              <div className="mt-1 text-xs text-neutral-500">
-                fee {r.submissionFeeAda.toLocaleString()} ₳ · {r.isCommercial ? 'commercial' : 'open-source'}
-                {r.submitter ? ` · by ${r.submitter}` : ''}
-                {r.submittedAt ? ` · submitted ${fmtDateTime(r.submittedAt)}` : ''}
-              </div>
-              {r.submissionFeeTxHash ? (
-                <div className="mt-1 text-xs">
-                  <span className="text-neutral-500">tx: </span>
-                  <a href={txUrl(r.submissionFeeTxHash)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">
-                    {r.submissionFeeTxHash} ↗
-                  </a>
-                </div>
-              ) : null}
-              {r.feedback ? (
-                <div className="mt-2 rounded border border-neutral-200 bg-white/60 p-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900/60">
-                  <div className="text-[10px] font-bold uppercase tracking-wide text-neutral-500">
-                    {r.decision === 'APPROVED' ? 'Approval note' : 'Rejection reason'}
-                  </div>
-                  <div className="mt-0.5 whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">{r.feedback}</div>
-                </div>
-              ) : null}
-            </li>
+            <HistoryRow
+              key={r.id}
+              r={r}
+              onOpen={() => setParams({ proposal: r.id })}
+              onChanged={() => boardFeeApi.history(HISTORY_PAGE, offset).then(setPage).catch(() => undefined)}
+            />
           ))}
         </ul>
       )}
@@ -230,6 +193,131 @@ function PendingFeeRow({ p, onReviewed }: { p: PendingFee; onReviewed: () => voi
           Reject
         </button>
       </div>
+    </li>
+  );
+}
+
+/**
+ * One decided fee-review row. While `canChange` (round still in SUBMISSION) the
+ * board can flip the decision: an approved row gets an "Undo / change to REJECT"
+ * action that opens a reason textarea; a rejected row gets "Approve now" that
+ * lets through an optional note. Backend re-anchors on each APPROVE so the
+ * latest on-chain proof matches the latest decision.
+ */
+function HistoryRow({ r, onOpen, onChanged }: { r: FeeHistoryRow; onOpen: () => void; onChanged: () => void }) {
+  const { txUrl } = useExplorer();
+  const [open, setOpen] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const flip = async (decision: 'APPROVE' | 'REJECT') => {
+    setError(null);
+    if (decision === 'REJECT' && !feedback.trim()) {
+      setError('A reason is required when rejecting.');
+      return;
+    }
+    setBusy(true);
+    try {
+      await boardProposalsApi.reviewFee(r.id, decision, feedback.trim() || undefined);
+      setOpen(false);
+      setFeedback('');
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <li className={`rounded-md border p-3 text-sm ${
+      r.decision === 'APPROVED'
+        ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20'
+        : 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'
+    }`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button onClick={onOpen} className="font-medium text-emerald-700 hover:underline dark:text-emerald-400">
+          {r.title}
+        </button>
+        <span className="flex items-center gap-2 text-xs text-neutral-500">
+          {r.publicId ? <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{r.publicId}</span> : null}
+          {r.roundNumber != null ? <span>round #{r.roundNumber}</span> : null}
+          <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${
+            r.decision === 'APPROVED'
+              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+              : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
+          }`}>
+            {r.decision === 'APPROVED' ? '✓ APPROVED' : '✗ REJECTED'}
+          </span>
+          {r.canChange ? (
+            <button
+              type="button"
+              onClick={() => { setOpen((v) => !v); setError(null); }}
+              className="rounded-md border border-neutral-400 px-2 py-0.5 text-[11px] text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              title={r.decision === 'APPROVED'
+                ? 'Round is still in SUBMISSION — you can undo this approval (changes to REJECTED).'
+                : 'Round is still in SUBMISSION — you can change this rejection to APPROVED.'}
+            >
+              {open ? 'Cancel change' : r.decision === 'APPROVED' ? '↩ Undo / change to REJECT' : '✓ Change to APPROVE'}
+            </button>
+          ) : (
+            <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400" title="Round has moved past SUBMISSION — decisions are now frozen.">locked</span>
+          )}
+        </span>
+      </div>
+      <div className="mt-1 text-xs text-neutral-500">
+        fee {r.submissionFeeAda.toLocaleString()} ₳ · {r.isCommercial ? 'commercial' : 'open-source'}
+        {r.submitter ? ` · by ${r.submitter}` : ''}
+        {r.submittedAt ? ` · submitted ${fmtDateTime(r.submittedAt)}` : ''}
+      </div>
+      {r.submissionFeeTxHash ? (
+        <div className="mt-1 text-xs">
+          <span className="text-neutral-500">tx: </span>
+          <a href={txUrl(r.submissionFeeTxHash)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">
+            {r.submissionFeeTxHash} ↗
+          </a>
+        </div>
+      ) : null}
+      {r.feedback ? (
+        <div className="mt-2 rounded border border-neutral-200 bg-white/60 p-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900/60">
+          <div className="text-[10px] font-bold uppercase tracking-wide text-neutral-500">
+            {r.decision === 'APPROVED' ? 'Approval note' : 'Rejection reason'}
+          </div>
+          <div className="mt-0.5 whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">{r.feedback}</div>
+        </div>
+      ) : null}
+      {open && r.canChange ? (
+        <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs dark:border-amber-900 dark:bg-amber-950/40">
+          <div className="font-semibold text-amber-800 dark:text-amber-200">
+            {r.decision === 'APPROVED' ? 'Change this approval to a REJECTION?' : 'Change this rejection to an APPROVAL?'}
+          </div>
+          <p className="mt-0.5 text-amber-700 dark:text-amber-300">
+            The proposal will move {r.decision === 'APPROVED' ? 'back to REJECTED (stage cleared)' : 'into FILTERING (the public stage)'}. A fresh on-chain acceptance anchor is written on every approval so the latest decision is what shows on-chain. Allowed only while the round hasn&apos;t moved past SUBMISSION.
+          </p>
+          <textarea
+            className="mt-2 w-full rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+            rows={2}
+            placeholder={r.decision === 'APPROVED' ? 'Reason for changing to REJECTED (required)' : 'Optional approval note'}
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+          />
+          {error ? <div className="mt-1 text-red-600">{error}</div> : null}
+          <div className="mt-1 flex flex-wrap gap-2">
+            <button
+              disabled={busy}
+              onClick={() => flip(r.decision === 'APPROVED' ? 'REJECT' : 'APPROVE')}
+              className={`rounded border px-2.5 py-1 disabled:opacity-40 ${
+                r.decision === 'APPROVED'
+                  ? 'border-red-500 text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950'
+                  : 'border-emerald-500 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950'
+              }`}
+            >
+              {busy ? 'Working…' : r.decision === 'APPROVED' ? 'Reject now' : 'Approve now'}
+            </button>
+          </div>
+        </div>
+      ) : null}
     </li>
   );
 }

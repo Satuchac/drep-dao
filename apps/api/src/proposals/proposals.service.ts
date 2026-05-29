@@ -298,16 +298,48 @@ export class ProposalsService {
   }
 
   /**
-   * §26.5 board fee review of a PENDING proposal. APPROVE → ACTIVE in Filtering (the tx is
-   * now locked); REJECT → REJECTED (feedback required). The feedback (also optional on
-   * approve) is shown to the submitter in the red FEEDBACK box next to the fee tx.
+   * §26.5 board fee review.
+   *
+   * **Initial review** of a PENDING proposal: APPROVE → ACTIVE in Filtering;
+   * REJECT → REJECTED (feedback required).
+   *
+   * **Re-review** of an already-decided proposal: allowed ONLY while the round
+   * is still in its SUBMISSION stage (a board member can correct a mistake —
+   * approved by accident, or rejected too harshly). Once the round moves on to
+   * FILTERING, fee decisions are frozen (the round is past the point where
+   * undoing matters). State transitions:
+   *   APPROVED (ACTIVE+FILTERING) + APPROVE → no-op, update note
+   *   APPROVED (ACTIVE+FILTERING) + REJECT  → REJECTED + stage=null
+   *   REJECTED (no stage)          + APPROVE → ACTIVE+FILTERING (un-reject)
+   *   REJECTED (no stage)          + REJECT  → no-op, update note
+   * Each APPROVE writes a fresh acceptance anchor with the current tx hash so
+   * the latest on-chain proof reflects the latest decision. The board's note
+   * is shown to the submitter in the FEEDBACK box.
    */
   async reviewFee(id: string, dto: ReviewFeeDto) {
-    const p = await this.prisma.proposal.findUnique({ where: { id } });
+    const p = await this.prisma.proposal.findUnique({
+      where: { id },
+      include: { round: { select: { status: true } } },
+    });
     if (!p) throw new NotFoundException('proposal not found');
-    if (p.status !== ProposalStatus.PENDING) {
-      throw new ConflictException('proposal is not awaiting fee confirmation');
+
+    // §3 — re-review is allowed only while the round is still in its SUBMISSION
+    // stage. Once SUBMISSION→FILTERING happens, fee decisions are frozen — undoing
+    // an approval after the proposal entered FILTERING would unwind votes.
+    const feeStageRejected = p.status === ProposalStatus.REJECTED && p.stage == null;
+    const wasDecided = p.status !== ProposalStatus.PENDING;
+    if (wasDecided) {
+      const isApproved = p.status === ProposalStatus.ACTIVE && p.stage === ProposalStage.FILTERING;
+      if (!isApproved && !feeStageRejected) {
+        throw new ConflictException('this proposal is not in a fee-review state any more');
+      }
+      if (p.round && p.round.status !== RoundStatus.SUBMISSION) {
+        throw new ConflictException(
+          `fee decisions are locked once the round leaves SUBMISSION (current: ${p.round.status})`,
+        );
+      }
     }
+
     const feedback = dto.feedback?.trim() || null;
     if (dto.decision === 'REJECT' && !feedback) {
       throw new BadRequestException('a reason is required when rejecting a submission fee');
@@ -319,9 +351,16 @@ export class ProposalsService {
         data: { status: ProposalStatus.ACTIVE, stage: ProposalStage.FILTERING, feeReviewFeedback: feedback, publicId },
       });
       // Fee was paid + confirmed → anchor the acceptance with the paying tx.
+      // A re-decision writes a fresh anchor; anchors are append-only on-chain
+      // so the latest one is the canonical state.
       await this.anchorActivation(id, { required: true, paid: true, ada: toAda(p.submissionFeeAda), txHash: p.submissionFeeTxHash });
     } else {
-      await this.prisma.proposal.update({ where: { id }, data: { status: ProposalStatus.REJECTED, feeReviewFeedback: feedback } });
+      // Reject (or re-reject after undo): clear the stage; status=REJECTED with
+      // stage=null is the fee-stage rejection signature.
+      await this.prisma.proposal.update({
+        where: { id },
+        data: { status: ProposalStatus.REJECTED, stage: null, feeReviewFeedback: feedback },
+      });
     }
     return this.get(id);
   }
@@ -907,7 +946,7 @@ export class ProposalsService {
         include: {
           submitterUser: { select: { displayName: true } },
           category: { select: { name: true } },
-          round: { select: { number: true } },
+          round: { select: { number: true, status: true } },
         },
       }),
       this.prisma.proposal.count({ where }),
@@ -930,6 +969,9 @@ export class ProposalsService {
         // Decision: status REJECTED + stage=null = fee REJECTED, else APPROVED.
         decision: (p.status === ProposalStatus.REJECTED && p.stage === null) ? 'REJECTED' as const : 'APPROVED' as const,
         feedback: p.feeReviewFeedback,
+        // §3 — board can still flip the decision while the round hasn't moved
+        // past SUBMISSION. UI uses this to render the "Undo / change" button.
+        canChange: p.round?.status === RoundStatus.SUBMISSION,
       })),
     };
   }
