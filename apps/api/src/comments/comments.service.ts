@@ -19,7 +19,14 @@ export class CommentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /** Threaded list (top-level comments with one level of replies). Tombstones shown as [deleted]. */
-  async list(proposalId: string) {
+  async list(proposalId: string, viewerUserId?: string) {
+    // §20 — also fetch the proposal's submitter so each comment can be flagged
+    // `isSubmitter` (the team's own posts get a distinct visual treatment).
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      select: { submitterUserId: true },
+    });
+    const submitterUserId = proposal?.submitterUserId ?? null;
     const rows = await this.prisma.comment.findMany({
       where: { proposalId },
       orderBy: { createdAt: 'asc' },
@@ -42,6 +49,11 @@ export class CommentsService {
       contentMd: c.deletedAt ? null : c.contentMd,
       deleted: !!c.deletedAt,
       createdAt: c.createdAt,
+      // §20 — the team's own posts vs everyone else.
+      isSubmitter: submitterUserId != null && c.authorUserId === submitterUserId,
+      // Whether the (signed-in) viewer wrote this post — drives the inline
+      // Edit / Delete controls. False when no viewer is supplied.
+      isMine: viewerUserId != null && c.authorUserId === viewerUserId,
     });
     const tops = rows.filter((c) => !c.parentId).map(view);
     const repliesByParent = new Map<string, ReturnType<typeof view>[]>();

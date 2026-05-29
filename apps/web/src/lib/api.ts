@@ -730,6 +730,10 @@ export interface CommentNode {
   contentMd: string | null;
   deleted: boolean;
   createdAt: string;
+  /** True when the comment was written by the proposal's submitter (team). */
+  isSubmitter?: boolean;
+  /** True when the signed-in viewer wrote this comment — drives Edit / Delete. */
+  isMine?: boolean;
   replies?: CommentNode[];
 }
 export const commentsApi = {

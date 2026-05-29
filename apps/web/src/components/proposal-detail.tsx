@@ -170,7 +170,17 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
       {showMilestones ? (
         <MilestonesSection id={id} isBoard={isBoard} isMine={mine} proposal={p} onChange={load} />
       ) : null}
-      <CommentsSection id={id} title={p.title} canPost={!!profile} />
+      {/* §20.1 — viewers (no membership) can see but not post; members and the
+          submitter can post + reply + edit their own. */}
+      <CommentsSection
+        id={id}
+        title={p.title}
+        canPost={
+          !!profile &&
+          (mine ||
+            profile.roles.some((r) => ['BOARD', 'DREP', 'DAO_MEMBER', 'EXPERT_APPROVED'].includes(r)))
+        }
+      />
     </div>
   );
 }
@@ -1578,10 +1588,50 @@ function MilestoneRow({ m, isMine, canPoa, onChange }: { m: MilestoneView; isMin
   );
 }
 
+/**
+ * §20.1 — public discussion under each proposal.
+ *
+ * Row tint:
+ *   - reply (any author)              → yellow
+ *   - submitter / team                 → grey
+ *   - DAO member / DRep / board / expert → green
+ *   - everyone else / [deleted]        → neutral
+ *
+ * Editor: MarkdownEditor everywhere — top-level "Add a public comment", per-row
+ * reply box, and the inline edit on the viewer's own comment. The reply / edit
+ * editors default-collapsed; the top-level "Add a comment" defaults-expanded so
+ * the call to action is obvious.
+ *
+ * Visibility: each comment has its own per-row Hide / Show toggle. A single
+ * "▾ Collapse all / ▸ Expand all" button under the section title flips every
+ * row's state in one go (per-row toggling continues to work after).
+ *
+ * Posting: viewers (signed-out + roles=['VIEWER']) can read but cannot post;
+ * the parent gates `canPost` accordingly. Edit / delete is owner-only inside
+ * the 5-minute window (the backend rejects late edits with a clear message).
+ */
+const COMMENT_ROLES_GREEN = new Set(['Board member', 'DAO member', 'Expert']);
+
+function commentTint(c: CommentNode): string {
+  if (c.deleted) return 'border-neutral-200 bg-neutral-50/60 dark:border-neutral-800 dark:bg-neutral-900/30';
+  if (c.parentId) return 'border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30'; // reply → yellow
+  if (c.isSubmitter) return 'border-neutral-300 bg-neutral-100/70 dark:border-neutral-700 dark:bg-neutral-900/50'; // team → grey
+  if (c.author.role && COMMENT_ROLES_GREEN.has(c.author.role))
+    return 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30'; // DRep / board → green
+  return 'border-neutral-200 dark:border-neutral-800';
+}
+
 function CommentsSection({ id, title, canPost }: { id: string; title: string; canPost: boolean }) {
   const [comments, setComments] = useState<CommentNode[]>([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [allCollapsed, setAllCollapsed] = useState(false);
+  // Per-comment expanded state — null = follow `allCollapsed`. Independent for
+  // each row, so a Collapse-all + manual expand of one row leaves the rest closed.
+  const [rowOpen, setRowOpen] = useState<Record<string, boolean>>({});
+  const setOpen = (cid: string, v: boolean) => setRowOpen((m) => ({ ...m, [cid]: v }));
+  const isOpen = (cid: string): boolean => (cid in rowOpen ? rowOpen[cid] : !allCollapsed);
+
   const load = useCallback(() => {
     commentsApi.list(id).then(setComments).catch(() => setComments([]));
   }, [id]);
@@ -1592,19 +1642,64 @@ function CommentsSection({ id, title, canPost }: { id: string; title: string; ca
     try { await commentsApi.create(id, contentMd, parentId); setText(''); load(); } finally { setBusy(false); }
   };
 
+  const total = comments.length + comments.reduce((s, c) => s + (c.replies?.length ?? 0), 0);
+
   return (
     <section className={card}>
-      <h3 className="text-base font-semibold">Comments on “{title}”</h3>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-base font-semibold">Comments on &ldquo;{title}&rdquo;</h3>
+        {comments.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => {
+              const next = !allCollapsed;
+              setAllCollapsed(next);
+              // Reset per-row overrides so the global state actually applies.
+              setRowOpen({});
+              void next;
+            }}
+            className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            {allCollapsed ? `▸ Expand all (${total})` : `▾ Collapse all (${total})`}
+          </button>
+        ) : null}
+      </div>
       {canPost ? (
-        <div className="mt-2 flex gap-2">
-          <input className="flex-1 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" placeholder="Add a public comment…" value={text} onChange={(e) => setText(e.target.value)} />
-          <button disabled={busy || !text.trim()} onClick={() => post(text)} className="rounded bg-emerald-600 px-3 py-1 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">Post</button>
+        <div className="mt-3">
+          <MarkdownEditor
+            value={text}
+            onChange={setText}
+            title="Add a public comment"
+            placeholder="Share your view (markdown — bold, italic, bullets, links…)"
+            minRows={3}
+          />
+          <button
+            disabled={busy || !text.trim()}
+            onClick={() => post(text)}
+            className="mt-1 rounded bg-emerald-600 px-3 py-1 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {busy ? 'Posting…' : 'Post comment'}
+          </button>
         </div>
-      ) : null}
+      ) : (
+        <div className="mt-2 rounded border border-neutral-200 bg-neutral-50 p-2 text-xs text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/60">
+          Only signed-in DAO members (DReps, board, approved experts) and the proposal&apos;s team can post — viewers may read.
+        </div>
+      )}
       <ul className="mt-3 space-y-2">
         {comments.length === 0 ? <li className="text-sm text-neutral-500">No comments yet.</li> : null}
         {comments.map((c) => (
-          <CommentItem key={c.id} c={c} canPost={canPost} onReply={(t) => post(t, c.id)} />
+          <CommentItem
+            key={c.id}
+            c={c}
+            canPost={canPost}
+            open={isOpen(c.id)}
+            onToggle={() => setOpen(c.id, !isOpen(c.id))}
+            replyOpen={(rid) => isOpen(rid)}
+            replyOnToggle={(rid) => setOpen(rid, !isOpen(rid))}
+            onReply={(t) => post(t, c.id)}
+            onChange={load}
+          />
         ))}
       </ul>
     </section>
@@ -1612,52 +1707,147 @@ function CommentsSection({ id, title, canPost }: { id: string; title: string; ca
 }
 
 const ROLE_CLS: Record<string, string> = {
-  'Board member': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
+  'Board member': 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200',
   Expert: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200',
-  'DAO member': 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200',
+  'DAO member': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
 };
 function RoleBadge({ role }: { role: string | null }) {
   if (!role) return null;
   return <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium ${ROLE_CLS[role] ?? 'bg-neutral-100 text-neutral-600'}`}>{role}</span>;
 }
+function TeamBadge() {
+  return (
+    <span className="ml-1.5 rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-medium text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
+      Team
+    </span>
+  );
+}
 const nameOf = (a: CommentNode['author']) => a.displayName ?? (a.drepId ? `${a.drepId.slice(0, 16)}…` : 'Anonymous');
 
-function CommentItem({ c, canPost, onReply }: { c: CommentNode; canPost: boolean; onReply: (t: string) => void }) {
+function CommentItem({
+  c,
+  canPost,
+  open,
+  onToggle,
+  replyOpen,
+  replyOnToggle,
+  onReply,
+  onChange,
+}: {
+  c: CommentNode;
+  canPost: boolean;
+  open: boolean;
+  onToggle: () => void;
+  replyOpen: (id: string) => boolean;
+  replyOnToggle: (id: string) => void;
+  onReply: (t: string) => void;
+  onChange: () => void;
+}) {
   const [replying, setReplying] = useState(false);
-  const [text, setText] = useState('');
-  // §4 — expert feedback is visually differentiated.
-  const expert = c.author.role === 'Expert';
+  const [replyText, setReplyText] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(c.contentMd ?? '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const saveEdit = async () => {
+    if (!editText.trim()) { setError('Comment cannot be empty.'); return; }
+    setBusy(true); setError(null);
+    try { await commentsApi.edit(c.id, editText); setEditing(false); onChange(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'edit failed'); }
+    finally { setBusy(false); }
+  };
+
+  const remove = async () => {
+    if (!confirm('Delete this comment? It will show as [deleted] but stay in the thread.')) return;
+    setBusy(true); setError(null);
+    try { await commentsApi.remove(c.id); onChange(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'delete failed'); }
+    finally { setBusy(false); }
+  };
+
   return (
-    <li className={`rounded border p-2 text-sm ${expert ? 'border-amber-300 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/30' : 'border-neutral-200 dark:border-neutral-800'}`}>
-      <div className="flex items-center justify-between text-xs text-neutral-500">
-        <span className="font-medium text-neutral-700 dark:text-neutral-300">{nameOf(c.author)}<RoleBadge role={c.author.role} /></span>
-        <span>{fmtDateTime(c.createdAt)}</span>
+    <li className={`rounded border p-2 text-sm ${commentTint(c)}`}>
+      <div className="flex items-center justify-between gap-2 text-xs text-neutral-500">
+        <span className="font-medium text-neutral-700 dark:text-neutral-300">
+          {nameOf(c.author)}
+          {c.isSubmitter ? <TeamBadge /> : null}
+          <RoleBadge role={c.author.role} />
+        </span>
+        <span className="flex items-center gap-2">
+          <span>{fmtDateTime(c.createdAt)}</span>
+          <button
+            onClick={onToggle}
+            className="rounded px-1 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+            title={open ? 'Hide this comment' : 'Show this comment'}
+          >
+            {open ? '▾' : '▸'}
+          </button>
+        </span>
       </div>
-      <div className={`mt-1 whitespace-pre-wrap ${c.deleted ? 'italic text-neutral-400' : ''}`}>{c.deleted ? '[deleted]' : c.contentMd}</div>
-      {canPost && !c.deleted ? (
-        <button onClick={() => setReplying((v) => !v)} className="mt-1 text-xs text-neutral-500 hover:underline">reply</button>
-      ) : null}
-      {replying ? (
-        <div className="mt-1 flex gap-2">
-          <input className="flex-1 rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900" value={text} onChange={(e) => setText(e.target.value)} />
-          <button onClick={() => { onReply(text); setText(''); setReplying(false); }} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 dark:text-emerald-300">send</button>
-        </div>
-      ) : null}
-      {c.replies && c.replies.length > 0 ? (
-        <ul className="mt-2 space-y-2 border-l border-neutral-200 pl-3 dark:border-neutral-800">
-          {c.replies.map((r) => {
-            const rExpert = r.author.role === 'Expert';
-            return (
-              <li key={r.id} className={`rounded text-sm ${rExpert ? 'bg-amber-50/50 p-1.5 dark:bg-amber-950/30' : ''}`}>
-                <div className="flex items-center justify-between text-xs text-neutral-500">
-                  <span className="font-medium text-neutral-700 dark:text-neutral-300">{nameOf(r.author)}<RoleBadge role={r.author.role} /></span>
-                  <span>{fmtDateTime(r.createdAt)}</span>
-                </div>
-                <div className={`mt-0.5 whitespace-pre-wrap ${r.deleted ? 'italic text-neutral-400' : ''}`}>{r.deleted ? '[deleted]' : r.contentMd}</div>
-              </li>
-            );
-          })}
-        </ul>
+
+      {open ? (
+        <>
+          {editing ? (
+            <div className="mt-1">
+              <MarkdownEditor value={editText} onChange={setEditText} placeholder="Edit your comment…" minRows={3} />
+              <div className="mt-1 flex gap-2">
+                <button disabled={busy} onClick={saveEdit} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">{busy ? 'Saving…' : 'Save'}</button>
+                <button disabled={busy} onClick={() => { setEditing(false); setEditText(c.contentMd ?? ''); setError(null); }} className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 dark:border-neutral-700 dark:text-neutral-300">Cancel</button>
+                {error ? <span className="text-xs text-red-600">{error}</span> : null}
+              </div>
+            </div>
+          ) : c.deleted ? (
+            <div className="mt-1 italic text-neutral-400">[deleted]</div>
+          ) : (
+            <Markdown className="mt-1 text-sm">{c.contentMd ?? ''}</Markdown>
+          )}
+
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
+            {canPost && !c.deleted && !c.parentId ? (
+              <button onClick={() => setReplying((v) => !v)} className="text-neutral-500 hover:underline">
+                {replying ? 'cancel reply' : 'reply'}
+              </button>
+            ) : null}
+            {c.isMine && !c.deleted && !editing ? (
+              <>
+                <button onClick={() => { setEditing(true); setEditText(c.contentMd ?? ''); }} className="text-emerald-700 hover:underline dark:text-emerald-400">edit</button>
+                <button onClick={remove} className="text-red-600 hover:underline">delete</button>
+              </>
+            ) : null}
+          </div>
+
+          {replying ? (
+            <div className="mt-1">
+              <MarkdownEditor value={replyText} onChange={setReplyText} title="Reply" placeholder="Reply…" minRows={2} />
+              <button
+                onClick={() => { onReply(replyText); setReplyText(''); setReplying(false); }}
+                disabled={!replyText.trim()}
+                className="mt-1 rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300"
+              >
+                Send reply
+              </button>
+            </div>
+          ) : null}
+
+          {c.replies && c.replies.length > 0 ? (
+            <ul className="mt-2 space-y-2 border-l border-neutral-200 pl-3 dark:border-neutral-800">
+              {c.replies.map((r) => (
+                <CommentItem
+                  key={r.id}
+                  c={r}
+                  canPost={canPost}
+                  open={replyOpen(r.id)}
+                  onToggle={() => replyOnToggle(r.id)}
+                  replyOpen={replyOpen}
+                  replyOnToggle={replyOnToggle}
+                  onReply={onReply}
+                  onChange={onChange}
+                />
+              ))}
+            </ul>
+          ) : null}
+        </>
       ) : null}
     </li>
   );

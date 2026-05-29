@@ -1,6 +1,7 @@
 import { IsOptional, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { CommentsService } from './comments.service';
 
@@ -16,10 +17,13 @@ export class EditCommentDto {
 export class CommentsController {
   constructor(private readonly comments: CommentsService) {}
 
-  // Public read (§20.1 — visible to everyone).
+  // Public read (§20.1 — visible to everyone). Optional auth so the response
+  // can flag each row with `isMine` (only present when the viewer is signed in)
+  // — used by the UI to show an Edit/Delete button on the viewer's own posts.
+  @UseGuards(OptionalJwtAuthGuard)
   @Get('proposals/:id/comments')
-  list(@Param('id', ParseUUIDPipe) id: string) {
-    return this.comments.list(id);
+  list(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() ctx?: AuthContext) {
+    return this.comments.list(id, ctx?.userId);
   }
 
   @UseGuards(JwtAuthGuard)
