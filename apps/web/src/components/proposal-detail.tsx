@@ -553,6 +553,9 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
         <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           <strong>Round in SUBMISSION.</strong> Reviewer voting opens when the board moves the round to FILTERING.
           Reviewers can already be pre-assigned here.
+          {r.assigned && r.assigned.length > 0 ? (
+            <> The assigned reviewers will be <strong>automatically notified to vote</strong> the moment the round moves to FILTERING — no further action needed if the board doesn&apos;t want to swap anyone.</>
+          ) : null}
         </div>
       ) : null}
       {r.assigned && r.assigned.length > 0 ? (
