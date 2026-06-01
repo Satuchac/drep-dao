@@ -76,6 +76,8 @@ export interface DrepApplicationInput {
   kycOptin?: boolean;
   callsOptin?: boolean;
   admissionCallOptin?: boolean;
+  // §8.2 — board-only self-toggle for "I'll vote on funding proposals".
+  votesOnFundingProposals?: boolean;
 }
 
 export interface MyDrep {
@@ -90,6 +92,9 @@ export interface MyDrep {
   kycOptin: boolean;
   callsOptin: boolean;
   admissionCallOptin: boolean;
+  // §8.2 — board-only toggle: when false, this board member doesn't count in
+  // funding D&V tallies. Always true for non-board (they always vote).
+  votesOnFundingProposals: boolean;
   yes: number;
   no: number;
   threshold: number;
@@ -130,6 +135,9 @@ export interface DaoMemberDetail extends DaoMember {
   subcategoryIds: string[];
   // Admission votes the member cast as a board reviewer (non-board members are 0).
   admissionVotesCast: { yes: number; no: number; total: number };
+  // §8.2 — null for non-board members (the flag doesn't apply); true/false
+  // for board members based on their profile setting.
+  votesOnFundingProposals: boolean | null;
 }
 
 export const daoApi = {

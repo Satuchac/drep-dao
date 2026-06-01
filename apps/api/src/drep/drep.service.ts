@@ -157,7 +157,7 @@ export class DrepService {
     // bio and no votes to count yet.
     const drep = await this.prisma.drep.findUnique({
       where: { drepIdOnchain },
-      select: { id: true, bio: true, socials: true, contact: true, subcategoryIds: true },
+      select: { id: true, bio: true, socials: true, contact: true, subcategoryIds: true, votesOnFundingProposals: true },
     });
 
     const admissionVotes = drep
@@ -178,6 +178,9 @@ export class DrepService {
       subcategoryIds: drep?.subcategoryIds ?? [],
       // Admission votes the member cast as a board reviewer (only board has any).
       admissionVotesCast: { yes, no, total: yes + no },
+      // §8.2 — board-only flag: does this board member vote on funding D&V?
+      // Null for non-board (the flag doesn't apply to them; they always vote).
+      votesOnFundingProposals: summary.isBoard ? (drep?.votesOnFundingProposals ?? true) : null,
     };
   }
 
@@ -347,6 +350,7 @@ export class DrepService {
       kycOptin: drep.kycOptin,
       callsOptin: drep.callsOptin,
       admissionCallOptin: drep.admissionCallOptin,
+      votesOnFundingProposals: drep.votesOnFundingProposals,
       yes: votes.filter((v) => v.choice === 'YES').length,
       no: votes.filter((v) => v.choice === 'NO').length,
       threshold,
@@ -464,6 +468,7 @@ export class DrepService {
         ...(dto.kycOptin !== undefined ? { kycOptin: dto.kycOptin } : {}),
         ...(dto.callsOptin !== undefined ? { callsOptin: dto.callsOptin } : {}),
         ...(dto.admissionCallOptin !== undefined ? { admissionCallOptin: dto.admissionCallOptin } : {}),
+        ...(dto.votesOnFundingProposals !== undefined ? { votesOnFundingProposals: dto.votesOnFundingProposals } : {}),
       },
     });
   }

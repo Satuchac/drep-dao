@@ -66,25 +66,19 @@ export class DvService {
     const existing = await this.prisma.voteSnapshot.findFirst({ where: { proposalId } });
     if (existing) return this.result(proposalId);
 
-    // §8.2 — voters are admitted DReps eligible for the round, EXCEPT board members,
-    // who only vote on funding proposals if they explicitly opted in for this proposal.
+    // §8.2 — voters are EVERY admitted DRep eligible for the round (board +
+    // non-board). The per-board-member opt-out is enforced LIVE via the
+    // `votesOnFundingProposals` flag on Drep, not via the snapshot, so flipping
+    // the toggle off mid-vote zeroes that member's contribution without
+    // mutating the snapshot, and flipping it back on restores it instantly.
     const eligible = await this.prisma.roundDrepEligibility.findMany({
       where: { roundId: proposal.roundId ?? undefined, drep: { status: 'ADMITTED' } },
-      select: { drepId: true, drep: { select: { drepIdOnchain: true, user: { select: { drepKeyHash: true } } } } },
-    });
-    const boardHashes = new Set((await this.prisma.boardSeat.findMany({ select: { drepKeyHash: true } })).map((s) => s.drepKeyHash));
-    const optedIn = new Set(
-      (await this.prisma.dvBoardOptIn.findMany({ where: { proposalId }, select: { drepId: true } })).map((o) => o.drepId),
-    );
-    const voters = eligible.filter((e) => {
-      const kh = e.drep.user?.drepKeyHash;
-      const isBoard = kh ? boardHashes.has(kh) : false;
-      return !isBoard || optedIn.has(e.drepId);
+      select: { drepId: true, drep: { select: { drepIdOnchain: true } } },
     });
 
-    const power = await this.realVotingPower(voters.map((v) => v.drep.drepIdOnchain));
+    const power = await this.realVotingPower(eligible.map((v) => v.drep.drepIdOnchain));
     const snapshot = await this.prisma.voteSnapshot.create({ data: { proposalId } });
-    for (const v of voters) await this.addSnapshotEntry(snapshot.id, v.drepId, power.get(v.drep.drepIdOnchain) ?? 0n);
+    for (const v of eligible) await this.addSnapshotEntry(snapshot.id, v.drepId, power.get(v.drep.drepIdOnchain) ?? 0n);
     await this.prisma.proposal.update({ where: { id: proposalId }, data: { votingStartAt: new Date() } });
     return this.result(proposalId);
   }
@@ -161,8 +155,25 @@ export class DvService {
         `round is in ${proposal.round.status}; Debate & Vote ballots are accepted only while the round is in VOTE`,
       );
     }
-    const drep = await this.prisma.drep.findUnique({ where: { userId } });
+    const drep = await this.prisma.drep.findUnique({
+      where: { userId },
+      include: { user: { select: { drepKeyHash: true } } },
+    });
     if (!drep) throw new ForbiddenException('DReps only');
+
+    // §8.2 — a board member who has opted out of voting on funding D&V cannot
+    // cast a ballot. The setting is on by default and toggleable from their
+    // profile. Non-board DReps are unaffected.
+    if (!drep.votesOnFundingProposals) {
+      const seat = drep.user.drepKeyHash
+        ? await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: drep.user.drepKeyHash } })
+        : null;
+      if (seat) {
+        throw new ForbiddenException(
+          'you have opted out of voting on funding proposals — enable it in your profile to cast a ballot',
+        );
+      }
+    }
 
     const snapshot = await this.prisma.voteSnapshot.findFirst({ where: { proposalId } });
     if (!snapshot) throw new ConflictException('voting has not opened yet');
@@ -202,11 +213,33 @@ export class DvService {
     });
     const choiceByDrep = new Map(votes.map((v) => [v.drepId, v.choice]));
 
+    // §8.2 — board members who have toggled OFF voteOnFundingProposals are
+    // skipped at tally time (their snapshot entry contributes 0 to YES /
+    // denominator / eligible count). The snapshot itself is never mutated —
+    // toggling the flag back on instantly restores their weight on the next
+    // tally read.
+    const drepIds = snapshot.entries.map((e) => e.drepId);
+    const dreps = await this.prisma.drep.findMany({
+      where: { id: { in: drepIds } },
+      select: { id: true, votesOnFundingProposals: true, user: { select: { drepKeyHash: true } } },
+    });
+    const boardHashes = new Set(
+      (await this.prisma.boardSeat.findMany({ select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
+    );
+    const skipDrepIds = new Set(
+      dreps
+        .filter((d) => !d.votesOnFundingProposals && d.user.drepKeyHash && boardHashes.has(d.user.drepKeyHash))
+        .map((d) => d.id),
+    );
+
     let yesPower = 0;
     let abstainPower = 0;
     let totalPower = 0;
     let cast = 0;
+    let eligibleCount = 0;
     for (const e of snapshot.entries) {
+      if (skipDrepIds.has(e.drepId)) continue; // board member opted out → effective abstain (zero weight)
+      eligibleCount++;
       const fp = Number(e.finalPower ?? 0);
       totalPower += fp;
       const c = choiceByDrep.get(e.drepId);
@@ -223,7 +256,7 @@ export class DvService {
     const anchor = await this.prisma.anchor.findFirst({ where: { proposalId, kind: 'dv' }, orderBy: { createdAt: 'desc' } });
     return {
       open: true,
-      eligible: snapshot.entries.length,
+      eligible: eligibleCount,
       cast,
       yesPower: round2(yesPower),
       abstainPower: round2(abstainPower),
@@ -287,16 +320,25 @@ export class DvService {
     const powerByDrep = new Map((snapshot?.entries ?? []).map((e) => [e.drepId, Number(e.finalPower ?? 0)]));
     const votes = await this.prisma.vote.findMany({
       where: { proposalId, phase: VotePhase.DEBATE_VOTE },
-      include: { drep: { select: { drepIdOnchain: true, user: { select: { displayName: true } } } } },
+      include: { drep: { select: { id: true, drepIdOnchain: true, votesOnFundingProposals: true, user: { select: { displayName: true, drepKeyHash: true } } } } },
       orderBy: { castAt: 'asc' },
     });
-    return votes.map((v) => ({
-      drep: v.drep.drepIdOnchain,
-      displayName: v.drep.user?.displayName ?? null,
-      choice: v.choice,
-      weight: round2(powerByDrep.get(v.drepId) ?? 0),
-      rationale: v.rationale ?? null,
-    }));
+    // §8.2 — a board member who has opted out has their weight zeroed in the
+    // public vote list so the audit row makes sense alongside the tally.
+    const boardHashes = new Set(
+      (await this.prisma.boardSeat.findMany({ select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
+    );
+    return votes.map((v) => {
+      const isBoard = !!v.drep.user?.drepKeyHash && boardHashes.has(v.drep.user.drepKeyHash);
+      const optedOut = isBoard && !v.drep.votesOnFundingProposals;
+      return {
+        drep: v.drep.drepIdOnchain,
+        displayName: v.drep.user?.displayName ?? null,
+        choice: v.choice,
+        weight: optedOut ? 0 : round2(powerByDrep.get(v.drepId) ?? 0),
+        rationale: v.rationale ?? null,
+      };
+    });
   }
 
   private async currentMerit(drepId: string, max?: number): Promise<number> {

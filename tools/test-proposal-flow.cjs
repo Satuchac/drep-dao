@@ -169,10 +169,29 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   // prevents D&V voting from happening while the round is still in FILTERING.
   await prisma.round.update({ where: { id: round.id }, data: { status: 'DV' } });
   // §8.2 — board members only vote on funding proposals after explicitly opting in.
-  await dv.openVoting(draft.id); // snapshot is empty here (only board are admitted, none opted in yet)
-  ok('board excluded from D&V until opt-in', (await dv.result(draft.id)).eligible === 0, `eligible=${(await dv.result(draft.id)).eligible}`);
-  for (const d of boardDreps) await dv.optIn(d.user.id, draft.id);
-  ok('board now eligible after opt-in', (await dv.result(draft.id)).eligible === boardDreps.length);
+  await dv.openVoting(draft.id);
+  // §8.2 — board members are voters by default (no per-proposal opt-in). The
+  // per-board-member opt-out lives in their profile and zeroes their snapshot
+  // weight at tally time without mutating the snapshot.
+  ok(
+    'board included in D&V by default (no per-proposal opt-in)',
+    (await dv.result(draft.id)).eligible === boardDreps.length,
+    `eligible=${(await dv.result(draft.id)).eligible} of ${boardDreps.length}`,
+  );
+  // Profile toggle on a single board member drops them from the live tally
+  // without re-running openVoting.
+  const optOutMember = boardDreps[0];
+  await prisma.drep.update({ where: { id: optOutMember.id }, data: { votesOnFundingProposals: false } });
+  ok(
+    'profile opt-out zeroes the member at tally time',
+    (await dv.result(draft.id)).eligible === boardDreps.length - 1,
+  );
+  // Toggle back on for the rest of the test.
+  await prisma.drep.update({ where: { id: optOutMember.id }, data: { votesOnFundingProposals: true } });
+  ok(
+    'profile opt-back-in restores their weight',
+    (await dv.result(draft.id)).eligible === boardDreps.length,
+  );
   const rationale = 'I support this proposal because '.padEnd(220, 'x');
   for (const d of boardDreps) await dv.vote(d.user.id, draft.id, 'YES', rationale);
   const fin = await dv.finalize(draft.id);

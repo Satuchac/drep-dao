@@ -219,6 +219,14 @@ function Stats({ d }: { d: DaoMemberDetail }) {
         }
       />
       <Stat label="Member since" value={d.since ? new Date(d.since).toLocaleDateString() : '—'} />
+      {/* §8.2 — board-only setting: do they vote on funding D&V? Hidden for
+          non-board (the flag doesn't apply — they always vote). */}
+      {d.isBoard ? (
+        <Stat
+          label="Votes on funding"
+          value={d.votesOnFundingProposals ? '✓ yes' : '✗ opted out'}
+        />
+      ) : null}
     </dl>
   );
 }

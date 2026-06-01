@@ -69,9 +69,13 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
     const order = ['FILTERING', 'DEBATE_VOTE', 'FUNDING'];
     return p.stage ? order.indexOf(p.stage) >= order.indexOf(s) : false;
   };
-  // Filtering result is relevant once filtering started; D&V once it reached D&V; milestones in funding.
+  // Filtering result is relevant once filtering started; D&V tally only when the
+  // round has actually advanced to VOTE (during DEBATE the proposal is in stage
+  // DEBATE_VOTE but ballots aren't open yet — feedback goes through comments).
   const showFiltering = !!p.stage; // any post-submission stage has filtering history
-  const showDv = stageReached('DEBATE_VOTE') || ['APPROVED', 'REJECTED', 'COMPLETE', 'FAILED'].includes(p.status);
+  const showDv =
+    (stageReached('DEBATE_VOTE') && (p.roundStatus === 'VOTE' || p.roundStatus === 'DV')) ||
+    ['APPROVED', 'REJECTED', 'COMPLETE', 'FAILED'].includes(p.status);
   const showMilestones = p.stage === 'FUNDING' || ['COMPLETE', 'FAILED'].includes(p.status);
 
   return (
@@ -818,10 +822,8 @@ function ChangeReviewerPicker({ proposalId, oldDrepId, onDone }: { proposalId: s
   );
 }
 
-function DvSection({ id, isBoard }: { id: string; isBoard: boolean }) {
+function DvSection({ id }: { id: string; isBoard: boolean }) {
   const [r, setR] = useState<DvResult | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
   const load = useCallback(() => dvApi.result(id).then(setR).catch(() => setR(null)), [id]);
   useEffect(() => { load(); }, [load]);
   if (!r || !r.open) return null;
@@ -834,13 +836,6 @@ function DvSection({ id, isBoard }: { id: string; isBoard: boolean }) {
   // Threshold is a % of the denominator (total − abstain); place it on the total-power scale.
   const thresholdPosPct = total > 0 ? ((((r.thresholdPct ?? 0) / 100) * denom) / total) * 100 : 0;
 
-  const optIn = async () => {
-    setBusy(true); setMsg(null);
-    try { await dvApi.optIn(id); setMsg('You opted in — you can now vote in My area.'); load(); }
-    catch (e) { setMsg(e instanceof Error ? e.message : 'opt-in failed'); }
-    finally { setBusy(false); }
-  };
-
   return (
     <section className={platformCard}>
       <div className="flex items-center justify-between">
@@ -851,15 +846,9 @@ function DvSection({ id, isBoard }: { id: string; isBoard: boolean }) {
         {r.cast}/{r.eligible} eligible DReps voted · {r.approved ? 'passing' : 'not passing'} at {r.ratioPct}% (need {r.thresholdPct}% of participating power)
       </div>
       <PowerBar yes={yes} no={no} abstain={abstain} total={total} thresholdPosPct={thresholdPosPct} thresholdPct={r.thresholdPct ?? 0} />
-      {isBoard ? (
-        <div className="mt-2 text-xs">
-          <button onClick={optIn} disabled={busy} className="rounded border border-neutral-400 px-2.5 py-1 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:hover:bg-neutral-800">
-            {busy ? 'Opting in…' : 'Opt in to vote on this funding proposal'}
-          </button>
-          <span className="ml-2 text-neutral-500">Board members only vote on funding proposals after opting in.</span>
-          {msg ? <div className="mt-1 text-emerald-600">{msg}</div> : null}
-        </div>
-      ) : null}
+      {/* §8.2 — board members are voters by default; the per-proposal opt-in
+          was replaced by a profile-level switch. To opt out, board members
+          flip it off in My area → Profile. */}
       <div className="mt-3"><Votes votes={r.votes ?? []} /></div>
     </section>
   );

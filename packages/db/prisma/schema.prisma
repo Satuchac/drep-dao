@@ -58,6 +58,11 @@ model Drep {
   kycOptin           Boolean   @default(false) @map("kyc_optin")
   callsOptin         Boolean   @default(false) @map("calls_optin")
   admissionCallOptin Boolean   @default(false) @map("admission_call_optin")
+  // §8.2 — board members vote on funding D&V only when this is true (default).
+  // Toggling it off mid-vote: their existing votes become effective abstain
+  // (their snapshot entry is skipped at tally time). Toggling it on adds them
+  // back live. Non-board admitted DReps are always voters and ignore this flag.
+  votesOnFundingProposals Boolean @default(true) @map("votes_on_funding_proposals")
   admittedAt         DateTime? @map("admitted_at") @db.Timestamptz(6)
   removedAt          DateTime? @map("removed_at") @db.Timestamptz(6)
 

@@ -29,9 +29,12 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
   const [kyc, setKyc] = useState(false);
   const [calls, setCalls] = useState(false);
   const [admissionCall, setAdmissionCall] = useState(false);
+  const [votesOnFunding, setVotesOnFunding] = useState(true); // §8.2 board-only toggle (default on)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  const isBoard = profile?.roles.includes('BOARD') ?? false;
 
   // Prefill from the existing profile (both modes — a re-applying DRep keeps prior data).
   useEffect(() => {
@@ -50,6 +53,7 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       setKyc(d.kycOptin);
       setCalls(d.callsOptin);
       setAdmissionCall(d.admissionCallOptin);
+      setVotesOnFunding(d.votesOnFundingProposals);
     });
   }, []);
 
@@ -80,6 +84,8 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       ...(mode === 'join'
         ? { kycOptin: kyc, callsOptin: calls, admissionCallOptin: admissionCall }
         : {}),
+      // §8.2 — board members can toggle this in profile mode (non-board don't see it).
+      ...(mode === 'profile' && isBoard ? { votesOnFundingProposals: votesOnFunding } : {}),
     };
     try {
       if (mode === 'join') await drepApi.apply(input);
@@ -176,6 +182,29 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={admissionCall} onChange={(e) => setAdmissionCall(e.target.checked)} />{' '}
             Admission-call opt-in
+          </label>
+        </div>
+      ) : null}
+
+      {/* §8.2 — board-only profile switch. Off = opt out of D&V voting on
+          funding proposals (existing votes become weight 0, future ballots
+          refused). Default on for every board member. */}
+      {mode === 'profile' && isBoard ? (
+        <div className="rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={votesOnFunding}
+              onChange={(e) => setVotesOnFunding(e.target.checked)}
+              className="mt-1"
+            />
+            <span>
+              <span className="font-medium">Vote on funding proposals</span>
+              <span className="block text-xs text-neutral-500">
+                When on, your weighted voting power is counted in every funding-proposal Debate &amp; Vote tally.
+                Turn it off to opt out — any vote you already cast becomes effective abstain (your snapshot weight goes to 0).
+              </span>
+            </span>
           </label>
         </div>
       ) : null}

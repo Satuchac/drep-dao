@@ -42,6 +42,10 @@ export class UpdateDrepDto {
   @IsOptional() @IsBoolean() kycOptin?: boolean;
   @IsOptional() @IsBoolean() callsOptin?: boolean;
   @IsOptional() @IsBoolean() admissionCallOptin?: boolean;
+  // §8.2 — board-member self-toggle for "I'll vote on funding proposals".
+  // Default true. Toggling off mid-VOTE zeroes the member's weight at the
+  // next tally read (their snapshot entry is skipped — no snapshot mutation).
+  @IsOptional() @IsBoolean() votesOnFundingProposals?: boolean;
 }
 
 export class AdmissionVoteDto {
