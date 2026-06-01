@@ -109,7 +109,9 @@ function FilterAssignmentRow({
         <div className="mt-2 rounded-md border border-emerald-200 bg-emerald-50/40 p-3 dark:border-emerald-900 dark:bg-emerald-950/20">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm font-medium">Your filtering vote — {a.title}</span>
-            {a.myVote ? <span className="text-xs text-emerald-600">voted {a.myVote}</span> : null}
+            {a.myVote ? (
+              <span className={`text-xs ${a.myVote === 'NO' ? 'text-red-600' : 'text-emerald-600'}`}>voted {a.myVote}</span>
+            ) : null}
           </div>
           {voteBox}
         </div>
@@ -151,7 +153,13 @@ function QuickFilterRow({ a, voteBox, onToggle }: { a: FilterAssignment; voteBox
               QUEUED
             </span>
           ) : a.myVote ? (
-            <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+            <span
+              className={
+                a.myVote === 'NO'
+                  ? 'rounded bg-red-100 px-1.5 py-0.5 text-[11px] font-medium text-red-700 dark:bg-red-950 dark:text-red-300'
+                  : 'rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+              }
+            >
               voted {a.myVote}
             </span>
           ) : (
