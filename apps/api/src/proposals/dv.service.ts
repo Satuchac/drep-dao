@@ -15,6 +15,7 @@ import {
   PLATFORM_CONFIG_DEFAULTS,
   ProposalStage,
   ProposalStatus,
+  RoundStatus,
   ROUND_SETTING_DEFAULTS,
   VoteChoice,
   VotePhase,
@@ -43,10 +44,22 @@ export class DvService {
    * nominal value (DV_SNAPSHOT_STAKE_ADA) so they aren't powerless in the demo.
    */
   async openVoting(proposalId: string) {
-    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      include: { round: { select: { status: true } } },
+    });
     if (!proposal) throw new NotFoundException('proposal not found');
     if (proposal.stage !== ProposalStage.DEBATE_VOTE) {
       throw new ConflictException('proposal is not in the DEBATE_VOTE stage');
+    }
+    // The proposal's stage flips to DEBATE_VOTE the moment it passes filtering,
+    // which can happen while the round is still in FILTERING. D&V voting must wait
+    // until the board advances the round itself — otherwise voters could cast
+    // weighted ballots during what is supposed to be the filtering window.
+    if (proposal.round && proposal.round.status !== RoundStatus.DV) {
+      throw new ConflictException(
+        `round is in ${proposal.round.status}; Debate & Vote opens when the round advances to DV`,
+      );
     }
 
     const existing = await this.prisma.voteSnapshot.findFirst({ where: { proposalId } });
@@ -135,9 +148,17 @@ export class DvService {
 
   /** §8.2 — eligible DRep casts/changes a balanced D&V vote (rationale mandatory). */
   async vote(userId: string, proposalId: string, choice: string, rationale: string) {
-    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      include: { round: { select: { status: true } } },
+    });
     if (!proposal || proposal.stage !== ProposalStage.DEBATE_VOTE) {
       throw new ConflictException('proposal is not in the DEBATE_VOTE stage');
+    }
+    if (proposal.round && proposal.round.status !== RoundStatus.DV) {
+      throw new ConflictException(
+        `round is in ${proposal.round.status}; Debate & Vote ballots are accepted only while the round is in DV`,
+      );
     }
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
     if (!drep) throw new ForbiddenException('DReps only');

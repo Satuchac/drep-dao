@@ -801,7 +801,14 @@ export class ProposalsService {
         }
       } else if (status === ProposalStatus.ACTIVE && stage === ProposalStage.DEBATE_VOTE) {
         const snap = dvSnapBy.get(p.id);
-        if (!snap) {
+        const roundStatus = p.round?.status ?? null;
+        // The proposal's stage flips to DEBATE_VOTE the moment it passes filtering,
+        // but D&V voting can't actually happen until the board moves the round to DV.
+        // Otherwise the board would see a misleading "0/N voted" while the round is
+        // still in FILTERING — voting was never live yet.
+        if (roundStatus && roundStatus !== 'DV') {
+          progress = { stage: 'DV', label: '✓ passed filtering · D&V opens when round advances', tone: 'emerald' };
+        } else if (!snap) {
           progress = { stage: 'DV', label: 'awaiting board to open Debate & Vote', tone: 'amber' };
         } else {
           const eligible = snap.entries.length;
