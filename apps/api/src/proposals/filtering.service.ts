@@ -210,12 +210,13 @@ export class FilteringService {
       where: { id: proposalId },
       include: { round: { select: { status: true } } },
     });
-    if (!proposal || proposal.stage !== ProposalStage.FILTERING) {
-      throw new ConflictException('proposal is not in the FILTERING stage');
-    }
-    // §3/§5 — voting is only open once the ROUND is in the FILTERING stage. During
-    // SUBMISSION, reviewers may be pre-assigned (so juries are ready) but cannot
-    // cast votes yet. The board moves the round to FILTERING when SUBMISSION ends.
+    if (!proposal) throw new NotFoundException('proposal not found');
+    // §3/§5/§7 — the gate is the ROUND, not the proposal stage. A proposal's stage
+    // flips to DEBATE_VOTE the moment its filtering threshold is met, but DReps can
+    // still change their filtering vote for the whole window the round is in
+    // FILTERING (the on-chain anchor that fired at first-decision time is final;
+    // post-decision vote changes update only the per-DRep record). During SUBMISSION
+    // reviewers may be pre-assigned but votes are not yet accepted.
     if (proposal.round && proposal.round.status !== RoundStatus.FILTERING) {
       throw new ConflictException(
         `filtering voting is closed — the round is in ${proposal.round.status}, not FILTERING`,
