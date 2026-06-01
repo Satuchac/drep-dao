@@ -75,6 +75,7 @@ async function confirm(prompt) {
     await db.proposalVersion.deleteMany({ where: { proposalId: { in: propIds } } });
     await db.comment.deleteMany({ where: { proposalId: { in: propIds } } });
     await db.feeAdjustment.deleteMany({ where: { proposalId: { in: propIds } } });
+    await db.budgetChangeRequest.deleteMany({ where: { proposalId: { in: propIds } } });
     await db.anchor.deleteMany({ where: { proposalId: { in: propIds } } });
     await db.proposal.deleteMany({ where: { id: { in: propIds } } });
   }
