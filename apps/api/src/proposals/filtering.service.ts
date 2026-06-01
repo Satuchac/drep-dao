@@ -243,40 +243,75 @@ export class FilteringService {
     return this.result(proposalId);
   }
 
-  /** Apply §7.2 result: ≥ threshold YES → DEBATE_VOTE; ≥ threshold NO → REJECTED. Anchors the decision. */
+  /**
+   * §7.2 — recompute the filtering decision against the live tally and move the
+   * proposal there if its current state doesn't match. Runs after every vote
+   * change (cast / re-cast / replacement) while the round is in FILTERING.
+   *
+   *  - yes >= threshold → ACTIVE + DEBATE_VOTE (advanced; anchor on transition)
+   *  - no  >= threshold → REJECTED + FILTERING (rejected; anchor on transition)
+   *  - neither           → ACTIVE + FILTERING (revert if a previous decision
+   *                        is no longer supported by the current votes)
+   *
+   * Anchors are written on every transition into a decided state — so if a
+   * proposal flips ACCEPTED → reverted → REJECTED → reverted → ACCEPTED, the
+   * on-chain history shows all three decisions and the latest one wins, per
+   * the "ensure the latest change is written" rule.
+   *
+   * Skipped entirely once the round leaves FILTERING — at that point the
+   * decision is frozen and vote changes can't move the proposal anymore.
+   */
   private async maybeDecide(proposalId: string) {
     const proposal = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
-      include: { round: { select: { number: true, id: true, name: true, filterApprovalVotes: true, dvApprovalThresholdPct: true } } },
+      include: { round: { select: { number: true, id: true, name: true, status: true, filterApprovalVotes: true, dvApprovalThresholdPct: true } } },
     });
-    // Only decide once: skip if no longer an active filtering proposal.
-    if (!proposal || proposal.status !== ProposalStatus.ACTIVE || proposal.stage !== ProposalStage.FILTERING) return;
+    if (!proposal) return;
+    if (proposal.round?.status !== RoundStatus.FILTERING) return;
 
-    // §6 — per-round overrides of the filtering approval count + D&V threshold.
-    const threshold = proposal.round?.filterApprovalVotes ?? ROUND_SETTING_DEFAULTS.filterApprovalVotes;
-    const dvThresholdPct = proposal.round?.dvApprovalThresholdPct ?? ROUND_SETTING_DEFAULTS.dvApprovalThresholdPct;
+    const threshold = proposal.round.filterApprovalVotes ?? ROUND_SETTING_DEFAULTS.filterApprovalVotes;
+    const dvThresholdPct = proposal.round.dvApprovalThresholdPct ?? ROUND_SETTING_DEFAULTS.dvApprovalThresholdPct;
     const votes = await this.prisma.vote.findMany({ where: { proposalId, phase: VotePhase.FILTERING } });
     const yes = votes.filter((v) => v.choice === VoteChoice.YES).length;
     const no = votes.filter((v) => v.choice === VoteChoice.NO).length;
 
-    let outcome: 'ACCEPTED' | 'REJECTED' | null = null;
-    if (yes >= threshold) {
+    // Where the live tally says the proposal should be right now.
+    const desired: { status: ProposalStatus; stage: ProposalStage; outcome: 'ACCEPTED' | 'REJECTED' | null } =
+      yes >= threshold
+        ? { status: ProposalStatus.ACTIVE, stage: ProposalStage.DEBATE_VOTE, outcome: 'ACCEPTED' }
+        : no >= threshold
+          ? { status: ProposalStatus.REJECTED, stage: ProposalStage.FILTERING, outcome: 'REJECTED' }
+          : { status: ProposalStatus.ACTIVE, stage: ProposalStage.FILTERING, outcome: null };
+
+    if (proposal.status === desired.status && proposal.stage === desired.stage) return;
+
+    if (desired.outcome === 'ACCEPTED') {
       await this.prisma.proposal.update({
         where: { id: proposalId },
         data: {
+          status: ProposalStatus.ACTIVE,
           stage: ProposalStage.DEBATE_VOTE,
           votingType: VotingType.BALANCED,
           approvalThresholdPct: dvThresholdPct,
         },
       });
-      outcome = 'ACCEPTED';
-    } else if (no >= threshold) {
-      await this.prisma.proposal.update({ where: { id: proposalId }, data: { status: ProposalStatus.REJECTED } });
-      outcome = 'REJECTED';
+    } else if (desired.outcome === 'REJECTED') {
+      await this.prisma.proposal.update({
+        where: { id: proposalId },
+        data: { status: ProposalStatus.REJECTED, stage: ProposalStage.FILTERING },
+      });
+    } else {
+      // Revert — a vote change undid the prior decision. Drop back to active
+      // filtering; no anchor is written here (the prior anchor stays as the
+      // historical record; the next threshold crossing writes a fresh one).
+      await this.prisma.proposal.update({
+        where: { id: proposalId },
+        data: { status: ProposalStatus.ACTIVE, stage: ProposalStage.FILTERING },
+      });
+      return;
     }
-    if (!outcome) return;
 
-    // §C — anchor the filtering decision on-chain (subject + every reviewer's vote + tally).
+    // §C — anchor the new decision on-chain (subject + every reviewer's vote + tally).
     try {
       const voteList = await this.anchorVoteList(proposalId);
       await this.anchor.anchorResult({
@@ -289,7 +324,7 @@ export class FilteringService {
         roundId: proposal.round?.id ?? proposal.roundId ?? null,
         votes: voteList.map((v) => ({ drep: v.drep, vote: v.choice })),
         preimageVotes: voteList,
-        outcome,
+        outcome: desired.outcome,
         yes,
         no,
         threshold,
