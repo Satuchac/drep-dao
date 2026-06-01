@@ -2261,6 +2261,10 @@ function commentTint(c: CommentNode): string {
   if (c.deleted) return 'border-neutral-200 bg-neutral-50/60 dark:border-neutral-800 dark:bg-neutral-900/30';
   if (c.parentId) return 'border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30'; // reply → yellow
   if (c.isSubmitter) return 'border-neutral-300 bg-neutral-100/70 dark:border-neutral-700 dark:bg-neutral-900/50'; // team → grey
+  // §8.1 — voting-eligible DReps render purple so the team can spot the
+  // voters' perspective at a glance during the Debate phase.
+  if (c.isVotingEligible)
+    return 'border-purple-300 bg-purple-50/60 dark:border-purple-900 dark:bg-purple-950/30';
   if (c.author.role && COMMENT_ROLES_GREEN.has(c.author.role))
     return 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30'; // DRep / board → green
   return 'border-neutral-200 dark:border-neutral-800';

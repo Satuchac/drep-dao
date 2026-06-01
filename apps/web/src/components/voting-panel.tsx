@@ -22,15 +22,16 @@ export function VotingPanel({ history = false }: { history?: boolean }) {
     const rounds = await roundsApi.list().catch(() => []);
     const lists = await Promise.all(rounds.map((r) => proposalsApi.byRound(r.id).catch(() => [])));
     // Default: only proposals currently in DEBATE_VOTE AND whose round has actually
-    // advanced to DV (proposal stage flips to DEBATE_VOTE the moment filtering passes
-    // — voting itself is not allowed until the board moves the round). History also
-    // includes proposals that passed through D&V — APPROVED / REJECTED / COMPLETE /
-    // FAILED — so the voter can recall past decisions (the row still links to detail).
-    const dvRoundIds = new Set(rounds.filter((r) => r.status === 'DV').map((r) => r.id));
+    // advanced to VOTE (the proposal stage flips to DEBATE_VOTE the moment filtering
+    // passes — ballots themselves aren't accepted until the round moves to VOTE).
+    // History also includes proposals that passed through D&V — APPROVED / REJECTED /
+    // COMPLETE / FAILED — so the voter can recall past decisions (the row still
+    // links to detail). DV is the deprecated alias for VOTE.
+    const voteRoundIds = new Set(rounds.filter((r) => r.status === 'VOTE' || r.status === 'DV').map((r) => r.id));
     const all = lists.flat();
     const pred = history
       ? (p: ProposalSummary) => p.stage === 'DEBATE_VOTE' || ['APPROVED', 'REJECTED', 'COMPLETE', 'FAILED'].includes(p.status)
-      : (p: ProposalSummary) => p.stage === 'DEBATE_VOTE' && !!p.roundId && dvRoundIds.has(p.roundId);
+      : (p: ProposalSummary) => p.stage === 'DEBATE_VOTE' && !!p.roundId && voteRoundIds.has(p.roundId);
     setItems(all.filter(pred));
   }, [history]);
   useEffect(() => {

@@ -59,8 +59,12 @@ export class RoundSettingsInput {
 }
 
 // MVP schedule uses coarse operational windows rather than the 9 fine-grained
-// sub-periods in §6. Categories may be GRANT or RFP (§5.2).
-export const ROUND_STAGE_KEYS = ['submission', 'filtering', 'debate_vote', 'funding'] as const;
+// sub-periods in §6. Categories may be GRANT or RFP (§5.2). §8 — what was a
+// single 'debate_vote' window is split into 'debate' (comments + revisions, no
+// voting) and 'vote' (ballots open, proposal frozen). 'debate_vote' is kept as
+// an accepted alias for any pre-split rows; new schedules use the split.
+export const ROUND_STAGE_KEYS = ['submission', 'filtering', 'debate', 'vote', 'funding'] as const;
+export const ROUND_STAGE_KEYS_LEGACY = [...ROUND_STAGE_KEYS, 'debate_vote'] as const;
 const CATEGORY_TYPES = Object.values(CategoryType) as string[]; // ['GRANT','RFP']
 
 export class CategoryInput {
@@ -81,6 +85,10 @@ export class ConfirmStageDto {
   @IsOptional() @IsDateString() endsAt?: string;
 }
 
+// The stage-key param for confirm/launch routes. Accepts the legacy
+// debate_vote alias so existing UI calls don't break during rollout.
+export const ROUND_STAGE_KEY_LEGACY = ROUND_STAGE_KEYS_LEGACY;
+
 // §6 — board shortens or extends the currently-running stage's end. Start is
 // frozen (the stage already started), and a new end can't fall behind "now".
 export class UpdateCurrentStageDto {
@@ -88,7 +96,7 @@ export class UpdateCurrentStageDto {
 }
 
 export class ScheduleInput {
-  @IsIn(ROUND_STAGE_KEYS) stageKey!: (typeof ROUND_STAGE_KEYS)[number];
+  @IsIn(ROUND_STAGE_KEYS_LEGACY) stageKey!: (typeof ROUND_STAGE_KEYS_LEGACY)[number];
   @IsDateString() startsAt!: string;
   @IsDateString() endsAt!: string;
 }

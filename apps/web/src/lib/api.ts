@@ -825,6 +825,13 @@ export interface CommentNode {
   isSubmitter?: boolean;
   /** True when the signed-in viewer wrote this comment — drives Edit / Delete. */
   isMine?: boolean;
+  /**
+   * §8.1 — True when the author is a DRep in the round's voting eligibility
+   * list (i.e. one of the people who will cast a ballot in the VOTE phase).
+   * Comments from these authors render purple to make voter feedback obvious
+   * during the DEBATE phase.
+   */
+  isVotingEligible?: boolean;
   replies?: CommentNode[];
 }
 export const commentsApi = {

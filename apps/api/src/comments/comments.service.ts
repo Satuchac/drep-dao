@@ -8,7 +8,7 @@ const authorSelect = {
     id: true,
     displayName: true,
     drepKeyHash: true,
-    drep: { select: { drepIdOnchain: true, status: true } },
+    drep: { select: { id: true, drepIdOnchain: true, status: true } },
     experts: { select: { approvedByBoard: true } },
   },
 } as const;
@@ -24,7 +24,7 @@ export class CommentsService {
     // `isSubmitter` (the team's own posts get a distinct visual treatment).
     const proposal = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
-      select: { submitterUserId: true },
+      select: { submitterUserId: true, roundId: true },
     });
     const submitterUserId = proposal?.submitterUserId ?? null;
     const rows = await this.prisma.comment.findMany({
@@ -36,6 +36,19 @@ export class CommentsService {
     const boardHashes = new Set(
       (await this.prisma.boardSeat.findMany({ select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
     );
+    // §8.1 — Debate-stage comments from a DRep who is eligible to vote on this
+    // round (admitted + in the round's eligibility list) get a distinct purple
+    // treatment in the UI so the team can tell a voter's feedback at a glance.
+    const eligibleDrepIds = proposal?.roundId
+      ? new Set(
+          (
+            await this.prisma.roundDrepEligibility.findMany({
+              where: { roundId: proposal.roundId },
+              select: { drepId: true },
+            })
+          ).map((e) => e.drepId),
+        )
+      : new Set<string>();
     const roleOf = (a: (typeof rows)[number]['author']): string | null => {
       if (a.drepKeyHash && boardHashes.has(a.drepKeyHash)) return 'Board member';
       if (a.experts?.some((e) => e.approvedByBoard)) return 'Expert';
@@ -54,6 +67,11 @@ export class CommentsService {
       // Whether the (signed-in) viewer wrote this post — drives the inline
       // Edit / Delete controls. False when no viewer is supplied.
       isMine: viewerUserId != null && c.authorUserId === viewerUserId,
+      // §8.1 — author is in the round's voting eligibility list (drives the
+      // purple Debate-feedback styling). Board members count when they're
+      // in eligibility (i.e. seated DReps); the strict opt-in (§8.2) only
+      // gates ballots, not who's a voter for this purpose.
+      isVotingEligible: !!c.author.drep?.id && eligibleDrepIds.has(c.author.drep.id),
     });
     // §20.1 — replies nest indefinitely. Group every comment by parentId, then
     // recursively attach so a reply-to-a-reply (and deeper) carries its own

@@ -13,12 +13,14 @@ const LOVELACE = 1_000_000;
 const toLovelace = (ada: number): bigint => BigInt(Math.round(ada * LOVELACE));
 const toAda = (lovelace: bigint | null): number => (lovelace == null ? 0 : Number(lovelace) / LOVELACE);
 
-// §5 — the round advances through these statuses in order.
+// §5 — the round advances through these statuses in order. §8 split the old
+// single "Debate & Vote" stage into DEBATE (discuss + revise) → VOTE (ballots).
 const STATUS_SEQUENCE: string[] = [
   RoundStatus.PREPARATION,
   RoundStatus.SUBMISSION,
   RoundStatus.FILTERING,
-  RoundStatus.DV,
+  RoundStatus.DEBATE,
+  RoundStatus.VOTE,
   RoundStatus.FUNDING,
   RoundStatus.CLOSED,
 ];
@@ -26,17 +28,28 @@ const STATUS_SEQUENCE: string[] = [
 const STAGE_KEY_FOR_STATUS: Record<string, string | undefined> = {
   [RoundStatus.SUBMISSION]: 'submission',
   [RoundStatus.FILTERING]: 'filtering',
-  [RoundStatus.DV]: 'debate_vote',
+  [RoundStatus.DEBATE]: 'debate',
+  [RoundStatus.VOTE]: 'vote',
   [RoundStatus.FUNDING]: 'funding',
 };
 const STATUS_FOR_STAGE_KEY: Record<string, string> = Object.fromEntries(
   Object.entries(STAGE_KEY_FOR_STATUS).map(([status, key]) => [key as string, status]),
 );
+// Backward-compat: any pre-split round_schedule row with key 'debate_vote' is
+// treated as the VOTE window (the most user-visible behaviour for an old round).
+const SCHEDULE_KEY_FOR_STATUS: Record<string, string[]> = {
+  [RoundStatus.SUBMISSION]: ['submission'],
+  [RoundStatus.FILTERING]: ['filtering'],
+  [RoundStatus.DEBATE]: ['debate'],
+  [RoundStatus.VOTE]: ['vote', 'debate_vote'],
+  [RoundStatus.FUNDING]: ['funding'],
+};
 // A round is "active" (carrying live proposals) when in one of these stages.
 const ACTIVE_ROUND_STATUSES: string[] = [
   RoundStatus.SUBMISSION,
   RoundStatus.FILTERING,
-  RoundStatus.DV,
+  RoundStatus.DEBATE,
+  RoundStatus.VOTE,
   RoundStatus.FUNDING,
 ];
 
@@ -415,22 +428,25 @@ export class RoundsService {
     const round = await this.prisma.round.findUnique({ where: { id }, include: { schedule: true } });
     if (!round) throw new NotFoundException('round not found');
 
-    // §5.1 — rounds may overlap, but only ONE reviewing stage (Filtering OR Debate &
+    // §5.1 — rounds may overlap, but only ONE reviewing stage (Filtering / Debate /
     // Vote) can be active across all rounds at a time, so DReps are never asked to
-    // filter/vote two rounds at once.
-    if (target === RoundStatus.FILTERING || target === RoundStatus.DV) {
+    // filter/vote two rounds at once. DV is treated as VOTE for the conflict check.
+    const reviewingStatuses: string[] = [RoundStatus.FILTERING, RoundStatus.DEBATE, RoundStatus.VOTE, RoundStatus.DV];
+    if (reviewingStatuses.includes(target)) {
       const other = await this.prisma.round.findFirst({
-        where: { status: { in: [RoundStatus.FILTERING, RoundStatus.DV] }, id: { not: id } },
+        where: { status: { in: reviewingStatuses }, id: { not: id } },
       });
       if (other) {
         throw new ConflictException(
-          `round #${other.number} is already in ${other.status}; only one Filtering or Debate & Vote stage can be active at a time`,
+          `round #${other.number} is already in ${other.status}; only one Filtering / Debate / Vote stage can be active at a time`,
         );
       }
     }
 
-    const stageKey = STAGE_KEY_FOR_STATUS[target];
-    const row = stageKey ? round.schedule.find((s) => s.stageKey === stageKey) : undefined;
+    // Find the schedule row for this target. Fall back to legacy 'debate_vote' so
+    // pre-split rounds whose schedule wasn't migrated can still advance.
+    const stageKeys = SCHEDULE_KEY_FOR_STATUS[target] ?? (STAGE_KEY_FOR_STATUS[target] ? [STAGE_KEY_FOR_STATUS[target]!] : []);
+    const row = stageKeys.length ? round.schedule.find((s) => stageKeys.includes(s.stageKey)) : undefined;
 
     await this.prisma.$transaction(async (tx) => {
       await tx.round.update({
@@ -445,7 +461,7 @@ export class RoundsService {
         const durationMs = row.endsAt.getTime() - row.startsAt.getTime();
         const delayed = now.getTime() > row.startsAt.getTime();
         await tx.roundSchedule.update({
-          where: { roundId_stageKey: { roundId: id, stageKey: stageKey! } },
+          where: { roundId_stageKey: { roundId: id, stageKey: row.stageKey } },
           data: {
             startsAt: now,
             endsAt: new Date(now.getTime() + durationMs),
@@ -486,22 +502,22 @@ export class RoundsService {
    */
   async advanceDueStages(now = new Date()): Promise<string[]> {
     const candidates = await this.prisma.round.findMany({
-      where: { status: { in: [RoundStatus.PREPARATION, RoundStatus.SUBMISSION, RoundStatus.FILTERING, RoundStatus.DV] } },
+      where: { status: { in: [RoundStatus.PREPARATION, RoundStatus.SUBMISSION, RoundStatus.FILTERING, RoundStatus.DEBATE, RoundStatus.VOTE, RoundStatus.DV] } },
       include: { schedule: true },
     });
     const advanced: string[] = [];
     for (const round of candidates) {
-      const nextStatus = this.nextStatusOf(round.status);
+      const nextStatus = this.nextStatusOf(round.status === RoundStatus.DV ? RoundStatus.VOTE : round.status);
       if (!nextStatus || nextStatus === RoundStatus.CLOSED) continue;
-      const key = STAGE_KEY_FOR_STATUS[nextStatus];
-      const row = round.schedule.find((s) => s.stageKey === key);
+      const keys = SCHEDULE_KEY_FOR_STATUS[nextStatus] ?? [];
+      const row = round.schedule.find((s) => keys.includes(s.stageKey));
       if (!row || !row.autoStart || !row.confirmedAt) continue;
       if (row.startsAt.getTime() > now.getTime()) continue; // not due yet
       try {
         await this.transitionTo(round.id, nextStatus, row.confirmedBy ?? null);
         advanced.push(round.id);
       } catch {
-        // e.g. another round holds the active Filtering/D&V stage (§5.1) — leave it for the next tick / manual launch.
+        // e.g. another round holds the active reviewing stage (§5.1) — leave it for the next tick / manual launch.
       }
     }
     return advanced;
@@ -516,13 +532,13 @@ export class RoundsService {
     status: string,
     schedule: { stageKey: string; startsAt: Date; endsAt: Date; autoStart: boolean; confirmedAt: Date | null }[],
   ) {
-    const nextStatus = this.nextStatusOf(status);
+    const nextStatus = this.nextStatusOf(status === RoundStatus.DV ? RoundStatus.VOTE : status);
     if (!nextStatus) return null;
-    const stageKey = STAGE_KEY_FOR_STATUS[nextStatus] ?? null; // null => CLOSED (manual)
-    const row = stageKey ? schedule.find((s) => s.stageKey === stageKey) ?? null : null;
+    const stageKeys = SCHEDULE_KEY_FOR_STATUS[nextStatus] ?? []; // empty => CLOSED (manual)
+    const row = stageKeys.length ? schedule.find((s) => stageKeys.includes(s.stageKey)) ?? null : null;
     return {
       status: nextStatus,
-      stageKey,
+      stageKey: stageKeys[0] ?? null,
       manualOnly: nextStatus === RoundStatus.CLOSED,
       planned: row ? { startsAt: row.startsAt, endsAt: row.endsAt } : null,
       autoStart: row?.autoStart ?? false,
@@ -596,12 +612,13 @@ export class RoundsService {
 
   /**
    * P7 — schedule windows must be sensible: each stage ends after it starts, and the
-   * canonical stages (submission → filtering → debate_vote → funding) that are present
-   * must not overlap and must run in order.
+   * canonical stages (submission → filtering → debate → vote → funding) that are
+   * present must not overlap and must run in order. Legacy 'debate_vote' rows sort
+   * between filtering and funding (where they used to live).
    */
   private assertScheduleOrdered(schedule?: ScheduleInput[]) {
     if (!schedule || schedule.length === 0) return;
-    const order = ['submission', 'filtering', 'debate_vote', 'funding'];
+    const order = ['submission', 'filtering', 'debate_vote', 'debate', 'vote', 'funding'];
     const present = [...schedule].sort((a, b) => order.indexOf(a.stageKey) - order.indexOf(b.stageKey));
     let prevEnd: Date | null = null;
     let prevLabel = '';

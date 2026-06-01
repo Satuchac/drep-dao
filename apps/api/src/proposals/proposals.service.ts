@@ -1001,18 +1001,20 @@ export class ProposalsService {
       } else if (status === ProposalStatus.ACTIVE && stage === ProposalStage.DEBATE_VOTE) {
         const snap = dvSnapBy.get(p.id);
         const roundStatus = p.round?.status ?? null;
-        // The proposal's stage flips to DEBATE_VOTE the moment it passes filtering,
-        // but D&V voting can't actually happen until the board moves the round to DV.
-        // Otherwise the board would see a misleading "0/N voted" while the round is
-        // still in FILTERING — voting was never live yet.
-        if (roundStatus && roundStatus !== 'DV') {
-          progress = { stage: 'DV', label: '✓ passed filtering · D&V opens when round advances', tone: 'emerald' };
+        // §8 — DEBATE is the discussion window (no ballots yet); VOTE is the
+        // ballot window. DV is the deprecated alias treated as VOTE. Anything
+        // earlier means the proposal just passed filtering and is waiting on
+        // the board to advance the round.
+        if (roundStatus === 'DEBATE') {
+          progress = { stage: 'DEBATE', label: '✓ passed filtering · in Debate (DReps comment; voting opens in Vote)', tone: 'emerald' };
+        } else if (roundStatus !== 'VOTE' && roundStatus !== 'DV') {
+          progress = { stage: 'DV', label: '✓ passed filtering · Debate opens when round advances', tone: 'emerald' };
         } else if (!snap) {
-          progress = { stage: 'DV', label: 'awaiting board to open Debate & Vote', tone: 'amber' };
+          progress = { stage: 'VOTE', label: 'awaiting board to open Vote', tone: 'amber' };
         } else {
           const eligible = snap.entries.length;
           const cast = new Set((dvVotesBy.get(p.id) ?? []).map((v) => v.drepId)).size;
-          progress = { stage: 'DV', label: `${cast}/${eligible} DReps voted`, tone: cast >= eligible ? 'emerald' : 'amber' };
+          progress = { stage: 'VOTE', label: `${cast}/${eligible} DReps voted`, tone: cast >= eligible ? 'emerald' : 'amber' };
         }
       } else if (status === ProposalStatus.APPROVED && stage === ProposalStage.FUNDING) {
         const active = stopBy.get(p.id);
@@ -1412,6 +1414,11 @@ export class ProposalsService {
     // §3 — during the round's SUBMISSION window the team can polish a submitted
     // proposal (ACTIVE+FILTERING). Snapshots a version on each edit.
     if (roundStatus === RoundStatus.SUBMISSION && p.status === ProposalStatus.ACTIVE) {
+      return { proposal: p, postSubmission: true };
+    }
+    // §8.1 — during DEBATE the team can revise based on reviewer feedback (no
+    // voting yet). Editing closes the moment the round advances to VOTE.
+    if (roundStatus === RoundStatus.DEBATE && p.status === ProposalStatus.ACTIVE) {
       return { proposal: p, postSubmission: true };
     }
     // §7.4 — REJECTED at filtering. The submitter can revise while the round is

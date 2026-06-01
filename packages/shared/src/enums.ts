@@ -114,12 +114,18 @@ export const PledgeReturnMethod = {
 } as const;
 export type PledgeReturnMethod = (typeof PledgeReturnMethod)[keyof typeof PledgeReturnMethod];
 
-/** §24.3 round status */
+/**
+ * §24.3 round status. The §8 "Debate & Vote" phase is split into two consecutive
+ * sub-stages — DEBATE (DReps comment + submitter revises) and VOTE (ballots open).
+ * DV is retained as a deprecated alias treated as VOTE for any pre-split rows.
+ */
 export const RoundStatus = {
   PREPARATION: 'PREPARATION', // §6 board configures the round
   SUBMISSION: 'SUBMISSION', // submission window open — proposals accepted (§3/§19)
   FILTERING: 'FILTERING',
-  DV: 'DV',
+  DEBATE: 'DEBATE', // §8.1 — DReps discuss; submitter may still revise; no voting yet
+  VOTE: 'VOTE',     // §8.2 — ballots open; proposal frozen; tally finalizes at the end
+  DV: 'DV',         // deprecated alias for VOTE; kept for any pre-split rows
   FUNDING: 'FUNDING',
   CLOSED: 'CLOSED',
 } as const;

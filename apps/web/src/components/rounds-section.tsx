@@ -16,10 +16,12 @@ import {
 import { ProposalList } from './proposal-list';
 import { BackButton, ProposalCounts, StatusBadge } from './round-ui';
 
+// §8 — D&V is split into DEBATE (DReps comment + revise) → VOTE (ballots).
 const STAGE_DEFS = [
   { key: 'submission', label: 'Submission' },
   { key: 'filtering', label: 'Filtering' },
-  { key: 'debate_vote', label: 'Debate & Vote' },
+  { key: 'debate', label: 'Debate' },
+  { key: 'vote', label: 'Vote' },
   { key: 'funding', label: 'Funding' },
 ];
 const CATEGORY_TYPES = ['GRANT', 'RFP'];
@@ -561,8 +563,31 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
           if (startMs != null && endMs != null && endMs <= startMs) warn = 'End must be after the start.';
           else if (startMs != null && prevEnd != null && startMs < prevEnd) warn = `Must start after the ${prevLabel} stage ends.`;
           const dur = startMs != null && endMs != null && endMs > startMs ? durationLabel(endMs - startMs) : null;
+          // §6 — when the user moves a stage so that it would overlap the next
+          // one, cascade the shift forward (every later stage moves by the same
+          // delta) so the schedule stays consecutive without manual fix-up.
           const setPart = (part: 'startsAt' | 'endsAt', val: string) =>
-            setSched((p) => ({ ...p, [s.key]: { ...p[s.key], [part]: val } }));
+            setSched((p) => {
+              const next: Record<string, { startsAt: string; endsAt: string }> = { ...p };
+              const cur = { ...(next[s.key] ?? { startsAt: '', endsAt: '' }), [part]: val };
+              next[s.key] = cur;
+              const myEndMs = cur.endsAt ? new Date(cur.endsAt).getTime() : null;
+              if (myEndMs == null) return next;
+              for (let j = idx + 1; j < STAGE_DEFS.length; j++) {
+                const k = STAGE_DEFS[j].key;
+                const ent = next[k];
+                if (!ent?.startsAt || !ent?.endsAt) continue;
+                const startMs = new Date(ent.startsAt).getTime();
+                const endMs = new Date(ent.endsAt).getTime();
+                if (startMs >= myEndMs) break; // no further collision possible (already in order)
+                const delta = myEndMs - startMs;
+                next[k] = {
+                  startsAt: new Date(startMs + delta).toISOString(),
+                  endsAt: new Date(endMs + delta).toISOString(),
+                };
+              }
+              return next;
+            });
           return (
             <div key={s.key} className="mb-2 text-sm">
               <div className="flex flex-wrap items-center gap-2">

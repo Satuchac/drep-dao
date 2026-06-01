@@ -8,7 +8,9 @@ import { CreateRoundForm } from './rounds-section';
 const STAGE_LABEL: Record<string, string> = {
   SUBMISSION: 'Submission',
   FILTERING: 'Filtering',
-  DV: 'Debate & Vote',
+  DEBATE: 'Debate & Vote — Debate',
+  VOTE: 'Debate & Vote — Vote',
+  DV: 'Debate & Vote (legacy)', // deprecated alias
   FUNDING: 'Funding',
   CLOSED: 'Close round',
 };
@@ -49,11 +51,14 @@ export function RoundStageControls() {
 }
 
 // Map of round.status → round.schedule.stageKey so the UI can pick the row for the
-// currently-running stage. PREPARATION has no schedule row.
+// currently-running stage. PREPARATION has no schedule row. DV remains for any
+// pre-split round whose schedule still has the old 'debate_vote' window.
 const CURRENT_STAGE_KEY: Record<string, string | null> = {
   PREPARATION: null,
   SUBMISSION: 'submission',
   FILTERING: 'filtering',
+  DEBATE: 'debate',
+  VOTE: 'vote',
   DV: 'debate_vote',
   FUNDING: 'funding',
   CLOSED: null,
@@ -61,7 +66,9 @@ const CURRENT_STAGE_KEY: Record<string, string | null> = {
 const STAGE_LABEL_BY_KEY: Record<string, string> = {
   submission: 'Submission',
   filtering: 'Filtering',
-  debate_vote: 'Debate & Vote',
+  debate: 'Debate',
+  vote: 'Vote',
+  debate_vote: 'Debate & Vote (legacy)',
   funding: 'Funding',
 };
 

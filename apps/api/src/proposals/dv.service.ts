@@ -52,13 +52,14 @@ export class DvService {
     if (proposal.stage !== ProposalStage.DEBATE_VOTE) {
       throw new ConflictException('proposal is not in the DEBATE_VOTE stage');
     }
-    // The proposal's stage flips to DEBATE_VOTE the moment it passes filtering,
-    // which can happen while the round is still in FILTERING. D&V voting must wait
-    // until the board advances the round itself — otherwise voters could cast
-    // weighted ballots during what is supposed to be the filtering window.
-    if (proposal.round && proposal.round.status !== RoundStatus.DV) {
+    // The proposal's stage flips to DEBATE_VOTE the moment it passes filtering.
+    // §8 — the round-level "Debate & Vote" is now two sub-stages: DEBATE (comments
+    // + revisions, no ballots) → VOTE (ballots open). Voting must wait until the
+    // round advances to VOTE — comments during DEBATE go through CommentsModule,
+    // not here. DV is the deprecated alias and is accepted as if it were VOTE.
+    if (proposal.round && proposal.round.status !== RoundStatus.VOTE && proposal.round.status !== RoundStatus.DV) {
       throw new ConflictException(
-        `round is in ${proposal.round.status}; Debate & Vote opens when the round advances to DV`,
+        `round is in ${proposal.round.status}; Debate & Vote ballots open when the round advances to VOTE`,
       );
     }
 
@@ -155,9 +156,9 @@ export class DvService {
     if (!proposal || proposal.stage !== ProposalStage.DEBATE_VOTE) {
       throw new ConflictException('proposal is not in the DEBATE_VOTE stage');
     }
-    if (proposal.round && proposal.round.status !== RoundStatus.DV) {
+    if (proposal.round && proposal.round.status !== RoundStatus.VOTE && proposal.round.status !== RoundStatus.DV) {
       throw new ConflictException(
-        `round is in ${proposal.round.status}; Debate & Vote ballots are accepted only while the round is in DV`,
+        `round is in ${proposal.round.status}; Debate & Vote ballots are accepted only while the round is in VOTE`,
       );
     }
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
