@@ -619,9 +619,14 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
                     {canChange ? (
                       <button
                         onClick={() => setChangingDrepId(changingDrepId === a.drepId ? null : a.drepId)}
-                        className="rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                        title="Swap this reviewer for someone else (only available before they vote)"
+                        className={
+                          changingDrepId === a.drepId
+                            ? 'rounded border border-neutral-400 px-1.5 py-0.5 text-[11px] text-neutral-700 hover:bg-neutral-100 dark:border-neutral-500 dark:text-neutral-300 dark:hover:bg-neutral-800'
+                            : 'rounded border border-emerald-500 px-2 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950'
+                        }
                       >
-                        {changingDrepId === a.drepId ? 'Cancel' : 'Change'}
+                        {changingDrepId === a.drepId ? 'Cancel' : '↻ Change reviewer'}
                       </button>
                     ) : null}
                   </span>

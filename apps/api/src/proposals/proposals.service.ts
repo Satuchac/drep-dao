@@ -787,15 +787,17 @@ export class ProposalsService {
         } else if (assigned.length === 0) {
           progress = { stage: 'FILTERING', label: 'awaiting reviewer draw (board)', tone: 'amber' };
         } else {
-          const voted = new Set(votes.map((v) => v.drepId)).size;
           const yes = votes.filter((v) => v.choice === 'YES').length;
           const no = votes.filter((v) => v.choice === 'NO').length;
-          const decided = yes >= filterThreshold || no >= filterThreshold;
-          progress = {
-            stage: 'FILTERING',
-            label: `${voted}/${assigned.length} reviewers voted · need ${filterThreshold} to decide`,
-            tone: decided ? 'emerald' : voted === 0 ? 'amber' : 'amber',
-          };
+          const passed = yes >= filterThreshold;
+          const failed = no >= filterThreshold;
+          // Board scan: show YES / NO counts inline + an outcome tag so they can
+          // tell at a glance which proposals are ready to advance vs. still need votes.
+          progress = passed
+            ? { stage: 'FILTERING', label: `✓ ${yes} YES · approved (advancing)`, tone: 'emerald' }
+            : failed
+              ? { stage: 'FILTERING', label: `✗ ${no} NO · rejected`, tone: 'red' }
+              : { stage: 'FILTERING', label: `${yes} YES · ${no} NO · need ${filterThreshold} to decide`, tone: 'amber' };
         }
       } else if (status === ProposalStatus.ACTIVE && stage === ProposalStage.DEBATE_VOTE) {
         const snap = dvSnapBy.get(p.id);
