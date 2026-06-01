@@ -108,6 +108,15 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
         </div>
         {/* Why a proposal was rejected — shown to everyone (submitter + reviewers), not buried. */}
         {p.status === 'REJECTED' ? <RejectionBanner proposal={p} /> : null}
+        {/* §7.4 — when the submitter is the viewer and the proposal is a rejected
+            filter (revise + resubmit cycle), surface the action UI directly under
+            the banner so it isn't buried below the read-only proposal content. */}
+        {mine && p.status === 'REJECTED' && p.stage === 'FILTERING' ? (
+          <>
+            <ResubmitPanel id={id} proposal={p} onChange={load} />
+            <EditSection id={id} proposal={p} onChange={load} />
+          </>
+        ) : null}
         <CollapsibleView label="Pitch / summary">
           <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</Markdown>
         </CollapsibleView>
@@ -155,9 +164,12 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
             {p.status === 'REJECTED' ? 'Edit & re-submit (all fields)' : 'Edit all fields'}
           </button>
         ) : null}
-        {/* §7.4 — REJECTED at filtering: edit (via EditSection below) then resubmit. */}
-        {mine ? <ResubmitPanel id={id} proposal={p} onChange={load} /> : null}
-        {mine ? <EditSection id={id} proposal={p} onChange={load} /> : null}
+        {/* For the non-rejected case (e.g. ACTIVE+FILTERING during round SUBMISSION),
+            the edit form stays below the proposal content. The rejection case
+            renders both panels at the top, right under the rejection banner. */}
+        {mine && !(p.status === 'REJECTED' && p.stage === 'FILTERING') ? (
+          <EditSection id={id} proposal={p} onChange={load} />
+        ) : null}
       </div>
 
       <VersionsSection id={id} />
@@ -368,23 +380,64 @@ function MilestonePlan({ milestones }: { milestones: PDetail['milestones'] }) {
 
 /**
  * A prominent red banner explaining WHY a proposal was rejected, visible to the submitter and
- * reviewers alike. A fee-review rejection records the reason in `feeReviewFeedback` (no stage);
- * a filtering / Debate & Vote rejection keeps its stage and the reviewers' rationales appear in
- * those sections below.
+ * reviewers alike.
+ *   - stage === null            → fee-stage rejection; reason comes from feeReviewFeedback
+ *     (which is also where a board fee APPROVAL feedback lives, so we only treat it as a
+ *     rejection reason when stage is null — otherwise we ignore that field entirely).
+ *   - stage === 'FILTERING'     → filtering rejection; banner explains the rule and lists
+ *     every NO reviewer with their rationale in a collapsible (per-DRep "show / hide").
+ *   - stage === 'DEBATE_VOTE'   → tally + rationales render in the D&V section below.
  */
 function RejectionBanner({ proposal: p }: { proposal: PDetail }) {
-  const reason = p.feeReviewFeedback?.trim();
-  const text = reason
-    ? reason
-    : p.stage === 'FILTERING'
-      ? 'Rejected during the Filtering review — see the reviewers’ rationales in the Filtering section below.'
-      : p.stage === 'DEBATE_VOTE'
-        ? 'Rejected at Debate & Vote — see the published tally and rationales below.'
-        : 'No reason was recorded.';
+  const [filterRes, setFilterRes] = useState<FilterResult | null>(null);
+  useEffect(() => {
+    if (p.stage === 'FILTERING') {
+      filteringApi.result(p.id).then(setFilterRes).catch(() => setFilterRes(null));
+    }
+  }, [p.id, p.stage]);
+
+  if (p.stage === null) {
+    const reason = p.feeReviewFeedback?.trim() || 'No reason was recorded.';
+    return (
+      <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/40">
+        <div className="text-sm font-semibold text-red-800 dark:text-red-300">Proposal rejected</div>
+        <div className="mt-0.5 whitespace-pre-wrap text-sm text-red-700 dark:text-red-300">{reason}</div>
+      </div>
+    );
+  }
+
+  if (p.stage === 'FILTERING') {
+    const noVoters = (filterRes?.votes ?? []).filter((v) => v.choice === 'NO');
+    return (
+      <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/40">
+        <div className="text-sm font-semibold text-red-800 dark:text-red-300">Rejected during the Filtering review</div>
+        <div className="mt-0.5 text-sm text-red-700 dark:text-red-300">
+          {filterRes
+            ? `${noVoters.length} reviewer${noVoters.length === 1 ? '' : 's'} voted NO — a YES decision is no longer mathematically possible.`
+            : 'Loading reviewer rationales…'}
+        </div>
+        {noVoters.length > 0 ? (
+          <ul className="mt-2 space-y-1.5">
+            {noVoters.map((v, i) => (
+              <li key={i} className="rounded border border-red-200 bg-white/60 px-2 py-1.5 text-xs dark:border-red-900 dark:bg-red-950/30">
+                <div className="font-medium text-red-900 dark:text-red-200">
+                  {v.displayName ?? (v.drep ? `${v.drep.slice(0, 16)}…` : 'Reviewer')} · <span className="text-red-700 dark:text-red-300">NO</span>
+                </div>
+                <RationaleText text={v.rationale} />
+              </li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/40">
       <div className="text-sm font-semibold text-red-800 dark:text-red-300">Proposal rejected</div>
-      <div className="mt-0.5 whitespace-pre-wrap text-sm text-red-700 dark:text-red-300">{text}</div>
+      <div className="mt-0.5 whitespace-pre-wrap text-sm text-red-700 dark:text-red-300">
+        Rejected at Debate &amp; Vote — see the published tally and rationales below.
+      </div>
     </div>
   );
 }
