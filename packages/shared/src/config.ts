@@ -89,6 +89,10 @@ export const ROUND_SETTING_DEFAULTS = {
   milestoneBoardExtraExtensionDays: 90,
   pledgeThresholdAda: 0,
   pledgeGraceDays: 14,
+  // §7.4 — after a filtering rejection the submitter can revise + resubmit while the
+  // round is still in FILTERING; this caps how many times. Each resubmit clears the
+  // jury's filtering votes and they vote again on the revised content.
+  filterResubmissionsAllowed: 2,
 } as const;
 
 export type RoundSettingKey = keyof typeof ROUND_SETTING_DEFAULTS;
@@ -123,6 +127,8 @@ export const ROUND_SETTING_META: Record<RoundSettingKey, string> = {
   milestoneBoardExtraExtensionDays: 'Extra milestone extension the board may grant on request (days).',
   pledgeThresholdAda: 'Requested amount above which a proposer must post a refundable pledge (ADA; 0 disables pledges).',
   pledgeGraceDays: 'Days a proposer has to post the required pledge.',
+  filterResubmissionsAllowed:
+    'How many times a submitter may revise + resubmit a proposal that was rejected at filtering, while the round is still in FILTERING. Each resubmit clears the existing filtering votes and the jury votes again on the revised content. 0 disables resubmissions.',
 };
 
 /** Known block explorers → tx/address URL templates per network ({hash}/{address} placeholders). */

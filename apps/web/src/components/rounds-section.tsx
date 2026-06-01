@@ -74,6 +74,10 @@ const SETTING_GROUPS: { title: string; fields: { key: SettingKey; label: string;
       { key: 'pledgeGraceDays', label: 'Grace (days)' },
     ],
   },
+  {
+    title: 'Filtering resubmissions',
+    fields: [{ key: 'filterResubmissionsAllowed', label: 'Resubmissions allowed' }],
+  },
 ];
 
 export function RoundsSection() {

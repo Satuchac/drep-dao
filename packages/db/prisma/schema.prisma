@@ -227,6 +227,8 @@ model Round {
   // §3 — proposer pledge.
   pledgeThresholdAda              Int? @map("pledge_threshold_ada")
   pledgeGraceDays                 Int? @map("pledge_grace_days")
+  // §7.4 — how many times a submitter may revise + resubmit a filter-rejected proposal.
+  filterResubmissionsAllowed      Int? @map("filter_resubmissions_allowed")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   endedAt         DateTime? @map("ended_at") @db.Timestamptz(6)
 
@@ -358,6 +360,9 @@ model Proposal {
   votingEndAt          DateTime? @map("voting_end_at") @db.Timestamptz(6)
   resultFinalizedAt    DateTime? @map("result_finalized_at") @db.Timestamptz(6)
   version              Int       @default(1)
+  // §7.4 — how many times the submitter has resubmitted this proposal after a
+  // filtering rejection. Each resubmit clears the existing filtering votes.
+  filterResubmissionsUsed Int    @default(0) @map("filter_resubmissions_used")
   createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 

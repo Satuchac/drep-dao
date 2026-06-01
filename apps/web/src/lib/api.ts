@@ -379,6 +379,7 @@ export interface RoundSettingsInput {
   milestoneBoardExtraExtensionDays?: number;
   pledgeThresholdAda?: number;
   pledgeGraceDays?: number;
+  filterResubmissionsAllowed?: number;
 }
 export interface CreateRoundInput extends RoundSettingsInput {
   name?: string;
@@ -540,6 +541,12 @@ export interface ProposalDetail extends ProposalSummary {
   submissionFeeAda: number;
   submissionFeeTxHashes: string[];
   feeReviewFeedback: string | null;
+  // §7.4 — resubmit budget after a filtering rejection.
+  filterResubmissionsUsed: number;
+  filterResubmissionsAllowed: number;
+  // The proposal's round status (PREPARATION / SUBMISSION / FILTERING / DV / FUNDING / CLOSED).
+  // Used by edit gates: editing closes once the round moves past SUBMISSION (unless rejected).
+  roundStatus: string | null;
   submittedAt: string | null;
   payoutAddress: string | null;
   pledgeAmountAda: number;
@@ -571,6 +578,9 @@ export const proposalsApi = {
       method: 'POST',
       body: JSON.stringify({ submissionFeeTxHash }),
     }),
+  // §7.4 — resubmit a proposal rejected at filtering; clears filtering votes.
+  resubmit: (id: string) =>
+    request<ProposalDetail>(`/proposals/${id}/resubmit`, { method: 'POST' }),
 };
 
 export interface FilterAssignment {

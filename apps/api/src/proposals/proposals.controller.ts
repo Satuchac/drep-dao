@@ -63,6 +63,14 @@ export class ProposalsController {
     return this.proposals.submit(ctx.userId, id, dto);
   }
 
+  // §7.4 — submitter resubmits a proposal that was REJECTED at filtering.
+  // Clears the existing filtering votes and reopens the proposal as ACTIVE.
+  @UseGuards(JwtAuthGuard)
+  @Post('proposals/:id/resubmit')
+  resubmit(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.proposals.resubmit(ctx.userId, id);
+  }
+
   // §12 — submitter changes an ACTIVE proposal's budget (creates a fee top-up/refund task).
   @UseGuards(JwtAuthGuard)
   @Post('proposals/:id/budget-change')

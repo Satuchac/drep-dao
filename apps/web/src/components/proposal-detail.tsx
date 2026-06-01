@@ -155,6 +155,8 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
             {p.status === 'REJECTED' ? 'Edit & re-submit (all fields)' : 'Edit all fields'}
           </button>
         ) : null}
+        {/* §7.4 — REJECTED at filtering: edit (via EditSection below) then resubmit. */}
+        {mine ? <ResubmitPanel id={id} proposal={p} onChange={load} /> : null}
         {mine ? <EditSection id={id} proposal={p} onChange={load} /> : null}
       </div>
 
@@ -862,23 +864,78 @@ function VersionsSection({ id }: { id: string }) {
           ))}
         </select>
         → current (v{current.version})
-        <button onClick={() => setShowFull((s) => !s)} className="ml-2 underline">{showFull ? 'show diff' : 'show full versions'}</button>
+        <button onClick={() => setShowFull((s) => !s)} className="ml-2 underline">
+          {showFull ? 'inline diff' : 'side-by-side diff'}
+        </button>
       </div>
       {showFull ? (
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
-          <div>
-            <div className="mb-1 text-xs font-medium text-neutral-500">v{prev.version} (selected)</div>
-            <pre className="overflow-x-auto whitespace-pre-wrap rounded border border-neutral-200 p-2 text-xs dark:border-neutral-800">{prev.contentMd}</pre>
-          </div>
-          <div>
-            <div className="mb-1 text-xs font-medium text-neutral-500">v{current.version} (latest)</div>
-            <pre className="overflow-x-auto whitespace-pre-wrap rounded border border-neutral-200 p-2 text-xs dark:border-neutral-800">{current.contentMd}</pre>
-          </div>
-        </div>
+        <SideBySideDiff oldText={prev.contentMd} newText={current.contentMd} oldLabel={`v${prev.version} (selected)`} newLabel={`v${current.version} (latest)`} />
       ) : (
         <Diff oldText={prev.contentMd} newText={current.contentMd} />
       )}
     </section>
+  );
+}
+
+/**
+ * §7.4 — side-by-side diff: two aligned columns. Deleted lines render red on
+ * the left and a blank slot on the right; added lines render the inverse;
+ * unchanged lines appear in both columns. Driven by the same LCS as the
+ * inline view, so the two stay in sync.
+ */
+function SideBySideDiff({ oldText, newText, oldLabel, newLabel }: { oldText: string; newText: string; oldLabel: string; newLabel: string }) {
+  const rows = useMemo(() => diffLines(oldText.split('\n'), newText.split('\n')), [oldText, newText]);
+  // Pair deletes with adjacent inserts so an edited line lines up across columns.
+  type Pair = { left: { line: string; op: 'eq' | 'del' } | null; right: { line: string; op: 'eq' | 'add' } | null };
+  const pairs: Pair[] = [];
+  let i = 0;
+  while (i < rows.length) {
+    const r = rows[i];
+    if (r.op === 'eq') {
+      pairs.push({ left: { line: r.line, op: 'eq' }, right: { line: r.line, op: 'eq' } });
+      i++;
+      continue;
+    }
+    // Collect a run of consecutive del/add and zip them by index.
+    const dels: string[] = [];
+    const adds: string[] = [];
+    while (i < rows.length && rows[i].op !== 'eq') {
+      if (rows[i].op === 'del') dels.push(rows[i].line);
+      else adds.push(rows[i].line);
+      i++;
+    }
+    const len = Math.max(dels.length, adds.length);
+    for (let k = 0; k < len; k++) {
+      pairs.push({
+        left: k < dels.length ? { line: dels[k], op: 'del' } : null,
+        right: k < adds.length ? { line: adds[k], op: 'add' } : null,
+      });
+    }
+  }
+  const cellCls = (op: 'eq' | 'add' | 'del' | null) =>
+    op === 'add' ? 'bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+    : op === 'del' ? 'bg-red-50 px-2 py-0.5 text-xs text-red-800 dark:bg-red-950 dark:text-red-200'
+    : op === 'eq' ? 'px-2 py-0.5 text-xs text-neutral-700 dark:text-neutral-300'
+    : 'select-none bg-neutral-50 px-2 py-0.5 text-xs text-neutral-300 dark:bg-neutral-900';
+  return (
+    <div className="mt-2 grid gap-2 sm:grid-cols-2">
+      <div>
+        <div className="mb-1 text-xs font-medium text-neutral-500">{oldLabel}</div>
+        <div className="overflow-x-auto whitespace-pre-wrap rounded border border-neutral-200 dark:border-neutral-800">
+          {pairs.map((p, idx) => (
+            <div key={idx} className={cellCls(p.left?.op ?? null)}>{p.left?.line || (p.left ? ' ' : '·')}</div>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="mb-1 text-xs font-medium text-neutral-500">{newLabel}</div>
+        <div className="overflow-x-auto whitespace-pre-wrap rounded border border-neutral-200 dark:border-neutral-800">
+          {pairs.map((p, idx) => (
+            <div key={idx} className={cellCls(p.right?.op ?? null)}>{p.right?.line || (p.right ? ' ' : '·')}</div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -923,6 +980,63 @@ function diffLines(a: string[], b: string[]): { op: 'eq' | 'add' | 'del'; line: 
   return out;
 }
 
+/**
+ * §7.4 — submitter's panel after a filtering rejection. Shows the remaining
+ * resubmission budget; the actual edits go through the existing EditSection +
+ * version snapshots. Clicking "Resubmit for re-vote" calls /resubmit which
+ * deletes the filtering votes and reopens the proposal as ACTIVE+FILTERING.
+ */
+function ResubmitPanel({ id, proposal, onChange }: { id: string; proposal: PDetail; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const rejected = proposal.status === 'REJECTED' && proposal.stage === 'FILTERING';
+  if (!rejected) return null;
+  const used = proposal.filterResubmissionsUsed;
+  const allowed = proposal.filterResubmissionsAllowed;
+  const remaining = Math.max(0, allowed - used);
+  const exhausted = remaining === 0;
+
+  const resubmit = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await proposalsApi.resubmit(id);
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+      <div className="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+        Rejected at filtering — you can revise
+      </div>
+      <p className="mt-0.5 text-xs text-amber-800 dark:text-amber-200">
+        Edit your proposal below (every save is captured as a new version DReps can diff),
+        then click <strong>Resubmit for re-vote</strong>. The current filtering votes are
+        cleared and the jury votes again on the revised content.{' '}
+        {exhausted
+          ? `All ${allowed} resubmissions used — no more retries this round.`
+          : `${remaining} of ${allowed} resubmission${allowed === 1 ? '' : 's'} remaining.`}
+      </p>
+      <div className="mt-2">
+        <button
+          type="button"
+          onClick={resubmit}
+          disabled={busy || exhausted}
+          className="rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+        >
+          {busy ? 'Resubmitting…' : exhausted ? 'No resubmissions left' : 'Resubmit for re-vote'}
+        </button>
+      </div>
+      {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
+    </div>
+  );
+}
+
 function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail; onChange: () => void }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(proposal.title);
@@ -936,10 +1050,18 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
   const [subcatIds, setSubcatIds] = useState<string[]>(proposal.subcategoryIds ?? []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Public/under-review revision (all descriptive fields, versioned): during Filtering or the
-  // Debate & Vote editing sub-phase. The budget (amount + milestones) is fee-coupled and changes
-  // via "Request a budget change"; pre-public states (DRAFT/PENDING/fee-rejected) edit in the form.
-  const editable = proposal.stage === 'FILTERING' || proposal.stage === 'DEBATE_VOTE';
+  // §3/§7.4 — versioned post-submission edit. Mirrors the backend ownEditable gate:
+  //   - while the round is in SUBMISSION the team can polish a submitted (ACTIVE) proposal,
+  //   - after a filtering rejection (REJECTED at FILTERING) while the round is still in
+  //     FILTERING, until the resubmission budget is exhausted.
+  // Pre-public states (DRAFT / PENDING / fee-rejected) edit in the full form, not here.
+  const inSubmission = proposal.roundStatus === 'SUBMISSION' && proposal.status === 'ACTIVE';
+  const canResubmit =
+    proposal.status === 'REJECTED' &&
+    proposal.stage === 'FILTERING' &&
+    proposal.roundStatus === 'FILTERING' &&
+    proposal.filterResubmissionsUsed < proposal.filterResubmissionsAllowed;
+  const editable = inSubmission || canResubmit;
   if (!editable) return null;
 
   const save = async () => {

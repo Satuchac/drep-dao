@@ -12,6 +12,7 @@ import {
   ProposalStage,
   ProposalType,
   RoundStatus,
+  VotePhase,
   VotingType,
 } from '@drep-dao/shared';
 import { ConfigService } from '@nestjs/config';
@@ -1002,6 +1003,7 @@ export class ProposalsService {
         category: { select: { name: true, minAda: true, maxAda: true, conditions: true } },
         submitterUser: { select: { displayName: true } },
         submitterDrep: { select: { drepIdOnchain: true } },
+        round: { select: { status: true, filterResubmissionsAllowed: true } },
       },
     });
     if (!p) throw new NotFoundException('proposal not found');
@@ -1023,6 +1025,10 @@ export class ProposalsService {
       submissionFeeTxHash: p.submissionFeeTxHash,
       submissionFeeTxHashes: p.submissionFeeTxHashes,
       feeReviewFeedback: p.feeReviewFeedback,
+      filterResubmissionsUsed: p.filterResubmissionsUsed,
+      filterResubmissionsAllowed:
+        p.round?.filterResubmissionsAllowed ?? ROUND_SETTING_DEFAULTS.filterResubmissionsAllowed,
+      roundStatus: p.round?.status ?? null,
       submittedAt: p.submittedAt,
       payoutAddress: p.payoutAddress,
       // §3 — pledge promise + confirmation state.
@@ -1143,14 +1149,18 @@ export class ProposalsService {
   /**
    * §7/§8 editing windows. Returns the proposal and whether this is a
    * post-submission edit (which must be versioned). Editable while:
-   *  - DRAFT, or
-   *  - PENDING (submitted, awaiting the board's fee confirmation — still private), or
-   *  - FILTERING stage (status ACTIVE) — submitter revises during the feedback rounds, or
-   *  - DEBATE_VOTE stage *before voting opens* (votingStartAt null) — the editing sub-phase.
-   * No edits during the D&V voting phase or after a final decision.
+   *  - DRAFT / PENDING / fee-REJECTED (pre-public, no snapshot), OR
+   *  - the round is in SUBMISSION (the team polishes a submitted proposal), OR
+   *  - the proposal was REJECTED at filtering AND the round is still in FILTERING
+   *    AND the per-round resubmission budget isn't exhausted (the resubmit cycle).
+   * No edits while the round is in FILTERING (without a prior rejection), D&V,
+   * FUNDING, or after a final decision.
    */
   private async ownEditable(userId: string, id: string) {
-    const p = await this.prisma.proposal.findUnique({ where: { id } });
+    const p = await this.prisma.proposal.findUnique({
+      where: { id },
+      include: { round: { select: { status: true, filterResubmissionsAllowed: true } } },
+    });
     if (!p) throw new NotFoundException('proposal not found');
     if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
     // Pre-public states → full editing (all fields, no version snapshot):
@@ -1160,12 +1170,69 @@ export class ProposalsService {
     if (p.status === ProposalStatus.DRAFT || p.status === ProposalStatus.PENDING || feeRejected) {
       return { proposal: p, postSubmission: false };
     }
-    const inFiltering = p.stage === ProposalStage.FILTERING && p.status === ProposalStatus.ACTIVE;
-    const inDvEditing = p.stage === ProposalStage.DEBATE_VOTE && p.votingStartAt == null;
-    if (inFiltering || inDvEditing) return { proposal: p, postSubmission: true };
+    const roundStatus = p.round?.status ?? null;
+    // §3 — during the round's SUBMISSION window the team can polish a submitted
+    // proposal (ACTIVE+FILTERING). Snapshots a version on each edit.
+    if (roundStatus === RoundStatus.SUBMISSION && p.status === ProposalStatus.ACTIVE) {
+      return { proposal: p, postSubmission: true };
+    }
+    // §7.4 — REJECTED at filtering. The submitter can revise while the round is
+    // still in FILTERING, up to filterResubmissionsAllowed times; the next
+    // resubmit clears the jury votes and reopens the proposal as ACTIVE.
+    if (p.status === ProposalStatus.REJECTED && p.stage === ProposalStage.FILTERING && roundStatus === RoundStatus.FILTERING) {
+      const allowed = p.round?.filterResubmissionsAllowed ?? ROUND_SETTING_DEFAULTS.filterResubmissionsAllowed;
+      if (p.filterResubmissionsUsed < allowed) {
+        return { proposal: p, postSubmission: true };
+      }
+      throw new ConflictException(
+        `no resubmissions left for this proposal (used ${p.filterResubmissionsUsed} of ${allowed})`,
+      );
+    }
     throw new ConflictException(
-      'editing is closed: proposals can be edited while in DRAFT, during Filtering, or during Debate & Vote before voting opens',
+      "editing is closed: proposals can be edited during the round's SUBMISSION window, or revised after a filtering rejection (until resubmissions are exhausted)",
     );
+  }
+
+  /**
+   * §7.4 — submitter resubmits a proposal that was REJECTED at filtering. Increments
+   * filterResubmissionsUsed, deletes the existing filtering votes (the jury votes
+   * again on the revised content) and clears any fee-review feedback. Proposal
+   * goes back to ACTIVE/FILTERING and re-enters the filtering decision loop. The
+   * original rejection's on-chain anchor is left in place — anchors are append-only;
+   * a fresh anchor fires when the new round of voting decides.
+   */
+  async resubmit(userId: string, id: string) {
+    const p = await this.prisma.proposal.findUnique({
+      where: { id },
+      include: { round: { select: { id: true, status: true, filterResubmissionsAllowed: true } } },
+    });
+    if (!p) throw new NotFoundException('proposal not found');
+    if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
+    if (p.status !== ProposalStatus.REJECTED || p.stage !== ProposalStage.FILTERING) {
+      throw new ConflictException('resubmit is only available for a proposal rejected at filtering');
+    }
+    if (p.round?.status !== RoundStatus.FILTERING) {
+      throw new ConflictException(
+        `the round is in ${p.round?.status ?? 'no round'}, not FILTERING — the resubmit window is closed`,
+      );
+    }
+    const allowed = p.round.filterResubmissionsAllowed ?? ROUND_SETTING_DEFAULTS.filterResubmissionsAllowed;
+    if (p.filterResubmissionsUsed >= allowed) {
+      throw new ConflictException(`no resubmissions left (used ${p.filterResubmissionsUsed} of ${allowed})`);
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.vote.deleteMany({ where: { proposalId: id, phase: VotePhase.FILTERING } });
+      await tx.proposal.update({
+        where: { id },
+        data: {
+          status: ProposalStatus.ACTIVE,
+          stage: ProposalStage.FILTERING,
+          feeReviewFeedback: null,
+          filterResubmissionsUsed: { increment: 1 },
+        },
+      });
+    });
+    return this.get(id, userId);
   }
 
   private assertMilestonesSum(milestones: MilestoneInput[], requestedAda: number) {

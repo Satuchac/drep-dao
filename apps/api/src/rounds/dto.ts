@@ -51,6 +51,8 @@ export class RoundSettingsInput {
   // §3 — proposer pledge.
   @IsOptional() @IsInt() @Min(0) pledgeThresholdAda?: number;
   @IsOptional() @IsInt() @Min(0) pledgeGraceDays?: number;
+  // §7.4 — filter-rejected proposals: how many revise + resubmit cycles allowed.
+  @IsOptional() @IsInt() @Min(0) filterResubmissionsAllowed?: number;
 }
 
 // MVP schedule uses coarse operational windows rather than the 9 fine-grained
