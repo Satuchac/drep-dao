@@ -740,6 +740,7 @@ export const proposalEditApi = {
       title?: string;
       contentMd?: string;
       requestedAmountAda?: number;
+      isCommercial?: boolean;
       costBreakdownMd?: string;
       teamInfoMd?: string;
       revenueSharingMd?: string;
@@ -748,6 +749,9 @@ export const proposalEditApi = {
       subcategoryIds?: string[];
       payoutAddress?: string;
       submissionFeeTxHash?: string;
+      // §7.4 — milestones are editable during the resubmit cycle after a filtering
+      // rejection (the resub clears the jury votes anyway); locked elsewhere.
+      milestones?: ProposalMilestoneInput[];
     },
   ) => request<ProposalDetail>(`/proposals/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
 };

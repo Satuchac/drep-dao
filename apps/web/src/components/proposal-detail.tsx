@@ -51,6 +51,9 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
   const [p, setP] = useState<PDetail | null>(null);
   const [mine, setMine] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Lifted so the read-only proposal content can hide while the submitter is editing
+  // (otherwise the same fields would appear twice — once in the form, once below).
+  const [editingOpen, setEditingOpen] = useState(false);
 
   const load = useCallback(() => {
     proposalsApi.get(id).then(setP).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
@@ -114,62 +117,68 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
         {mine && p.status === 'REJECTED' && p.stage === 'FILTERING' ? (
           <>
             <ResubmitPanel id={id} proposal={p} onChange={load} />
-            <EditSection id={id} proposal={p} onChange={load} />
+            <EditSection id={id} proposal={p} onChange={load} open={editingOpen} onOpenChange={setEditingOpen} />
           </>
         ) : null}
-        <CollapsibleView label="Pitch / summary">
-          <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</Markdown>
-        </CollapsibleView>
-        {/* Milestone plan (read-only). The board's milestone-review workflow replaces it in FUNDING. */}
-        {!showMilestones && p.milestones.length > 0 ? <MilestonePlan milestones={p.milestones} /> : null}
-        {/* §3.4 — every funding field from the form is shown (collapsible); empty ones collapse with an "empty" marker. */}
-        <DetailBlock label="Expected ecosystem impact" md={p.ecosystemImpactMd} hint="what changes if this is built" />
-        <DetailBlock label="Success metrics / KPIs" md={p.successMetricsMd} hint="how success will be measured" />
-        <DetailBlock label="Cost breakdown" md={p.costBreakdownMd} hint="how the budget is spent" />
-        <DetailBlock label="Team info" md={p.teamInfoMd} hint="who is delivering this" />
-        <DetailBlock label="Revenue sharing" md={p.revenueSharingMd} hint="for commercial projects" />
-        {/* §5.3/§7.1 — expertise tags (always shown like the form). */}
-        <CollapsibleView label="Expertise areas" hint="helps match filtering reviewers" empty={!p.subcategoryIds || p.subcategoryIds.length === 0}>
-          {p.subcategoryIds && p.subcategoryIds.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
-              {p.subcategoryIds.map((sid) => (
-                <span key={sid} className="rounded-full border border-neutral-300 px-2 py-0.5 text-[11px] text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
-                  {SUBCAT_LABEL[sid] ?? sid}
-                </span>
-              ))}
+        {/* When editing is open, every field below is duplicated by the form above —
+            hide the read-only blocks so the submitter sees one canonical copy. */}
+        {editingOpen ? null : (
+          <>
+            <CollapsibleView label="Pitch / summary">
+              <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</Markdown>
+            </CollapsibleView>
+            {/* Milestone plan (read-only). The board's milestone-review workflow replaces it in FUNDING. */}
+            {!showMilestones && p.milestones.length > 0 ? <MilestonePlan milestones={p.milestones} /> : null}
+            {/* §3.4 — every funding field from the form is shown (collapsible); empty ones collapse with an "empty" marker. */}
+            <DetailBlock label="Expected ecosystem impact" md={p.ecosystemImpactMd} hint="what changes if this is built" />
+            <DetailBlock label="Success metrics / KPIs" md={p.successMetricsMd} hint="how success will be measured" />
+            <DetailBlock label="Cost breakdown" md={p.costBreakdownMd} hint="how the budget is spent" />
+            <DetailBlock label="Team info" md={p.teamInfoMd} hint="who is delivering this" />
+            <DetailBlock label="Revenue sharing" md={p.revenueSharingMd} hint="for commercial projects" />
+            {/* §5.3/§7.1 — expertise tags (always shown like the form). */}
+            <CollapsibleView label="Expertise areas" hint="helps match filtering reviewers" empty={!p.subcategoryIds || p.subcategoryIds.length === 0}>
+              {p.subcategoryIds && p.subcategoryIds.length > 0 ? (
+                <div className="flex flex-wrap gap-1">
+                  {p.subcategoryIds.map((sid) => (
+                    <span key={sid} className="rounded-full border border-neutral-300 px-2 py-0.5 text-[11px] text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
+                      {SUBCAT_LABEL[sid] ?? sid}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-sm text-neutral-400">None selected.</span>
+              )}
+            </CollapsibleView>
+            {p.categoryAsk?.conditions ? <DetailBlock label="Category conditions" md={p.categoryAsk.conditions} /> : null}
+            {/* Payout / refund address — where the DAO sends fee refunds + the budget once funded. */}
+            <div className="mt-3 rounded-md border border-neutral-300 px-2 py-1.5 dark:border-neutral-700">
+              <div className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Payout / refund address</div>
+              {p.payoutAddress ? (
+                <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                  <span className="break-all font-mono text-xs text-neutral-600 dark:text-neutral-400">{p.payoutAddress}</span>
+                  <CopyButton text={p.payoutAddress} />
+                </div>
+              ) : (
+                <div className="mt-0.5 text-xs text-neutral-400">Not provided.</div>
+              )}
             </div>
-          ) : (
-            <span className="text-sm text-neutral-400">None selected.</span>
-          )}
-        </CollapsibleView>
-        {p.categoryAsk?.conditions ? <DetailBlock label="Category conditions" md={p.categoryAsk.conditions} /> : null}
-        {/* Payout / refund address — where the DAO sends fee refunds + the budget once funded. */}
-        <div className="mt-3 rounded-md border border-neutral-300 px-2 py-1.5 dark:border-neutral-700">
-          <div className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Payout / refund address</div>
-          {p.payoutAddress ? (
-            <div className="mt-0.5 flex flex-wrap items-center gap-2">
-              <span className="break-all font-mono text-xs text-neutral-600 dark:text-neutral-400">{p.payoutAddress}</span>
-              <CopyButton text={p.payoutAddress} />
-            </div>
-          ) : (
-            <div className="mt-0.5 text-xs text-neutral-400">Not provided.</div>
-          )}
-        </div>
-        {mine ? <FeeBlock proposal={p} /> : null}
-        {/* §12 — once ACTIVE, the budget can change but the fee delta is settled by the board. */}
-        {mine && p.status === 'ACTIVE' ? <BudgetChangeSection id={id} proposal={p} onChange={load} /> : null}
-        {/* Pre-public (PENDING / fee-rejected): edit ALL fields in the full form. */}
-        {mine && onEditFull && (p.status === 'PENDING' || (p.status === 'REJECTED' && !p.stage)) ? (
-          <button onClick={onEditFull} className="mt-3 rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
-            {p.status === 'REJECTED' ? 'Edit & re-submit (all fields)' : 'Edit all fields'}
-          </button>
-        ) : null}
-        {/* For the non-rejected case (e.g. ACTIVE+FILTERING during round SUBMISSION),
-            the edit form stays below the proposal content. The rejection case
-            renders both panels at the top, right under the rejection banner. */}
-        {mine && !(p.status === 'REJECTED' && p.stage === 'FILTERING') ? (
-          <EditSection id={id} proposal={p} onChange={load} />
-        ) : null}
+            {mine ? <FeeBlock proposal={p} /> : null}
+            {/* §12 — once ACTIVE, the budget can change but the fee delta is settled by the board. */}
+            {mine && p.status === 'ACTIVE' ? <BudgetChangeSection id={id} proposal={p} onChange={load} /> : null}
+            {/* Pre-public (PENDING / fee-rejected): edit ALL fields in the full form. */}
+            {mine && onEditFull && (p.status === 'PENDING' || (p.status === 'REJECTED' && !p.stage)) ? (
+              <button onClick={onEditFull} className="mt-3 rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
+                {p.status === 'REJECTED' ? 'Edit & re-submit (all fields)' : 'Edit all fields'}
+              </button>
+            ) : null}
+            {/* For the non-rejected case (e.g. ACTIVE+FILTERING during round SUBMISSION),
+                the edit form stays below the proposal content. The rejection case
+                renders both panels at the top, right under the rejection banner. */}
+            {mine && !(p.status === 'REJECTED' && p.stage === 'FILTERING') ? (
+              <EditSection id={id} proposal={p} onChange={load} open={editingOpen} onOpenChange={setEditingOpen} />
+            ) : null}
+          </>
+        )}
       </div>
 
       <VersionsSection id={id} />
@@ -1090,8 +1099,19 @@ function ResubmitPanel({ id, proposal, onChange }: { id: string; proposal: PDeta
   );
 }
 
-function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail; onChange: () => void }) {
-  const [open, setOpen] = useState(false);
+function EditSection({
+  id,
+  proposal,
+  onChange,
+  open,
+  onOpenChange,
+}: {
+  id: string;
+  proposal: PDetail;
+  onChange: () => void;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
   const [title, setTitle] = useState(proposal.title);
   const [content, setContent] = useState(proposal.contentMd);
   const [costBreakdown, setCostBreakdown] = useState(proposal.costBreakdownMd ?? '');
@@ -1101,6 +1121,14 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
   const [successMetrics, setSuccessMetrics] = useState(proposal.successMetricsMd ?? '');
   const [payoutAddress, setPayoutAddress] = useState(proposal.payoutAddress ?? '');
   const [subcatIds, setSubcatIds] = useState<string[]>(proposal.subcategoryIds ?? []);
+  const [amount, setAmount] = useState(proposal.requestedAmountAda);
+  const [commercial, setCommercial] = useState(!!proposal.isCommercial);
+  const [milestones, setMilestones] = useState(proposal.milestones.map((m) => ({
+    title: m.title ?? '',
+    description: m.description ?? '',
+    acceptanceCriteria: m.acceptanceCriteria ?? '',
+    amountAda: m.amountAda,
+  })));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // §3/§7.4 — versioned post-submission edit. Mirrors the backend ownEditable gate:
@@ -1115,10 +1143,21 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
     proposal.roundStatus === 'FILTERING' &&
     proposal.filterResubmissionsUsed < proposal.filterResubmissionsAllowed;
   const editable = inSubmission || canResubmit;
+  // Budget + milestone editing is unlocked during the resubmit cycle (the team
+  // restructures after reviewer feedback); locked during a SUBMISSION polish
+  // because the fee was already quoted from the original amount.
+  const budgetEditable = canResubmit;
   if (!editable) return null;
+
+  const milestoneSum = milestones.reduce((acc, m) => acc + Number(m.amountAda || 0), 0);
+  const milestonesMatch = milestoneSum === Number(amount);
 
   const save = async () => {
     setError(null);
+    if (budgetEditable && !milestonesMatch) {
+      setError(`Milestones sum to ${milestoneSum.toLocaleString()} ₳ but must equal the requested amount ${Number(amount).toLocaleString()} ₳.`);
+      return;
+    }
     setBusy(true);
     try {
       await proposalEditApi.update(id, {
@@ -1131,8 +1170,20 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
         successMetricsMd: successMetrics,
         payoutAddress,
         subcategoryIds: subcatIds,
+        ...(budgetEditable
+          ? {
+              requestedAmountAda: Number(amount),
+              isCommercial: commercial,
+              milestones: milestones.map((m) => ({
+                title: m.title.trim() || undefined,
+                description: m.description,
+                acceptanceCriteria: m.acceptanceCriteria.trim() || undefined,
+                amountAda: Number(m.amountAda),
+              })),
+            }
+          : {}),
       });
-      setOpen(false);
+      onOpenChange(false);
       onChange();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'edit failed');
@@ -1143,20 +1194,79 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
 
   if (!open)
     return (
-      <button onClick={() => setOpen(true)} className="mt-3 rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
+      <button onClick={() => onOpenChange(true)} className="mt-3 rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
         Edit proposal
       </button>
     );
   return (
     <div className="mt-3 space-y-2 rounded border border-neutral-200 p-2 dark:border-neutral-800">
-      <div className="text-xs text-neutral-500">Edit the proposal text. The budget (amount + milestones) changes via &ldquo;Request a budget change&rdquo;.</div>
+      <div className="text-xs text-neutral-500">
+        {budgetEditable
+          ? 'Revise the proposal — every field including the budget and milestones (the submission-fee tx hash is locked).'
+          : 'Edit the proposal text. The budget (amount + milestones) changes via "Request a budget change".'}
+      </div>
       <label className="block">
         <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title</span>
         <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={title} onChange={(e) => setTitle(e.target.value)} />
       </label>
+      {budgetEditable ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-sm">
+            <span className="block text-xs font-medium text-neutral-600 dark:text-neutral-400">Requested ₳</span>
+            <input type="number" className="mt-0.5 w-36 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+          </label>
+          <label className="flex items-center gap-1.5 text-sm">
+            <input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} />
+            Commercial / for profit
+          </label>
+        </div>
+      ) : null}
       {/* Entering edit mode signals intent to edit — keep every section expanded so
           the submitter can see all editable fields, even the ones that were empty. */}
       <MarkdownEditor value={content} onChange={setContent} title="Pitch / summary" subtitle="What are you proposing to build, and why? Who is it for, what does it solve, and what makes it the right project at the right time?" placeholder="Proposal pitch (markdown)" minRows={6} />
+      {budgetEditable ? (
+        <div className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
+          <div className="text-sm font-medium">Milestones (must sum to the requested amount)</div>
+          <div className="mt-1 space-y-2">
+            {milestones.map((m, i) => {
+              const set = (patch: Partial<typeof m>) =>
+                setMilestones((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+              return (
+                <div key={i} className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-neutral-500">Milestone {i + 1}</span>
+                    {milestones.length > 1 ? (
+                      <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => setMilestones((p) => p.filter((_, j) => j !== i))}>remove</button>
+                    ) : null}
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-end gap-2">
+                    <label className="flex-1">
+                      <span className="block text-xs font-medium text-neutral-600 dark:text-neutral-400">Title</span>
+                      <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" placeholder="Milestone title" value={m.title} onChange={(e) => set({ title: e.target.value })} />
+                    </label>
+                    <label>
+                      <span className="block text-xs font-medium text-neutral-600 dark:text-neutral-400">Budget (₳)</span>
+                      <input type="number" className="mt-0.5 w-32 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={m.amountAda} onChange={(e) => set({ amountAda: Number(e.target.value) })} />
+                    </label>
+                  </div>
+                  <div className="mt-2">
+                    <MarkdownEditor value={m.description} onChange={(v) => set({ description: v })} title="Description" placeholder="What is delivered in this milestone" minRows={3} required />
+                  </div>
+                  <div className="mt-2">
+                    <MarkdownEditor value={m.acceptanceCriteria} onChange={(v) => set({ acceptanceCriteria: v })} title="Acceptance criteria" hint="how completion is judged" placeholder="How completion will be verified" minRows={3} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <button type="button" className="mt-1 text-xs underline" onClick={() => setMilestones((p) => [...p, { title: '', description: '', acceptanceCriteria: '', amountAda: 0 }])}>+ add milestone</button>
+          <div className={`mt-1 text-xs ${milestonesMatch ? 'text-emerald-600' : 'font-medium text-red-600'}`}>
+            {milestonesMatch
+              ? `✓ Milestones sum to ${milestoneSum.toLocaleString()} ₳ (matches requested).`
+              : `⚠ Milestones sum to ${milestoneSum.toLocaleString()} ₳ but the requested amount is ${Number(amount).toLocaleString()} ₳ — they must be equal (off by ${Math.abs(milestoneSum - Number(amount)).toLocaleString()} ₳).`}
+          </div>
+        </div>
+      ) : null}
       <MarkdownEditor value={ecosystemImpact} onChange={setEcosystemImpact} title="Expected ecosystem impact" subtitle="What specific benefit will the project have for the ecosystem? Who will the result serve, what problem does it solve and why should it be funded from community funds?" placeholder="Who benefits, what changes — short- and long-term." minRows={3} />
       <MarkdownEditor value={successMetrics} onChange={setSuccessMetrics} title="Success metrics / KPIs" subtitle="What measurable indicators will you use to evaluate the success of the project? Specify the target values, time frame and method of verification." placeholder="How will success be measured (with targets where you can)" minRows={3} />
       <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title="Cost breakdown" hint="optional" placeholder="How the budget is spent" minRows={3} />
@@ -1189,7 +1299,7 @@ function EditSection({ id, proposal, onChange }: { id: string; proposal: PDetail
         <button disabled={busy} onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
           {busy ? 'Saving…' : 'Save (creates a new version)'}
         </button>
-        <button onClick={() => setOpen(false)} className="text-xs text-neutral-500 hover:underline">cancel</button>
+        <button onClick={() => onOpenChange(false)} className="text-xs text-neutral-500 hover:underline">cancel</button>
       </div>
     </div>
   );

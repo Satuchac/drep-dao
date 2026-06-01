@@ -131,8 +131,13 @@ export class ProposalsService {
    */
   async updateDraft(userId: string, id: string, dto: UpdateProposalDto) {
     const { proposal: p, postSubmission } = await this.ownEditable(userId, id);
+    // §7.4 — during the resubmit cycle (REJECTED at filtering with resubmissions
+    // remaining) the team is restructuring after reviewer feedback, so milestones +
+    // amount + commercial flag are editable again. The fee that was paid stays —
+    // any new fee delta is handled by the board in the next filtering pass.
+    const inResubmitCycle = p.status === ProposalStatus.REJECTED && p.stage === ProposalStage.FILTERING;
     if (dto.milestones) {
-      if (postSubmission) {
+      if (postSubmission && !inResubmitCycle) {
         throw new ConflictException('milestones cannot be restructured after submission');
       }
       const total = dto.requestedAmountAda ?? toAda(p.requestedAmountAda);
@@ -150,8 +155,10 @@ export class ProposalsService {
     // submitter could quote+pay a small fee, then raise the budget for free. A fee-rejected
     // proposal has no accepted payment, so it (like a draft) is still freely editable; an
     // ACTIVE budget change goes through requestBudgetChange (which settles the fee delta).
+    // Exception §7.4: during the resubmit cycle the proposal hasn't passed Filtering yet,
+    // so the team is allowed to rework the budget shape with the rest of the proposal.
     const feeRejected = p.status === ProposalStatus.REJECTED && p.stage == null;
-    const amountLocked = !(p.status === ProposalStatus.DRAFT || feeRejected);
+    const amountLocked = !(p.status === ProposalStatus.DRAFT || feeRejected || inResubmitCycle);
     if (amountLocked) {
       if (dto.requestedAmountAda != null && dto.requestedAmountAda !== toAda(p.requestedAmountAda)) {
         throw new BadRequestException('the requested amount is locked after submission — request a budget change instead');
@@ -213,7 +220,7 @@ export class ProposalsService {
           updatedAt: new Date(),
         },
       });
-      if (dto.milestones && !postSubmission) {
+      if (dto.milestones && (!postSubmission || inResubmitCycle)) {
         await tx.milestone.deleteMany({ where: { proposalId: id } });
         await tx.milestone.createMany({
           data: dto.milestones.map((m, idx) => ({
