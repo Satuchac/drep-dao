@@ -598,6 +598,12 @@ export class ProposalsService {
    * budget owes MORE fee (TOPUP), decreasing returns fee (REFUND). The board records the tx
    * (My Area → Payments). Locked elsewhere (see updateDraft) so this is the only way to move it.
    */
+  /**
+   * §12 — submitter requests a budget change. Creates a PENDING BudgetChangeRequest
+   * for a board member to approve or reject. The proposal itself is NOT mutated and
+   * the filtering votes are NOT cleared until the board approves — so a proposal
+   * that's currently passing stays passing if the board rejects the change.
+   */
   async requestBudgetChange(userId: string, id: string, dto: BudgetChangeDto) {
     const p = await this.prisma.proposal.findUnique({
       where: { id },
@@ -614,39 +620,88 @@ export class ProposalsService {
     await this.assertAmountInCategory(p.categoryId, newAmount);
     this.assertMilestonesSum(dto.milestones, newAmount);
 
-    // §12 — budget changes while the round is in FILTERING require the jury to
-    // re-vote on the revised budget; cap how many times per proposal so a submitter
-    // can't repeatedly invalidate votes. Outside FILTERING the existing fee-delta
-    // path applies without invalidating anything.
     const inFiltering = p.round?.status === RoundStatus.FILTERING;
     const budgetCap = p.round?.filterBudgetChangesAllowed ?? ROUND_SETTING_DEFAULTS.filterBudgetChangesAllowed;
     if (inFiltering && p.budgetChangesUsed >= budgetCap) {
       throw new ConflictException(`no in-filter budget changes left (used ${p.budgetChangesUsed} of ${budgetCap})`);
     }
 
-    const oldFee = toAda(p.submissionFeeAda); // fee accounted for so far
+    const existingPending = await this.prisma.budgetChangeRequest.findFirst({
+      where: { proposalId: id, status: 'PENDING' },
+    });
+    if (existingPending) {
+      throw new ConflictException('there is already a pending budget-change request on this proposal — wait for the board to decide');
+    }
+
+    const req = await this.prisma.budgetChangeRequest.create({
+      data: {
+        proposalId: id,
+        requesterId: userId,
+        prevAmountAda: toLovelace(oldAmount),
+        proposedAmountAda: toLovelace(newAmount),
+        proposedMilestones: dto.milestones.map((m) => ({
+          title: m.title ?? null,
+          description: m.description,
+          acceptanceCriteria: m.acceptanceCriteria ?? null,
+          amountAda: m.amountAda,
+        })) as Prisma.InputJsonValue,
+        reason: dto.reason?.trim() || null,
+        status: 'PENDING',
+      },
+    });
+    return { id: req.id, status: req.status };
+  }
+
+  /**
+   * §12 — board approves a pending budget change. Mutates the proposal (amount +
+   * milestones + new fee), records the version snapshot, and — if the round is in
+   * FILTERING — clears the filtering votes + resets the proposal to ACTIVE+FILTERING
+   * so the jury votes again on the revised budget. Queues a FeeAdjustment if the
+   * fee changed. The request flips to APPROVED.
+   */
+  async approveBudgetChange(boardUserId: string, requestId: string, feedback?: string) {
+    const req = await this.prisma.budgetChangeRequest.findUnique({
+      where: { id: requestId },
+      include: { proposal: { include: { round: { select: { status: true, filterBudgetChangesAllowed: true } } } } },
+    });
+    if (!req) throw new NotFoundException('budget-change request not found');
+    if (req.status !== 'PENDING') throw new ConflictException(`request already ${req.status.toLowerCase()}`);
+    const p = req.proposal;
+    if (p.status !== ProposalStatus.ACTIVE) {
+      throw new ConflictException('proposal is no longer ACTIVE — cannot apply budget change');
+    }
+    const inFiltering = p.round?.status === RoundStatus.FILTERING;
+    const budgetCap = p.round?.filterBudgetChangesAllowed ?? ROUND_SETTING_DEFAULTS.filterBudgetChangesAllowed;
+    if (inFiltering && p.budgetChangesUsed >= budgetCap) {
+      throw new ConflictException(`no in-filter budget changes left (used ${p.budgetChangesUsed} of ${budgetCap})`);
+    }
+
+    const newAmount = toAda(req.proposedAmountAda);
+    const oldAmount = toAda(req.prevAmountAda);
+    const proposedMilestones = req.proposedMilestones as Array<{ title: string | null; description: string; acceptanceCriteria: string | null; amountAda: number }>;
+    const oldFee = toAda(p.submissionFeeAda);
     const newFee = await this.computeFee(newAmount, p.isCommercial ?? false, p.roundId);
     const delta = Math.round((newFee - oldFee) * 1e6) / 1e6;
 
     await this.prisma.$transaction(async (tx) => {
-      // Snapshot the pre-change state so the version history captures every budget
-      // change (amount + milestones) the same way text edits are captured.
-      const snapshot = await this.buildProposalSnapshot(tx, id);
+      const snapshot = await this.buildProposalSnapshot(tx, p.id);
       await tx.proposalVersion.create({
-        data: { proposalId: id, version: p.version, contentMd: p.contentMd, snapshot: (snapshot ?? Prisma.JsonNull) as Prisma.InputJsonValue, editedBy: userId },
+        data: {
+          proposalId: p.id,
+          version: p.version,
+          contentMd: p.contentMd,
+          snapshot: (snapshot ?? Prisma.JsonNull) as Prisma.InputJsonValue,
+          editedBy: boardUserId,
+        },
       });
       await tx.proposal.update({
-        where: { id },
+        where: { id: p.id },
         data: {
           requestedAmountAda: toLovelace(newAmount),
           submissionFeeAda: toLovelace(newFee),
           version: { increment: 1 },
           ...(inFiltering
             ? {
-                // Reset to active filtering — if the proposal had already passed (stage =
-                // DEBATE_VOTE) the cleared votes leave it back in the undecided ACTIVE
-                // FILTERING state. The prior on-chain anchor stays as history; the next
-                // threshold crossing writes a fresh one (same pattern as resubmit).
                 status: ProposalStatus.ACTIVE,
                 stage: ProposalStage.FILTERING,
                 budgetChangesUsed: { increment: 1 },
@@ -655,12 +710,12 @@ export class ProposalsService {
         },
       });
       if (inFiltering) {
-        await tx.vote.deleteMany({ where: { proposalId: id, phase: VotePhase.FILTERING } });
+        await tx.vote.deleteMany({ where: { proposalId: p.id, phase: VotePhase.FILTERING } });
       }
-      await tx.milestone.deleteMany({ where: { proposalId: id } });
+      await tx.milestone.deleteMany({ where: { proposalId: p.id } });
       await tx.milestone.createMany({
-        data: dto.milestones.map((m, idx) => ({
-          proposalId: id,
+        data: proposedMilestones.map((m, idx) => ({
+          proposalId: p.id,
           idx,
           title: m.title ?? null,
           description: m.description,
@@ -670,11 +725,10 @@ export class ProposalsService {
         })),
       });
       if (delta !== 0) {
-        const kind = delta > 0 ? 'TOPUP' : 'REFUND';
         await tx.feeAdjustment.create({
           data: {
-            proposalId: id,
-            kind,
+            proposalId: p.id,
+            kind: delta > 0 ? 'TOPUP' : 'REFUND',
             amountAda: toLovelace(Math.abs(delta)),
             prevAmountAda: toLovelace(oldAmount),
             newAmountAda: toLovelace(newAmount),
@@ -685,8 +739,53 @@ export class ProposalsService {
           },
         });
       }
+      await tx.budgetChangeRequest.update({
+        where: { id: req.id },
+        data: { status: 'APPROVED', decidedByUserId: boardUserId, decidedFeedback: feedback?.trim() || null, decidedAt: new Date() },
+      });
     });
-    return this.get(id, userId);
+    return this.get(p.id, boardUserId);
+  }
+
+  /**
+   * §12 — board rejects a pending budget change. The proposal and its filtering
+   * votes are left exactly as they were — if the proposal was already passing
+   * filtering, it stays passing. Feedback is required (so the team knows why).
+   */
+  async rejectBudgetChange(boardUserId: string, requestId: string, feedback: string) {
+    if (!feedback?.trim()) throw new BadRequestException('feedback is required when rejecting a budget change');
+    const req = await this.prisma.budgetChangeRequest.findUnique({ where: { id: requestId } });
+    if (!req) throw new NotFoundException('budget-change request not found');
+    if (req.status !== 'PENDING') throw new ConflictException(`request already ${req.status.toLowerCase()}`);
+    await this.prisma.budgetChangeRequest.update({
+      where: { id: req.id },
+      data: { status: 'REJECTED', decidedByUserId: boardUserId, decidedFeedback: feedback.trim(), decidedAt: new Date() },
+    });
+    return this.get(req.proposalId, boardUserId);
+  }
+
+  /** Pending budget-change requests across all proposals — the board's to-do list. */
+  async listPendingBudgetChanges() {
+    const rows = await this.prisma.budgetChangeRequest.findMany({
+      where: { status: 'PENDING' },
+      orderBy: { createdAt: 'asc' },
+      include: {
+        proposal: { select: { id: true, publicId: true, title: true, requestedAmountAda: true, isCommercial: true } },
+        requester: { select: { displayName: true } },
+      },
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      proposalId: r.proposalId,
+      proposalTitle: r.proposal.title,
+      proposalPublicId: r.proposal.publicId,
+      requester: r.requester.displayName ?? null,
+      prevAmountAda: toAda(r.prevAmountAda),
+      proposedAmountAda: toAda(r.proposedAmountAda),
+      proposedMilestones: r.proposedMilestones,
+      reason: r.reason,
+      createdAt: r.createdAt.toISOString(),
+    }));
   }
 
   /**
@@ -1088,16 +1187,22 @@ export class ProposalsService {
   }
 
   async get(id: string, viewerUserId?: string) {
-    const p = await this.prisma.proposal.findUnique({
-      where: { id },
-      include: {
-        milestones: { orderBy: { idx: 'asc' } },
-        category: { select: { name: true, minAda: true, maxAda: true, conditions: true } },
-        submitterUser: { select: { displayName: true } },
-        submitterDrep: { select: { drepIdOnchain: true } },
-        round: { select: { status: true, filterResubmissionsAllowed: true, filterBudgetChangesAllowed: true } },
-      },
-    });
+    const [p, pendingBudget] = await Promise.all([
+      this.prisma.proposal.findUnique({
+        where: { id },
+        include: {
+          milestones: { orderBy: { idx: 'asc' } },
+          category: { select: { name: true, minAda: true, maxAda: true, conditions: true } },
+          submitterUser: { select: { displayName: true } },
+          submitterDrep: { select: { drepIdOnchain: true } },
+          round: { select: { status: true, filterResubmissionsAllowed: true, filterBudgetChangesAllowed: true } },
+        },
+      }),
+      this.prisma.budgetChangeRequest.findFirst({
+        where: { proposalId: id, status: 'PENDING' },
+        include: { requester: { select: { displayName: true } } },
+      }),
+    ]);
     if (!p) throw new NotFoundException('proposal not found');
     // DRAFT + PENDING (fee not yet confirmed) are visible only to their submitter.
     if (ProposalsService.PRIVATE_STATUSES.includes(p.status as ProposalStatus) && p.submitterUserId !== viewerUserId) {
@@ -1123,6 +1228,19 @@ export class ProposalsService {
       budgetChangesUsed: p.budgetChangesUsed,
       filterBudgetChangesAllowed:
         p.round?.filterBudgetChangesAllowed ?? ROUND_SETTING_DEFAULTS.filterBudgetChangesAllowed,
+      // §12 — a pending board-approval-needed budget change, if any. Hides the
+      // "Request a budget change" button and surfaces a banner for everyone.
+      pendingBudgetChange: pendingBudget
+        ? {
+            id: pendingBudget.id,
+            prevAmountAda: toAda(pendingBudget.prevAmountAda),
+            proposedAmountAda: toAda(pendingBudget.proposedAmountAda),
+            proposedMilestones: pendingBudget.proposedMilestones,
+            reason: pendingBudget.reason,
+            createdAt: pendingBudget.createdAt.toISOString(),
+            requester: pendingBudget.requester?.displayName ?? null,
+          }
+        : null,
       roundStatus: p.round?.status ?? null,
       submittedAt: p.submittedAt,
       payoutAddress: p.payoutAddress,

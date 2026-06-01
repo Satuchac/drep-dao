@@ -112,6 +112,11 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
         </div>
         {/* Why a proposal was rejected — shown to everyone (submitter + reviewers), not buried. */}
         {p.status === 'REJECTED' ? <RejectionBanner proposal={p} /> : null}
+        {/* §12 — a pending budget-change request is visible to everyone (so DReps
+            know voting will reset on approval); board sees inline approve/reject. */}
+        {p.pendingBudgetChange ? (
+          <PendingBudgetChangeBanner proposal={p} isBoard={isBoard} onChange={load} />
+        ) : null}
         {/* §7.4 — when the submitter is the viewer and the proposal is a rejected
             filter (revise + resubmit cycle), surface the action UI directly under
             the banner so it isn't buried below the read-only proposal content. */}
@@ -577,7 +582,11 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
   const load = useCallback(() => {
     filteringApi.result(id).then(setR).catch(() => setR(null));
   }, [id]);
-  useEffect(load, [load]);
+  // Reload when the proposal itself changes (status / stage / version bump after
+  // a budget-change approval or resubmit) so the votes panel never goes stale.
+  // proposal.version bumps on every edit; pendingBudgetChange flips when one is
+  // raised or decided. Both surface here as cache-busting deps.
+  useEffect(load, [load, proposal.status, proposal.stage, proposal.pendingBudgetChange?.id]);
   useEffect(() => {
     if (!proposal.roundId) { setRoundStatus(null); return; }
     roundsApi.get(proposal.roundId).then((rd) => setRoundStatus(rd.status)).catch(() => setRoundStatus(null));
@@ -1223,6 +1232,103 @@ function diffLines(a: string[], b: string[]): { op: 'eq' | 'add' | 'del'; line: 
 }
 
 /**
+ * §12 — a pending budget-change request banner. Visible to everyone (so DReps
+ * and the submitter know voting is paused on the proposal until the board
+ * decides). The board sees inline Approve / Reject buttons + a feedback box.
+ * Approval applies the change (clears filtering votes if the round is in
+ * FILTERING, queues the fee delta); rejection leaves the proposal — and the
+ * existing reviewer votes — untouched.
+ */
+function PendingBudgetChangeBanner({ proposal, isBoard, onChange }: { proposal: PDetail; isBoard: boolean; onChange: () => void }) {
+  const pending = proposal.pendingBudgetChange;
+  const [feedback, setFeedback] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!pending) return null;
+  const inFiltering = proposal.roundStatus === 'FILTERING';
+
+  const decide = async (kind: 'APPROVE' | 'REJECT') => {
+    setError(null);
+    if (kind === 'REJECT' && !feedback.trim()) {
+      setError('Rejection feedback is required so the team understands why.');
+      return;
+    }
+    setBusy(true);
+    try {
+      if (kind === 'APPROVE') await boardProposalsApi.approveBudgetChange(pending.id, feedback.trim() || undefined);
+      else await boardProposalsApi.rejectBudgetChange(pending.id, feedback.trim());
+      setFeedback('');
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+      <div className="text-sm font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+        Budget change pending board approval
+      </div>
+      <div className="mt-1 text-xs text-amber-800 dark:text-amber-200">
+        {pending.requester ? <strong>{pending.requester}</strong> : 'The submitter'} requested{' '}
+        <strong>{pending.prevAmountAda.toLocaleString()} ₳ → {pending.proposedAmountAda.toLocaleString()} ₳</strong> on{' '}
+        {new Date(pending.createdAt).toLocaleString()}.
+        {inFiltering ? ' If approved, the jury\'s filtering votes will be cleared and they vote again on the revised budget.' : ''}
+      </div>
+      {pending.reason ? (
+        <div className="mt-1.5 rounded bg-white/70 p-1.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+          <span className="text-[10px] font-semibold uppercase">Reason from team:</span> {pending.reason}
+        </div>
+      ) : null}
+      {pending.proposedMilestones?.length ? (
+        <div className="mt-2">
+          <div className="text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-300">Proposed milestones</div>
+          <ul className="mt-0.5 space-y-0.5 text-xs text-amber-900 dark:text-amber-100">
+            {pending.proposedMilestones.map((m, i) => (
+              <li key={i}>
+                M#{i + 1} — {m.title || <em>(untitled)</em>} · {m.amountAda.toLocaleString()} ₳{m.description ? <span className="text-amber-700 dark:text-amber-300"> · {m.description.slice(0, 80)}{m.description.length > 80 ? '…' : ''}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {isBoard ? (
+        <div className="mt-2 space-y-1.5 border-t border-amber-300 pt-2 dark:border-amber-900">
+          <textarea
+            value={feedback}
+            onChange={(e) => setFeedback(e.target.value)}
+            placeholder="Feedback (required to reject; optional on approve)"
+            rows={2}
+            className="w-full rounded border border-amber-300 px-2 py-1 text-xs dark:border-amber-900 dark:bg-amber-950/50"
+          />
+          {error ? <div className="text-xs text-red-600">{error}</div> : null}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => decide('APPROVE')}
+              className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {busy ? '…' : '✓ Approve change'}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => decide('REJECT')}
+              className="rounded-md border border-red-500 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950"
+            >
+              ✗ Reject change
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * §7.4 — submitter's panel after a filtering rejection. Shows the remaining
  * resubmission budget; the actual edits go through the existing EditSection +
  * version snapshots. Clicking "Resubmit for re-vote" calls /resubmit which
@@ -1494,6 +1600,7 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(proposal.requestedAmountAda);
   const [ms, setMs] = useState(proposal.milestones.map((m) => ({ description: m.description ?? '', amountAda: m.amountAda })));
+  const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -1501,13 +1608,14 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
   const sum = ms.reduce((a, m) => a + Number(m.amountAda || 0), 0);
   const match = sum === Number(amount);
   const delta = Number(amount) - proposal.requestedAmountAda;
-  // §12 — while the round is in FILTERING, a budget change clears the jury's
-  // filtering votes (they re-vote on the revised budget). Capped per round so
-  // a submitter can't repeatedly invalidate votes; separate counter from
+  // §12 — while the round is in FILTERING, an APPROVED budget change clears the
+  // jury's filtering votes (they re-vote on the revised budget). Capped per round
+  // so the submitter can't repeatedly invalidate votes; separate counter from
   // post-rejection resubmissions.
   const invalidatesVotes = proposal.roundStatus === 'FILTERING';
   const budgetRemaining = Math.max(0, proposal.filterBudgetChangesAllowed - proposal.budgetChangesUsed);
   const budgetExhausted = invalidatesVotes && budgetRemaining === 0;
+  const pending = proposal.pendingBudgetChange;
 
   const save = async () => {
     setError(null);
@@ -1515,14 +1623,12 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
     if (!match) { setError(`Milestones sum to ${sum.toLocaleString()} ₳ but must equal ${Number(amount).toLocaleString()} ₳.`); return; }
     setBusy(true);
     try {
-      await proposalsApi.budgetChange(id, { requestedAmountAda: Number(amount), milestones: ms.map((m) => ({ description: m.description, amountAda: Number(m.amountAda) })) });
-      setMsg(
-        invalidatesVotes
-          ? 'Budget updated — the jury\'s filtering votes have been cleared; they vote again on the revised budget.'
-          : delta > 0 ? 'Budget increased — a fee top-up was created for the board to settle.'
-          : delta < 0 ? 'Budget decreased — a fee refund was created for the board to settle.'
-          : 'Budget updated.',
-      );
+      await proposalsApi.budgetChange(id, {
+        requestedAmountAda: Number(amount),
+        milestones: ms.map((m) => ({ description: m.description, amountAda: Number(m.amountAda) })),
+        reason: reason.trim() || undefined,
+      });
+      setMsg('Budget change submitted — waiting for a board member to approve. Your existing reviewer votes stay until the board decides.');
       setOpen(false);
       onChange();
     } catch (e) {
@@ -1531,6 +1637,11 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
       setBusy(false);
     }
   };
+
+  // A pending banner (visible to everyone, with approve/reject for board) is
+  // rendered at the top of the proposal card — this section just hides while
+  // there's a pending request so the submitter isn't tempted to file another.
+  if (pending) return null;
 
   if (budgetExhausted) {
     return (
@@ -1551,7 +1662,7 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
         </button>
         {invalidatesVotes ? (
           <div className="text-[11px] text-neutral-500">
-            A budget change now will clear the jury&apos;s filtering votes — they re-vote on the revised budget. {budgetRemaining} of {proposal.filterBudgetChangesAllowed} budget change{proposal.filterBudgetChangesAllowed === 1 ? '' : 's'} remaining.
+            A budget change now needs board approval first. If they approve, the jury&apos;s filtering votes will be cleared and they re-vote on the revised budget. {budgetRemaining} of {proposal.filterBudgetChangesAllowed} budget change{proposal.filterBudgetChangesAllowed === 1 ? '' : 's'} remaining.
           </div>
         ) : null}
       </div>
@@ -1586,13 +1697,23 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
       </div>
       {invalidatesVotes ? (
         <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-          ⚠ This will clear the jury&apos;s filtering votes — they re-vote on the revised budget. {budgetRemaining} of {proposal.filterBudgetChangesAllowed} budget change{proposal.filterBudgetChangesAllowed === 1 ? '' : 's'} remaining for this round.
+          ⚠ This request needs board approval first. If they approve, the jury&apos;s filtering votes will be cleared and they re-vote on the revised budget. {budgetRemaining} of {proposal.filterBudgetChangesAllowed} budget change{proposal.filterBudgetChangesAllowed === 1 ? '' : 's'} remaining for this round.
         </div>
       ) : null}
+      <label className="block">
+        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Reason for the change <span className="text-neutral-400">(optional — context for the board)</span></span>
+        <textarea
+          className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+          rows={2}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Why is the budget changing? What did you learn that motivated this?"
+        />
+      </label>
       {error ? <div className="text-xs text-red-600">{error}</div> : null}
       <div className="flex gap-2">
         <button disabled={busy || delta === 0} onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-          {busy ? 'Saving…' : 'Apply budget change'}
+          {busy ? 'Submitting…' : 'Submit for board approval'}
         </button>
         <button onClick={() => setOpen(false)} className="text-xs text-neutral-500 hover:underline">cancel</button>
       </div>

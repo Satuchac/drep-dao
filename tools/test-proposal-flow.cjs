@@ -110,20 +110,32 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
     Array.isArray(v0.snapshot.milestones) && v0.snapshot.milestones.length === det.milestones.length,
   );
 
-  console.log('\n=== Budget change snapshots milestones too ===');
-  // requestBudgetChange (ACTIVE only) edits amount + milestones. The snapshot must
-  // capture the pre-change milestone list so the diff shows that part of the change.
+  console.log('\n=== Budget change: PENDING → board APPROVES → snapshot + votes reset ===');
+  // §12 — a budget change is a request that the board approves or rejects.
+  // The proposal + filtering votes are unchanged until APPROVE.
   const preBudgetMilestones = det.milestones.map((m) => ({ description: m.description, amountAda: m.amountAda }));
   // Bump M1 by 200 ₳ so the requested amount actually changes (backend rejects "unchanged").
   const newMilestones = preBudgetMilestones.map((m, i) => (i === 0 ? { ...m, amountAda: m.amountAda + 200 } : m));
   const sum = newMilestones.reduce((a, m) => a + m.amountAda, 0);
-  await proposals.requestBudgetChange(carol.id, draft.id, { requestedAmountAda: sum, milestones: newMilestones });
+  const req = await proposals.requestBudgetChange(carol.id, draft.id, { requestedAmountAda: sum, milestones: newMilestones, reason: 'M1 scope expanded after kickoff call' });
+  ok('budget change created a PENDING request', req.status === 'PENDING' && !!req.id);
+  const oldAmount = det.requestedAmountAda;
+  const detMid = await proposals.get(draft.id);
+  ok('proposal still shows the old amount while pending', detMid.requestedAmountAda === oldAmount && !!detMid.pendingBudgetChange);
+  const versionsMid = await proposals.versions(draft.id);
+  ok('no new version row written for a pending request yet', versionsMid.length === versions.length);
+
+  // Board approves → proposal mutates, version is snapshotted, fee delta queued.
+  await proposals.approveBudgetChange(boardDreps[0].user.id, req.id);
   const versions2 = await proposals.versions(draft.id);
-  ok('budget change created a new version entry', versions2.length === versions.length + 1);
+  ok('approval created a new version entry', versions2.length === versions.length + 1);
   const beforeBudget = versions2[versions2.length - 2];
   const afterBudget = versions2[versions2.length - 1];
-  ok('pre-budget snapshot kept old milestone shape', JSON.stringify(beforeBudget.snapshot.milestones.map((m) => m.amountAda)) === JSON.stringify(preBudgetMilestones.map((m) => m.amountAda)));
+  ok('pre-approval snapshot kept old milestone shape', JSON.stringify(beforeBudget.snapshot.milestones.map((m) => m.amountAda)) === JSON.stringify(preBudgetMilestones.map((m) => m.amountAda)));
   ok('current snapshot reflects new milestone amounts', JSON.stringify(afterBudget.snapshot.milestones.map((m) => m.amountAda)) === JSON.stringify(newMilestones.map((m) => m.amountAda)));
+  const detAfter = await proposals.get(draft.id);
+  ok('pending-request cleared after approval', !detAfter.pendingBudgetChange);
+  ok('proposal now carries the approved amount', detAfter.requestedAmountAda === sum);
 
   console.log('\n=== §7 Filtering: draw + 3 YES → anchored decision ===');
   // The proposal.stage transitions (FILTERING → DEBATE_VOTE → FUNDING) come from the
@@ -212,6 +224,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   await prisma.voteSnapshot.deleteMany({ where: { proposalId: draft.id } });
   await prisma.proposalVersion.deleteMany({ where: { proposalId: draft.id } });
   await prisma.feeAdjustment.deleteMany({ where: { proposalId: draft.id } });
+  await prisma.budgetChangeRequest.deleteMany({ where: { proposalId: draft.id } });
   await prisma.anchor.deleteMany({ where: { proposalId: draft.id } });
   // Auto-prepared PROJECT_FUNDING multisig actions (one per APPROVED milestone) — no
   // FK to proposal so we match by the unique description tag the service writes.

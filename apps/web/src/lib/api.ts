@@ -139,6 +139,17 @@ export const daoApi = {
   proofs: () => request<OnChainProof[]>('/dao/proofs'),
 };
 
+// §12 — submitter's pending budget-change request (board approves or rejects).
+export interface PendingBudgetChange {
+  id: string;
+  prevAmountAda: number;
+  proposedAmountAda: number;
+  proposedMilestones: { title: string | null; description: string; acceptanceCriteria: string | null; amountAda: number }[];
+  reason: string | null;
+  requester: string | null;
+  createdAt: string;
+}
+
 // §18 — board force-submits anchors recorded but not yet posted on-chain.
 export const boardProofsApi = {
   submit: (id: string) =>
@@ -548,6 +559,10 @@ export interface ProposalDetail extends ProposalSummary {
   // §12 — in-filter budget-change budget (separate counter from resubmissions).
   budgetChangesUsed: number;
   filterBudgetChangesAllowed: number;
+  // §12 — a pending board-approval-needed budget change, if any. Hides the
+  // "Request a budget change" button (one outstanding request at a time) and
+  // surfaces a banner for both the submitter and the board.
+  pendingBudgetChange: PendingBudgetChange | null;
   // The proposal's round status (PREPARATION / SUBMISSION / FILTERING / DV / FUNDING / CLOSED).
   // Used by edit gates: editing closes once the round moves past SUBMISSION (unless rejected).
   roundStatus: string | null;
@@ -570,8 +585,8 @@ export const proposalsApi = {
     request<ProposalDetail>('/proposals', { method: 'POST', body: JSON.stringify(input) }),
   update: (id: string, input: Partial<CreateProposalInput>) =>
     request<ProposalDetail>(`/proposals/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
-  budgetChange: (id: string, input: { requestedAmountAda: number; milestones: ProposalMilestoneInput[] }) =>
-    request<ProposalDetail>(`/proposals/${id}/budget-change`, { method: 'POST', body: JSON.stringify(input) }),
+  budgetChange: (id: string, input: { requestedAmountAda: number; milestones: ProposalMilestoneInput[]; reason?: string }) =>
+    request<{ id: string; status: string }>(`/proposals/${id}/budget-change`, { method: 'POST', body: JSON.stringify(input) }),
   // §3 — team pastes the on-chain pledge payment tx hash (FUNDING + promised pledge).
   pledgeTx: (id: string, txHash: string) =>
     request<ProposalDetail>(`/proposals/${id}/pledge-tx`, { method: 'POST', body: JSON.stringify({ txHash }) }),
@@ -674,7 +689,27 @@ export const boardProposalsApi = {
     request<DvResult>(`/admin/proposals/${id}/open-dv-vote`, { method: 'POST' }),
   finalizeDv: (id: string) =>
     request<DvResult>(`/admin/proposals/${id}/finalize-dv`, { method: 'POST' }),
+  // §12 — pending budget-change requests awaiting board approval.
+  pendingBudgetChanges: () =>
+    request<PendingBudgetChangeRow[]>('/admin/proposals/pending-budget-changes'),
+  approveBudgetChange: (requestId: string, feedback?: string) =>
+    request<ProposalDetail>(`/admin/proposals/budget-changes/${requestId}/approve`, { method: 'POST', body: JSON.stringify({ feedback }) }),
+  rejectBudgetChange: (requestId: string, feedback: string) =>
+    request<ProposalDetail>(`/admin/proposals/budget-changes/${requestId}/reject`, { method: 'POST', body: JSON.stringify({ feedback }) }),
 };
+
+export interface PendingBudgetChangeRow {
+  id: string;
+  proposalId: string;
+  proposalTitle: string;
+  proposalPublicId: string | null;
+  requester: string | null;
+  prevAmountAda: number;
+  proposedAmountAda: number;
+  proposedMilestones: { title: string | null; description: string; acceptanceCriteria: string | null; amountAda: number }[];
+  reason: string | null;
+  createdAt: string;
+}
 
 export interface DvResult {
   open: boolean;

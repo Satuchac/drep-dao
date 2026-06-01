@@ -39,6 +39,8 @@ model AppUser {
   notificationPreference NotificationPreference?
   configUpdates          PlatformConfig[]         @relation("ConfigUpdater")
   stopFundingsProposed   StopFundingProposal[]    @relation("StopProposerUser")
+  budgetChangesRequested BudgetChangeRequest[]    @relation("BudgetChangeRequester")
+  budgetChangesDecided   BudgetChangeRequest[]    @relation("BudgetChangeDecider")
 
   @@map("app_user")
 }
@@ -386,6 +388,7 @@ model Proposal {
   quickPollsWon  QuickPoll[]        @relation("QuickPollWinner")
   quickPollVotesFor QuickPollVote[] @relation("QuickPollChoice")
   feeAdjustments FeeAdjustment[]
+  budgetChangeRequests BudgetChangeRequest[]
   stopFundings   StopFundingProposal[]
 
   @@index([roundId, status])
@@ -416,6 +419,32 @@ model FeeAdjustment {
 
   @@index([status, createdAt])
   @@map("fee_adjustment")
+}
+
+// §12 — submitter's request to change a proposal's budget while ACTIVE. The board
+// approves or rejects; only after APPROVE is the proposal mutated, the filtering
+// votes cleared, and the fee delta queued (FeeAdjustment row). On REJECT the
+// proposal stays exactly as it was — previous reviewer votes survive.
+model BudgetChangeRequest {
+  id                 String    @id @default(uuid()) @db.Uuid
+  proposalId         String    @map("proposal_id") @db.Uuid
+  requesterId        String    @map("requester_id") @db.Uuid
+  prevAmountAda      BigInt    @map("prev_amount_ada")
+  proposedAmountAda  BigInt    @map("proposed_amount_ada")
+  proposedMilestones Json      @map("proposed_milestones") // [{title, description, acceptanceCriteria, amountAda}]
+  reason             String?
+  status             String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  decidedByUserId    String?   @map("decided_by_user_id") @db.Uuid
+  decidedFeedback    String?   @map("decided_feedback")
+  decidedAt          DateTime? @map("decided_at") @db.Timestamptz(6)
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  proposal  Proposal @relation(fields: [proposalId], references: [id])
+  requester AppUser  @relation("BudgetChangeRequester", fields: [requesterId], references: [id])
+  decidedBy AppUser? @relation("BudgetChangeDecider", fields: [decidedByUserId], references: [id])
+
+  @@index([proposalId, status])
+  @@map("budget_change_request")
 }
 
 model ProposalVersion {

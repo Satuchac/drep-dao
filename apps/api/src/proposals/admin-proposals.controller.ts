@@ -4,7 +4,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { ProposalsService } from './proposals.service';
-import { ReviewFeeDto, ReviewPledgeDto, SettlePaymentDto } from './dto';
+import { BudgetChangeDecisionDto, ReviewFeeDto, ReviewPledgeDto, SettlePaymentDto } from './dto';
 
 export class ReplaceReviewerDto {
   @IsUUID() oldDrepId!: string;
@@ -43,6 +43,32 @@ export class AdminProposalsController {
   @Post(':id/review-fee')
   reviewFee(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReviewFeeDto) {
     return this.proposals.reviewFee(id, dto);
+  }
+
+  // §12 — pending budget-change requests awaiting board approval.
+  @Get('pending-budget-changes')
+  pendingBudgetChanges() {
+    return this.proposals.listPendingBudgetChanges();
+  }
+
+  // §12 — board APPROVES a budget-change request → applies the change (votes
+  // re-set if in FILTERING, fee delta queued); REJECTS → proposal stays as-is.
+  @Post('budget-changes/:requestId/approve')
+  approveBudgetChange(
+    @CurrentUser() ctx: AuthContext,
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+    @Body() dto: BudgetChangeDecisionDto,
+  ) {
+    return this.proposals.approveBudgetChange(ctx.userId, requestId, dto.feedback);
+  }
+
+  @Post('budget-changes/:requestId/reject')
+  rejectBudgetChange(
+    @CurrentUser() ctx: AuthContext,
+    @Param('requestId', ParseUUIDPipe) requestId: string,
+    @Body() dto: BudgetChangeDecisionDto,
+  ) {
+    return this.proposals.rejectBudgetChange(ctx.userId, requestId, dto.feedback ?? '');
   }
 
   // §3 — proposals in FUNDING awaiting pledge confirmation (the team pasted a tx,

@@ -106,6 +106,12 @@ export class BudgetChangeDto {
   @ValidateNested({ each: true })
   @Type(() => MilestoneInput)
   milestones!: MilestoneInput[];
+  // Optional context the submitter sends to the board with the request.
+  @IsOptional() @IsString() @MaxLength(2000) reason?: string;
+}
+
+export class BudgetChangeDecisionDto {
+  @IsOptional() @IsString() @MaxLength(2000) feedback?: string;
 }
 
 export class SettlePaymentDto {
