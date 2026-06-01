@@ -274,12 +274,20 @@ export class FilteringService {
     const votes = await this.prisma.vote.findMany({ where: { proposalId, phase: VotePhase.FILTERING } });
     const yes = votes.filter((v) => v.choice === VoteChoice.YES).length;
     const no = votes.filter((v) => v.choice === VoteChoice.NO).length;
+    // §7.2 — rejection requires YES to be mathematically out of reach, not just
+    // "NO matches the YES threshold". With 4 reviewers and threshold 2, two NOs
+    // still leave two unvoted reviewers who could deliver the YES; three NOs
+    // mean only one reviewer is left and a 2-YES majority is impossible.
+    const assignedCount = await this.prisma.filterAssignment.count({
+      where: { proposalId, releasedAt: null },
+    });
+    const maxPossibleYes = Math.max(0, assignedCount - no);
 
     // Where the live tally says the proposal should be right now.
     const desired: { status: ProposalStatus; stage: ProposalStage; outcome: 'ACCEPTED' | 'REJECTED' | null } =
       yes >= threshold
         ? { status: ProposalStatus.ACTIVE, stage: ProposalStage.DEBATE_VOTE, outcome: 'ACCEPTED' }
-        : no >= threshold
+        : maxPossibleYes < threshold
           ? { status: ProposalStatus.REJECTED, stage: ProposalStage.FILTERING, outcome: 'REJECTED' }
           : { status: ProposalStatus.ACTIVE, stage: ProposalStage.FILTERING, outcome: null };
 

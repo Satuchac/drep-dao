@@ -790,14 +790,17 @@ export class ProposalsService {
         } else {
           const yes = votes.filter((v) => v.choice === 'YES').length;
           const no = votes.filter((v) => v.choice === 'NO').length;
+          // §7.2 — rejection only when YES is mathematically out of reach
+          // (every remaining unvoted reviewer would have to vote YES).
+          const maxPossibleYes = Math.max(0, assigned.length - no);
           const passed = yes >= filterThreshold;
-          const failed = no >= filterThreshold;
+          const failed = maxPossibleYes < filterThreshold;
           // Board scan: show YES / NO counts inline + an outcome tag so they can
           // tell at a glance which proposals are ready to advance vs. still need votes.
           progress = passed
             ? { stage: 'FILTERING', label: `✓ ${yes} YES · approved (advancing)`, tone: 'emerald' }
             : failed
-              ? { stage: 'FILTERING', label: `✗ ${no} NO · rejected`, tone: 'red' }
+              ? { stage: 'FILTERING', label: `✗ ${no} NO · rejected (YES no longer possible)`, tone: 'red' }
               : { stage: 'FILTERING', label: `${yes} YES · ${no} NO · need ${filterThreshold} to decide`, tone: 'amber' };
         }
       } else if (status === ProposalStatus.ACTIVE && stage === ProposalStage.DEBATE_VOTE) {
