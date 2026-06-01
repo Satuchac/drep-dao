@@ -783,6 +783,22 @@ function MineRow({
           <span className={`text-xs ${p.status === 'REJECTED' ? 'font-medium text-red-600' : isDraft ? 'text-amber-600' : 'text-neutral-500'}`}>
             {p.status}{p.stage ? ` · ${p.stage}` : ''}{isDraft ? ' · private' : ''}
           </span>
+          {p.progress ? (
+            <span
+              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                p.progress.tone === 'emerald'
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+                  : p.progress.tone === 'red'
+                    ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
+                    : p.progress.tone === 'amber'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+                      : 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300'
+              }`}
+              title={p.progress.label}
+            >
+              {p.progress.label}
+            </span>
+          ) : null}
           {fullFormEdit ? (
             <>
               <button onClick={onEdit} className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800">

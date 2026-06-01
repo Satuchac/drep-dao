@@ -932,6 +932,12 @@ export class ProposalsService {
       where: { proposalId: { in: ids }, status: 'ACTIVE' },
       include: { votes: { select: { choice: true } } },
     });
+    // §12 — pending budget-change requests outrank the normal progress chip:
+    // a proposal blocked on board approval should read that way, not "0/4 voted".
+    const pendingBudgets = await this.prisma.budgetChangeRequest.findMany({
+      where: { proposalId: { in: ids }, status: 'PENDING' },
+      select: { proposalId: true },
+    });
 
     // Index per proposal.
     const fAssignBy = group(filterAssign, (a) => a.proposalId);
@@ -942,6 +948,7 @@ export class ProposalsService {
     const msByProposal = group(ms, (m) => m.proposalId);
     const msVotesById = group(msVotes, (v) => v.milestoneId ?? '');
     const stopBy = new Map(activeStops.map((s) => [s.proposalId, s]));
+    const pendingBudgetSet = new Set(pendingBudgets.map((b) => b.proposalId));
 
     return proposals.map((p) => {
       const base = this.summary(p);
@@ -1063,6 +1070,17 @@ export class ProposalsService {
         if (reasons.length > 0) rejectionReasons = reasons;
       }
 
+      // §12 — a pending budget change supersedes the normal progress chip so
+      // every list view (My proposals, round overview) surfaces this state
+      // without needing to open the proposal.
+      if (pendingBudgetSet.has(p.id)) {
+        progress = {
+          stage: 'BUDGET',
+          label: 'budget change pending board approval',
+          tone: 'amber',
+        };
+      }
+
       return { ...base, progress, rejectionReasons };
     });
   }
@@ -1181,9 +1199,16 @@ export class ProposalsService {
     const proposals = await this.prisma.proposal.findMany({
       where: { submitterUserId: userId },
       orderBy: { createdAt: 'desc' },
-      include: { category: { select: { name: true } }, submitterUser: { select: { displayName: true } }, submitterDrep: { select: { drepIdOnchain: true } } },
+      include: {
+        category: { select: { name: true } },
+        submitterUser: { select: { displayName: true } },
+        submitterDrep: { select: { drepIdOnchain: true } },
+        // Needed by enrichSummaries to compute the per-row "what's needed now" chip
+        // so the My-area list surfaces vote progress / pending budget changes / etc.
+        round: { select: { status: true, filterReviewerCount: true, filterApprovalVotes: true, milestoneApprovalVotes: true } },
+      },
     });
-    return proposals.map((p) => this.summary(p));
+    return this.enrichSummaries(proposals);
   }
 
   async get(id: string, viewerUserId?: string) {
