@@ -422,7 +422,11 @@ model ProposalVersion {
   id         String   @id @default(uuid()) @db.Uuid
   proposalId String   @map("proposal_id") @db.Uuid
   version    Int
-  contentMd  String   @map("content_md")
+  contentMd  String   @map("content_md") // kept for legacy rows; canonical pitch text lives in `snapshot` too
+  // Full snapshot of every editable field at this version (pitch, title, descriptive
+  // fields, payout, expertise, amount, commercial flag, milestones). Used by the
+  // diff view to surface ALL changes between two versions, not just the pitch.
+  snapshot   Json?    @map("snapshot")
   editedBy   String?  @map("edited_by") @db.Uuid
   editedAt   DateTime @default(now()) @map("edited_at") @db.Timestamptz(6)
 

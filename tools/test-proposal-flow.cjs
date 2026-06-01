@@ -70,6 +70,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
     roundId: round.id, categoryId: round.categories[0].id, title: 'Build a tool',
     contentMd: 'Original pitch.', isCommercial: true, requestedAmountAda: 1000,
     milestones: [{ description: 'M1', amountAda: 600 }, { description: 'M2', amountAda: 400 }],
+    payoutAddress: 'addr_test1qpd_carol_payout',
   });
   const submitted = await proposals.submit(carol.id, draft.id, { submissionFeeTxHash: 'feehash123' });
   ok('commercial fee = 3% of requested', submitted.submissionFeeAda === 30, `${submitted.submissionFeeAda} ₳`);
@@ -79,10 +80,50 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   let det = await proposals.get(draft.id);
   ok('fee confirmed → ACTIVE + FILTERING', det.status === 'ACTIVE' && det.stage === 'FILTERING');
 
-  console.log('\n=== Edit during filtering → versioned + diff ===');
-  await proposals.updateDraft(carol.id, draft.id, { contentMd: 'Updated pitch with more detail.' });
+  console.log('\n=== Edit during filtering → versioned + diff (full snapshot) ===');
+  // Edit multiple fields at once. The version snapshot must capture every editable
+  // field (pitch, ecosystem impact, success metrics, payout) so the diff view can
+  // show the whole change set — not just the pitch.
+  await proposals.updateDraft(carol.id, draft.id, {
+    contentMd: 'Updated pitch with more detail.',
+    ecosystemImpactMd: 'Now serves three additional segments.',
+    successMetricsMd: '5,000 monthly active users in 6 months.',
+    payoutAddress: 'addr_test1qpd_v2',
+  });
   const versions = await proposals.versions(draft.id);
   ok('prior content snapshotted', versions.length === 2 && versions[0].contentMd === 'Original pitch.' && versions[1].current === true);
+  const v0 = versions[0], v1 = versions[1];
+  ok('v0 snapshot present + carries pitch', !!v0.snapshot && v0.snapshot.contentMd === 'Original pitch.');
+  ok('v1 snapshot reflects updated pitch', !!v1.snapshot && v1.snapshot.contentMd === 'Updated pitch with more detail.');
+  ok(
+    'snapshot diff catches ecosystem impact change',
+    (v0.snapshot.ecosystemImpactMd ?? '') !== (v1.snapshot.ecosystemImpactMd ?? '') &&
+      v1.snapshot.ecosystemImpactMd === 'Now serves three additional segments.',
+  );
+  ok(
+    'snapshot diff catches success-metrics change',
+    v1.snapshot.successMetricsMd === '5,000 monthly active users in 6 months.',
+  );
+  ok('snapshot diff catches payout change', v1.snapshot.payoutAddress === 'addr_test1qpd_v2');
+  ok(
+    'snapshot milestone array is captured',
+    Array.isArray(v0.snapshot.milestones) && v0.snapshot.milestones.length === det.milestones.length,
+  );
+
+  console.log('\n=== Budget change snapshots milestones too ===');
+  // requestBudgetChange (ACTIVE only) edits amount + milestones. The snapshot must
+  // capture the pre-change milestone list so the diff shows that part of the change.
+  const preBudgetMilestones = det.milestones.map((m) => ({ description: m.description, amountAda: m.amountAda }));
+  // Bump M1 by 200 ₳ so the requested amount actually changes (backend rejects "unchanged").
+  const newMilestones = preBudgetMilestones.map((m, i) => (i === 0 ? { ...m, amountAda: m.amountAda + 200 } : m));
+  const sum = newMilestones.reduce((a, m) => a + m.amountAda, 0);
+  await proposals.requestBudgetChange(carol.id, draft.id, { requestedAmountAda: sum, milestones: newMilestones });
+  const versions2 = await proposals.versions(draft.id);
+  ok('budget change created a new version entry', versions2.length === versions.length + 1);
+  const beforeBudget = versions2[versions2.length - 2];
+  const afterBudget = versions2[versions2.length - 1];
+  ok('pre-budget snapshot kept old milestone shape', JSON.stringify(beforeBudget.snapshot.milestones.map((m) => m.amountAda)) === JSON.stringify(preBudgetMilestones.map((m) => m.amountAda)));
+  ok('current snapshot reflects new milestone amounts', JSON.stringify(afterBudget.snapshot.milestones.map((m) => m.amountAda)) === JSON.stringify(newMilestones.map((m) => m.amountAda)));
 
   console.log('\n=== §7 Filtering: draw + 3 YES → anchored decision ===');
   // The proposal.stage transitions (FILTERING → DEBATE_VOTE → FUNDING) come from the
@@ -112,6 +153,9 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   ok('filtering exposes public rationale', fres.votes.some((v) => v.rationale === 'clear and well-scoped'));
 
   console.log('\n=== §8 Debate & Vote: balanced, anchored (board opt-in §8.2) ===');
+  // Round must be in DV before openVoting / cast — the round-status gate
+  // prevents D&V voting from happening while the round is still in FILTERING.
+  await prisma.round.update({ where: { id: round.id }, data: { status: 'DV' } });
   // §8.2 — board members only vote on funding proposals after explicitly opting in.
   await dv.openVoting(draft.id); // snapshot is empty here (only board are admitted, none opted in yet)
   ok('board excluded from D&V until opt-in', (await dv.result(draft.id)).eligible === 0, `eligible=${(await dv.result(draft.id)).eligible}`);
@@ -167,6 +211,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   await prisma.voteSnapshotEntry.deleteMany({ where: { snapshotId: { in: snapIds } } });
   await prisma.voteSnapshot.deleteMany({ where: { proposalId: draft.id } });
   await prisma.proposalVersion.deleteMany({ where: { proposalId: draft.id } });
+  await prisma.feeAdjustment.deleteMany({ where: { proposalId: draft.id } });
   await prisma.anchor.deleteMany({ where: { proposalId: draft.id } });
   // Auto-prepared PROJECT_FUNDING multisig actions (one per APPROVED milestone) — no
   // FK to proposal so we match by the unique description tag the service writes.

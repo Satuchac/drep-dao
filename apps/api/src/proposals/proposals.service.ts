@@ -16,6 +16,7 @@ import {
   VotingType,
 } from '@drep-dao/shared';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { AnchorService } from '../cardano/anchor.service';
@@ -194,9 +195,12 @@ export class ProposalsService {
     }
     await this.prisma.$transaction(async (tx) => {
       if (postSubmission) {
-        // Snapshot the version being replaced so reviewers can see what changed.
+        // Snapshot the version being replaced so reviewers can diff what changed.
+        // Captures every editable field (not just pitch) so the diff view can show
+        // changes across milestones / ecosystem impact / budget / etc.
+        const snapshot = await this.buildProposalSnapshot(tx, id);
         await tx.proposalVersion.create({
-          data: { proposalId: id, version: p.version, contentMd: p.contentMd, editedBy: userId },
+          data: { proposalId: id, version: p.version, contentMd: p.contentMd, snapshot: (snapshot ?? Prisma.JsonNull) as Prisma.InputJsonValue, editedBy: userId },
         });
       }
       await tx.proposal.update({
@@ -238,6 +242,41 @@ export class ProposalsService {
     return this.get(id, userId);
   }
 
+  /**
+   * Full per-version snapshot of every editable proposal field — title, pitch,
+   * descriptive markdown blocks, payout, expertise, amount + commercial flag,
+   * milestone plan. Used by the diff view so a change to ANY field shows up,
+   * not just the pitch text. Accepts a transaction client so it can be called
+   * mid-transaction (snapshot the pre-update state, then mutate).
+   */
+  private async buildProposalSnapshot(tx: Prisma.TransactionClient | typeof this.prisma, proposalId: string) {
+    const p = await tx.proposal.findUnique({
+      where: { id: proposalId },
+      include: { milestones: { orderBy: { idx: 'asc' } } },
+    });
+    if (!p) return null;
+    return {
+      title: p.title,
+      contentMd: p.contentMd,
+      ecosystemImpactMd: p.ecosystemImpactMd ?? null,
+      successMetricsMd: p.successMetricsMd ?? null,
+      costBreakdownMd: p.costBreakdownMd ?? null,
+      teamInfoMd: typeof p.teamInfo === 'string' ? p.teamInfo : null,
+      revenueSharingMd: typeof p.revenueSharing === 'string' ? p.revenueSharing : null,
+      payoutAddress: p.payoutAddress ?? null,
+      subcategoryIds: p.subcategoryIds ?? [],
+      requestedAmountAda: toAda(p.requestedAmountAda),
+      isCommercial: !!p.isCommercial,
+      milestones: p.milestones.map((m) => ({
+        idx: m.idx,
+        title: m.title ?? null,
+        description: m.description ?? '',
+        acceptanceCriteria: m.acceptanceCriteria ?? null,
+        amountAda: toAda(m.amountAda),
+      })),
+    };
+  }
+
   /** Content version history (snapshots + the current head) for the diff view. */
   async versions(id: string) {
     const p = await this.prisma.proposal.findUnique({
@@ -245,19 +284,25 @@ export class ProposalsService {
       select: { version: true, contentMd: true, updatedAt: true, status: true, submitterUserId: true },
     });
     if (!p || p.status === ProposalStatus.DRAFT) return [];
-    const snapshots = await this.prisma.proposalVersion.findMany({
-      where: { proposalId: id },
-      orderBy: { version: 'asc' },
-      include: { editor: { select: { displayName: true } } },
-    });
+    const [snapshots, currentSnapshot] = await Promise.all([
+      this.prisma.proposalVersion.findMany({
+        where: { proposalId: id },
+        orderBy: { version: 'asc' },
+        include: { editor: { select: { displayName: true } } },
+      }),
+      this.buildProposalSnapshot(this.prisma, id),
+    ]);
     const history = snapshots.map((s) => ({
       version: s.version,
       contentMd: s.contentMd,
+      // Older rows pre-dating the snapshot column have it null — the diff view
+      // falls back to contentMd-only for those.
+      snapshot: (s.snapshot as Record<string, unknown> | null) ?? null,
       editedAt: s.editedAt,
       editor: s.editor?.displayName ?? null,
       current: false,
     }));
-    history.push({ version: p.version, contentMd: p.contentMd, editedAt: p.updatedAt, editor: null, current: true });
+    history.push({ version: p.version, contentMd: p.contentMd, snapshot: currentSnapshot, editedAt: p.updatedAt, editor: null, current: true });
     return history;
   }
 
@@ -584,11 +629,18 @@ export class ProposalsService {
     const delta = Math.round((newFee - oldFee) * 1e6) / 1e6;
 
     await this.prisma.$transaction(async (tx) => {
+      // Snapshot the pre-change state so the version history captures every budget
+      // change (amount + milestones) the same way text edits are captured.
+      const snapshot = await this.buildProposalSnapshot(tx, id);
+      await tx.proposalVersion.create({
+        data: { proposalId: id, version: p.version, contentMd: p.contentMd, snapshot: (snapshot ?? Prisma.JsonNull) as Prisma.InputJsonValue, editedBy: userId },
+      });
       await tx.proposal.update({
         where: { id },
         data: {
           requestedAmountAda: toLovelace(newAmount),
           submissionFeeAda: toLovelace(newFee),
+          version: { increment: 1 },
           ...(inFiltering
             ? {
                 // Reset to active filtering — if the proposal had already passed (stage =

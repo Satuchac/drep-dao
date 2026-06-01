@@ -20,6 +20,7 @@ import {
   type ProposalDetail as PDetail,
   type VoteRationale,
   type ProposalVersionEntry,
+  type ProposalSnapshot,
   type MilestoneView,
   type MilestoneCandidate,
   type StopFundingView,
@@ -930,12 +931,191 @@ function VersionsSection({ id }: { id: string }) {
           {showFull ? 'inline diff' : 'side-by-side diff'}
         </button>
       </div>
-      {showFull ? (
-        <SideBySideDiff oldText={prev.contentMd} newText={current.contentMd} oldLabel={`v${prev.version} (selected)`} newLabel={`v${current.version} (latest)`} />
-      ) : (
-        <Diff oldText={prev.contentMd} newText={current.contentMd} />
-      )}
+      <VersionDiff prev={prev} current={current} sideBySide={showFull} />
     </section>
+  );
+}
+
+/**
+ * §7 — multi-field version diff. Walks every editable field in the snapshot;
+ * emits a labelled section only for fields that actually changed:
+ *   - Text fields (title, pitch, ecosystem impact, etc.) → LCS line diff
+ *     (inline or side-by-side, driven by the parent toggle)
+ *   - Scalars (requested amount, commercial flag) → "old → new" badge
+ *   - String list (expertise areas) → added (green) / removed (red) sets
+ *   - Milestones → compact per-milestone table comparing both versions
+ * Falls back to a contentMd-only diff when older rows don't have a snapshot.
+ */
+function VersionDiff({ prev, current, sideBySide }: { prev: ProposalVersionEntry; current: ProposalVersionEntry; sideBySide: boolean }) {
+  const renderText = (oldText: string, newText: string) =>
+    sideBySide
+      ? <SideBySideDiff oldText={oldText} newText={newText} oldLabel={`v${prev.version}`} newLabel={`v${current.version}`} />
+      : <Diff oldText={oldText} newText={newText} />;
+
+  // Backward compatibility: older rows have no snapshot — compare contentMd only.
+  if (!prev.snapshot || !current.snapshot) {
+    if (prev.contentMd === current.contentMd) {
+      return <p className="mt-2 text-xs italic text-neutral-500">No textual changes detected (older version captured only the pitch text).</p>;
+    }
+    return (
+      <div className="mt-2">
+        <DiffFieldHeader label="Pitch / summary" />
+        {renderText(prev.contentMd, current.contentMd)}
+      </div>
+    );
+  }
+
+  const TEXT_FIELDS: { key: keyof ProposalSnapshot; label: string }[] = [
+    { key: 'title', label: 'Title' },
+    { key: 'contentMd', label: 'Pitch / summary' },
+    { key: 'ecosystemImpactMd', label: 'Expected ecosystem impact' },
+    { key: 'successMetricsMd', label: 'Success metrics / KPIs' },
+    { key: 'costBreakdownMd', label: 'Cost breakdown' },
+    { key: 'teamInfoMd', label: 'Team info' },
+    { key: 'revenueSharingMd', label: 'Revenue sharing' },
+    { key: 'payoutAddress', label: 'Payout / refund address' },
+  ];
+
+  const a = prev.snapshot, b = current.snapshot;
+  const sections: React.ReactNode[] = [];
+
+  for (const { key, label } of TEXT_FIELDS) {
+    const oldVal = String(a[key] ?? '');
+    const newVal = String(b[key] ?? '');
+    if (oldVal !== newVal) {
+      sections.push(
+        <div key={`text-${key}`} className="mt-3">
+          <DiffFieldHeader label={label} />
+          {renderText(oldVal, newVal)}
+        </div>,
+      );
+    }
+  }
+
+  if (a.requestedAmountAda !== b.requestedAmountAda) {
+    sections.push(
+      <div key="amount" className="mt-3">
+        <DiffFieldHeader label="Requested amount" />
+        <ScalarChange before={`${a.requestedAmountAda.toLocaleString()} ₳`} after={`${b.requestedAmountAda.toLocaleString()} ₳`} />
+      </div>,
+    );
+  }
+  if (a.isCommercial !== b.isCommercial) {
+    sections.push(
+      <div key="commercial" className="mt-3">
+        <DiffFieldHeader label="Commercial / for profit" />
+        <ScalarChange before={a.isCommercial ? 'yes' : 'no'} after={b.isCommercial ? 'yes' : 'no'} />
+      </div>,
+    );
+  }
+
+  const aSubs = new Set(a.subcategoryIds);
+  const bSubs = new Set(b.subcategoryIds);
+  const removed = [...aSubs].filter((x) => !bSubs.has(x));
+  const added = [...bSubs].filter((x) => !aSubs.has(x));
+  if (removed.length || added.length) {
+    sections.push(
+      <div key="subs" className="mt-3">
+        <DiffFieldHeader label="Expertise areas" />
+        <div className="mt-1 flex flex-wrap gap-1.5 text-xs">
+          {removed.map((s) => (
+            <span key={`r-${s}`} className="rounded-full bg-red-100 px-2 py-0.5 text-red-700 line-through dark:bg-red-950 dark:text-red-300">{SUBCAT_LABEL[s] ?? s}</span>
+          ))}
+          {added.map((s) => (
+            <span key={`a-${s}`} className="rounded-full bg-emerald-100 px-2 py-0.5 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">+ {SUBCAT_LABEL[s] ?? s}</span>
+          ))}
+        </div>
+      </div>,
+    );
+  }
+
+  if (!sameMilestones(a.milestones, b.milestones)) {
+    sections.push(
+      <div key="milestones" className="mt-3">
+        <DiffFieldHeader label="Milestones" />
+        <MilestoneDiff before={a.milestones} after={b.milestones} />
+      </div>,
+    );
+  }
+
+  if (sections.length === 0) {
+    return <p className="mt-2 text-xs italic text-neutral-500">No differences between v{prev.version} and v{current.version}.</p>;
+  }
+  return <div>{sections}</div>;
+}
+
+function DiffFieldHeader({ label }: { label: string }) {
+  return <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{label}</div>;
+}
+
+function ScalarChange({ before, after }: { before: string; after: string }) {
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+      <span className="rounded bg-red-50 px-2 py-0.5 text-red-800 line-through dark:bg-red-950 dark:text-red-200">{before}</span>
+      <span className="text-neutral-400">→</span>
+      <span className="rounded bg-emerald-50 px-2 py-0.5 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{after}</span>
+    </div>
+  );
+}
+
+function sameMilestones(a: ProposalSnapshot['milestones'], b: ProposalSnapshot['milestones']) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i], y = b[i];
+    if ((x.title ?? '') !== (y.title ?? '') || (x.description ?? '') !== (y.description ?? '') || (x.acceptanceCriteria ?? '') !== (y.acceptanceCriteria ?? '') || x.amountAda !== y.amountAda) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function MilestoneDiff({ before, after }: { before: ProposalSnapshot['milestones']; after: ProposalSnapshot['milestones'] }) {
+  const max = Math.max(before.length, after.length);
+  const rows: React.ReactNode[] = [];
+  for (let i = 0; i < max; i++) {
+    const a = before[i];
+    const b = after[i];
+    if (!a) {
+      rows.push(
+        <div key={`add-${i}`} className="mt-1 rounded border border-emerald-200 bg-emerald-50 p-2 text-xs dark:border-emerald-900 dark:bg-emerald-950/30">
+          <div className="font-semibold text-emerald-800 dark:text-emerald-200">+ Milestone #{i + 1} added</div>
+          <MilestoneSummary m={b} />
+        </div>,
+      );
+      continue;
+    }
+    if (!b) {
+      rows.push(
+        <div key={`del-${i}`} className="mt-1 rounded border border-red-200 bg-red-50 p-2 text-xs dark:border-red-900 dark:bg-red-950/30">
+          <div className="font-semibold text-red-800 dark:text-red-200">− Milestone #{i + 1} removed</div>
+          <MilestoneSummary m={a} />
+        </div>,
+      );
+      continue;
+    }
+    const changed = (a.title ?? '') !== (b.title ?? '') || (a.description ?? '') !== (b.description ?? '') || (a.acceptanceCriteria ?? '') !== (b.acceptanceCriteria ?? '') || a.amountAda !== b.amountAda;
+    if (!changed) continue;
+    rows.push(
+      <div key={`ch-${i}`} className="mt-1 rounded border border-amber-200 bg-amber-50 p-2 text-xs dark:border-amber-900 dark:bg-amber-950/30">
+        <div className="font-semibold text-amber-800 dark:text-amber-200">Milestone #{i + 1} changed</div>
+        <div className="mt-1 grid gap-1 sm:grid-cols-2">
+          <div><div className="text-[10px] uppercase text-neutral-500">before</div><MilestoneSummary m={a} /></div>
+          <div><div className="text-[10px] uppercase text-neutral-500">after</div><MilestoneSummary m={b} /></div>
+        </div>
+      </div>,
+    );
+  }
+  return <div className="mt-1">{rows}</div>;
+}
+
+function MilestoneSummary({ m }: { m: ProposalSnapshot['milestones'][number] }) {
+  return (
+    <div className="text-neutral-700 dark:text-neutral-300">
+      <div><span className="text-neutral-500">Title:</span> {m.title || <span className="italic text-neutral-400">(none)</span>}</div>
+      <div><span className="text-neutral-500">Budget:</span> {m.amountAda.toLocaleString()} ₳</div>
+      <div className="whitespace-pre-wrap"><span className="text-neutral-500">Description:</span> {m.description || <span className="italic text-neutral-400">(none)</span>}</div>
+      {m.acceptanceCriteria ? <div className="whitespace-pre-wrap"><span className="text-neutral-500">Acceptance:</span> {m.acceptanceCriteria}</div> : null}
+    </div>
   );
 }
 

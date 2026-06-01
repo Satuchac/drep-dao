@@ -727,9 +727,27 @@ export const meApi = {
 };
 
 // -------- Proposal version history (diff view) --------
+/** Full per-edit snapshot of every editable field — what the diff view compares. */
+export interface ProposalSnapshot {
+  title: string;
+  contentMd: string;
+  ecosystemImpactMd: string | null;
+  successMetricsMd: string | null;
+  costBreakdownMd: string | null;
+  teamInfoMd: string | null;
+  revenueSharingMd: string | null;
+  payoutAddress: string | null;
+  subcategoryIds: string[];
+  requestedAmountAda: number;
+  isCommercial: boolean;
+  milestones: { idx: number; title: string | null; description: string; acceptanceCriteria: string | null; amountAda: number }[];
+}
 export interface ProposalVersionEntry {
   version: number;
   contentMd: string;
+  // Pre-snapshot rows have snapshot=null; the diff view falls back to a
+  // contentMd-only comparison for those.
+  snapshot: ProposalSnapshot | null;
   editedAt: string;
   editor: string | null;
   current: boolean;
