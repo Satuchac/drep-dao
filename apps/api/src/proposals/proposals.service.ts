@@ -554,7 +554,10 @@ export class ProposalsService {
    * (My Area → Payments). Locked elsewhere (see updateDraft) so this is the only way to move it.
    */
   async requestBudgetChange(userId: string, id: string, dto: BudgetChangeDto) {
-    const p = await this.prisma.proposal.findUnique({ where: { id } });
+    const p = await this.prisma.proposal.findUnique({
+      where: { id },
+      include: { round: { select: { status: true, filterBudgetChangesAllowed: true } } },
+    });
     if (!p) throw new NotFoundException('proposal not found');
     if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
     if (p.status !== ProposalStatus.ACTIVE) {
@@ -566,6 +569,16 @@ export class ProposalsService {
     await this.assertAmountInCategory(p.categoryId, newAmount);
     this.assertMilestonesSum(dto.milestones, newAmount);
 
+    // §12 — budget changes while the round is in FILTERING require the jury to
+    // re-vote on the revised budget; cap how many times per proposal so a submitter
+    // can't repeatedly invalidate votes. Outside FILTERING the existing fee-delta
+    // path applies without invalidating anything.
+    const inFiltering = p.round?.status === RoundStatus.FILTERING;
+    const budgetCap = p.round?.filterBudgetChangesAllowed ?? ROUND_SETTING_DEFAULTS.filterBudgetChangesAllowed;
+    if (inFiltering && p.budgetChangesUsed >= budgetCap) {
+      throw new ConflictException(`no in-filter budget changes left (used ${p.budgetChangesUsed} of ${budgetCap})`);
+    }
+
     const oldFee = toAda(p.submissionFeeAda); // fee accounted for so far
     const newFee = await this.computeFee(newAmount, p.isCommercial ?? false, p.roundId);
     const delta = Math.round((newFee - oldFee) * 1e6) / 1e6;
@@ -573,8 +586,25 @@ export class ProposalsService {
     await this.prisma.$transaction(async (tx) => {
       await tx.proposal.update({
         where: { id },
-        data: { requestedAmountAda: toLovelace(newAmount), submissionFeeAda: toLovelace(newFee) },
+        data: {
+          requestedAmountAda: toLovelace(newAmount),
+          submissionFeeAda: toLovelace(newFee),
+          ...(inFiltering
+            ? {
+                // Reset to active filtering — if the proposal had already passed (stage =
+                // DEBATE_VOTE) the cleared votes leave it back in the undecided ACTIVE
+                // FILTERING state. The prior on-chain anchor stays as history; the next
+                // threshold crossing writes a fresh one (same pattern as resubmit).
+                status: ProposalStatus.ACTIVE,
+                stage: ProposalStage.FILTERING,
+                budgetChangesUsed: { increment: 1 },
+              }
+            : {}),
+        },
       });
+      if (inFiltering) {
+        await tx.vote.deleteMany({ where: { proposalId: id, phase: VotePhase.FILTERING } });
+      }
       await tx.milestone.deleteMany({ where: { proposalId: id } });
       await tx.milestone.createMany({
         data: dto.milestones.map((m, idx) => ({
@@ -1013,7 +1043,7 @@ export class ProposalsService {
         category: { select: { name: true, minAda: true, maxAda: true, conditions: true } },
         submitterUser: { select: { displayName: true } },
         submitterDrep: { select: { drepIdOnchain: true } },
-        round: { select: { status: true, filterResubmissionsAllowed: true } },
+        round: { select: { status: true, filterResubmissionsAllowed: true, filterBudgetChangesAllowed: true } },
       },
     });
     if (!p) throw new NotFoundException('proposal not found');
@@ -1038,6 +1068,9 @@ export class ProposalsService {
       filterResubmissionsUsed: p.filterResubmissionsUsed,
       filterResubmissionsAllowed:
         p.round?.filterResubmissionsAllowed ?? ROUND_SETTING_DEFAULTS.filterResubmissionsAllowed,
+      budgetChangesUsed: p.budgetChangesUsed,
+      filterBudgetChangesAllowed:
+        p.round?.filterBudgetChangesAllowed ?? ROUND_SETTING_DEFAULTS.filterBudgetChangesAllowed,
       roundStatus: p.round?.status ?? null,
       submittedAt: p.submittedAt,
       payoutAddress: p.payoutAddress,
@@ -1169,7 +1202,7 @@ export class ProposalsService {
   private async ownEditable(userId: string, id: string) {
     const p = await this.prisma.proposal.findUnique({
       where: { id },
-      include: { round: { select: { status: true, filterResubmissionsAllowed: true } } },
+      include: { round: { select: { status: true, filterResubmissionsAllowed: true, filterBudgetChangesAllowed: true } } },
     });
     if (!p) throw new NotFoundException('proposal not found');
     if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
@@ -1214,7 +1247,7 @@ export class ProposalsService {
   async resubmit(userId: string, id: string) {
     const p = await this.prisma.proposal.findUnique({
       where: { id },
-      include: { round: { select: { id: true, status: true, filterResubmissionsAllowed: true } } },
+      include: { round: { select: { id: true, status: true, filterResubmissionsAllowed: true, filterBudgetChangesAllowed: true } } },
     });
     if (!p) throw new NotFoundException('proposal not found');
     if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');

@@ -1321,6 +1321,13 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
   const sum = ms.reduce((a, m) => a + Number(m.amountAda || 0), 0);
   const match = sum === Number(amount);
   const delta = Number(amount) - proposal.requestedAmountAda;
+  // §12 — while the round is in FILTERING, a budget change clears the jury's
+  // filtering votes (they re-vote on the revised budget). Capped per round so
+  // a submitter can't repeatedly invalidate votes; separate counter from
+  // post-rejection resubmissions.
+  const invalidatesVotes = proposal.roundStatus === 'FILTERING';
+  const budgetRemaining = Math.max(0, proposal.filterBudgetChangesAllowed - proposal.budgetChangesUsed);
+  const budgetExhausted = invalidatesVotes && budgetRemaining === 0;
 
   const save = async () => {
     setError(null);
@@ -1329,7 +1336,13 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
     setBusy(true);
     try {
       await proposalsApi.budgetChange(id, { requestedAmountAda: Number(amount), milestones: ms.map((m) => ({ description: m.description, amountAda: Number(m.amountAda) })) });
-      setMsg(delta > 0 ? 'Budget increased — a fee top-up was created for the board to settle.' : delta < 0 ? 'Budget decreased — a fee refund was created for the board to settle.' : 'Budget updated.');
+      setMsg(
+        invalidatesVotes
+          ? 'Budget updated — the jury\'s filtering votes have been cleared; they vote again on the revised budget.'
+          : delta > 0 ? 'Budget increased — a fee top-up was created for the board to settle.'
+          : delta < 0 ? 'Budget decreased — a fee refund was created for the board to settle.'
+          : 'Budget updated.',
+      );
       setOpen(false);
       onChange();
     } catch (e) {
@@ -1339,13 +1352,28 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
     }
   };
 
-  if (!open)
+  if (budgetExhausted) {
     return (
       <div className="mt-3">
         {msg ? <div className="mb-1 text-xs text-emerald-600">{msg}</div> : null}
+        <div className="text-xs text-neutral-500">
+          No in-filter budget changes left ({proposal.budgetChangesUsed} of {proposal.filterBudgetChangesAllowed} used) — the budget is locked for the rest of this round&apos;s filtering.
+        </div>
+      </div>
+    );
+  }
+  if (!open)
+    return (
+      <div className="mt-3 space-y-1">
+        {msg ? <div className="text-xs text-emerald-600">{msg}</div> : null}
         <button onClick={() => setOpen(true)} className="rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
           Request a budget change
         </button>
+        {invalidatesVotes ? (
+          <div className="text-[11px] text-neutral-500">
+            A budget change now will clear the jury&apos;s filtering votes — they re-vote on the revised budget. {budgetRemaining} of {proposal.filterBudgetChangesAllowed} budget change{proposal.filterBudgetChangesAllowed === 1 ? '' : 's'} remaining.
+          </div>
+        ) : null}
       </div>
     );
   return (
@@ -1376,6 +1404,11 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
             ? 'Decreasing the budget will create a fee refund the board returns on-chain.'
             : 'Change the amount to create a fee top-up (increase) or refund (decrease).'}
       </div>
+      {invalidatesVotes ? (
+        <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+          ⚠ This will clear the jury&apos;s filtering votes — they re-vote on the revised budget. {budgetRemaining} of {proposal.filterBudgetChangesAllowed} budget change{proposal.filterBudgetChangesAllowed === 1 ? '' : 's'} remaining for this round.
+        </div>
+      ) : null}
       {error ? <div className="text-xs text-red-600">{error}</div> : null}
       <div className="flex gap-2">
         <button disabled={busy || delta === 0} onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">

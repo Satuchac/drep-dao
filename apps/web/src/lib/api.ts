@@ -380,6 +380,7 @@ export interface RoundSettingsInput {
   pledgeThresholdAda?: number;
   pledgeGraceDays?: number;
   filterResubmissionsAllowed?: number;
+  filterBudgetChangesAllowed?: number;
 }
 export interface CreateRoundInput extends RoundSettingsInput {
   name?: string;
@@ -544,6 +545,9 @@ export interface ProposalDetail extends ProposalSummary {
   // §7.4 — resubmit budget after a filtering rejection.
   filterResubmissionsUsed: number;
   filterResubmissionsAllowed: number;
+  // §12 — in-filter budget-change budget (separate counter from resubmissions).
+  budgetChangesUsed: number;
+  filterBudgetChangesAllowed: number;
   // The proposal's round status (PREPARATION / SUBMISSION / FILTERING / DV / FUNDING / CLOSED).
   // Used by edit gates: editing closes once the round moves past SUBMISSION (unless rejected).
   roundStatus: string | null;

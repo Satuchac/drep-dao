@@ -93,6 +93,11 @@ export const ROUND_SETTING_DEFAULTS = {
   // round is still in FILTERING; this caps how many times. Each resubmit clears the
   // jury's filtering votes and they vote again on the revised content.
   filterResubmissionsAllowed: 2,
+  // §12 — separately caps how many budget-change requests the submitter may make
+  // while the round is in FILTERING. Each accepted change clears the jury's
+  // filtering votes (so they re-vote on the revised budget). 0 disables in-filter
+  // budget changes entirely.
+  filterBudgetChangesAllowed: 2,
 } as const;
 
 export type RoundSettingKey = keyof typeof ROUND_SETTING_DEFAULTS;
@@ -129,6 +134,8 @@ export const ROUND_SETTING_META: Record<RoundSettingKey, string> = {
   pledgeGraceDays: 'Days a proposer has to post the required pledge.',
   filterResubmissionsAllowed:
     'How many times a submitter may revise + resubmit a proposal that was rejected at filtering, while the round is still in FILTERING. Each resubmit clears the existing filtering votes and the jury votes again on the revised content. 0 disables resubmissions.',
+  filterBudgetChangesAllowed:
+    'How many in-filter budget changes the submitter may request while the round is in FILTERING. Each accepted change clears the jury\'s filtering votes — they vote again on the revised budget. Counted separately from resubmissions. 0 disables in-filter budget changes.',
 };
 
 /** Known block explorers → tx/address URL templates per network ({hash}/{address} placeholders). */

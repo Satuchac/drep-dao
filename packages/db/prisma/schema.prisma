@@ -229,6 +229,9 @@ model Round {
   pledgeGraceDays                 Int? @map("pledge_grace_days")
   // §7.4 — how many times a submitter may revise + resubmit a filter-rejected proposal.
   filterResubmissionsAllowed      Int? @map("filter_resubmissions_allowed")
+  // §12 — how many budget-change requests the submitter may make while the round
+  // is in FILTERING (each clears the jury's filtering votes and they vote again).
+  filterBudgetChangesAllowed      Int? @map("filter_budget_changes_allowed")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   endedAt         DateTime? @map("ended_at") @db.Timestamptz(6)
 
@@ -363,6 +366,9 @@ model Proposal {
   // §7.4 — how many times the submitter has resubmitted this proposal after a
   // filtering rejection. Each resubmit clears the existing filtering votes.
   filterResubmissionsUsed Int    @default(0) @map("filter_resubmissions_used")
+  // §12 — how many budget-change requests this proposal used while the round was
+  // in FILTERING. Each accepted change clears the filtering votes (re-vote).
+  budgetChangesUsed       Int    @default(0) @map("budget_changes_used")
   createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 

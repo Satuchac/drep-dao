@@ -76,7 +76,10 @@ const SETTING_GROUPS: { title: string; fields: { key: SettingKey; label: string;
   },
   {
     title: 'Filtering resubmissions',
-    fields: [{ key: 'filterResubmissionsAllowed', label: 'Resubmissions allowed' }],
+    fields: [
+      { key: 'filterResubmissionsAllowed', label: 'Resubmissions allowed' },
+      { key: 'filterBudgetChangesAllowed', label: 'Budget changes allowed (in-filter)' },
+    ],
   },
 ];
 
