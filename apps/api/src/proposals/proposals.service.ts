@@ -103,6 +103,8 @@ export class ProposalsService {
         // §3 — optional pledge promise (paid on-chain later, after approval).
         pledgeAmountAda: dto.pledgeAmountAda ? toLovelace(dto.pledgeAmountAda) : null,
         pledgeReturnMethod: dto.pledgeAmountAda ? (dto.pledgeReturnMethod?.trim() || null) : null,
+        // §3.4 — revenue-sharing gate (board verifies before funding unblocks).
+        revenueSharingRequired: !!dto.revenueSharingRequired,
         // §3.4 funding fields (stored in the existing Json columns as markdown strings).
         ...(dto.teamInfoMd ? { teamInfo: dto.teamInfoMd } : {}),
         ...(dto.revenueSharingMd ? { revenueSharing: dto.revenueSharingMd } : {}),
@@ -244,6 +246,7 @@ export class ProposalsService {
           ...pledgeData,
           ...(dto.teamInfoMd !== undefined ? { teamInfo: dto.teamInfoMd } : {}),
           ...(dto.revenueSharingMd !== undefined ? { revenueSharing: dto.revenueSharingMd } : {}),
+          ...(dto.revenueSharingRequired !== undefined ? { revenueSharingRequired: !!dto.revenueSharingRequired } : {}),
           ...(dto.ecosystemImpactMd !== undefined ? { ecosystemImpactMd: dto.ecosystemImpactMd } : {}),
           ...(dto.successMetricsMd !== undefined ? { successMetricsMd: dto.successMetricsMd } : {}),
           ...(postSubmission ? { version: { increment: 1 } } : {}),
@@ -624,6 +627,58 @@ export class ProposalsService {
         };
       }),
     );
+  }
+
+  /**
+   * §3.4 — board verifies the team's revenue-sharing action (e.g. token contribution
+   * to the Treasury). Unblocks milestone POAs. Idempotent: re-verifying is a no-op.
+   */
+  async verifyRevenueSharing(boardUserId: string, id: string) {
+    void boardUserId;
+    const p = await this.prisma.proposal.findUnique({ where: { id } });
+    if (!p) throw new NotFoundException('proposal not found');
+    if (!p.revenueSharingRequired) {
+      throw new ConflictException('this proposal does not require revenue-sharing verification');
+    }
+    if (p.revenueSharingVerifiedAt) {
+      return this.get(id);
+    }
+    await this.prisma.proposal.update({
+      where: { id },
+      data: { revenueSharingVerifiedAt: new Date() },
+    });
+    return this.get(id);
+  }
+
+  /** §3.4 — board's to-do list: approved proposals waiting on the revenue-sharing
+   *  verification before milestone work can start. */
+  async listPendingRevenueSharing() {
+    const rows = await this.prisma.proposal.findMany({
+      where: {
+        status: ProposalStatus.APPROVED,
+        stage: ProposalStage.FUNDING,
+        revenueSharingRequired: true,
+        revenueSharingVerifiedAt: null,
+      },
+      orderBy: { updatedAt: 'asc' },
+      include: {
+        submitterUser: { select: { displayName: true } },
+        category: { select: { name: true } },
+        round: { select: { number: true } },
+      },
+    });
+    return rows.map((p) => ({
+      id: p.id,
+      publicId: p.publicId,
+      title: p.title,
+      roundNumber: p.round?.number ?? null,
+      categoryName: p.category?.name ?? null,
+      submitter: p.submitterUser?.displayName ?? null,
+      revenueSharingMd: typeof p.revenueSharing === 'string' ? p.revenueSharing : null,
+      // The submission-fee address is the canonical "send things to the platform"
+      // address — surfaced here so the board can sanity-check on-chain receipts.
+      hintAddress: this.config.get<string>('SUBMISSION_FEE_ADDRESS') ?? '',
+    }));
   }
 
   /**
@@ -1311,6 +1366,10 @@ export class ProposalsService {
       pledgeTxHash: p.pledgeTxHash,
       pledgeConfirmedAt: p.pledgeConfirmedAt,
       pledgeFeedback: p.pledgeFeedback,
+      // §3.4 — revenue-sharing gate. When required, the board must verify
+      // before milestone work begins (the verifiedAt timestamp unlocks it).
+      revenueSharingRequired: p.revenueSharingRequired,
+      revenueSharingVerifiedAt: p.revenueSharingVerifiedAt,
       subcategoryIds: p.subcategoryIds,
       // §5.2 — the category's funding-request bounds + conditions, for display.
       categoryAsk: {

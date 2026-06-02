@@ -46,6 +46,9 @@ export function ProposalSubmit() {
   const [costBreakdown, setCostBreakdown] = useState('');
   const [teamInfo, setTeamInfo] = useState('');
   const [revenueSharing, setRevenueSharing] = useState('');
+  // §3.4 — when checked, the proposal needs board verification post-approval
+  // before milestone POAs unblock.
+  const [revenueSharingRequired, setRevenueSharingRequired] = useState(false);
   // §3.4 — Expected ecosystem impact + Success metrics / KPIs.
   const [ecosystemImpact, setEcosystemImpact] = useState('');
   const [successMetrics, setSuccessMetrics] = useState('');
@@ -134,7 +137,8 @@ export function ProposalSubmit() {
     subcategoryIds: subcatIds.length ? subcatIds : undefined,
     costBreakdownMd: costBreakdown.trim() || undefined,
     teamInfoMd: teamInfo.trim() || undefined,
-    revenueSharingMd: revenueSharing.trim() || undefined,
+    revenueSharingMd: revenueSharingRequired ? (revenueSharing.trim() || undefined) : undefined,
+    revenueSharingRequired,
     ecosystemImpactMd: ecosystemImpact.trim() || undefined,
     successMetricsMd: successMetrics.trim() || undefined,
     payoutAddress: payoutAddress.trim() || undefined,
@@ -217,6 +221,7 @@ export function ProposalSubmit() {
       setCostBreakdown(p.costBreakdownMd ?? '');
       setTeamInfo(p.teamInfoMd ?? '');
       setRevenueSharing(p.revenueSharingMd ?? '');
+      setRevenueSharingRequired(p.revenueSharingRequired ?? false);
       setEcosystemImpact(p.ecosystemImpactMd ?? '');
       setSuccessMetrics(p.successMetricsMd ?? '');
       setPayoutAddress(p.payoutAddress ?? '');
@@ -513,7 +518,13 @@ export function ProposalSubmit() {
           {/* §3.4 — funding-specific detail (all optional, collapsed by default to keep the form short). */}
           <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title="Cost breakdown" hint="optional — how the budget is spent" placeholder="How the budget is spent" minRows={3} defaultCollapsed={!costBreakdown.trim()} />
           <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title="Team info" hint="optional — who is delivering this" placeholder="Who is delivering this, and why you're best suited" minRows={3} defaultCollapsed={!teamInfo.trim()} />
-          <MarkdownEditor value={revenueSharing} onChange={setRevenueSharing} title="Revenue sharing" hint="optional — for commercial projects" placeholder="For commercial projects: how the DAO shares in returns" minRows={3} defaultCollapsed={!revenueSharing.trim()} />
+          <RevenueSharingBlock
+            required={revenueSharingRequired}
+            onRequiredChange={setRevenueSharingRequired}
+            text={revenueSharing}
+            onTextChange={setRevenueSharing}
+            submissionFeeAddress={cfg?.submissionFeeAddress ?? null}
+          />
           {/* §3 — optional refundable pledge. Only shown when the round's threshold > 0.
               Team opts in; amount must be ≥ threshold; return-method description is required.
               The actual on-chain payment happens later in FUNDING (after approval). */}
@@ -1047,6 +1058,62 @@ function FeeTxInput({
               : 'text-neutral-500'
         }`}>
           {hint.text}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * §3.4 — revenue sharing as a checkbox + conditional text. Ticking the box
+ * signals the team will perform a one-off action (e.g. send 10% of token
+ * supply to the Treasury) that the board must verify before milestone work
+ * can begin post-approval. Renders the submission-fee address with a copy
+ * button as the canonical "send things to the platform" target.
+ */
+export function RevenueSharingBlock({
+  required,
+  onRequiredChange,
+  text,
+  onTextChange,
+  submissionFeeAddress,
+}: {
+  required: boolean;
+  onRequiredChange: (v: boolean) => void;
+  text: string;
+  onTextChange: (v: string) => void;
+  submissionFeeAddress: string | null;
+}) {
+  return (
+    <div className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={required} onChange={(e) => onRequiredChange(e.target.checked)} />
+        <span className="font-medium">Revenue sharing</span>
+        <span className="text-xs text-neutral-500">
+          — check this if your proposal involves a token contribution or other one-off action the board needs to verify before funding starts
+        </span>
+      </label>
+      {required ? (
+        <div className="mt-2 space-y-2">
+          <MarkdownEditor
+            value={text}
+            onChange={onTextChange}
+            title="Conditions"
+            subtitle="What will the team do, and by when? Example: send 10% of token supply to the DAO Treasury within 14 days of approval."
+            placeholder="Describe the action and any verification details (tx hash, on-chain address, etc.)"
+            minRows={3}
+          />
+          {submissionFeeAddress ? (
+            <div className="rounded border border-neutral-200 bg-neutral-50/60 p-2 text-xs dark:border-neutral-800 dark:bg-neutral-900/40">
+              <div className="text-neutral-600 dark:text-neutral-400">
+                If you&apos;ll send tokens to the Treasury, use the platform&apos;s submission-fee address (also the canonical platform-receive address):
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <div className="flex-1 break-all font-mono text-[11px] text-neutral-500">{submissionFeeAddress}</div>
+                <CopyButton text={submissionFeeAddress} label="Copy address" />
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </div>

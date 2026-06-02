@@ -71,6 +71,18 @@ export class AdminProposalsController {
     return this.proposals.rejectBudgetChange(ctx.userId, requestId, dto.feedback ?? '');
   }
 
+  // §3.4 — proposals waiting on the board to verify revenue-sharing conditions
+  // before milestone work begins. Confirm with verify-revenue-sharing below.
+  @Get('pending-revenue-sharing')
+  pendingRevenueSharing() {
+    return this.proposals.listPendingRevenueSharing();
+  }
+
+  @Post(':id/verify-revenue-sharing')
+  verifyRevenueSharing(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.proposals.verifyRevenueSharing(ctx.userId, id);
+  }
+
   // §3 — proposals in FUNDING awaiting pledge confirmation (the team pasted a tx,
   // the platform verifies it on-chain; the board approves or rejects).
   @Get('pending-pledge')

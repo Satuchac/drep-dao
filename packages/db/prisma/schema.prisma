@@ -379,6 +379,12 @@ model Proposal {
   // §12 — how many budget-change requests this proposal used while the round was
   // in FILTERING. Each accepted change clears the filtering votes (re-vote).
   budgetChangesUsed       Int    @default(0) @map("budget_changes_used")
+  // §3.4 — revenue sharing: team's checkbox declaring they will share something
+  // (e.g. % of token supply to the Treasury). When true, the board must verify
+  // the conditions are met before milestone work begins. Independent from the
+  // free-text `revenueSharing` field which carries the details.
+  revenueSharingRequired   Boolean   @default(false) @map("revenue_sharing_required")
+  revenueSharingVerifiedAt DateTime? @map("revenue_sharing_verified_at") @db.Timestamptz(6)
   createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 

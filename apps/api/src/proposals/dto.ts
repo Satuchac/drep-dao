@@ -43,6 +43,10 @@ export class CreateProposalDto {
   // return-method description is required. Sent on-chain AFTER approval.
   @IsOptional() @IsInt() @Min(0) pledgeAmountAda?: number;
   @IsOptional() @IsString() @MaxLength(5000) pledgeReturnMethod?: string;
+  // §3.4 — revenue-sharing gate: when true, the team is promising a one-off
+  // action (e.g. 10% of token supply to the Treasury) that the board must
+  // verify before milestone work begins. Details live in `revenueSharingMd`.
+  @IsOptional() @IsBoolean() revenueSharingRequired?: boolean;
 
   @IsArray()
   @ArrayMinSize(1)
@@ -67,6 +71,7 @@ export class UpdateProposalDto {
   @IsOptional() @IsString() @MaxLength(120) submissionFeeTxHash?: string;
   @IsOptional() @IsInt() @Min(0) pledgeAmountAda?: number;
   @IsOptional() @IsString() @MaxLength(5000) pledgeReturnMethod?: string;
+  @IsOptional() @IsBoolean() revenueSharingRequired?: boolean;
 
   @IsOptional()
   @IsArray()

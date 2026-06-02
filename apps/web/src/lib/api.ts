@@ -510,6 +510,10 @@ export interface CreateProposalInput {
   submissionFeeTxHash?: string;
   pledgeAmountAda?: number;
   pledgeReturnMethod?: string;
+  // §3.4 — revenue-sharing gate: when true, the board must verify the team's
+  // promised action (e.g. token contribution to the Treasury) before milestone
+  // POAs unblock post-approval.
+  revenueSharingRequired?: boolean;
   milestones: ProposalMilestoneInput[];
 }
 export interface ProposalProgress {
@@ -582,6 +586,10 @@ export interface ProposalDetail extends ProposalSummary {
   pledgeTxHash: string | null;
   pledgeConfirmedAt: string | null;
   pledgeFeedback: string | null;
+  // §3.4 — revenue-sharing gate. When required, the board must verify before
+  // milestone POAs unblock; until then any POA submission is refused.
+  revenueSharingRequired: boolean;
+  revenueSharingVerifiedAt: string | null;
   categoryAsk: { minAda: number | null; maxAda: number | null; conditions: string | null };
   milestones: { id: string; idx: number; title: string | null; description: string; acceptanceCriteria: string | null; amountAda: number; status: string }[];
 }
@@ -705,6 +713,10 @@ export const boardProposalsApi = {
     request<ProposalDetail>(`/admin/proposals/budget-changes/${requestId}/approve`, { method: 'POST', body: JSON.stringify({ feedback }) }),
   rejectBudgetChange: (requestId: string, feedback: string) =>
     request<ProposalDetail>(`/admin/proposals/budget-changes/${requestId}/reject`, { method: 'POST', body: JSON.stringify({ feedback }) }),
+  // §3.4 — board verifies a proposal's revenue-sharing conditions (token
+  // contribution, etc.) to unblock its milestone POAs post-approval.
+  verifyRevenueSharing: (proposalId: string) =>
+    request<ProposalDetail>(`/admin/proposals/${proposalId}/verify-revenue-sharing`, { method: 'POST' }),
 };
 
 export interface PendingBudgetChangeRow {
@@ -822,6 +834,8 @@ export const proposalEditApi = {
       // confirmed on-chain by the board. Set amount to 0 to remove the pledge.
       pledgeAmountAda?: number;
       pledgeReturnMethod?: string;
+      // §3.4 — revenue-sharing gate.
+      revenueSharingRequired?: boolean;
     },
   ) => request<ProposalDetail>(`/proposals/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
 };

@@ -265,6 +265,14 @@ export class MilestonesService {
         'the pledge payment must be confirmed by the board before milestone POAs can be submitted',
       );
     }
+    // §3.4 — revenue-sharing gate: same pattern as the pledge gate. If the team
+    // promised a revenue-sharing action (token contribution, etc.), the board
+    // must verify it before milestone POAs can begin.
+    if (m.proposal.revenueSharingRequired && !m.proposal.revenueSharingVerifiedAt) {
+      throw new ConflictException(
+        'the revenue-sharing conditions must be verified by the board before milestone POAs can be submitted',
+      );
+    }
     if (m.status === 'APPROVED') throw new ConflictException('milestone is already approved');
     if (m.status === 'POA_SUBMITTED') {
       throw new ConflictException('a POA is already under review — wait for the reviewers\' decision; only a REJECTED milestone can be re-submitted');

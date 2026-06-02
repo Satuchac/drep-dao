@@ -32,6 +32,7 @@ import {
 import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, RationaleText } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
 import { CopyButton } from './copy-button';
+import { RevenueSharingBlock } from './proposal-submit';
 
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
 // Subtle blue tint on platform-managed governance sections (Filtering jury, D&V,
@@ -156,7 +157,8 @@ export function ProposalDetail({
             <DetailBlock label="Success metrics / KPIs" md={p.successMetricsMd} hint="how success will be measured" />
             <DetailBlock label="Cost breakdown" md={p.costBreakdownMd} hint="how the budget is spent" />
             <DetailBlock label="Team info" md={p.teamInfoMd} hint="who is delivering this" />
-            <DetailBlock label="Revenue sharing" md={p.revenueSharingMd} hint="for commercial projects" />
+            <RevenueSharingReadOnly proposal={p} isBoard={isBoard} onChange={load} />
+            <SkinInTheGameReadOnly proposal={p} />
             {/* §5.3/§7.1 — expertise tags (always shown like the form). */}
             <CollapsibleView label="Expertise areas" hint="helps match filtering reviewers" empty={!p.subcategoryIds || p.subcategoryIds.length === 0}>
               {p.subcategoryIds && p.subcategoryIds.length > 0 ? (
@@ -379,6 +381,101 @@ function DetailBlock({ label, md, hint }: { label: string; md?: string | null; h
       ) : (
         <span className="text-sm text-neutral-400">Not provided.</span>
       )}
+    </CollapsibleView>
+  );
+}
+
+/**
+ * §3.4 — revenue-sharing status, always visible to everyone. Mirrors the
+ * checkbox state so reviewers can tell whether the team committed to any
+ * post-approval action — and, once approved, whether the board has verified it.
+ */
+function RevenueSharingReadOnly({ proposal: p, isBoard, onChange }: { proposal: PDetail; isBoard: boolean; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!p.revenueSharingRequired) {
+    return (
+      <CollapsibleView label="Revenue sharing" hint="no post-approval conditions" empty>
+        <span className="text-sm text-neutral-400">Not promised.</span>
+      </CollapsibleView>
+    );
+  }
+  const verified = !!p.revenueSharingVerifiedAt;
+  // Board can mark verified once the proposal is APPROVED and the team's
+  // committed action has happened on-chain. Pre-APPROVED there's nothing
+  // to verify yet (no funding has started).
+  const canVerify = isBoard && !verified && p.status === 'APPROVED';
+  const verify = async () => {
+    setBusy(true); setError(null);
+    try { await boardProposalsApi.verifyRevenueSharing(p.id); onChange(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'failed'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <CollapsibleView label="Revenue sharing" hint={verified ? 'verified by the board' : 'pending board verification'}>
+      <div className="space-y-2">
+        <div className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
+          verified
+            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+            : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+        }`}>
+          {verified ? `✓ Verified ${fmtDateTime(p.revenueSharingVerifiedAt!)}` : '⏳ Pending board verification — milestone POAs are blocked until verified'}
+        </div>
+        {p.revenueSharingMd?.trim() ? (
+          <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.revenueSharingMd}</Markdown>
+        ) : (
+          <span className="text-sm text-neutral-400">No conditions text provided.</span>
+        )}
+        {canVerify ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={verify}
+              className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+            >
+              {busy ? 'Verifying…' : '✓ Confirm conditions met'}
+            </button>
+            {error ? <span className="text-xs text-red-600">{error}</span> : null}
+          </div>
+        ) : null}
+      </div>
+    </CollapsibleView>
+  );
+}
+
+/**
+ * §3 — skin-in-the-game (pledge) status, always visible to everyone so reviewers
+ * can see at a glance whether the team is staking anything. Hides the on-chain
+ * tx / verification panel — that's in the dedicated PledgeSection in FUNDING.
+ */
+function SkinInTheGameReadOnly({ proposal: p }: { proposal: PDetail }) {
+  const promised = p.pledgeAmountAda > 0;
+  if (!promised) {
+    return (
+      <CollapsibleView label="Skin in the game" hint="optional refundable pledge" empty>
+        <span className="text-sm text-neutral-400">Not promised.</span>
+      </CollapsibleView>
+    );
+  }
+  const confirmed = !!p.pledgeConfirmedAt;
+  return (
+    <CollapsibleView label="Skin in the game" hint={confirmed ? 'pledge confirmed on-chain' : 'pledge promised (confirmed by board post-approval)'}>
+      <div className="space-y-1.5">
+        <div className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
+          confirmed
+            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+            : 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300'
+        }`}>
+          Promised: {p.pledgeAmountAda.toLocaleString()} ₳ {confirmed ? '· ✓ confirmed' : '· awaiting payment + board confirmation (FUNDING)'}
+        </div>
+        {p.pledgeReturnMethod?.trim() ? (
+          <div>
+            <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Return method</div>
+            <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.pledgeReturnMethod}</Markdown>
+          </div>
+        ) : null}
+      </div>
     </CollapsibleView>
   );
 }
@@ -1400,11 +1497,14 @@ function EditSection({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const { cfg } = useExplorer();
   const [title, setTitle] = useState(proposal.title);
   const [content, setContent] = useState(proposal.contentMd);
   const [costBreakdown, setCostBreakdown] = useState(proposal.costBreakdownMd ?? '');
   const [teamInfo, setTeamInfo] = useState(proposal.teamInfoMd ?? '');
   const [revenueSharing, setRevenueSharing] = useState(proposal.revenueSharingMd ?? '');
+  // §3.4 — revenue-sharing gate checkbox (board verifies post-approval).
+  const [revenueSharingRequired, setRevenueSharingRequired] = useState(!!proposal.revenueSharingRequired);
   const [ecosystemImpact, setEcosystemImpact] = useState(proposal.ecosystemImpactMd ?? '');
   const [successMetrics, setSuccessMetrics] = useState(proposal.successMetricsMd ?? '');
   const [payoutAddress, setPayoutAddress] = useState(proposal.payoutAddress ?? '');
@@ -1465,7 +1565,8 @@ function EditSection({
         contentMd: content,
         costBreakdownMd: costBreakdown,
         teamInfoMd: teamInfo,
-        revenueSharingMd: revenueSharing,
+        revenueSharingMd: revenueSharingRequired ? revenueSharing : '',
+        revenueSharingRequired,
         ecosystemImpactMd: ecosystemImpact,
         successMetricsMd: successMetrics,
         payoutAddress,
@@ -1577,7 +1678,13 @@ function EditSection({
       <MarkdownEditor value={successMetrics} onChange={setSuccessMetrics} title="Success metrics / KPIs" subtitle="What measurable indicators will you use to evaluate the success of the project? Specify the target values, time frame and method of verification." placeholder="How will success be measured (with targets where you can)" minRows={3} />
       <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title="Cost breakdown" hint="optional" placeholder="How the budget is spent" minRows={3} />
       <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title="Team info" hint="optional" placeholder="Who is delivering this" minRows={3} />
-      <MarkdownEditor value={revenueSharing} onChange={setRevenueSharing} title="Revenue sharing" hint="optional" placeholder="For commercial projects: how the DAO shares in returns" minRows={3} />
+      <RevenueSharingBlock
+        required={revenueSharingRequired}
+        onRequiredChange={setRevenueSharingRequired}
+        text={revenueSharing}
+        onTextChange={setRevenueSharing}
+        submissionFeeAddress={cfg?.submissionFeeAddress ?? null}
+      />
       <label className="block">
         <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Payout / refund address (Cardano)</span>
         <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900" placeholder="addr_test1…" value={payoutAddress} onChange={(e) => setPayoutAddress(e.target.value)} />
