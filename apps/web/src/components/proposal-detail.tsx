@@ -46,7 +46,19 @@ const choiceCls: Record<string, string> = {
 };
 
 /** §20 — full proposal view: content, version diff, votes + public rationale, milestones, comments. */
-export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack: () => void; onEditFull?: () => void }) {
+export function ProposalDetail({
+  id,
+  onBack,
+  onEditFull,
+  initialEditing,
+}: {
+  id: string;
+  onBack: () => void;
+  onEditFull?: () => void;
+  /** Pre-open the inline EditSection — set when the user clicked "Edit" in
+   *  the My-area row instead of "Open", so they don't have to click again. */
+  initialEditing?: boolean;
+}) {
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
   const [p, setP] = useState<PDetail | null>(null);
@@ -54,7 +66,7 @@ export function ProposalDetail({ id, onBack, onEditFull }: { id: string; onBack:
   const [error, setError] = useState<string | null>(null);
   // Lifted so the read-only proposal content can hide while the submitter is editing
   // (otherwise the same fields would appear twice — once in the form, once below).
-  const [editingOpen, setEditingOpen] = useState(false);
+  const [editingOpen, setEditingOpen] = useState(!!initialEditing);
 
   const load = useCallback(() => {
     proposalsApi.get(id).then(setP).catch((e) => setError(e instanceof Error ? e.message : 'failed'));

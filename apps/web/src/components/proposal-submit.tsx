@@ -25,6 +25,10 @@ export function ProposalSubmit() {
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
   const [editingFeedback, setEditingFeedback] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  // When the user clicked "Edit" on a detail-edit row (not "Open"), open the
+  // ProposalDetail with the inline EditSection already expanded — saves a click
+  // and matches the intent: "Edit" means I want to edit, not just read.
+  const [openInEditMode, setOpenInEditMode] = useState(false);
   const [rounds, setRounds] = useState<RoundSummary[]>([]);
   const [mine, setMine] = useState<ProposalSummary[]>([]);
   const [roundId, setRoundId] = useState('');
@@ -295,8 +299,9 @@ export function ProposalSubmit() {
       <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
         <ProposalDetail
           id={detailId}
-          onBack={() => { setOpenId(null); loadMine(); }}
-          onEditFull={() => { setOpenId(null); startEdit(detailId); }}
+          initialEditing={openInEditMode}
+          onBack={() => { setOpenId(null); setOpenInEditMode(false); loadMine(); }}
+          onEditFull={() => { setOpenId(null); setOpenInEditMode(false); startEdit(detailId); }}
         />
       </section>
     );
@@ -721,7 +726,15 @@ export function ProposalSubmit() {
           <ul className="mt-1 space-y-1 text-sm">
             {/* Hide the proposal currently open in the editor above (avoids a confusing duplicate). */}
             {mine.filter((p) => p.id !== editingId).map((p) => (
-              <MineRow key={p.id} p={p} feeAddress={cfg?.submissionFeeAddress ?? undefined} onOpen={() => setOpenId(p.id)} onEdit={() => startEdit(p.id)} onSubmitted={loadMine} />
+              <MineRow
+                key={p.id}
+                p={p}
+                feeAddress={cfg?.submissionFeeAddress ?? undefined}
+                onOpen={() => { setOpenInEditMode(false); setOpenId(p.id); }}
+                onEdit={() => startEdit(p.id)}
+                onDetailEdit={() => { setOpenInEditMode(true); setOpenId(p.id); }}
+                onSubmitted={loadMine}
+              />
             ))}
           </ul>
         </div>
@@ -736,12 +749,18 @@ function MineRow({
   feeAddress,
   onOpen,
   onEdit,
+  onDetailEdit,
   onSubmitted,
 }: {
   p: ProposalSummary;
   feeAddress?: string;
   onOpen: () => void;
+  // Pre-public proposals: jump straight into the full create-form for editing.
   onEdit: () => void;
+  // Post-public proposals (FILTERING / DEBATE_VOTE): open ProposalDetail with the
+  // inline EditSection already expanded — saves the user from clicking "Edit
+  // proposal" a second time after the detail opens.
+  onDetailEdit: () => void;
   onSubmitted: () => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
@@ -811,7 +830,7 @@ function MineRow({
               ) : null}
             </>
           ) : detailEdit ? (
-            <button onClick={onOpen} className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800">
+            <button onClick={onDetailEdit} className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800">
               Edit
             </button>
           ) : null}
