@@ -83,6 +83,38 @@ export class DvService {
     return this.result(proposalId);
   }
 
+  /**
+   * §8 — called by the round-transition flow when a round enters VOTE. Refreshes
+   * every DEBATE_VOTE-stage proposal in the round: clears any pre-VOTE snapshot
+   * + DV vote records (those were stale per §8.2 — see the historical opt-in
+   * model), then takes a fresh snapshot capturing the full current electorate
+   * (admitted DReps + opted-in board members). Auto-opens voting so the board
+   * doesn't have to click "open voting" on each proposal manually.
+   */
+  async openVotingForRound(roundId: string) {
+    const proposals = await this.prisma.proposal.findMany({
+      where: { roundId, stage: ProposalStage.DEBATE_VOTE, status: ProposalStatus.ACTIVE },
+      select: { id: true },
+    });
+    for (const p of proposals) {
+      const stale = await this.prisma.voteSnapshot.findMany({
+        where: { proposalId: p.id },
+        select: { id: true },
+      });
+      if (stale.length > 0) {
+        await this.prisma.$transaction(async (tx) => {
+          await tx.voteSnapshotEntry.deleteMany({ where: { snapshotId: { in: stale.map((s) => s.id) } } });
+          await tx.voteSnapshot.deleteMany({ where: { proposalId: p.id } });
+        });
+      }
+      // DV votes pre-snapshot-refresh would be against a deleted snapshot; clear
+      // them too. (Vote rows reference proposalId + drepId, not the snapshot,
+      // so removing votes here is the safe equivalent of "start the tally over".)
+      await this.prisma.vote.deleteMany({ where: { proposalId: p.id, phase: VotePhase.DEBATE_VOTE } });
+      await this.openVoting(p.id);
+    }
+  }
+
   /** §8.2 — a board member opts in to vote on this funding proposal (adds them to the snapshot if open). */
   async optIn(userId: string, proposalId: string) {
     const drep = await this.prisma.drep.findUnique({ where: { userId }, include: { user: { select: { drepKeyHash: true } } } });

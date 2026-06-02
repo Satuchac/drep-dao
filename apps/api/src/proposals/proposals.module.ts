@@ -13,6 +13,6 @@ import { DvController } from './dv.controller';
   imports: [AuthModule],
   controllers: [ProposalsController, AdminProposalsController, FilteringController, DvController],
   providers: [ProposalsService, FilteringService, DvService, BoardGuard],
-  exports: [ProposalsService],
+  exports: [ProposalsService, DvService],
 })
 export class ProposalsModule {}

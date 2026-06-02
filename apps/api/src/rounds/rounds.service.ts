@@ -1,12 +1,16 @@
 import {
   BadRequestException,
   ConflictException,
+  forwardRef,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DRepStatus, ProposalStatus, RoundStatus, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { DvService } from '../proposals/dv.service';
 import { CreateRoundDto, UpdateRoundDto, CategoryInput, ScheduleInput, ConfirmStageDto, RoundSettingsInput } from './dto';
 
 const LOVELACE = 1_000_000;
@@ -58,6 +62,12 @@ export class RoundsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    // §8 — on DEBATE → VOTE we (re-)snapshot every DEBATE_VOTE-stage proposal in
+    // the round so the electorate reflects the full current eligibility, not a
+    // stale pre-VOTE snapshot. Injected lazily via Optional so the rounds tests
+    // (which build RoundsService manually) don't have to mock DvService.
+    @Optional() @Inject(forwardRef(() => DvService))
+    private readonly dv?: DvService,
   ) {}
 
   /** §6 — board creates a round in PREPARATION with categories, schedule, eligibility. */
@@ -525,6 +535,13 @@ export class RoundsService {
         }
       }
     });
+    // §8 — entering VOTE: refresh every DEBATE_VOTE-stage proposal's snapshot
+    // so it reflects the FULL current electorate (admitted DReps + opted-in
+    // board), then auto-open voting so the board doesn't have to click "open"
+    // on each one manually. Skipped if DvService isn't wired in (rare — tests).
+    if (target === RoundStatus.VOTE && this.dv) {
+      await this.dv.openVotingForRound(id);
+    }
     return this.get(id);
   }
 
