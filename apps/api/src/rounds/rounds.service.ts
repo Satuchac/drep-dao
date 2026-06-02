@@ -356,6 +356,38 @@ export class RoundsService {
   }
 
   /**
+   * §6 — update a FUTURE stage's planned start/end (and autoStart) without
+   * advancing the round. Distinct from confirmStage which is reserved for the
+   * immediate-next stage's transition. Useful when the board is mid-round and
+   * wants to push Funding's dates a week later, etc. Refuses past, current,
+   * and the immediate-next stage — those have dedicated controls.
+   */
+  async updatePlannedStage(id: string, stageKey: string, dto: { startsAt: string; endsAt: string; autoStart?: boolean }) {
+    const round = await this.prisma.round.findUnique({ where: { id }, include: { schedule: true } });
+    if (!round) throw new NotFoundException('round not found');
+    const stageStatus = STATUS_FOR_STAGE_KEY[stageKey];
+    if (!stageStatus) throw new BadRequestException(`unknown stage key: ${stageKey}`);
+    const currentIdx = STATUS_SEQUENCE.indexOf(round.status);
+    const stageIdx = STATUS_SEQUENCE.indexOf(stageStatus);
+    if (stageIdx <= currentIdx) {
+      throw new BadRequestException(`${stageKey} is not a future stage for round #${round.number} (current: ${round.status})`);
+    }
+    const nextStatus = this.nextStatusOf(round.status === RoundStatus.DV ? RoundStatus.VOTE : round.status);
+    if (nextStatus && STAGE_KEY_FOR_STATUS[nextStatus] === stageKey) {
+      throw new BadRequestException(`${stageKey} is the immediate next stage — use confirmStage instead`);
+    }
+    const startsAt = new Date(dto.startsAt);
+    const endsAt = new Date(dto.endsAt);
+    if (endsAt <= startsAt) throw new BadRequestException('endsAt must be after startsAt');
+    await this.prisma.roundSchedule.upsert({
+      where: { roundId_stageKey: { roundId: id, stageKey } },
+      update: { startsAt, endsAt, ...(dto.autoStart !== undefined ? { autoStart: dto.autoStart } : {}) },
+      create: { roundId: id, stageKey, startsAt, endsAt, autoStart: dto.autoStart ?? false },
+    });
+    return this.get(id);
+  }
+
+  /**
    * §6 — shorten or extend the **current** stage. The start is frozen (the stage
    * already entered), so only `endsAt` is updatable. The new end must be in the
    * future and not push past the planned next stage's start (we'd need to shift

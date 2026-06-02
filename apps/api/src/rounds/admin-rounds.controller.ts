@@ -37,6 +37,21 @@ export class AdminRoundsController {
     return this.rounds.confirmStage(id, stageKey, dto, ctx.userId);
   }
 
+  // §6 — update a FUTURE stage's planned start/end without advancing the round.
+  // Distinct from confirm: used for stages strictly after the immediate-next one.
+  @Patch(':id/stages/:stageKey/plan')
+  updatePlannedStage(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('stageKey') stageKey: string,
+    @Body() dto: ConfirmStageDto,
+  ) {
+    return this.rounds.updatePlannedStage(id, stageKey, {
+      startsAt: dto.startsAt!,
+      endsAt: dto.endsAt!,
+      autoStart: dto.autoStart,
+    });
+  }
+
   // §6 — board shortens or extends the currently-running stage (start is frozen).
   @Patch(':id/current-stage')
   updateCurrentStage(

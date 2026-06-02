@@ -485,6 +485,9 @@ export const boardRoundsApi = {
   // §6 — shorten or extend the currently-running stage's end (start is frozen).
   updateCurrentStage: (id: string, endsAt: string) =>
     request<RoundDetail>(`/admin/rounds/${id}/current-stage`, { method: 'PATCH', body: JSON.stringify({ endsAt }) }),
+  // §6 — update a FUTURE stage's planned dates without advancing the round.
+  updatePlannedStage: (id: string, stageKey: string, input: ConfirmStageInput) =>
+    request<RoundDetail>(`/admin/rounds/${id}/stages/${stageKey}/plan`, { method: 'PATCH', body: JSON.stringify(input) }),
 };
 
 export interface ProposalMilestoneInput {
