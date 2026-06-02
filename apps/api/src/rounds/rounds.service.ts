@@ -542,6 +542,13 @@ export class RoundsService {
     if (target === RoundStatus.VOTE && this.dv) {
       await this.dv.openVotingForRound(id);
     }
+    // §9.3 — leaving VOTE for FUNDING: finalize every D&V-stage proposal so
+    // the result is published with the full vote turnout. Manual mid-VOTE
+    // finalize is blocked at the DvService level, so this is the canonical
+    // moment the tally crystallizes.
+    if (target === RoundStatus.FUNDING && round.status === RoundStatus.VOTE && this.dv) {
+      await this.dv.finalizeRound(id);
+    }
     return this.get(id);
   }
 

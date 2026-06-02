@@ -526,6 +526,19 @@ function RejectionBanner({ proposal: p }: { proposal: PDetail }) {
   }, [p.id, p.stage]);
 
   if (p.stage === null) {
+    // §9.3 — a D&V rejection also has stage=null (set by finalize), but it's NOT
+    // a fee-stage rejection — discriminate by resultFinalizedAt being set.
+    if (p.resultFinalizedAt) {
+      return (
+        <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/40">
+          <div className="text-sm font-semibold text-red-800 dark:text-red-300">Rejected at Debate &amp; Vote</div>
+          <div className="mt-0.5 text-sm text-red-700 dark:text-red-300">
+            The published tally did not meet the approval threshold — see the rationales + per-voter weights in the
+            Debate &amp; Vote section below.
+          </div>
+        </div>
+      );
+    }
     const reason = p.feeReviewFeedback?.trim() || 'No reason was recorded.';
     return (
       <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/40">

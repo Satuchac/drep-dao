@@ -583,6 +583,9 @@ export interface ProposalDetail extends ProposalSummary {
   // Used by edit gates: editing closes once the round moves past SUBMISSION (unless rejected).
   roundStatus: string | null;
   submittedAt: string | null;
+  // §9.3 — set when the D&V tally is published. Lets the rejection banner
+  // distinguish a D&V rejection (stage=null + this set) from a fee rejection.
+  resultFinalizedAt: string | null;
   payoutAddress: string | null;
   pledgeAmountAda: number;
   pledgeReturnMethod: string | null;

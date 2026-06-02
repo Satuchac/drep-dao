@@ -1359,6 +1359,10 @@ export class ProposalsService {
         : null,
       roundStatus: p.round?.status ?? null,
       submittedAt: p.submittedAt,
+      // §9.3 — set when the board (or auto-finalize on VOTE → FUNDING) publishes
+      // the D&V tally. Lets the rejection banner distinguish a D&V rejection
+      // (stage=null, resultFinalizedAt set) from a fee-stage rejection.
+      resultFinalizedAt: p.resultFinalizedAt,
       payoutAddress: p.payoutAddress,
       // §3 — pledge promise + confirmation state.
       pledgeAmountAda: toAda(p.pledgeAmountAda),

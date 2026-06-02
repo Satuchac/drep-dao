@@ -115,6 +115,30 @@ export class DvService {
     }
   }
 
+  /**
+   * §9.3 — called by the round-transition flow when the VOTE stage ends (round
+   * moves to FUNDING). Finalizes every DEBATE_VOTE-stage proposal in the round
+   * — APPROVED if threshold met, REJECTED otherwise. The finalize() guard that
+   * refuses mid-VOTE doesn't apply here because we're called AFTER the round
+   * left VOTE (round.status === FUNDING when this runs).
+   */
+  async finalizeRound(roundId: string) {
+    const proposals = await this.prisma.proposal.findMany({
+      where: { roundId, stage: ProposalStage.DEBATE_VOTE, status: ProposalStatus.ACTIVE },
+      select: { id: true },
+    });
+    for (const p of proposals) {
+      try {
+        await this.finalize(p.id);
+      } catch (e) {
+        // Skip any that can't be finalized (e.g. no snapshot — shouldn't happen
+        // after openVotingForRound but defensive). The board sees the proposal
+        // still ACTIVE+DEBATE_VOTE and can manually finalize it.
+        void e;
+      }
+    }
+  }
+
   /** §8.2 — a board member opts in to vote on this funding proposal (adds them to the snapshot if open). */
   async optIn(userId: string, proposalId: string) {
     const drep = await this.prisma.drep.findUnique({ where: { userId }, include: { user: { select: { drepKeyHash: true } } } });
@@ -305,8 +329,25 @@ export class DvService {
     };
   }
 
-  /** §9.3 — board finalizes (publishes): APPROVED if threshold met, else REJECTED. Anchors the result. */
+  /**
+   * §9.3 — finalize the tally and publish the result. APPROVED if threshold met,
+   * else REJECTED. Anchors the result on-chain. Refuses while the round is still
+   * in VOTE — finalizing mid-vote would publish a half-counted result based on
+   * implicit-NO from voters who simply haven't voted yet. The board advances the
+   * round to FUNDING (or the VOTE window expires) and finalize is auto-triggered
+   * from the round-transition flow then.
+   */
   async finalize(proposalId: string) {
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      include: { round: { select: { status: true } } },
+    });
+    if (!proposal) throw new BadRequestException('proposal not found');
+    if (proposal.round?.status === RoundStatus.VOTE) {
+      throw new ConflictException(
+        'voting is still in progress (round is in VOTE); the tally is finalized automatically when the round advances to FUNDING',
+      );
+    }
     const r = await this.result(proposalId);
     if (!('open' in r) || !r.open) throw new BadRequestException('voting has not opened');
     const status = r.approved ? ProposalStatus.APPROVED : ProposalStatus.REJECTED;

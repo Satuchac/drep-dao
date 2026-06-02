@@ -123,16 +123,13 @@ function VoteCard({
       )}
 
       {isBoard ? (
-        <div className="mt-2 flex gap-2">
-          {!r?.open ? (
-            <button disabled={busy} onClick={() => act(() => boardProposalsApi.openDvVote(proposal.id))} className="rounded border border-neutral-300 px-2 py-0.5 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
-              Open voting (snapshot)
-            </button>
-          ) : (
-            <button disabled={busy} onClick={() => act(() => boardProposalsApi.finalizeDv(proposal.id))} className="rounded border border-indigo-400 px-2 py-0.5 text-xs text-indigo-700 hover:bg-indigo-50 dark:text-indigo-300 dark:hover:bg-indigo-950">
-              Finalize result
-            </button>
-          )}
+        <div className="mt-2 text-xs text-neutral-500">
+          {/* §8/§9.3 — voting auto-opens when the round enters VOTE and the tally
+              auto-finalizes when the round advances to FUNDING. No manual Open /
+              Finalize button — board drives both via the Round stage controls. */}
+          {r?.open
+            ? 'Tally finalizes automatically when the round advances to FUNDING.'
+            : 'Voting opens automatically when the round enters VOTE.'}
         </div>
       ) : null}
 
