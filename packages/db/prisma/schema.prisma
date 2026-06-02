@@ -239,6 +239,9 @@ model Round {
   // §12 — how many budget-change requests the submitter may make while the round
   // is in FILTERING (each clears the jury's filtering votes and they vote again).
   filterBudgetChangesAllowed      Int? @map("filter_budget_changes_allowed")
+  // §3 — minimum word count enforced on every mandatory text field at submit
+  // and on post-submission edits. 0 disables the check (test mode).
+  mandatoryWords                  Int? @map("mandatory_words")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   endedAt         DateTime? @map("ended_at") @db.Timestamptz(6)
 

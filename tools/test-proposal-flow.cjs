@@ -69,7 +69,16 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const draft = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: round.categories[0].id, title: 'Build a tool',
     contentMd: 'Original pitch.', isCommercial: true, requestedAmountAda: 1000,
-    milestones: [{ description: 'M1', amountAda: 600 }, { description: 'M2', amountAda: 400 }],
+    // §3 — every mandatory field must be non-empty at submit time (default
+    // mandatoryWords = 1). Each milestone needs a title + acceptanceCriteria.
+    ecosystemImpactMd: 'Benefits developers',
+    successMetricsMd: 'Adoption metrics',
+    costBreakdownMd: 'Engineering costs',
+    teamInfoMd: 'Small team',
+    milestones: [
+      { title: 'Milestone one', description: 'M1', acceptanceCriteria: 'Done', amountAda: 600 },
+      { title: 'Milestone two', description: 'M2', acceptanceCriteria: 'Done', amountAda: 400 },
+    ],
     payoutAddress: 'addr_test1qpd_carol_payout',
   });
   const submitted = await proposals.submit(carol.id, draft.id, { submissionFeeTxHash: 'feehash123' });

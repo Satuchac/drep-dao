@@ -195,6 +195,30 @@ export class ProposalsService {
         pledgeReturnMethod: nextAmount > 0 ? (nextMethod?.trim() || null) : null,
       };
     }
+    // §3 — for post-submission edits, the proposal must remain valid (every
+    // mandatory text field meets the round's word minimum). Compute the merged
+    // final state from dto + current values and validate before the write.
+    if (postSubmission) {
+      const finalMilestones = dto.milestones
+        ? dto.milestones.map((m, idx) => ({ idx, title: m.title ?? null, description: m.description, acceptanceCriteria: m.acceptanceCriteria ?? null }))
+        : await this.prisma.milestone.findMany({
+            where: { proposalId: id },
+            orderBy: { idx: 'asc' },
+            select: { idx: true, title: true, description: true, acceptanceCriteria: true },
+          });
+      await this.assertMandatoryWords(p.roundId, this.mandatoryProposalFields(
+        {
+          title: dto.title ?? p.title,
+          contentMd: dto.contentMd ?? p.contentMd,
+          ecosystemImpactMd: dto.ecosystemImpactMd ?? p.ecosystemImpactMd,
+          successMetricsMd: dto.successMetricsMd ?? p.successMetricsMd,
+          costBreakdownMd: dto.costBreakdownMd ?? p.costBreakdownMd,
+          teamInfo: dto.teamInfoMd ?? (typeof p.teamInfo === 'string' ? p.teamInfo : null),
+        },
+        finalMilestones,
+      ));
+    }
+
     await this.prisma.$transaction(async (tx) => {
       if (postSubmission) {
         // Snapshot the version being replaced so reviewers can diff what changed.
@@ -321,6 +345,14 @@ export class ProposalsService {
     if (!p.payoutAddress?.trim()) {
       throw new BadRequestException('a payout / refund address is required to submit (the DAO needs somewhere to send refunds and the funded budget)');
     }
+    // §3 — every mandatory text field (proposal + each milestone) must meet
+    // the round's word-count minimum. Skipped in test mode (mandatoryWords=0).
+    const milestonesAtSubmit = await this.prisma.milestone.findMany({
+      where: { proposalId: id },
+      orderBy: { idx: 'asc' },
+      select: { idx: true, title: true, description: true, acceptanceCriteria: true },
+    });
+    await this.assertMandatoryWords(p.roundId, this.mandatoryProposalFields(p, milestonesAtSubmit));
     const fee = await this.computeFee(toAda(p.requestedAmountAda), p.isCommercial ?? false, p.roundId);
     if (fee <= 0) {
       // No fee for this proposal type → admit immediately, no board fee confirmation.
@@ -1480,6 +1512,65 @@ export class ProposalsService {
       });
     });
     return this.get(id, userId);
+  }
+
+  private wordCount(text: string | null | undefined): number {
+    return (text ?? '').trim().split(/\s+/).filter(Boolean).length;
+  }
+
+  /**
+   * §3 — every listed text field must have at least the round's `mandatoryWords`
+   * count. 0 disables the check (test mode). Validates on submit and on every
+   * post-submission edit; pre-public drafts can stay partial.
+   */
+  private async assertMandatoryWords(
+    roundId: string | null,
+    fields: { label: string; text: string | null | undefined }[],
+  ) {
+    if (!roundId) return;
+    const round = await this.prisma.round.findUnique({
+      where: { id: roundId },
+      select: { mandatoryWords: true },
+    });
+    const min = round?.mandatoryWords ?? ROUND_SETTING_DEFAULTS.mandatoryWords;
+    if (min <= 0) return;
+    const short = fields.filter((f) => this.wordCount(f.text) < min);
+    if (short.length === 0) return;
+    const detail = short
+      .map((f) => `${f.label} (${this.wordCount(f.text)}/${min})`)
+      .join(', ');
+    throw new BadRequestException(
+      `Each mandatory field needs at least ${min} word${min === 1 ? '' : 's'}. Too short: ${detail}.`,
+    );
+  }
+
+  private mandatoryProposalFields(
+    p: {
+      title: string;
+      contentMd: string;
+      ecosystemImpactMd: string | null;
+      successMetricsMd: string | null;
+      costBreakdownMd: string | null;
+      teamInfo?: unknown;
+    },
+    milestones: { idx?: number; title: string | null; description: string | null; acceptanceCriteria: string | null }[],
+  ): { label: string; text: string | null | undefined }[] {
+    const teamText = typeof p.teamInfo === 'string' ? p.teamInfo : null;
+    const out: { label: string; text: string | null | undefined }[] = [
+      { label: 'Title', text: p.title },
+      { label: 'Pitch / summary', text: p.contentMd },
+      { label: 'Expected ecosystem impact', text: p.ecosystemImpactMd },
+      { label: 'Success metrics / KPIs', text: p.successMetricsMd },
+      { label: 'Cost breakdown', text: p.costBreakdownMd },
+      { label: 'Team info', text: teamText },
+    ];
+    milestones.forEach((m, i) => {
+      const n = (m.idx != null ? m.idx : i) + 1;
+      out.push({ label: `Milestone ${n} title`, text: m.title });
+      out.push({ label: `Milestone ${n} description`, text: m.description });
+      out.push({ label: `Milestone ${n} acceptance criteria`, text: m.acceptanceCriteria });
+    });
+    return out;
   }
 
   private assertMilestonesSum(milestones: MilestoneInput[], requestedAda: number) {

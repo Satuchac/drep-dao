@@ -83,6 +83,10 @@ const SETTING_GROUPS: { title: string; fields: { key: SettingKey; label: string;
       { key: 'filterBudgetChangesAllowed', label: 'Budget changes allowed (in-filter)' },
     ],
   },
+  {
+    title: 'Mandatory text fields',
+    fields: [{ key: 'mandatoryWords', label: 'Minimum words per field' }],
+  },
 ];
 
 export function RoundsSection() {

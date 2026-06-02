@@ -56,6 +56,9 @@ export class RoundSettingsInput {
   // §12 — in-filter budget changes: how many times the submitter may change the
   // budget while the round is in FILTERING (each clears filtering votes).
   @IsOptional() @IsInt() @Min(0) filterBudgetChangesAllowed?: number;
+  // §3 — minimum word count enforced on every mandatory text field at submit
+  // and on post-submission edits. 0 disables the check (test mode).
+  @IsOptional() @IsInt() @Min(0) mandatoryWords?: number;
 }
 
 // MVP schedule uses coarse operational windows rather than the 9 fine-grained

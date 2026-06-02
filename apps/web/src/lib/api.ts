@@ -400,6 +400,7 @@ export interface RoundSettingsInput {
   pledgeGraceDays?: number;
   filterResubmissionsAllowed?: number;
   filterBudgetChangesAllowed?: number;
+  mandatoryWords?: number;
 }
 export interface CreateRoundInput extends RoundSettingsInput {
   name?: string;

@@ -98,6 +98,12 @@ export const ROUND_SETTING_DEFAULTS = {
   // filtering votes (so they re-vote on the revised budget). 0 disables in-filter
   // budget changes entirely.
   filterBudgetChangesAllowed: 2,
+  // §3 — minimum word count enforced on each mandatory text field of a proposal
+  // (title, pitch, every milestone's name/description/acceptance criteria,
+  // ecosystem impact, success metrics, cost breakdown, team info). Validated on
+  // submit + on post-submission edits. 0 disables the check entirely — useful
+  // for test environments.
+  mandatoryWords: 1,
 } as const;
 
 export type RoundSettingKey = keyof typeof ROUND_SETTING_DEFAULTS;
@@ -136,6 +142,8 @@ export const ROUND_SETTING_META: Record<RoundSettingKey, string> = {
     'How many times a submitter may revise + resubmit a proposal that was rejected at filtering, while the round is still in FILTERING. Each resubmit clears the existing filtering votes and the jury votes again on the revised content. 0 disables resubmissions.',
   filterBudgetChangesAllowed:
     'How many in-filter budget changes the submitter may request while the round is in FILTERING. Each accepted change clears the jury\'s filtering votes — they vote again on the revised budget. Counted separately from resubmissions. 0 disables in-filter budget changes.',
+  mandatoryWords:
+    'Minimum word count required on each mandatory text field of a proposal: title, pitch, every milestone (name + description + acceptance criteria), ecosystem impact, success metrics, cost breakdown, team info. Checked on submit and on every post-submission edit. 0 disables the check entirely (test mode).',
 };
 
 /** Known block explorers → tx/address URL templates per network ({hash}/{address} placeholders). */
