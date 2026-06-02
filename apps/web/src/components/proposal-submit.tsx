@@ -814,20 +814,22 @@ function MineRow({
             {p.status}{p.stage ? ` · ${p.stage}` : ''}{isDraft ? ' · private' : ''}
           </span>
           {p.progress ? (
-            <span
-              className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-                p.progress.tone === 'emerald'
-                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
-                  : p.progress.tone === 'red'
-                    ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
-                    : p.progress.tone === 'amber'
-                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
-                      : 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300'
-              }`}
-              title={p.progress.label}
-            >
-              {p.progress.label}
-            </span>
+            <>
+              <span
+                className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${tinyToneCls(p.progress.tone)}`}
+                title={p.progress.label}
+              >
+                {p.progress.label}
+              </span>
+              {p.progress.extra ? (
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${tinyToneCls(p.progress.extra.tone)}`}
+                  title={p.progress.extra.label}
+                >
+                  {p.progress.extra.label}
+                </span>
+              ) : null}
+            </>
           ) : null}
           {fullFormEdit ? (
             <>
@@ -1062,6 +1064,15 @@ function FeeTxInput({
       ) : null}
     </div>
   );
+}
+
+function tinyToneCls(tone: 'amber' | 'emerald' | 'neutral' | 'red'): string {
+  switch (tone) {
+    case 'emerald': return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200';
+    case 'red':     return 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200';
+    case 'amber':   return 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200';
+    default:        return 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300';
+  }
 }
 
 /**

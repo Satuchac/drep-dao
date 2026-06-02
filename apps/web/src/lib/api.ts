@@ -523,6 +523,9 @@ export interface ProposalProgress {
   stage: string;
   label: string;
   tone: 'amber' | 'emerald' | 'neutral' | 'red';
+  // §8/§9 — secondary chip rendered after the main label (e.g. live threshold
+  // YES/NO status next to a "4/6 DReps voted" chip during the VOTE stage).
+  extra?: { label: string; tone: 'amber' | 'emerald' | 'neutral' | 'red' };
 }
 export interface FeeVerification {
   requiredAda: number;

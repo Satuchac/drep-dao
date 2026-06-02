@@ -98,11 +98,18 @@ export function ProposalList({ roundId }: { roundId: string }) {
 }
 
 function ProgressChip({ p }: { p: ProposalProgress }) {
-  const toneCls = {
+  const tones = {
     amber: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200',
     emerald: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
     neutral: 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300',
     red: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
-  }[p.tone];
-  return <span title={p.label} className={`rounded px-2 py-0.5 text-[11px] font-medium ${toneCls}`}>{p.label}</span>;
+  };
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span title={p.label} className={`rounded px-2 py-0.5 text-[11px] font-medium ${tones[p.tone]}`}>{p.label}</span>
+      {p.extra ? (
+        <span title={p.extra.label} className={`rounded px-2 py-0.5 text-[11px] font-medium ${tones[p.extra.tone]}`}>{p.extra.label}</span>
+      ) : null}
+    </span>
+  );
 }

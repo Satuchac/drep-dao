@@ -1003,12 +1003,33 @@ export class ProposalsService {
     const dvSnapshots = await this.prisma.voteSnapshot.findMany({
       where: { proposalId: { in: ids } },
       orderBy: { takenAt: 'desc' },
-      include: { entries: { select: { drepId: true } } },
+      // finalPower is needed for the live YES/NO threshold indicator (next to
+      // the "X/N voted" chip) that tells the board at a glance whether each
+      // D&V proposal would currently pass.
+      include: { entries: { select: { drepId: true, finalPower: true } } },
     });
     const dvVotes = await this.prisma.vote.findMany({
       where: { proposalId: { in: ids }, phase: 'DEBATE_VOTE' },
       include: { drep: { select: { drepIdOnchain: true, user: { select: { displayName: true } } } } },
     });
+    // §8.2 — board members who toggled off votesOnFundingProposals are skipped
+    // at tally time. Pull every drep referenced by any current snapshot entry
+    // so the round-overview YES/NO chip matches what DvService.result reports.
+    const snapDrepIds = Array.from(new Set(dvSnapshots.flatMap((s) => s.entries.map((e) => e.drepId))));
+    const snapDreps = snapDrepIds.length
+      ? await this.prisma.drep.findMany({
+          where: { id: { in: snapDrepIds } },
+          select: { id: true, votesOnFundingProposals: true, user: { select: { drepKeyHash: true } } },
+        })
+      : [];
+    const boardKeys = new Set(
+      (await this.prisma.boardSeat.findMany({ select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
+    );
+    const skipDrepIds = new Set(
+      snapDreps
+        .filter((d) => !d.votesOnFundingProposals && d.user?.drepKeyHash && boardKeys.has(d.user.drepKeyHash))
+        .map((d) => d.id),
+    );
     const ms = await this.prisma.milestone.findMany({
       where: { proposalId: { in: ids } },
       select: { id: true, idx: true, proposalId: true, status: true },
@@ -1048,7 +1069,8 @@ export class ProposalsService {
       const milestoneThreshold = p.round?.milestoneApprovalVotes ?? ROUND_SETTING_DEFAULTS.milestoneApprovalVotes;
 
       // Build the "what's needed now" hint for ACTIVE proposals.
-      let progress: { stage: string; label: string; tone: 'amber' | 'emerald' | 'neutral' | 'red' } | null = null;
+      type Tone = 'amber' | 'emerald' | 'neutral' | 'red';
+      let progress: { stage: string; label: string; tone: Tone; extra?: { label: string; tone: Tone } } | null = null;
       if (status === ProposalStatus.PENDING) {
         // §3/§12 — distinguish "fee tx not entered yet" from "fee tx entered, board hasn't
         // reviewed". Both block the proposal from advancing past SUBMISSION; the second is
@@ -1101,9 +1123,38 @@ export class ProposalsService {
         } else if (!snap) {
           progress = { stage: 'VOTE', label: 'awaiting board to open Vote', tone: 'amber' };
         } else {
-          const eligible = snap.entries.length;
-          const cast = new Set((dvVotesBy.get(p.id) ?? []).map((v) => v.drepId)).size;
-          progress = { stage: 'VOTE', label: `${cast}/${eligible} DReps voted`, tone: cast >= eligible ? 'emerald' : 'amber' };
+          // §8.2 — skip opted-out board members at tally time so the chip
+          // matches what DvService.result reports.
+          const eligibleEntries = snap.entries.filter((e) => !skipDrepIds.has(e.drepId));
+          const eligible = eligibleEntries.length;
+          const votes = dvVotesBy.get(p.id) ?? [];
+          const voteByDrep = new Map(votes.map((v) => [v.drepId, v.choice]));
+          const cast = eligibleEntries.filter((e) => voteByDrep.has(e.drepId)).length;
+          // Live threshold check: would the proposal pass right now? Missing
+          // voters count as implicit NO; abstain reduces the denominator.
+          let yesPower = 0, abstainPower = 0, totalPower = 0;
+          for (const e of eligibleEntries) {
+            const fp = Number(e.finalPower ?? 0);
+            totalPower += fp;
+            const c = voteByDrep.get(e.drepId);
+            if (c === 'YES') yesPower += fp;
+            else if (c === 'ABSTAIN') abstainPower += fp;
+          }
+          const approvalThresholdPct = (p as { approvalThresholdPct?: unknown }).approvalThresholdPct;
+          const thresholdPct = approvalThresholdPct != null
+            ? Number(approvalThresholdPct)
+            : ROUND_SETTING_DEFAULTS.dvApprovalThresholdPct;
+          const denom = Math.max(0, totalPower - abstainPower);
+          const ratioPct = denom > 0 ? (yesPower / denom) * 100 : 0;
+          const passingNow = denom > 0 && ratioPct >= thresholdPct;
+          progress = {
+            stage: 'VOTE',
+            label: `${cast}/${eligible} DReps voted`,
+            tone: cast >= eligible ? 'emerald' : 'amber',
+            extra: passingNow
+              ? { label: `✓ YES · ${ratioPct.toFixed(0)}% / ${thresholdPct}%`, tone: 'emerald' }
+              : { label: `✗ NO · ${ratioPct.toFixed(0)}% / ${thresholdPct}%`, tone: 'red' },
+          };
         }
       } else if (status === ProposalStatus.APPROVED && stage === ProposalStage.FUNDING) {
         const active = stopBy.get(p.id);
