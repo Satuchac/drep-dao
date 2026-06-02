@@ -1406,21 +1406,25 @@ function EditSection({
   })));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // §3/§7.4 — versioned post-submission edit. Mirrors the backend ownEditable gate:
+  // §3/§7.4/§8.1 — versioned post-submission edit. Mirrors the backend ownEditable gate:
   //   - while the round is in SUBMISSION the team can polish a submitted (ACTIVE) proposal,
+  //   - during the round's DEBATE window the team can revise based on reviewer feedback,
   //   - after a filtering rejection (REJECTED at FILTERING) while the round is still in
   //     FILTERING, until the resubmission budget is exhausted.
   // Pre-public states (DRAFT / PENDING / fee-rejected) edit in the full form, not here.
   const inSubmission = proposal.roundStatus === 'SUBMISSION' && proposal.status === 'ACTIVE';
+  const inDebate = proposal.roundStatus === 'DEBATE' && proposal.status === 'ACTIVE';
   const canResubmit =
     proposal.status === 'REJECTED' &&
     proposal.stage === 'FILTERING' &&
     proposal.roundStatus === 'FILTERING' &&
     proposal.filterResubmissionsUsed < proposal.filterResubmissionsAllowed;
-  const editable = inSubmission || canResubmit;
-  // Budget + milestone editing is unlocked during the resubmit cycle (the team
-  // restructures after reviewer feedback); locked during a SUBMISSION polish
-  // because the fee was already quoted from the original amount.
+  const editable = inSubmission || inDebate || canResubmit;
+  // Budget + milestone editing is unlocked ONLY in the resubmit cycle — the
+  // team rebuilds after a filtering rejection. During SUBMISSION polish and
+  // DEBATE the fee has already been quoted, so budget changes route through
+  // "Request a budget change" (board approval). Inline edit handles text
+  // fields + expertise + payout only in those phases.
   const budgetEditable = canResubmit;
   if (!editable) return null;
 
