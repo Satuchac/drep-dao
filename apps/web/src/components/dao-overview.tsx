@@ -182,6 +182,10 @@ export function DaoOverview() {
         </div>
       )}
 
+      {members && members.length > 0 ? (
+        <VotingPowerTotals members={members} />
+      ) : null}
+
       {members && members.some((m) => m.delegators === 0) ? (
         <p className="text-xs text-neutral-400">
           0 voting power / 0 delegators means no account has delegated its vote to that DRep yet (CIP-1694
@@ -229,6 +233,60 @@ export function DaoOverview() {
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * §4/§8.2/§10 — two aggregate voting-power totals shown directly under the
+ * members table.
+ *   Internal proposals: sum of every member's adjusted power (every DAO
+ *     member is a voter — board + non-board — when balanced. This ignores
+ *     the per-proposal voting-style nuances; that's a separate concern.)
+ *   Funding proposals:  sum of every NON-board member + every BOARD member
+ *     whose profile flag votesOnFundingProposals is true. Board members who
+ *     have opted out are excluded.
+ */
+function VotingPowerTotals({ members }: { members: DaoMember[] }) {
+  const internalTotal = members.reduce((s, m) => s + m.adjustedPower, 0);
+  const fundingTotal = members.reduce((s, m) => {
+    if (!m.isBoard) return s + m.adjustedPower;
+    return s + (m.votesOnFundingProposals ? m.adjustedPower : 0);
+  }, 0);
+  const optedOut = members.filter((m) => m.isBoard && !m.votesOnFundingProposals);
+  const optedIn = members.filter((m) => m.isBoard && m.votesOnFundingProposals);
+
+  return (
+    <div className="mt-2 rounded-md border border-neutral-200 bg-neutral-50/40 p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900/40">
+      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+        Aggregate voting power (adjusted)
+      </div>
+      <dl className="mt-1 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-neutral-600 dark:text-neutral-400">
+            Internal proposals
+            <span className="ml-1 text-xs text-neutral-400">— all {members.length} members</span>
+          </dt>
+          <dd className="font-semibold tabular-nums">{internalTotal.toFixed(2)}</dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="text-neutral-600 dark:text-neutral-400">
+            Funding proposals
+            <span className="ml-1 text-xs text-neutral-400">
+              — non-board + {optedIn.length}/{optedIn.length + optedOut.length} opted-in board
+            </span>
+          </dt>
+          <dd className="font-semibold tabular-nums">{fundingTotal.toFixed(2)}</dd>
+        </div>
+      </dl>
+      {optedOut.length > 0 ? (
+        <div className="mt-1 text-xs text-neutral-500">
+          Excluded from funding total (opted out): {optedOut.map((m) => m.displayName).join(', ')} ·{' '}
+          <span className="tabular-nums">
+            {optedOut.reduce((s, m) => s + m.adjustedPower, 0).toFixed(2)} adjusted power
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

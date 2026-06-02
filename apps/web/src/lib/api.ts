@@ -115,6 +115,9 @@ export interface DaoMember {
   adjustedPower: number; // log10(votingPowerAda) × (1 + merit/200)
   since: string | null; // board install date (board) or board-approval date (DAO member)
   meetsEntryRequirements: boolean; // §14.1 — still meets the power/delegator minimum (board always true)
+  // §8.2 — only meaningful for board members. Funding-proposal totals subtract
+  // board members whose flag is false; non-board are always voters.
+  votesOnFundingProposals: boolean;
 }
 
 export interface OnChainProof {
@@ -135,9 +138,6 @@ export interface DaoMemberDetail extends DaoMember {
   subcategoryIds: string[];
   // Admission votes the member cast as a board reviewer (non-board members are 0).
   admissionVotesCast: { yes: number; no: number; total: number };
-  // §8.2 — null for non-board members (the flag doesn't apply); true/false
-  // for board members based on their profile setting.
-  votesOnFundingProposals: boolean | null;
 }
 
 export const daoApi = {

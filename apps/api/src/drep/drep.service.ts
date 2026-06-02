@@ -47,9 +47,11 @@ export class DrepService {
     // yet), plus admitted DReps still registered on-chain. Keyed by drep id.
     // `since` = when they became a member: board install date (board_seat.addedAt)
     // for board members, board-approval date (drep.admittedAt) for admitted DReps.
-    interface Row { drepId: string; displayName: string; isBoard: boolean; drepRowId?: string; stakeAddress?: string; since: Date | null; photo: string | null }
+    interface Row { drepId: string; displayName: string; isBoard: boolean; drepRowId?: string; stakeAddress?: string; since: Date | null; photo: string | null; votesOnFundingProposals: boolean }
     const byId = new Map<string, Row>();
-    for (const s of seats) byId.set(s.drepId, { drepId: s.drepId, displayName: s.displayName, isBoard: true, since: s.addedAt, photo: null });
+    // Genesis-seated board members without a Drep row default to "votes on funding"
+    // (the default for new board members).
+    for (const s of seats) byId.set(s.drepId, { drepId: s.drepId, displayName: s.displayName, isBoard: true, since: s.addedAt, photo: null, votesOnFundingProposals: true });
     for (const d of admitted) {
       const isBoard = d.user.drepKeyHash ? boardKeys.has(d.user.drepKeyHash) : false;
       if (!isBoard && !d.user.drepRegistered) continue; // skip lapsed non-board members
@@ -59,6 +61,7 @@ export class DrepService {
         existing.stakeAddress = d.user.stakeAddress;
         if (d.user.displayName) existing.displayName = d.user.displayName; // prefer self-set name
         existing.photo = d.photo;
+        existing.votesOnFundingProposals = d.votesOnFundingProposals;
         // keep the board-install date for board members
       } else {
         byId.set(d.drepIdOnchain, {
@@ -69,6 +72,7 @@ export class DrepService {
           stakeAddress: d.user.stakeAddress,
           since: d.admittedAt,
           photo: d.photo,
+          votesOnFundingProposals: d.votesOnFundingProposals,
         });
       }
     }
@@ -135,6 +139,10 @@ export class DrepService {
           adjustedPower: round(base * mult),
           since: r.since ? r.since.toISOString() : null,
           meetsEntryRequirements,
+          // §8.2 — only meaningful for board members (always true for non-board,
+          // who always vote). The funding-proposal totals subtract board members
+          // whose flag is false.
+          votesOnFundingProposals: r.votesOnFundingProposals,
         };
       }),
     );
@@ -180,7 +188,10 @@ export class DrepService {
       admissionVotesCast: { yes, no, total: yes + no },
       // §8.2 — board-only flag: does this board member vote on funding D&V?
       // Null for non-board (the flag doesn't apply to them; they always vote).
-      votesOnFundingProposals: summary.isBoard ? (drep?.votesOnFundingProposals ?? true) : null,
+      // Non-board members always vote on funding (the flag is a board-only opt-out).
+      // The dao-members-directory UI hides the field for non-board so the constant
+      // `true` never surfaces incorrectly.
+      votesOnFundingProposals: summary.isBoard ? (drep?.votesOnFundingProposals ?? true) : true,
     };
   }
 
