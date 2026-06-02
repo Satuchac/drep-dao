@@ -1417,6 +1417,11 @@ function EditSection({
     acceptanceCriteria: m.acceptanceCriteria ?? '',
     amountAda: m.amountAda,
   })));
+  // §3 — pledge (skin in the game). Editable inline alongside everything else
+  // during the resubmit/DEBATE phases; locked once the team confirms it on-chain.
+  const [pledgeEnabled, setPledgeEnabled] = useState((proposal.pledgeAmountAda ?? 0) > 0);
+  const [pledgeAmount, setPledgeAmount] = useState<number>(proposal.pledgeAmountAda ?? 0);
+  const [pledgeReturnMethod, setPledgeReturnMethod] = useState(proposal.pledgeReturnMethod ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // §3/§7.4/§8.1 — versioned post-submission edit. Mirrors the backend ownEditable gate:
@@ -1433,12 +1438,15 @@ function EditSection({
     proposal.roundStatus === 'FILTERING' &&
     proposal.filterResubmissionsUsed < proposal.filterResubmissionsAllowed;
   const editable = inSubmission || inDebate || canResubmit;
-  // Budget + milestone editing is unlocked ONLY in the resubmit cycle — the
-  // team rebuilds after a filtering rejection. During SUBMISSION polish and
-  // DEBATE the fee has already been quoted, so budget changes route through
-  // "Request a budget change" (board approval). Inline edit handles text
-  // fields + expertise + payout only in those phases.
-  const budgetEditable = canResubmit;
+  // Budget + milestones + pledge are unlocked in the resubmit cycle (the team
+  // rebuilds after a filtering rejection) AND during DEBATE (the team revises
+  // the whole proposal — no votes have been cast on the new shape yet, ballots
+  // only start in VOTE). SUBMISSION polish keeps amount + milestones locked
+  // because the fee was already quoted from the original amount — that path
+  // uses the existing "Request a budget change" flow which settles the fee delta.
+  const budgetEditable = canResubmit || inDebate;
+  // Pledge follows the same rule: editable wherever the rest of the budget is.
+  const pledgeEditable = budgetEditable && !proposal.pledgeConfirmedAt;
   if (!editable) return null;
 
   const milestoneSum = milestones.reduce((acc, m) => acc + Number(m.amountAda || 0), 0);
@@ -1472,6 +1480,12 @@ function EditSection({
                 acceptanceCriteria: m.acceptanceCriteria.trim() || undefined,
                 amountAda: Number(m.amountAda),
               })),
+            }
+          : {}),
+        ...(pledgeEditable
+          ? {
+              pledgeAmountAda: pledgeEnabled && pledgeAmount > 0 ? Number(pledgeAmount) : 0,
+              pledgeReturnMethod: pledgeEnabled ? (pledgeReturnMethod.trim() || undefined) : undefined,
             }
           : {}),
       });
@@ -1568,6 +1582,37 @@ function EditSection({
         <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Payout / refund address (Cardano)</span>
         <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900" placeholder="addr_test1…" value={payoutAddress} onChange={(e) => setPayoutAddress(e.target.value)} />
       </label>
+      {/* §3 — skin-in-the-game pledge. Same shape as the submission form.
+          Locked once confirmed on-chain by the board (proposal in FUNDING). */}
+      {pledgeEditable ? (
+        <div className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={pledgeEnabled} onChange={(e) => setPledgeEnabled(e.target.checked)} />
+            <span className="font-medium">Skin in the game (refundable pledge — optional)</span>
+          </label>
+          {pledgeEnabled ? (
+            <div className="mt-2 space-y-2">
+              <label className="flex items-center gap-2 text-sm">
+                Pledge ₳
+                <input
+                  type="number"
+                  className="w-32 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                  value={pledgeAmount || ''}
+                  onChange={(e) => setPledgeAmount(Number(e.target.value))}
+                />
+              </label>
+              <MarkdownEditor
+                value={pledgeReturnMethod}
+                onChange={setPledgeReturnMethod}
+                title="Pledge return method"
+                subtitle="How and when will the pledge be returned? Common patterns: a slice with each milestone, or the full amount only after the final milestone."
+                placeholder="Example: 25% returned after milestone 1, 25% after milestone 2, the rest after the final milestone."
+                minRows={3}
+              />
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div>
         <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Expertise areas</div>
         <div className="mt-1 flex flex-wrap gap-1.5">

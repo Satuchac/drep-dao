@@ -817,6 +817,10 @@ export const proposalEditApi = {
       // §7.4 — milestones are editable during the resubmit cycle after a filtering
       // rejection (the resub clears the jury votes anyway); locked elsewhere.
       milestones?: ProposalMilestoneInput[];
+      // §3 — skin-in-the-game pledge (amount + return method). Editable until
+      // confirmed on-chain by the board. Set amount to 0 to remove the pledge.
+      pledgeAmountAda?: number;
+      pledgeReturnMethod?: string;
     },
   ) => request<ProposalDetail>(`/proposals/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
 };
