@@ -193,14 +193,15 @@ export function ProposalDetail({
                 {p.status === 'REJECTED' ? 'Edit & re-submit (all fields)' : 'Edit all fields'}
               </button>
             ) : null}
-            {/* For the non-rejected case (e.g. ACTIVE+FILTERING during round SUBMISSION),
-                the edit form stays below the proposal content. The rejection case
-                renders both panels at the top, right under the rejection banner. */}
-            {mine && !(p.status === 'REJECTED' && p.stage === 'FILTERING') ? (
-              <EditSection id={id} proposal={p} onChange={load} open={editingOpen} onOpenChange={setEditingOpen} />
-            ) : null}
           </>
         )}
+        {/* EditSection lives OUTSIDE the read-only block so it stays mounted
+            when editingOpen flips true (in which case the read-only blocks
+            above are hidden and only the form below renders). The rejected
+            case handles its own copy of EditSection above with ResubmitPanel. */}
+        {mine && !(p.status === 'REJECTED' && p.stage === 'FILTERING') ? (
+          <EditSection id={id} proposal={p} onChange={load} open={editingOpen} onOpenChange={setEditingOpen} />
+        ) : null}
       </div>
 
       <VersionsSection id={id} />
