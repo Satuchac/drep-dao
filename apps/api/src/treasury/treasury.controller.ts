@@ -4,6 +4,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { TreasuryService } from './treasury.service';
+import { MultisigBroadcastService } from './multisig-broadcast.service';
 
 export class PrepareTopUpDto {
   @IsNumber() @Min(1) amountAda!: number;
@@ -18,11 +19,18 @@ export class ApproveActionDto {
 export class SubmitPayoutTxDto {
   @IsString() @MaxLength(80) txHash!: string;
 }
+export class SubmitWitnessDto {
+  /** Hex-encoded TransactionWitnessSet returned by api.signTx(txCbor, true). */
+  @IsString() @MaxLength(50000) witnessHex!: string;
+}
 
 // §15 Treasury overview + board actions (prepare/approve multisig spends).
 @Controller()
 export class TreasuryController {
-  constructor(private readonly treasury: TreasuryService) {}
+  constructor(
+    private readonly treasury: TreasuryService,
+    private readonly broadcast: MultisigBroadcastService,
+  ) {}
 
   @UseGuards(JwtAuthGuard)
   @Get('dao/treasury')
@@ -49,6 +57,24 @@ export class TreasuryController {
   @Post('admin/treasury/sweep-hot-wallet')
   sweepHotWallet(@CurrentUser() ctx: AuthContext) {
     return this.treasury.sweepHotWallet(ctx.userId);
+  }
+
+  /** §15 — fetch the unsigned tx body for a multisig action so the board
+   *  member can sign it with their HW wallet via CIP-30 signTx. */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Get('admin/board-actions/:id/tx-body')
+  txBody(@Param('id', ParseUUIDPipe) id: string) {
+    return this.broadcast.prepareTxBody(id);
+  }
+
+  /** §15 — submit a board member's vkey witness for a multisig action. When
+   *  the threshold of distinct witnesses is collected, the platform combines
+   *  them with the native script, submits via Koios, and marks the action
+   *  CONFIRMED with the on-chain tx hash. */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Post('admin/board-actions/:id/witness')
+  witness(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SubmitWitnessDto) {
+    return this.broadcast.submitWitness(id, dto.witnessHex, ctx.userId);
   }
 
   /** Hot-wallet policy (low threshold, top-up cap) used by the form UI. */

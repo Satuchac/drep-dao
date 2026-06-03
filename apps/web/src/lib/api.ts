@@ -248,6 +248,17 @@ export const treasuryApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  /** §15 — fetch the unsigned tx body the board member's wallet should sign
+   *  via CIP-30 api.signTx(txBodyHex, partialSign=true). */
+  txBody: (id: string) =>
+    request<{ txBodyHex: string; sourceAddress: string; scriptHash: string }>(`/admin/board-actions/${id}/tx-body`),
+  /** §15 — submit the wallet's TransactionWitnessSet CBOR; when the threshold
+   *  is collected the backend combines + broadcasts the tx. */
+  submitWitness: (id: string, witnessHex: string) =>
+    request<{ status: string; approvals: number; threshold: number; txHash?: string | null; stored?: number }>(
+      `/admin/board-actions/${id}/witness`,
+      { method: 'POST', body: JSON.stringify({ witnessHex }) },
+    ),
   /** §11/§15 — paste the on-chain broadcast tx hash; backend verifies via Koios. */
   submitPayoutTx: (id: string, txHash: string) =>
     request<{ status: string; txHash: string | null; paid?: boolean; found?: boolean; koiosAvailable?: boolean; paidLovelace?: string; paidAt?: string | null }>(

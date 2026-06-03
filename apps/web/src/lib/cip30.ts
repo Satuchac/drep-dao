@@ -5,8 +5,16 @@ import { stakeAddressFromHex, drepIdFromPubKeyHex } from '@drep-dao/cardano';
 /** Minimal CIP-30 (+ CIP-95) typings — just what login and DRep apply need. */
 export interface Cip30Api {
   getRewardAddresses(): Promise<string[]>; // hex reward addresses
+  getUsedAddresses?(): Promise<string[]>;
   getNetworkId(): Promise<number>;
   signData(addressHex: string, payloadHex: string): Promise<{ signature: string; key: string }>;
+  /** Sign a Cardano transaction body. partialSign=true asks the wallet to
+   *  sign with whichever of its keys match required_signers / inputs, without
+   *  refusing if the wallet doesn't own all inputs (needed for native-script
+   *  multisig where the inputs sit at a script address). Returns the wallet's
+   *  TransactionWitnessSet CBOR (vkey witnesses only — combine with the
+   *  native script server-side). */
+  signTx(txCbor: string, partialSign?: boolean): Promise<string>;
   /** CIP-95 — present on Lace/Eternl etc. */
   cip95?: { getPubDRepKey(): Promise<string> };
 }

@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { boardActionMessage } from '@drep-dao/cardano';
 import { treasuryApi, type BoardAction } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { CopyButton } from './copy-button';
@@ -9,7 +8,7 @@ import { useExplorer } from '@/lib/explorer';
 
 /** §15.3 — pending board/treasury actions the platform prepared, awaiting 3-of-5 approval. */
 export function BoardActions({ onChange, history = false }: { onChange?: () => void; history?: boolean }) {
-  const { profile, signMessage } = useAuth();
+  const { profile, signTx } = useAuth();
   const { txUrl } = useExplorer();
   const [actions, setActions] = useState<BoardAction[]>([]);
   const [past, setPast] = useState<BoardAction[]>([]);
@@ -35,6 +34,13 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
       else delete next[id];
       return next;
     });
+  /** §15 — real native-script multisig approval:
+   *    1. fetch the unsigned tx body from the backend (built once, cached)
+   *    2. ask the wallet to sign it via CIP-30 signTx(partialSign=true)
+   *    3. submit the wallet's witness CBOR
+   *    4. backend combines witnesses + native script + broadcasts when N
+   *       distinct vkey witnesses are collected
+   */
   const approve = async (a: BoardAction) => {
     setErr(a.id, null);
     setBusy(a.id);
@@ -43,29 +49,20 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
         setErr(a.id, 'Connect your wallet to sign this action.');
         return;
       }
-      const ts = new Date().toISOString();
-      const message = boardActionMessage({
-        actionId: a.id,
-        kind: a.kind,
-        amountAda: a.amountAda ?? 0,
-        voterStakeAddress: profile.user.stakeAddress,
-        ts,
-      });
-      // A treasury approval MUST be signed by the board member's own wallet.
-      // signMessage throws if the user cancels (caught below); returns null
-      // only when the wallet you logged in with isn't injected (e.g.
-      // extension disabled / different browser profile). Give a concrete
-      // instruction in that case so the user can act.
-      const s = await signMessage(message);
-      if (!s) {
+      const { txBodyHex } = await treasuryApi.txBody(a.id);
+      const witnessHex = await signTx(txBodyHex);
+      if (!witnessHex) {
         setErr(a.id, 'Could not reach the wallet you logged in with. Open the wallet extension (or re-connect from the login card on the right) and click Approve & sign again.');
         return;
       }
-      await treasuryApi.approveAction(a.id, { signature: s.signature, signingKey: s.key, ts });
+      const r = await treasuryApi.submitWitness(a.id, witnessHex);
+      if (r.status === 'CONFIRMED' && r.txHash) {
+        setErr(a.id, null);
+      }
       load();
       onChange?.();
     } catch (e) {
-      setErr(a.id, e instanceof Error ? e.message : 'Approve cancelled — nothing was recorded.');
+      setErr(a.id, e instanceof Error ? e.message : 'Sign cancelled — nothing was recorded.');
     } finally {
       setBusy(null);
     }

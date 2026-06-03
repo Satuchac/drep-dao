@@ -6,11 +6,12 @@ import { TreasuryService } from './treasury.service';
 import { TreasuryController } from './treasury.controller';
 import { BoardMultisigService } from './board-multisig.service';
 import { BoardMultisigController } from './board-multisig.controller';
+import { MultisigBroadcastService } from './multisig-broadcast.service';
 
 @Module({
   imports: [AuthModule, CardanoModule],
   controllers: [TreasuryController, BoardMultisigController],
-  providers: [TreasuryService, BoardMultisigService, BoardGuard],
+  providers: [TreasuryService, BoardMultisigService, MultisigBroadcastService, BoardGuard],
   exports: [BoardMultisigService],
 })
 export class TreasuryModule {}

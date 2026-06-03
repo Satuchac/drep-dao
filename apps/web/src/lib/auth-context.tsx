@@ -25,6 +25,11 @@ interface AuthState {
   detectDRepId: () => Promise<string | null>;
   /** Sign a message with the connected wallet's stake key (CIP-30 signData); null if unavailable. */
   signMessage: (message: string) => Promise<{ signature: string; key: string } | null>;
+  /** Sign a Cardano transaction body via CIP-30 signTx (partialSign=true).
+   *  Used for real multisig broadcast — the wallet returns its own
+   *  TransactionWitnessSet which the platform combines with other board
+   *  members' witnesses + the native script. Null if wallet unavailable. */
+  signTx: (txBodyHex: string) => Promise<string | null>;
 }
 
 // Remember WHICH wallet the user logged in with, so signing after a page reload
@@ -100,6 +105,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return await signMessageWithStakeKey(api, message);
   }, []);
 
+  const signTx = useCallback(async (txBodyHex: string) => {
+    let api = walletApiRef.current;
+    if (!api) {
+      const key = walletKeyRef.current;
+      const entry = key ? listInjectedWallets().find((w) => w.key === key) : null;
+      if (!entry) return null;
+      api = (await getStakeAddress(entry)).api;
+      walletApiRef.current = api;
+    }
+    // partialSign=true → wallet signs the tx with whichever of its keys match
+    // required_signers / inputs, instead of refusing because it doesn't own
+    // every input (multisig: inputs are at the script address, not the wallet).
+    return await api.signTx(txBodyHex, true);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -112,6 +132,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshWallets,
         detectDRepId: detect,
         signMessage,
+        signTx,
       }}
     >
       {children}
