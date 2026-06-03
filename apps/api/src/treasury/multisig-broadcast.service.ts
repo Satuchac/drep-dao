@@ -93,11 +93,12 @@ export class MultisigBroadcastService {
       txb.add_output(CSL.TransactionOutput.new(destAddr, CSL.Value.new(CSL.BigNum.from_str(String(action.amountAda)))));
       txb.add_change_if_needed(srcAddr);
     }
-    // Also add required signers at the tx level so wallets see the intent
-    // even before they inspect the witness set.
-    for (const kh of source.keyHashes) {
-      txb.add_required_signer(CSL.Ed25519KeyHash.from_hex(kh));
-    }
+    // Deliberately NOT setting required_signers — the native script in the
+    // witness set already enforces "at least 3-of-N". required_signers would
+    // turn that into "ALL listed must sign" (Cardano ledger rule
+    // MissingVKeyWitnessesUTXOW), making 3-of-5 broadcast impossible.
+    // Wallets with partialSign=true still sign script-locked txs when the
+    // script bytes are present in the witness set.
 
     const txBody = txb.build();
     void totalIn; // reserved for future fee-estimation diagnostics

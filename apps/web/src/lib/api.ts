@@ -259,6 +259,13 @@ export const treasuryApi = {
    *  via CIP-30 api.signTx(txBodyHex, partialSign=true). */
   txBody: (id: string) =>
     request<{ txBodyHex: string; sourceAddress: string; scriptHash: string }>(`/admin/board-actions/${id}/tx-body`),
+  /** §15.4 — any single board member can cancel a pending multisig action.
+   *  Reason becomes part of the audit history. */
+  cancelAction: (id: string, reason: string) =>
+    request<{ id: string; status: string }>(`/admin/board-actions/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
   /** §15 — submit the wallet's TransactionWitnessSet CBOR; when the threshold
    *  is collected the backend combines + broadcasts the tx. */
   submitWitness: (id: string, witnessHex: string) =>

@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { boardActionMessage } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
@@ -260,6 +260,40 @@ export class TreasuryService {
       },
     });
     return { id: row.id, status: row.status, amountAda: dto.amountAda, destAddress: dest };
+  }
+
+  /** §15.4 — any board member can cancel a pending multisig action. Single
+   *  click (no threshold). Marks the action FAILED so it disappears from
+   *  the live queue + appears in history with the cancellation reason.
+   *  Allowed only while the action is still PENDING_SIGS or READY — once a
+   *  tx is broadcast (BROADCASTED) or confirmed on-chain (CONFIRMED) it
+   *  cannot be cancelled. */
+  async cancelBoardAction(userId: string, actionId: string, reason: string) {
+    if (!(await this.boardDrep(userId))) throw new ForbiddenException('board members only');
+    const action = await this.prisma.multisigAction.findUnique({ where: { id: actionId } });
+    if (!action) throw new NotFoundException('action not found');
+    if (action.status !== 'PENDING_SIGS' && action.status !== 'READY') {
+      throw new ConflictException(`cannot cancel an action in status ${action.status}`);
+    }
+    const r = (reason ?? '').trim();
+    if (r.length < 5) {
+      throw new BadRequestException('please provide a short cancellation reason (audit trail)');
+    }
+    if (r.length > 500) {
+      throw new BadRequestException('cancellation reason is capped at 500 characters');
+    }
+    const me = await this.prisma.appUser.findUnique({ where: { id: userId }, select: { displayName: true } });
+    const note = `[CANCELLED by ${me?.displayName ?? 'board'}: ${r}]`;
+    await this.prisma.multisigAction.update({
+      where: { id: actionId },
+      data: {
+        status: 'FAILED',
+        // Preserve the original description; append the cancellation note so
+        // the history row says WHY it was cancelled and by whom.
+        description: action.description ? `${action.description}\n\n${note}` : note,
+      },
+    });
+    return { id: actionId, status: 'FAILED' };
   }
 
   /** §15.3 — board-callable sweep of ALL hot-wallet funds back into the

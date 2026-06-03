@@ -5,6 +5,7 @@ import { treasuryApi, type BoardAction } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
+import { ConfirmDialog } from './confirm-dialog';
 
 /** §15.3 — pending board/treasury actions the platform prepared, awaiting 3-of-5 approval. */
 export function BoardActions({ onChange, history = false }: { onChange?: () => void; history?: boolean }) {
@@ -18,6 +19,10 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
   // the user clicked (the previous single-error state lived at the section
   // top, easy to miss when there are several actions and you've scrolled).
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // §15.4 — Cancel-action confirm-dialog state. `cancelTarget` is the action
+  // being cancelled; `cancelReason` is the required short audit note.
+  const [cancelTarget, setCancelTarget] = useState<BoardAction | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
 
   const load = useCallback(() => {
     treasuryApi
@@ -138,13 +143,27 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
             <div className="mt-1 text-xs text-neutral-500">
               {a.approvals}/{a.threshold} approvals{a.mineApproved ? ' · you approved ✓' : ''}
             </div>
-            <button
-              disabled={busy === a.id || a.mineApproved}
-              onClick={() => approve(a)}
-              className="mt-2 rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
-            >
-              {a.mineApproved ? 'Approved' : busy === a.id ? 'Signing…' : 'Approve & sign'}
-            </button>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                disabled={busy === a.id || a.mineApproved}
+                onClick={() => approve(a)}
+                className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
+              >
+                {a.mineApproved ? 'Approved' : busy === a.id ? 'Signing…' : 'Approve & sign'}
+              </button>
+              {/* §15.4 — any single board member can cancel a pending action.
+                  Marks it FAILED with the cancellation reason in the audit
+                  trail. Hidden once the tx is on-chain (BROADCASTED/CONFIRMED). */}
+              {a.status === 'PENDING_SIGS' || a.status === 'READY' ? (
+                <button
+                  disabled={busy === a.id}
+                  onClick={() => setCancelTarget(a)}
+                  className="rounded border border-neutral-400 px-2.5 py-1 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                >
+                  Cancel
+                </button>
+              ) : null}
+            </div>
             {errors[a.id] ? (
               <div className="mt-1 rounded border border-red-300 bg-red-50 p-1.5 text-[11px] text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
                 {errors[a.id]}
@@ -188,6 +207,62 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
           </ul>
         </div>
       ) : null}
+      {/* §15.4 — cancel-action confirm dialog. Reason is required (≥5 chars)
+          and lands in the audit history alongside the cancelled action. */}
+      <ConfirmDialog
+        open={!!cancelTarget}
+        title="Cancel this action?"
+        tone="danger"
+        confirmLabel="Cancel action"
+        cancelLabel="Keep it"
+        onCancel={() => { setCancelTarget(null); setCancelReason(''); }}
+        onConfirm={async () => {
+          if (!cancelTarget) return;
+          const reason = cancelReason.trim();
+          if (reason.length < 5) return;
+          const id = cancelTarget.id;
+          setCancelTarget(null);
+          setCancelReason('');
+          setBusy(id);
+          try {
+            await treasuryApi.cancelAction(id, reason);
+            load();
+            onChange?.();
+          } catch (e) {
+            setErr(id, e instanceof Error ? e.message : 'cancel failed');
+          } finally {
+            setBusy(null);
+          }
+        }}
+        message={
+          <div className="space-y-2">
+            <p>
+              This will mark the action as <strong>cancelled</strong> and move it to history. Any signatures
+              already collected are discarded. Once on-chain (broadcast), an action cannot be cancelled — only
+              pending ones.
+            </p>
+            {cancelTarget ? (
+              <p className="text-xs text-neutral-500">
+                <strong>{cancelTarget.proposalTitle ? `Milestone #${(cancelTarget.milestoneIdx ?? 0) + 1} — ${cancelTarget.proposalTitle}` : (cancelTarget.description ?? cancelTarget.kind)}</strong>
+                {cancelTarget.amountAda != null ? <> · {cancelTarget.amountAda.toLocaleString()} ₳</> : null}
+              </p>
+            ) : null}
+            <label className="block text-xs">
+              Reason (audit trail) — required, min 5 chars
+              <textarea
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                placeholder="Why is this being cancelled?"
+                rows={2}
+                className="mt-1 block w-full resize-y rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+              />
+              <span className={`text-[11px] ${cancelReason.trim().length >= 5 ? 'text-emerald-600' : 'text-neutral-500'}`}>
+                {cancelReason.trim().length}/5 min
+              </span>
+            </label>
+          </div>
+        }
+      />
     </section>
   );
 }

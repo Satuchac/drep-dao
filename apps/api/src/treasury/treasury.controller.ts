@@ -28,6 +28,9 @@ export class SubmitWitnessDto {
   /** Hex-encoded TransactionWitnessSet returned by api.signTx(txCbor, true). */
   @IsString() @MaxLength(50000) witnessHex!: string;
 }
+export class CancelActionDto {
+  @IsString() @MaxLength(500) reason!: string;
+}
 
 // §15 Treasury overview + board actions (prepare/approve multisig spends).
 @Controller()
@@ -110,6 +113,13 @@ export class TreasuryController {
   @Post('admin/board-actions/:id/approve')
   approve(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ApproveActionDto) {
     return this.treasury.approve(ctx.userId, id, dto);
+  }
+
+  /** §15.4 — any single board member can cancel a pending multisig action. */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Post('admin/board-actions/:id/cancel')
+  cancel(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CancelActionDto) {
+    return this.treasury.cancelBoardAction(ctx.userId, id, dto.reason);
   }
 
   /** §11/§15 — after the board broadcasts the assembled multisig tx, paste
