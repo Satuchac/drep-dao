@@ -28,6 +28,8 @@ import {
   type FilterResult,
   type FilterCandidate,
   type DvResult,
+  type PledgeVerification,
+  type RoundDetail,
 } from '@/lib/api';
 import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, RationaleText } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
@@ -150,8 +152,12 @@ export function ProposalDetail({
             <CollapsibleView label="Pitch / summary">
               <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</Markdown>
             </CollapsibleView>
-            {/* Milestone plan (read-only). The board's milestone-review workflow replaces it in FUNDING. */}
-            {!showMilestones && p.milestones.length > 0 ? <MilestonePlan milestones={p.milestones} /> : null}
+            {/* §3.4/§11 — the complete milestone plan (title, budget, description,
+                acceptance criteria) stays visible inside the proposal card at all
+                times — including during FUNDING — so reviewers always have the
+                full promise to compare a POA against. The lower MilestonesSection
+                handles the actual POA submission / review workflow. */}
+            {p.milestones.length > 0 ? <MilestonePlan milestones={p.milestones} /> : null}
             {/* §3.4 — every funding field from the form is shown (collapsible); empty ones collapse with an "empty" marker. */}
             <DetailBlock label="Expected ecosystem impact" md={p.ecosystemImpactMd} hint="what changes if this is built" />
             <DetailBlock label="Success metrics / KPIs" md={p.successMetricsMd} hint="how success will be measured" />
@@ -159,6 +165,13 @@ export function ProposalDetail({
             <DetailBlock label="Team info" md={p.teamInfoMd} hint="who is delivering this" />
             <RevenueSharingReadOnly proposal={p} isBoard={isBoard} onChange={load} />
             <SkinInTheGameReadOnly proposal={p} />
+            {/* §3 — when a pledge was promised and the round is in FUNDING, render the
+                payment panel right here (inside the proposal card, next to the read-only
+                "Skin in the game" block) so the proposer immediately sees the address +
+                tx-hash input. Hidden once the proposal lands in COMPLETE / FAILED. */}
+            {p.pledgeAmountAda > 0 && p.stage === 'FUNDING' && !['COMPLETE', 'FAILED'].includes(p.status) ? (
+              <PledgeSection id={id} proposal={p} isBoard={isBoard} isMine={mine} onChange={load} />
+            ) : null}
             {/* §5.3/§7.1 — expertise tags (always shown like the form). */}
             <CollapsibleView label="Expertise areas" hint="helps match filtering reviewers" empty={!p.subcategoryIds || p.subcategoryIds.length === 0}>
               {p.subcategoryIds && p.subcategoryIds.length > 0 ? (
@@ -209,12 +222,9 @@ export function ProposalDetail({
       <VersionsSection id={id} />
       {showFiltering ? <FilteringSection id={id} isBoard={isBoard} proposal={p} /> : null}
       {showDv ? <DvSection id={id} isBoard={isBoard} /> : null}
-      {/* §3 — pledge section only when a pledge was promised; visible to everyone (the
-          on-chain payment + the board confirmation are public). Hidden once we drop into
-          FAILED / COMPLETE — past that point the pledge is settled (or moot). */}
-      {p.pledgeAmountAda > 0 && p.stage === 'FUNDING' && !['COMPLETE', 'FAILED'].includes(p.status) ? (
-        <PledgeSection id={id} proposal={p} isBoard={isBoard} isMine={mine} onChange={load} />
-      ) : null}
+      {/* §3 — the PledgeSection itself is rendered inside the proposal card next to
+          the "Skin in the game" read-only block (so the proposer sees the address +
+          tx input immediately on page open). Nothing to render here. */}
       {showMilestones ? (
         <MilestonesSection id={id} isBoard={isBoard} isMine={mine} proposal={p} onChange={load} />
       ) : null}
@@ -251,7 +261,7 @@ function VotingProgressChip({ id, status, stage }: { id: string; status: string;
   useEffect(() => {
     let alive = true;
     const set = (c: Chip) => { if (alive) setChip(c); };
-    (async () => {
+    const run = async () => {
       if (['COMPLETE', 'REJECTED', 'FAILED'].includes(status)) { set(null); return; }
       if (stage === 'FILTERING' && status === 'ACTIVE') {
         const r = await filteringApi.result(id).catch(() => null);
@@ -296,12 +306,30 @@ function VotingProgressChip({ id, status, stage }: { id: string; status: string;
         if (ms.length === 0) { set(null); return; }
         const approved = ms.filter((m) => m.status === 'APPROVED').length;
         const inReview = ms.filter((m) => m.status === 'POA_SUBMITTED');
-        if (inReview.length > 0) {
-          const m = inReview[0];
+        // Rejected = a current POA the submitter must address (either ≥threshold
+        // NO, or approval became mathematically unreachable). Show this red so
+        // the team can't miss the "you need to resubmit" state.
+        const rejected = ms.filter((m) => m.status === 'REJECTED');
+        if (rejected.length > 0) {
+          const m = rejected[0];
           set({
-            label: `M#${m.idx + 1} in review · ${m.yes}/${m.threshold} YES`,
-            tone: 'amber',
-            title: `Milestone #${m.idx + 1} POA under reviewer vote — ${m.yes} YES / ${m.no} NO of ${m.threshold} needed.`,
+            label: `M#${m.idx + 1} POA rejected — resubmit needed`,
+            tone: 'red',
+            title: `Milestone #${m.idx + 1} POA was rejected (${m.yes} YES / ${m.no} NO of ${m.threshold} needed). The team can post a revised POA.`,
+          });
+        } else if (inReview.length > 0) {
+          const m = inReview[0];
+          // If any NO is on file, max-possible YES = reviewers - no. When that
+          // drops below threshold, the POA can't be approved with the current
+          // ballots — turn the chip red so it reads as "stuck", not "pending".
+          const maxPossibleYes = m.reviewers.length - m.no;
+          const stuck = m.no > 0 && maxPossibleYes < m.threshold;
+          set({
+            label: stuck
+              ? `M#${m.idx + 1} stuck · ${m.yes} YES / ${m.no} NO (need ${m.threshold})`
+              : `M#${m.idx + 1} in review · ${m.yes} YES / ${m.no} NO (need ${m.threshold})`,
+            tone: stuck ? 'red' : m.no > 0 ? 'amber' : 'amber',
+            title: `Milestone #${m.idx + 1} POA — ${m.yes} YES / ${m.no} NO of ${m.threshold} needed${stuck ? '. Approval is no longer reachable with the current ballots — the POA will close as rejected.' : '.'}`,
           });
         } else {
           set({
@@ -313,8 +341,15 @@ function VotingProgressChip({ id, status, stage }: { id: string; status: string;
       } else {
         set(null);
       }
-    })();
-    return () => { alive = false; };
+    };
+    void run();
+    // §11 — milestone state changes (POA submitted, vote cast, auto-reject,
+    // approval) need to surface in the header chip without a page refresh.
+    // Reviewer / submitter actions inside the page already trigger a reload
+    // of MilestonesSection, but this chip lives outside that subtree, so it
+    // polls every 15 s for a fresh picture.
+    const interval = setInterval(() => { void run(); }, 15_000);
+    return () => { alive = false; clearInterval(interval); };
   }, [id, status, stage]);
 
   if (!chip) return null;
@@ -694,6 +729,41 @@ function AnchorLink({ txHash }: { txHash: string | null | undefined }) {
     <a href={txUrl(txHash)} target="_blank" rel="noreferrer" className="text-xs text-emerald-700 underline dark:text-emerald-400">
       on-chain proof ↗
     </a>
+  );
+}
+
+/** §11/§15 — milestone payout badge: collapses the multisig signing + on-chain
+ *  state into a single chip with the explorer link when PAID. */
+function PayoutBadge({ payout }: { payout: MilestoneView['payout'] }) {
+  const { txUrl } = useExplorer();
+  if (!payout) return null;
+  const base = 'rounded px-2 py-0.5 text-[11px] font-medium';
+  if (payout.status === 'CONFIRMED') {
+    return (
+      <span className={`${base} bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200`} title={`Paid ${payout.paidAt ? `on ${fmtDateTime(payout.paidAt)}` : ''}`}>
+        ✓ PAID{payout.txHash ? <> · <a href={txUrl(payout.txHash)} target="_blank" rel="noreferrer" className="underline">tx ↗</a></> : null}
+      </span>
+    );
+  }
+  if (payout.status === 'BROADCASTED') {
+    return (
+      <span className={`${base} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200`} title="Tx broadcast, on-chain verification pending.">
+        Payment broadcasting{payout.txHash ? <> · <a href={txUrl(payout.txHash)} target="_blank" rel="noreferrer" className="underline">tx ↗</a></> : null}
+      </span>
+    );
+  }
+  if (payout.status === 'READY') {
+    return (
+      <span className={`${base} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200`} title="3-of-5 reached — board is broadcasting the multisig tx.">
+        Payment ready — awaiting broadcast
+      </span>
+    );
+  }
+  // PENDING_SIGS (default) — show the signature progress.
+  return (
+    <span className={`${base} bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300`} title="Awaiting 3-of-5 board signatures.">
+      Payment pending · {payout.approvals}/{payout.threshold} sigs
+    </span>
   );
 }
 
@@ -1917,6 +1987,7 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState('');
+  const [pV, setPV] = useState<PledgeVerification | null>(null);
 
   useEffect(() => {
     configApi.get().then((c) => setPledgeAddress(c.pledgeAddress)).catch(() => setPledgeAddress(null));
@@ -1925,6 +1996,20 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
   const confirmed = !!proposal.pledgeConfirmedAt;
   const paidNotConfirmed = !!proposal.pledgeTxHash && !confirmed;
   const notPaid = !proposal.pledgeTxHash && !confirmed;
+
+  // §3 — auto on-chain verification of the saved pledge tx. Mirrors the
+  // submission-fee flow: 700 ms after a hash becomes available, run the
+  // chain check; then re-check every 10 s while not fully paid. Stops once
+  // the board confirms (confirmed=true) or the hash is cleared.
+  useEffect(() => { setPV(null); }, [proposal.pledgeTxHash]);
+  useEffect(() => {
+    if (!proposal.pledgeTxHash || confirmed) return;
+    const delay = pV ? 10_000 : 700;
+    const t = setTimeout(() => {
+      proposalsApi.verifyPledge(id).then(setPV).catch(() => { /* keep last result */ });
+    }, delay);
+    return () => clearTimeout(t);
+  }, [id, proposal.pledgeTxHash, confirmed, pV]);
 
   const submit = async () => {
     setBusy(true); setError(null);
@@ -1995,6 +2080,43 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
         </div>
       ) : null}
 
+      {/* §3 — automatic on-chain verification banner (mirrors the fee flow). */}
+      {pV && !confirmed ? (
+        <div
+          className={`mt-2 rounded border p-2 text-xs ${
+            pV.fullyPaid
+              ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200'
+              : !pV.koiosAvailable
+                ? 'border-neutral-300 bg-neutral-50 text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300'
+                : pV.paidAda > 0
+                  ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200'
+                  : 'border-red-300 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200'
+          }`}
+        >
+          {pV.fullyPaid ? (
+            <span>
+              <strong>✓ Fully paid</strong> — {pV.paidAda.toLocaleString()} ₳ received at the pledge address
+              (required {pV.requiredAda.toLocaleString()} ₳). Awaiting the board&apos;s final confirmation.
+            </span>
+          ) : !pV.koiosAvailable ? (
+            <span>
+              <strong>⚠ Couldn&apos;t reach the chain right now</strong> — Koios is throttling. Your hash is saved;
+              the platform re-checks every ~10 s and the answer will appear here automatically.
+            </span>
+          ) : pV.paidAda > 0 ? (
+            <span>
+              <strong>Partial payment:</strong> {pV.paidAda.toLocaleString()} ₳ received,{' '}
+              <strong>{pV.missingAda.toLocaleString()} ₳ still missing</strong>{' '}
+              (required {pV.requiredAda.toLocaleString()} ₳). Send the rest and paste the new tx hash below.
+            </span>
+          ) : pV.tx && !pV.tx.found ? (
+            <span>✗ The tx hash isn&apos;t on-chain yet. Re-checking every ~10 s — it will update automatically when the next block lands.</span>
+          ) : (
+            <span>✗ This tx didn&apos;t pay the pledge address. Did you send to the right address (shown above)?</span>
+          )}
+        </div>
+      ) : null}
+
       {/* Submitter — paste tx hash (always available until confirmed). */}
       {isMine && !confirmed ? (
         <div className="mt-3 space-y-1">
@@ -2046,51 +2168,145 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
 
 function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: string; isBoard: boolean; isMine: boolean; proposal: PDetail; onChange: () => void }) {
   const [ms, setMs] = useState<MilestoneView[] | null>(null);
-  const [roundStatus, setRoundStatus] = useState<string | null>(null);
+  // We need the round's milestone settings (reviewer count + approval votes)
+  // — not just status — so the allocation panel + UI hints match the round's
+  // own configuration instead of platform defaults.
+  const [round, setRound] = useState<RoundDetail | null>(null);
+  const [showApproved, setShowApproved] = useState(false);
+  const [showUpcoming, setShowUpcoming] = useState(false);
   const load = useCallback(() => {
     milestonesApi.forProposal(id).then(setMs).catch(() => setMs([]));
   }, [id]);
   useEffect(load, [load]);
   useEffect(() => {
-    if (!proposal.roundId) { setRoundStatus(null); return; }
-    roundsApi.get(proposal.roundId).then((r) => setRoundStatus(r.status)).catch(() => setRoundStatus(null));
+    if (!proposal.roundId) { setRound(null); return; }
+    roundsApi.get(proposal.roundId).then(setRound).catch(() => setRound(null));
   }, [proposal.roundId]);
   if (!ms) return null;
   const noReviewers = ms.every((m) => m.reviewers.length === 0);
-  const inFunding = (proposal.stage === 'FUNDING') && (proposal.status === 'APPROVED') && (roundStatus === 'FUNDING');
+  const inFunding = (proposal.stage === 'FUNDING') && (proposal.status === 'APPROVED') && (round?.status === 'FUNDING');
   const stoppedOrDone = ['COMPLETE', 'FAILED'].includes(proposal.status);
+  // Fall back to the per-milestone `threshold` (already round-aware) for the
+  // approval-votes hint; reviewer count uses the round setting directly with a
+  // 3 fallback (only hit while the round detail is still loading).
+  const requiredReviewers = round?.settings.milestoneReviewerCount ?? 3;
+  const requiredYes = round?.settings.milestoneApprovalVotes ?? ms[0]?.threshold ?? 2;
 
-  // Anyone reviewer or board (not the submitter) can see stop-funding controls — but
-  // server-side gates which user is actually allowed to propose. The button itself is
-  // surfaced inside <StopFundingPanel/>.
+  // §11.2 — sequential gate. The "active" milestone is the first one that hasn't
+  // been APPROVED yet. Earlier milestones are APPROVED (collapsible history);
+  // later milestones are LOCKED until each preceding one is approved
+  // (collapsible upcoming list so the team can see what's queued without the
+  // POA form distracting them). This mirrors the backend rule in submitPoa.
+  const approved = ms.filter((m) => m.status === 'APPROVED');
+  const activeIdx = ms.findIndex((m) => m.status !== 'APPROVED');
+  const active = activeIdx >= 0 ? ms[activeIdx] : null;
+  const upcoming = activeIdx >= 0 ? ms.slice(activeIdx + 1) : [];
+
   return (
     <section className={platformCard}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold">Funding — milestones (§11)</h3>
-        {!inFunding && !stoppedOrDone ? (
-          <span className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-            Round is not in the FUNDING stage — POAs are closed
+        <div className="flex items-center gap-2 text-xs text-neutral-500">
+          <span>{approved.length}/{ms.length} approved</span>
+          <span className="rounded border border-neutral-300 px-2 py-0.5 text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
+            Round rule: {requiredReviewers} reviewer{requiredReviewers === 1 ? '' : 's'} · {requiredYes} YES to approve
           </span>
-        ) : null}
+          {!inFunding && !stoppedOrDone ? (
+            <span className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+              Round is not in the FUNDING stage — POAs are closed
+            </span>
+          ) : null}
+        </div>
       </div>
 
       {/* Reviewer allocation panel (board only) — shown before any POA is submitted. */}
-      {isBoard && noReviewers && inFunding ? <ReviewerAllocationPanel id={id} onChange={() => { load(); onChange(); }} /> : null}
-      {isBoard && !noReviewers && !ms.some((m) => m.poaCount > 0) ? (
-        <div className="mt-2 flex items-center gap-2 text-xs text-neutral-500">
-          <span>{ms[0]?.reviewers.length ?? 0} reviewer(s) assigned · no POA submitted yet.</span>
-          <ReleaseReviewersButton id={id} onChange={() => { load(); onChange(); }} />
+      {isBoard && noReviewers && inFunding ? <ReviewerAllocationPanel id={id} target={requiredReviewers} onChange={() => { load(); onChange(); }} /> : null}
+
+      {/* §11.1 — board's always-visible reviewer roster + per-proposal controls.
+          The roster + swap controls live together so a board member can see at
+          a glance who is on the jury and reassign without scrolling. The
+          re-allocate button is only offered before any POA has been submitted
+          (the backend rejects it afterwards); the swap panel is offered always
+          (vacancy / illness / conflict can hit even mid-review). */}
+      {isBoard && !noReviewers && active ? (
+        <div className="mt-2 space-y-1 text-xs">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-neutral-700 dark:text-neutral-300">Currently assigned reviewers:</span>
+            <span className="text-neutral-700 dark:text-neutral-300">
+              {active.reviewers.map((r) => r.displayName ?? (r.drepIdOnchain?.slice(0, 14) + '…')).join(', ')}
+            </span>
+            {!ms.some((m) => m.poaCount > 0) ? (
+              <>
+                <span className="text-neutral-400">·</span>
+                <span className="text-neutral-500">no POA submitted yet</span>
+                <ReleaseReviewersButton id={id} onChange={() => { load(); onChange(); }} />
+              </>
+            ) : null}
+          </div>
+          <ReplaceMilestoneReviewerPanel id={id} reviewers={active.reviewers} onChange={() => { load(); onChange(); }} />
         </div>
       ) : null}
 
       {/* Stop-funding panel (reviewers + board may propose; board votes). */}
       <StopFundingPanel proposalId={id} canShowProposeButton={inFunding && !stoppedOrDone} isBoard={isBoard} onChange={() => { load(); onChange(); }} />
 
-      <ul className="mt-2 space-y-2">
-        {ms.map((m) => (
-          <MilestoneRow key={m.id} m={m} isMine={isMine} canPoa={inFunding} onChange={() => { load(); onChange(); }} />
-        ))}
-      </ul>
+      {/* Past (approved) — collapsible so the active milestone is what the eye
+          lands on. Approved milestones are immutable: read-only summary only. */}
+      {approved.length > 0 ? (
+        <div className="mt-3 rounded border border-emerald-200 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20">
+          <button
+            type="button"
+            onClick={() => setShowApproved((v) => !v)}
+            className="flex w-full items-center justify-between px-2 py-1 text-xs font-semibold text-emerald-800 dark:text-emerald-200"
+          >
+            <span>✓ Approved milestones ({approved.length})</span>
+            <span>{showApproved ? '▾ hide' : '▸ show'}</span>
+          </button>
+          {showApproved ? (
+            <ul className="space-y-2 px-2 pb-2">
+              {approved.map((m) => (
+                <MilestoneRow key={m.id} m={m} isMine={isMine} canPoa={false} locked onChange={() => { load(); onChange(); }} />
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Active milestone — the only one the submitter can act on right now.
+          Rendered prominently (no collapse) so it's the focus of the section. */}
+      {active ? (
+        <div className="mt-3">
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+            Active milestone — #{active.idx + 1} of {ms.length}
+          </div>
+          <ul className="space-y-2">
+            <MilestoneRow m={active} isMine={isMine} canPoa={inFunding} onChange={() => { load(); onChange(); }} />
+          </ul>
+        </div>
+      ) : null}
+
+      {/* Upcoming (locked) — collapsible. Read-only; the submitter cannot post
+          a POA until each preceding milestone is approved. Shown so the team
+          can still see what's coming + reviewers/budget. */}
+      {upcoming.length > 0 ? (
+        <div className="mt-3 rounded border border-neutral-200 dark:border-neutral-800">
+          <button
+            type="button"
+            onClick={() => setShowUpcoming((v) => !v)}
+            className="flex w-full items-center justify-between px-2 py-1 text-xs font-semibold text-neutral-700 dark:text-neutral-300"
+          >
+            <span>🔒 Upcoming milestones ({upcoming.length}) — unlock one at a time as each prior milestone is approved</span>
+            <span>{showUpcoming ? '▾ hide' : '▸ show'}</span>
+          </button>
+          {showUpcoming ? (
+            <ul className="space-y-2 px-2 pb-2">
+              {upcoming.map((m) => (
+                <MilestoneRow key={m.id} m={m} isMine={isMine} canPoa={false} locked onChange={() => { load(); onChange(); }} />
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -2102,21 +2318,14 @@ function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: st
  * override of `milestoneReviewerCount`) and confirms — the same set is assigned to every
  * milestone of the proposal.
  */
-function ReviewerAllocationPanel({ id, onChange }: { id: string; onChange: () => void }) {
+function ReviewerAllocationPanel({ id, target, onChange }: { id: string; target: number; onChange: () => void }) {
   const [cands, setCands] = useState<MilestoneCandidate[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [target, setTarget] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     boardMilestoneApi.candidates(id).then(setCands).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
   }, [id]);
-  // Derive the target count from the round settings (read indirectly through `forProposal`'s
-  // first milestone's threshold isn't quite right — the board sees a hint instead). We rely on
-  // the server's exact validation; the UI defaults to 3 (platform default).
-  useEffect(() => {
-    if (target == null) setTarget(3);
-  }, [target]);
 
   const toggle = (drepId: string) =>
     setPicked((prev) => {
@@ -2141,12 +2350,13 @@ function ReviewerAllocationPanel({ id, onChange }: { id: string; onChange: () =>
   if (!cands) return <div className="mt-2 text-xs text-neutral-500">Loading candidate reviewers…</div>;
   if (cands.length === 0) return <div className="mt-2 text-xs text-amber-700">No admitted DReps are eligible to review this round.</div>;
 
+  const offBy = picked.size - target;
   return (
     <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="font-medium">Allocate milestone reviewers</div>
         <div className="text-xs text-neutral-500">
-          Pick {target ?? '3'} DRep{(target ?? 3) === 1 ? '' : 's'} · {picked.size} selected
+          Pick {target} DRep{target === 1 ? '' : 's'} · {picked.size} selected
         </div>
       </div>
       <p className="mt-0.5 text-xs text-neutral-500">
@@ -2170,11 +2380,17 @@ function ReviewerAllocationPanel({ id, onChange }: { id: string; onChange: () =>
       <div className="mt-2 flex items-center gap-2">
         <button
           onClick={confirm}
-          disabled={busy || picked.size === 0}
+          disabled={busy || picked.size !== target}
+          title={offBy === 0 ? 'Assign these reviewers' : `Pick exactly ${target} reviewer${target === 1 ? '' : 's'} (round setting)`}
           className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300"
         >
           {busy ? 'Assigning…' : `Confirm ${picked.size} reviewer${picked.size === 1 ? '' : 's'}`}
         </button>
+        {offBy !== 0 ? (
+          <span className="text-xs text-amber-700 dark:text-amber-300">
+            Pick exactly {target} reviewer{target === 1 ? '' : 's'} ({offBy > 0 ? `remove ${offBy}` : `add ${-offBy} more`}).
+          </span>
+        ) : null}
         {error ? <span className="text-xs text-red-600">{error}</span> : null}
       </div>
     </div>
@@ -2196,6 +2412,105 @@ function ReleaseReviewersButton({ id, onChange }: { id: string; onChange: () => 
       </button>
       {err ? <span className="text-[11px] text-red-600">{err}</span> : null}
     </>
+  );
+}
+
+/**
+ * §11.1 — board swaps a single milestone reviewer (vacancy / illness / conflict
+ * of interest). Mirrors the FILTERING reviewer-replace flow:
+ *   - lists the currently-assigned reviewers (mirrored across every milestone),
+ *   - lets the board pick one to replace + a candidate from the ranked list,
+ *   - server-side gates: cast votes are final → can't swap a reviewer who has
+ *     already voted on any milestone; new DRep must be admitted, not the
+ *     submitter, not already on this proposal.
+ */
+function ReplaceMilestoneReviewerPanel({ id, reviewers, onChange }: { id: string; reviewers: MilestoneView['reviewers']; onChange: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [cands, setCands] = useState<MilestoneCandidate[] | null>(null);
+  const [oldDrepId, setOldDrepId] = useState<string>('');
+  const [newDrepId, setNewDrepId] = useState<string>('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    boardMilestoneApi.candidates(id).then(setCands).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
+  }, [open, id]);
+
+  const assignedIds = new Set(reviewers.map((r) => r.drepId).filter(Boolean) as string[]);
+  const eligibleNew = (cands ?? []).filter((c) => !assignedIds.has(c.drepId));
+
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try {
+      await boardMilestoneApi.replaceReviewer(id, oldDrepId, newDrepId);
+      setOldDrepId(''); setNewDrepId(''); setOpen(false); onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!open) {
+    return (
+      <div className="mt-2 text-xs">
+        <button
+          onClick={() => setOpen(true)}
+          className="rounded border border-neutral-300 px-2 py-0.5 text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          title="Swap an assigned reviewer (vacancy / illness / conflict of interest)"
+        >
+          ↻ Replace a reviewer
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded border border-neutral-300 bg-neutral-50 p-2 text-xs dark:border-neutral-700 dark:bg-neutral-900">
+      <div className="mb-1 flex items-center justify-between">
+        <span className="font-semibold">Replace a milestone reviewer</span>
+        <button onClick={() => { setOpen(false); setError(null); }} className="text-neutral-500 hover:underline">cancel</button>
+      </div>
+      <div className="mb-1 text-[11px] text-neutral-500">
+        Same reviewer set is mirrored across every milestone, so the swap applies to all of them. A reviewer who has already cast their vote cannot be replaced.
+      </div>
+      <div className="mb-2 text-[11px]">
+        <span className="font-semibold text-neutral-600 dark:text-neutral-400">Currently assigned:</span>{' '}
+        <span className="text-neutral-700 dark:text-neutral-300">
+          {reviewers.map((r) => r.displayName ?? (r.drepIdOnchain?.slice(0, 14) + '…')).join(', ')}
+        </span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <label className="block">
+          <span className="text-[11px] text-neutral-500">Old reviewer</span>
+          <select value={oldDrepId} onChange={(e) => setOldDrepId(e.target.value)} className="mt-0.5 w-full rounded border border-neutral-300 px-1.5 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900">
+            <option value="">— pick the reviewer to swap out —</option>
+            {reviewers.filter((r) => r.drepId).map((r) => (
+              <option key={r.drepId!} value={r.drepId!}>{r.displayName ?? `${r.drepIdOnchain?.slice(0, 14)}…`}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-[11px] text-neutral-500">Replacement</span>
+          <select value={newDrepId} onChange={(e) => setNewDrepId(e.target.value)} disabled={!cands} className="mt-0.5 w-full rounded border border-neutral-300 px-1.5 py-0.5 text-xs disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900">
+            <option value="">{cands ? '— pick a replacement DRep —' : 'Loading candidates…'}</option>
+            {eligibleNew.map((c) => (
+              <option key={c.drepId} value={c.drepId}>
+                {c.displayName ?? `${c.drepIdOnchain?.slice(0, 14)}…`}
+                {c.expertiseMatch ? ' · expertise match' : ''} · load {c.loadInRound}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <button disabled={busy || !oldDrepId || !newDrepId} onClick={submit} className="rounded border border-emerald-500 px-2 py-0.5 text-emerald-700 disabled:opacity-40 dark:text-emerald-300">
+          {busy ? '…' : 'Replace reviewer'}
+        </button>
+        {error ? <span className="text-red-600">{error}</span> : null}
+      </div>
+    </div>
   );
 }
 
@@ -2327,18 +2642,21 @@ function StopFundingRow({ s, isBoard, onChange }: { s: StopFundingView; isBoard:
   );
 }
 
-function MilestoneRow({ m, isMine, canPoa, onChange }: { m: MilestoneView; isMine: boolean; canPoa: boolean; onChange: () => void }) {
+function MilestoneRow({ m, isMine, canPoa, locked = false, onChange }: { m: MilestoneView; isMine: boolean; canPoa: boolean; locked?: boolean; onChange: () => void }) {
   const [poa, setPoa] = useState('');
   const [rationale, setRationale] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPast, setShowPast] = useState(false);
   const run = async (fn: () => Promise<unknown>) => {
     setError(null); setBusy(true);
     try { await fn(); onChange(); } catch (e) { setError(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
   };
-  // POA is allowed iff: round is in FUNDING, milestone is not APPROVED, and it's NOT currently
-  // under review (POA_SUBMITTED is immutable until the reviewers decide). REJECTED → may resubmit.
-  const submitterCanPoa = isMine && canPoa && m.status !== 'APPROVED' && m.status !== 'POA_SUBMITTED';
+  // POA is allowed iff: this row is the ACTIVE one (locked=false), the round is
+  // in FUNDING, the milestone is not APPROVED, and it's NOT currently under
+  // review (POA_SUBMITTED is immutable until reviewers decide). REJECTED →
+  // resubmit. Locked rows (approved-past or upcoming) never show the form.
+  const submitterCanPoa = !locked && isMine && canPoa && m.status !== 'APPROVED' && m.status !== 'POA_SUBMITTED';
   return (
     <li className="rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">
       <div className="flex items-center justify-between">
@@ -2352,6 +2670,10 @@ function MilestoneRow({ m, isMine, canPoa, onChange }: { m: MilestoneView; isMin
           </span>
           <StatusBadge status={m.status} cls={PROPOSAL_STATUS_CLS} />
           <AnchorLink txHash={m.anchorTxHash} />
+          {/* §11/§15 — disbursement status: visible to everyone (the payment
+              is on-chain, after all). PAID + tx link when CONFIRMED; otherwise
+              "Payment pending (N/M sigs)" or "Payment ready — awaiting broadcast". */}
+          <PayoutBadge payout={m.payout} />
         </div>
       </div>
       {m.reviewers.length > 0 ? (
@@ -2359,17 +2681,60 @@ function MilestoneRow({ m, isMine, canPoa, onChange }: { m: MilestoneView; isMin
           Reviewers: {m.reviewers.map((r) => r.displayName ?? r.drepIdOnchain?.slice(0, 14) + '…').join(', ')}
         </div>
       ) : null}
-      {m.description ? <Markdown className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">{m.description}</Markdown> : null}
-      {m.acceptanceCriteria ? (
-        <div className="mt-1">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Acceptance criteria</div>
-          <Markdown className="text-xs text-neutral-600 dark:text-neutral-400">{m.acceptanceCriteria}</Markdown>
+      {/* §11 — "What was promised": description + acceptance criteria pulled
+          straight from the proposal submission. Shown ONLY on the active row
+          so the reviewer can compare the promise against the POA below
+          without scrolling; the same content for past/upcoming milestones
+          is already rendered in the "Milestones" plan at the top of the
+          proposal card, so we skip it on locked rows to avoid duplication. */}
+      {!locked && (m.description || m.acceptanceCriteria) ? (
+        <div className="mt-1 rounded border border-neutral-200 bg-neutral-50 p-2 text-xs dark:border-neutral-800 dark:bg-neutral-900/40">
+          <div className="text-[11px] font-bold uppercase tracking-wide text-neutral-500">What the team promised to deliver</div>
+          {m.description ? (
+            <div className="mt-1">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Description</div>
+              <Markdown className="text-neutral-700 dark:text-neutral-300">{m.description}</Markdown>
+            </div>
+          ) : null}
+          {m.acceptanceCriteria ? (
+            <div className="mt-1">
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Acceptance criteria</div>
+              <Markdown className="text-neutral-700 dark:text-neutral-300">{m.acceptanceCriteria}</Markdown>
+            </div>
+          ) : (
+            <div className="mt-1 text-[11px] text-neutral-400">No acceptance criteria were provided at submission.</div>
+          )}
         </div>
       ) : null}
       {m.latestPoa ? (
         <div className="mt-1 rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-800/50">
-          <div className="font-medium">Proof of Achievement (attempt {m.latestPoa.attempt}{m.status === 'REJECTED' ? ' — REJECTED, may resubmit' : m.status === 'POA_SUBMITTED' ? ' — under review' : ''})</div>
+          <div className="font-medium">Proof of Achievement (attempt {m.latestPoa.attempt}{m.status === 'REJECTED' ? ' — REJECTED, may resubmit' : m.status === 'POA_SUBMITTED' ? ' — under review' : m.status === 'APPROVED' ? ' — APPROVED' : ''})</div>
           <Markdown className="mt-0.5 text-neutral-600 dark:text-neutral-400">{m.latestPoa.contentMd ?? ''}</Markdown>
+        </div>
+      ) : null}
+      {/* Earlier (superseded) POA attempts — every entry was rejected. Collapsible
+          so the current attempt stays prominent; lets the team / reviewers
+          reference the prior submissions without scrolling. */}
+      {m.pastPoas && m.pastPoas.length > 0 ? (
+        <div className="mt-1 rounded border border-neutral-200 dark:border-neutral-800">
+          <button
+            type="button"
+            onClick={() => setShowPast((v) => !v)}
+            className="flex w-full items-center justify-between px-2 py-1 text-[11px] font-semibold text-neutral-500"
+          >
+            <span>Previous attempts ({m.pastPoas.length}) — all rejected, superseded by the current attempt</span>
+            <span>{showPast ? '▾ hide' : '▸ show'}</span>
+          </button>
+          {showPast ? (
+            <ul className="space-y-1 px-2 pb-2">
+              {m.pastPoas.map((p) => (
+                <li key={p.attempt} className="rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-800/40">
+                  <div className="font-medium text-neutral-500">Attempt {p.attempt} — rejected (superseded)</div>
+                  <Markdown className="mt-0.5 text-neutral-500 dark:text-neutral-400">{p.contentMd ?? ''}</Markdown>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       ) : null}
       {m.votes.length > 0 ? <div className="mt-1"><Votes votes={m.votes} /></div> : null}
@@ -2383,14 +2748,17 @@ function MilestoneRow({ m, isMine, canPoa, onChange }: { m: MilestoneView; isMin
             {m.status === 'REJECTED' ? `Submit attempt ${m.poaCount + 1}` : 'Submit POA'}
           </button>
         </div>
-      ) : isMine && m.status === 'POA_SUBMITTED' ? (
+      ) : isMine && !locked && m.status === 'POA_SUBMITTED' ? (
         <div className="mt-2 text-xs text-neutral-500">Your POA is under review — you can resubmit only if the reviewers reject it.</div>
-      ) : isMine && !canPoa && m.status !== 'APPROVED' ? (
+      ) : isMine && !locked && !canPoa && m.status !== 'APPROVED' ? (
         <div className="mt-2 text-xs text-amber-700">POA submission is closed (round is not in the FUNDING stage).</div>
+      ) : isMine && locked && m.status !== 'APPROVED' ? (
+        <div className="mt-2 text-xs text-amber-700">Locked — the previous milestone must be approved first.</div>
       ) : null}
 
-      {/* Assigned reviewer votes when a POA is in review. */}
-      {!isMine && m.status === 'POA_SUBMITTED' ? (
+      {/* Assigned reviewer votes when a POA is in review. Locked rows never vote
+          (an active POA is by definition on the active milestone, not a locked one). */}
+      {!isMine && !locked && m.status === 'POA_SUBMITTED' ? (
         <div className="mt-2 space-y-1">
           <MarkdownEditor value={rationale} onChange={setRationale} placeholder="feedback (required for NO)" minRows={3} />
           <div className="flex gap-2">

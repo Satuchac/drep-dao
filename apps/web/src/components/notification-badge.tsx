@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, filteringApi, internalProposalsApi, milestonesApi, removalApi, treasuryApi } from '@/lib/api';
+import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, filteringApi, internalProposalsApi, milestonesApi, proposalsApi, removalApi, treasuryApi } from '@/lib/api';
 
 /**
  * §15.3 — notifications in the login rectangle. A red circle with the total number of to-dos
@@ -11,13 +11,13 @@ import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, boardPledgeAp
  * Actions, then Applications, then Voting & reviews, then Internal proposals. Self-hides when
  * there is nothing to do.
  */
-export function NotificationBadge({ isBoard, onNavigate }: { isBoard: boolean; onNavigate: (tab: 'sign' | 'apps' | 'voting' | 'internal') => void }) {
-  const [counts, setCounts] = useState({ actions: 0, applications: 0, voting: 0, internal: 0 });
+export function NotificationBadge({ isBoard, onNavigate }: { isBoard: boolean; onNavigate: (tab: 'sign' | 'apps' | 'voting' | 'internal' | 'proposals') => void }) {
+  const [counts, setCounts] = useState({ actions: 0, applications: 0, voting: 0, internal: 0, mine: 0 });
 
   useEffect(() => {
     let alive = true;
     const poll = async () => {
-      const next = { actions: 0, applications: 0, voting: 0, internal: 0 };
+      const next = { actions: 0, applications: 0, voting: 0, internal: 0, mine: 0 };
       if (isBoard) {
         const [a, f, p, dapps, eapps, rem, stop, pl] = await Promise.allSettled([
           treasuryApi.boardActions(),
@@ -42,6 +42,14 @@ export function NotificationBadge({ isBoard, onNavigate }: { isBoard: boolean; o
       }
       try { next.voting = (await filteringApi.votingTasks()).total; } catch { /* leave 0 */ }
       try { next.internal = (await internalProposalsApi.pendingCount()).count; } catch { /* 0 */ }
+      // §11.2 — submitter's "my proposals" to-dos: any of the user's proposals
+      // currently sitting on a REJECTED milestone needing a fresh POA. The
+      // backend tags those rows with a red `progress` chip whose label starts
+      // with "M#…POA rejected", so we count those without a new endpoint.
+      try {
+        const mine = await proposalsApi.mine();
+        next.mine = mine.filter((p) => p.progress?.tone === 'red' && p.progress.label.includes('POA rejected')).length;
+      } catch { /* 0 */ }
       if (alive) setCounts(next);
     };
     poll();
@@ -52,25 +60,29 @@ export function NotificationBadge({ isBoard, onNavigate }: { isBoard: boolean; o
     };
   }, [isBoard]);
 
-  const total = counts.actions + counts.applications + counts.voting + counts.internal;
+  const total = counts.actions + counts.applications + counts.voting + counts.internal + counts.mine;
   if (total <= 0) return null;
 
   // Land on the tab that actually has work: Actions, then Applications, then Voting & reviews,
-  // then Internal proposals.
+  // then Internal proposals, then My proposals.
   const target = counts.actions > 0
     ? 'sign'
     : counts.applications > 0
       ? 'apps'
       : counts.voting > 0
         ? 'voting'
-        : 'internal';
+        : counts.internal > 0
+          ? 'internal'
+          : 'proposals';
   const label = counts.actions > 0
     ? 'Actions'
     : counts.applications > 0
       ? 'Applications'
       : counts.voting > 0
         ? 'Voting & reviews'
-        : 'Internal proposals';
+        : counts.internal > 0
+          ? 'Internal proposals'
+          : 'My proposals';
 
   return (
     <button

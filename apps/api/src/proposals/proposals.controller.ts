@@ -93,4 +93,11 @@ export class ProposalsController {
   pledgeTx(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: PledgeTxHashDto) {
     return this.proposals.submitPledgeTxHash(ctx.userId, id, dto.txHash);
   }
+
+  // §3 — submitter-driven on-chain verification of the pledge payment.
+  @UseGuards(JwtAuthGuard)
+  @Get('proposals/:id/verify-pledge')
+  verifyPledge(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.proposals.verifyPledgeOnChain(id, ctx.userId);
+  }
 }

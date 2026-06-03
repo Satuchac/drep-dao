@@ -22,6 +22,12 @@ export class AssignReviewersDto {
   drepIds!: string[];
 }
 
+/** Board swaps one assigned milestone reviewer for another DRep (vacancy / illness). */
+export class ReplaceMilestoneReviewerDto {
+  @IsUUID() oldDrepId!: string;
+  @IsUUID() newDrepId!: string;
+}
+
 /** Reviewer or board member proposes stopping funding. */
 export class StopFundingDto {
   @IsString() @MinLength(10) @MaxLength(5000) reason!: string;
@@ -127,6 +133,13 @@ export class MilestonesController {
   @Post('admin/proposals/:id/release-milestone-reviewers')
   release(@Param('id', ParseUUIDPipe) id: string) {
     return this.milestones.releaseReviewers(id);
+  }
+
+  /** Swap one assigned milestone reviewer for another DRep (vacancy / illness). */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Post('admin/proposals/:id/replace-milestone-reviewer')
+  replaceReviewer(@Param('id', ParseUUIDPipe) id: string, @Body() dto: ReplaceMilestoneReviewerDto) {
+    return this.milestones.replaceReviewer(id, dto.oldDrepId, dto.newDrepId);
   }
 
   @UseGuards(JwtAuthGuard, BoardGuard)

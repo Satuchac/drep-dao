@@ -463,6 +463,47 @@ export class ProposalsService {
    * amount each saved tx sent to the configured fee address; cumulative so a team
    * can split the payment across several txs.
    */
+  /**
+   * §3 — submitter-driven on-chain check for the pledge payment. Mirrors
+   * verifyFeeOnChain: looks up the pasted tx via Koios against the configured
+   * pledge address and reports whether the promised pledge amount has landed.
+   * Auto-called by the UI after the team pastes the hash and on a slow poll
+   * until the board confirms.
+   */
+  async verifyPledgeOnChain(id: string, userId: string) {
+    const p = await this.prisma.proposal.findUnique({ where: { id } });
+    if (!p) throw new NotFoundException('proposal not found');
+    if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
+    const pledgeAddress = this.config.get<string>('PLEDGE_ADDRESS')
+      ?? this.config.get<string>('SUBMISSION_FEE_ADDRESS')
+      ?? this.config.get<string>('TREASURY_ADDRESS')
+      ?? '';
+    const requiredAda = toAda(p.pledgeAmountAda);
+    const hash = p.pledgeTxHash;
+    if (!pledgeAddress || !hash || requiredAda <= 0) {
+      return {
+        requiredAda,
+        paidAda: 0,
+        missingAda: requiredAda,
+        fullyPaid: requiredAda === 0 && !hash,
+        koiosAvailable: true,
+        tx: null as { hash: string; found: boolean; paidAda: number; koiosAvailable: boolean } | null,
+      };
+    }
+    // Pass 0n so we get the actual paid amount without applying a threshold.
+    const v = await this.cardano.verifyPayment(hash, pledgeAddress, 0n);
+    const paidAda = toAda(v.paidLovelace);
+    const missing = Math.max(0, requiredAda - paidAda);
+    return {
+      requiredAda,
+      paidAda,
+      missingAda: missing,
+      fullyPaid: paidAda >= requiredAda,
+      koiosAvailable: v.koiosAvailable,
+      tx: { hash, found: v.found, paidAda, koiosAvailable: v.koiosAvailable },
+    };
+  }
+
   async verifyFeeOnChain(id: string, userId: string) {
     const p = await this.prisma.proposal.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('proposal not found');
@@ -1178,10 +1219,15 @@ export class ProposalsService {
           } else {
             const approved = milestones.filter((m) => m.status === 'APPROVED').length;
             const inReview = milestones.find((m) => m.status === 'POA_SUBMITTED');
+            // §11.2 — REJECTED needs submitter action: the team must post a
+            // revised POA. Surface this red so it stands out in My-proposals.
+            const rejected = milestones.find((m) => m.status === 'REJECTED');
             if (inReview) {
               const v = msVotesById.get(inReview.id) ?? [];
               const yes = v.filter((x) => x.choice === 'YES').length;
               progress = { stage: 'FUNDING', label: `M#${inReview.idx + 1} POA under review · ${yes}/${milestoneThreshold} YES`, tone: 'amber' };
+            } else if (rejected) {
+              progress = { stage: 'FUNDING', label: `M#${rejected.idx + 1} POA rejected — resubmit needed`, tone: 'red' };
             } else {
               progress = {
                 stage: 'FUNDING',

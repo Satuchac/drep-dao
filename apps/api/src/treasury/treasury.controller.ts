@@ -13,6 +13,9 @@ export class ApproveActionDto {
   @IsOptional() @IsString() @MaxLength(8000) signingKey?: string;
   @IsOptional() @IsString() @MaxLength(40) ts?: string;
 }
+export class SubmitPayoutTxDto {
+  @IsString() @MaxLength(80) txHash!: string;
+}
 
 // §15 Treasury overview + board actions (prepare/approve multisig spends).
 @Controller()
@@ -41,5 +44,13 @@ export class TreasuryController {
   @Post('admin/board-actions/:id/approve')
   approve(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ApproveActionDto) {
     return this.treasury.approve(ctx.userId, id, dto);
+  }
+
+  /** §11/§15 — after the board broadcasts the assembled multisig tx, paste
+   *  the on-chain tx hash here to verify + stamp the action CONFIRMED. */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Post('admin/board-actions/:id/payout-tx')
+  payoutTx(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SubmitPayoutTxDto) {
+    return this.treasury.submitPayoutTxHash(ctx.userId, id, dto.txHash);
   }
 }

@@ -197,18 +197,84 @@ export interface BoardAction {
   threshold: number;
   mineApproved: boolean;
   createdAt: string;
+  // §11/§15 — payout-specific link + insufficiency hint. Null for non-payout
+  // kinds (REWARD_PAYOUT / OPS / etc.); always set for PROJECT_FUNDING.
+  proposalId: string | null;
+  milestoneId: string | null;
+  milestoneIdx: number | null;
+  proposalTitle: string | null;
+  destAddress: string | null;
+  paidAt: string | null;
+  insufficient: boolean;
+}
+
+export interface BoardActionsView {
+  count: number;
+  actions: BoardAction[];
+  history: BoardAction[];
+  treasury: { address: string | null; balanceAda: number } | null;
 }
 
 export const treasuryApi = {
   overview: () => request<TreasuryOverview>('/dao/treasury'),
   boardActions: (history = false) =>
-    request<{ count: number; actions: BoardAction[]; history: BoardAction[] }>(`/me/board-actions${history ? '?history=1' : ''}`),
+    request<BoardActionsView>(`/me/board-actions${history ? '?history=1' : ''}`),
   prepareTopUp: (amountAda: number) =>
     request<{ id: string }>('/admin/treasury/prepare-topup', { method: 'POST', body: JSON.stringify({ amountAda }) }),
   approveAction: (id: string, body: { signature?: string; signingKey?: string; ts?: string }) =>
     request<{ approvals: number; threshold: number; status: string }>(`/admin/board-actions/${id}/approve`, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+  /** §11/§15 — paste the on-chain broadcast tx hash; backend verifies via Koios. */
+  submitPayoutTx: (id: string, txHash: string) =>
+    request<{ status: string; txHash: string | null; paid?: boolean; found?: boolean; koiosAvailable?: boolean; paidLovelace?: string; paidAt?: string | null }>(
+      `/admin/board-actions/${id}/payout-tx`,
+      { method: 'POST', body: JSON.stringify({ txHash }) },
+    ),
+};
+
+// §15 — multisig setup status + per-board key submission.
+export interface MultisigSeatRow {
+  seatId: string;
+  drepId: string;
+  drepKeyHash: string;
+  displayName: string;
+  userId: string | null;
+  hasKey: boolean;
+  keyHash: string | null;
+  paymentBech32: string | null;
+  hardwareAttested: boolean;
+  submittedAt: string | null;
+}
+export interface MultisigStatus {
+  threshold: number;
+  total: number;
+  submitted: number;
+  ready: boolean;
+  active: {
+    scriptHash: string;
+    bech32Address: string;
+    threshold: number;
+    totalKeys: number;
+    assembledAt: string;
+  } | null;
+  seats: MultisigSeatRow[];
+}
+export const multisigApi = {
+  status: () => request<MultisigStatus>('/dao/multisig/status'),
+  submitKey: (body: { paymentBech32: string; hardwareAttested: boolean; signature: string; key: string; ts: string }) =>
+    request<MultisigStatus>('/admin/multisig/key', { method: 'POST', body: JSON.stringify(body) }),
+};
+
+// §15.4 — user's payment address for rewards. Editable; historical RewardEntry
+// rows stamp the address they were paid to so updating doesn't rewrite history.
+export const rewardAddressApi = {
+  get: () => request<{ rewardPaymentAddress: string | null }>('/me/reward-address'),
+  set: (address: string | null) =>
+    request<{ rewardPaymentAddress: string | null }>('/me/reward-address', {
+      method: 'PATCH',
+      body: JSON.stringify({ address }),
     }),
 };
 
@@ -537,6 +603,15 @@ export interface FeeVerification {
   koiosAvailable: boolean;
   txs: { hash: string; found: boolean; paidAda: number; koiosAvailable: boolean }[];
 }
+// §3 — same shape as FeeVerification but with a single tx (the pledge is paid in one go).
+export interface PledgeVerification {
+  requiredAda: number;
+  paidAda: number;
+  missingAda: number;
+  fullyPaid: boolean;
+  koiosAvailable: boolean;
+  tx: { hash: string; found: boolean; paidAda: number; koiosAvailable: boolean } | null;
+}
 export interface ProposalRejectionReason {
   stage: string;
   from: string | null;
@@ -618,6 +693,8 @@ export const proposalsApi = {
     request<ProposalDetail>(`/proposals/${id}/pledge-tx`, { method: 'POST', body: JSON.stringify({ txHash }) }),
   // §12 — submitter verifies the cumulative submission-fee payment on-chain.
   verifyFee: (id: string) => request<FeeVerification>(`/proposals/${id}/verify-fee`),
+  // §3 — submitter verifies the on-chain pledge payment.
+  verifyPledge: (id: string) => request<PledgeVerification>(`/proposals/${id}/verify-pledge`),
   submit: (id: string, submissionFeeTxHash: string) =>
     request<ProposalDetail>(`/proposals/${id}/submit`, {
       method: 'POST',
@@ -880,7 +957,7 @@ export const commentsApi = {
 };
 
 // -------- Milestones (§11) --------
-export interface MilestoneReviewer { drepIdOnchain: string | null; displayName: string | null }
+export interface MilestoneReviewer { drepId: string | null; drepIdOnchain: string | null; displayName: string | null }
 export interface MilestoneView {
   id: string;
   idx: number;
@@ -891,12 +968,25 @@ export interface MilestoneView {
   status: string;
   reviewers: MilestoneReviewer[];
   latestPoa: { contentMd: string | null; submittedAt: string; attempt: number } | null;
+  /** Earlier (superseded) POA attempts — every one was rejected (or it would
+   *  have been the final, approved attempt). Shown in a collapsible history. */
+  pastPoas: { attempt: number; contentMd: string | null; submittedAt: string }[];
   poaCount: number;
   yes: number;
   no: number;
   threshold: number;
   votes: VoteRationale[];
   anchorTxHash: string | null;
+  /** §11/§15 — disbursement status for this milestone's PROJECT_FUNDING
+   *  multisig action. null until the milestone is APPROVED + the action
+   *  has been prepared. */
+  payout: {
+    status: string;        // PENDING_SIGS | READY | BROADCASTED | CONFIRMED
+    approvals: number;
+    threshold: number;
+    txHash: string | null;
+    paidAt: string | null;
+  } | null;
 }
 export interface MilestoneAssignmentView {
   milestoneId: string;
@@ -1061,6 +1151,12 @@ export const boardMilestoneApi = {
   /** Release the currently-assigned reviewers (only before any POA has been submitted). */
   release: (proposalId: string) =>
     request<{ released: boolean }>(`/admin/proposals/${proposalId}/release-milestone-reviewers`, { method: 'POST' }),
+  /** §11.1 — swap a single assigned reviewer for another DRep (vacancy / illness / conflict). */
+  replaceReviewer: (proposalId: string, oldDrepId: string, newDrepId: string) =>
+    request<MilestoneView[]>(`/admin/proposals/${proposalId}/replace-milestone-reviewer`, {
+      method: 'POST',
+      body: JSON.stringify({ oldDrepId, newDrepId }),
+    }),
   terminate: (proposalId: string) => request<{ status: string }>(`/admin/proposals/${proposalId}/terminate`, { method: 'POST' }),
   /** Board-wide list of every ACTIVE stop-funding awaiting board votes. */
   activeStopFundings: () => request<ActiveStopFunding[]>('/admin/stop-fundings/active'),

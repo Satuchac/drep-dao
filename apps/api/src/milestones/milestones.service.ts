@@ -150,6 +150,83 @@ export class MilestonesService {
     return this.forProposal(proposalId);
   }
 
+  /**
+   * §11.1 — board swaps a single milestone reviewer for another DRep (vacancy,
+   * illness, conflict of interest). Mirrors filtering.replaceReviewer:
+   *   - the old reviewer must currently be assigned on EVERY milestone of the
+   *     proposal (assignment is per-proposal, mirrored across all milestones),
+   *   - they must NOT have voted on any milestone that is still POA_SUBMITTED
+   *     (cast votes are final — those milestones keep the old reviewer's vote;
+   *     for un-voted POA_SUBMITTED milestones the new reviewer simply picks up
+   *     the open ballot),
+   *   - the new DRep must be admitted, not the submitter, not already on this
+   *     proposal. Soft-releases the old assignments and creates fresh ones for
+   *     the new DRep on every milestone of the proposal. Adds the new DRep to
+   *     round eligibility if missing.
+   */
+  async replaceReviewer(proposalId: string, oldDrepId: string, newDrepId: string) {
+    if (oldDrepId === newDrepId) {
+      throw new BadRequestException('the replacement DRep must be different');
+    }
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      select: { id: true, status: true, stage: true, roundId: true, submitterDrepId: true, milestones: { select: { id: true, status: true } } },
+    });
+    if (!proposal) throw new NotFoundException('proposal not found');
+    if (proposal.stage !== ProposalStage.FUNDING || proposal.status !== ProposalStatus.APPROVED) {
+      throw new ConflictException('proposal is not in the FUNDING stage');
+    }
+    if (newDrepId === proposal.submitterDrepId) {
+      throw new BadRequestException('the submitter cannot review their own milestones');
+    }
+
+    const oldAssignments = await this.prisma.milestoneAssignment.findMany({
+      where: { reviewerDrepId: oldDrepId, releasedAt: null, milestone: { proposalId } },
+    });
+    if (oldAssignments.length === 0) {
+      throw new ConflictException('that DRep is not currently assigned to this proposal');
+    }
+    // A reviewer who has already cast their vote on a milestone (whatever its
+    // current status) can't be unwound for that milestone — their vote is part
+    // of the record. We refuse the swap outright rather than partially apply it.
+    const votedOn = await this.prisma.vote.findMany({
+      where: { drepId: oldDrepId, phase: VotePhase.MILESTONE, milestoneId: { in: oldAssignments.map((a) => a.milestoneId) } },
+      select: { milestoneId: true },
+    });
+    if (votedOn.length > 0) {
+      throw new ConflictException('this reviewer has already cast a vote on this proposal — their vote is final and cannot be replaced');
+    }
+
+    const newDrep = await this.prisma.drep.findUnique({ where: { id: newDrepId }, select: { id: true, status: true } });
+    if (!newDrep || newDrep.status !== 'ADMITTED') {
+      throw new BadRequestException('replacement is not an admitted DRep');
+    }
+    const conflict = await this.prisma.milestoneAssignment.findFirst({
+      where: { reviewerDrepId: newDrepId, releasedAt: null, milestone: { proposalId } },
+    });
+    if (conflict) {
+      throw new BadRequestException('that DRep is already assigned to this proposal');
+    }
+    const eligibleRow = proposal.roundId
+      ? await this.prisma.roundDrepEligibility.findUnique({ where: { roundId_drepId: { roundId: proposal.roundId, drepId: newDrepId } } })
+      : null;
+
+    const now = new Date();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.milestoneAssignment.updateMany({
+        where: { id: { in: oldAssignments.map((a) => a.id) } },
+        data: { releasedAt: now },
+      });
+      await tx.milestoneAssignment.createMany({
+        data: oldAssignments.map((a) => ({ milestoneId: a.milestoneId, reviewerDrepId: newDrepId, confirmedByBoardAt: now })),
+      });
+      if (!eligibleRow && proposal.roundId) {
+        await tx.roundDrepEligibility.create({ data: { roundId: proposal.roundId, drepId: newDrepId } });
+      }
+    });
+    return this.forProposal(proposalId);
+  }
+
   /** Release all reviewers (only allowed while no POA has been submitted on any milestone). */
   async releaseReviewers(proposalId: string) {
     const submitted = await this.prisma.milestone.count({
@@ -174,7 +251,10 @@ export class MilestonesService {
       orderBy: { idx: 'asc' },
       include: {
         assignments: { where: { releasedAt: null }, include: { reviewerDrep: { select: { drepIdOnchain: true, user: { select: { displayName: true } } } } } },
-        poas: { orderBy: { attempt: 'desc' }, take: 1 },
+        // §11.2 — return every POA attempt (not just the latest) so the UI can
+        // surface past attempts in a collapsible "previous submissions" section.
+        // Cap at 20 — well above any realistic submitter loop.
+        poas: { orderBy: { attempt: 'desc' }, take: 20 },
       },
     });
     const threshold = await this.milestoneThreshold(proposalId);
@@ -190,16 +270,29 @@ export class MilestonesService {
           amountAda: Number(m.amountAda) / LOVELACE,
           status: m.status,
           reviewers: m.assignments.map((a) => ({
+            // Internal drepId is needed by the board UI to identify which
+            // assigned reviewer to swap when calling replaceReviewer.
+            drepId: a.reviewerDrepId ?? null,
             drepIdOnchain: a.reviewerDrep?.drepIdOnchain ?? null,
             displayName: a.reviewerDrep?.user?.displayName ?? null,
           })),
           latestPoa: m.poas[0] ? { contentMd: m.poas[0].contentMd, submittedAt: m.poas[0].submittedAt, attempt: m.poas[0].attempt } : null,
+          // All earlier (superseded) attempts — every entry here is a POA that
+          // didn't reach APPROVED (otherwise the milestone would be closed and
+          // no later attempt would exist). Used by the UI's "previous attempts"
+          // collapsible. Excludes the latest (already in latestPoa).
+          pastPoas: m.poas.slice(1).map((p) => ({ attempt: p.attempt, contentMd: p.contentMd, submittedAt: p.submittedAt })),
           poaCount: await this.prisma.milestonePoa.count({ where: { milestoneId: m.id } }),
           yes: votes.filter((v) => v.choice === VoteChoice.YES).length,
           no: votes.filter((v) => v.choice === VoteChoice.NO).length,
           threshold,
           votes,
           anchorTxHash: await this.milestoneAnchorTx(proposalId, m.idx),
+          // §11/§15 — payout status for the disbursement multisig action.
+          // null when no payout has been prepared yet (milestone not yet
+          // APPROVED). Otherwise one row with the board signing state +
+          // optional on-chain tx hash.
+          payout: await this.milestonePayoutStatus(m.id),
         };
       }),
     );
@@ -280,6 +373,22 @@ export class MilestonesService {
     if (m.assignments.length === 0) {
       throw new ConflictException('the board has not allocated reviewers yet — please wait');
     }
+    // §11.2 — sequential milestones. The team works one milestone at a time: a
+    // POA for milestone N+1 can only be posted after N has been APPROVED. This
+    // prevents jumping ahead (e.g. submitting M2 while M1 is still under review
+    // or has been rejected) and matches how the budget is meant to be released
+    // gate-by-gate.
+    if (m.idx > 0) {
+      const prev = await this.prisma.milestone.findFirst({
+        where: { proposalId: m.proposalId, idx: m.idx - 1 },
+        select: { status: true },
+      });
+      if (!prev || prev.status !== 'APPROVED') {
+        throw new ConflictException(
+          `milestone #${m.idx + 1} cannot be submitted until milestone #${m.idx} is APPROVED`,
+        );
+      }
+    }
 
     const attempt = (await this.prisma.milestonePoa.count({ where: { milestoneId } })) + 1;
     await this.prisma.$transaction(async (tx) => {
@@ -342,7 +451,11 @@ export class MilestonesService {
     return { status: ProposalStatus.FAILED };
   }
 
-  /** §11.4 — 2 YES → APPROVED (+ anchor + auto-prepare payout); 2 NO → REJECTED (resubmit). */
+  /** §11.4 — threshold YES → APPROVED (+ anchor + auto-prepare payout); threshold NO → REJECTED (resubmit).
+   *  Also REJECTED when the YES threshold becomes mathematically unreachable
+   *  (e.g. 2 reviewers, threshold 2, 1 NO → max possible YES = 1 < 2): the POA
+   *  is stuck, so we close it as REJECTED to free the submitter to post a new
+   *  attempt that incorporates the NO reviewer's feedback. */
   private async maybeDecide(milestoneId: string) {
     const m = await this.prisma.milestone.findUnique({
       where: { id: milestoneId },
@@ -350,12 +463,21 @@ export class MilestonesService {
     });
     if (!m || m.status !== 'POA_SUBMITTED') return;
     const threshold = m.proposal.round?.milestoneApprovalVotes ?? ROUND_SETTING_DEFAULTS.milestoneApprovalVotes;
+    const reviewerCount = await this.prisma.milestoneAssignment.count({
+      where: { milestoneId, releasedAt: null },
+    });
     const votes = await this.voteList(milestoneId);
     const yes = votes.filter((v) => v.choice === VoteChoice.YES).length;
     const no = votes.filter((v) => v.choice === VoteChoice.NO).length;
     let outcome: 'APPROVED' | 'REJECTED' | null = null;
     if (yes >= threshold) outcome = 'APPROVED';
     else if (no >= threshold) outcome = 'REJECTED';
+    // Conservative: assume current NO votes won't flip. Max future YES =
+    // reviewerCount - no (existing YES plus every still-un-voted reviewer
+    // voting YES). If that's still below the threshold, approval is
+    // impossible without action — close as REJECTED so the team can
+    // resubmit. Threshold = 2 + 2 reviewers + 1 NO → max YES = 1 < 2.
+    else if (reviewerCount > 0 && reviewerCount - no < threshold) outcome = 'REJECTED';
     if (!outcome) return;
 
     await this.prisma.milestone.update({
@@ -408,19 +530,25 @@ export class MilestonesService {
     publicId: string | null,
     payoutAddress: string | null,
   ) {
-    void milestoneId;
-    const tag = `milestone #${idx + 1} payout — ${publicId ?? title}`;
+    // Idempotent — by milestoneId now (we used to match the description tag
+    // since the action wasn't linked to the milestone). One PROJECT_FUNDING
+    // action per approved milestone.
     const existing = await this.prisma.multisigAction.findFirst({
-      where: { kind: 'PROJECT_FUNDING', description: { contains: tag } },
+      where: { kind: 'PROJECT_FUNDING', milestoneId },
     });
     if (existing) return;
-    const dest = payoutAddress ? ` → ${payoutAddress.slice(0, 16)}…` : '';
+    const label = `Milestone #${idx + 1} payout — ${publicId ? `${publicId}: ` : ''}${title}`;
     await this.prisma.multisigAction.create({
       data: {
         kind: 'PROJECT_FUNDING',
         status: 'PENDING_SIGS',
         amountAda: BigInt(Math.round(amountAda * LOVELACE)),
-        description: `${tag}: ${amountAda.toLocaleString()} ₳${dest} — milestone APPROVED, ready to disburse${proposalId ? '' : ''}`,
+        description: `${label} — milestone APPROVED, ready to disburse ${amountAda.toLocaleString()} ₳`,
+        proposalId,
+        milestoneId,
+        milestoneIdx: idx,
+        proposalTitle: title,
+        destAddress: payoutAddress,
       },
     });
   }
@@ -699,6 +827,26 @@ export class MilestonesService {
       choice: v.choice,
       rationale: v.rationale ?? null,
     }));
+  }
+
+  /** §11/§15 — milestone payout status: the PROJECT_FUNDING multisig action.
+   *  Shape mirrors what the front-end needs to render the badge:
+   *    null  → no payout prepared yet (milestone not approved)
+   *    obj   → status (PENDING_SIGS/READY/BROADCASTED/CONFIRMED), approvals,
+   *            threshold, txHash (when broadcast), paidAt (when confirmed). */
+  private async milestonePayoutStatus(milestoneId: string) {
+    const a = await this.prisma.multisigAction.findFirst({
+      where: { kind: 'PROJECT_FUNDING', milestoneId },
+      include: { signatures: { select: { id: true } } },
+    });
+    if (!a) return null;
+    return {
+      status: a.status,
+      approvals: a.signatures.length,
+      threshold: 3, // matches TreasuryService.APPROVAL_THRESHOLD
+      txHash: a.txHash,
+      paidAt: a.paidAt,
+    };
   }
 
   /** Find the on-chain anchor tx for a specific milestone (matched by its readable ref). */
