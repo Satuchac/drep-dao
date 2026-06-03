@@ -46,6 +46,7 @@ model AppUser {
   budgetChangesRequested BudgetChangeRequest[]    @relation("BudgetChangeRequester")
   budgetChangesDecided   BudgetChangeRequest[]    @relation("BudgetChangeDecider")
   boardMultisigKey       BoardMultisigKey[]
+  hotWalletSweeps        HotWalletSweep[]
 
   @@map("app_user")
 }
@@ -1095,6 +1096,25 @@ model BoardMultisigKey {
 
   @@index([userId])
   @@map("board_multisig_key")
+}
+
+// §15.3 — every HOT_WALLET → TREASURY sweep tx (board-triggered or sysadmin).
+// Persisted so the Treasury "Hot wallet history" UI can show what actually
+// moved and link the explorer, even after a page refresh. Top-ups go the
+// other way and are already persisted as MultisigAction rows.
+model HotWalletSweep {
+  id                  String   @id @default(uuid()) @db.Uuid
+  txHash              String   @unique @map("tx_hash")
+  amountLovelace      BigInt   @map("amount_lovelace")
+  fromAddress         String   @map("from_address")
+  toAddress           String   @map("to_address")
+  initiatedByUserId   String?  @map("initiated_by_user_id") @db.Uuid
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  initiatedBy AppUser? @relation(fields: [initiatedByUserId], references: [id])
+
+  @@index([createdAt(sort: Desc)])
+  @@map("hot_wallet_sweep")
 }
 
 // §15 — the assembled multisig. The active row is the most recent one with

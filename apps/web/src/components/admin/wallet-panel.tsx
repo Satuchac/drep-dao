@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type AdminWalletStatus } from '@/lib/admin-api';
+import { ConfirmDialog } from '../confirm-dialog';
 
 /**
  * §18/§23 — platform-admin management of the anchor hot wallet. The interlock: move
@@ -13,6 +14,8 @@ export function WalletPanel() {
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmSweep, setConfirmSweep] = useState(false);
+  const [confirmRotate, setConfirmRotate] = useState(false);
 
   const load = useCallback(() => {
     adminApi.wallet().then(setW).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
@@ -58,10 +61,7 @@ export function WalletPanel() {
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               disabled={busy !== null || swept || !w.treasury.configured}
-              onClick={() => {
-                if (confirm('Move ALL hot-wallet funds to the treasury (multisig)?'))
-                  run('sweep', async () => `Swept to treasury — tx ${(await adminApi.sweepWallet()).txHash}`);
-              }}
+              onClick={() => setConfirmSweep(true)}
               className="rounded-md border border-amber-600 px-3 py-1.5 text-sm text-amber-300 hover:bg-amber-950 disabled:opacity-40"
             >
               {busy === 'sweep' ? 'Sweeping…' : '1. Move everything to the multisig'}
@@ -69,10 +69,7 @@ export function WalletPanel() {
             <button
               disabled={busy !== null || !swept}
               title={swept ? '' : 'Sweep the hot wallet first'}
-              onClick={() => {
-                if (confirm('Exchange the hot-wallet seed? The platform generates a new key; the old one is retired. Fund the new address from the treasury afterwards.'))
-                  run('rotate', async () => `Seed exchanged. New hot-wallet address: ${(await adminApi.rotateSeed()).address ?? '(unset)'}`);
-              }}
+              onClick={() => setConfirmRotate(true)}
               className="rounded-md border border-red-600 px-3 py-1.5 text-sm text-red-300 hover:bg-red-950 disabled:opacity-40"
             >
               {busy === 'rotate' ? 'Exchanging…' : '2. Exchange the seed'}
@@ -81,6 +78,24 @@ export function WalletPanel() {
           </div>
         </>
       )}
+      <ConfirmDialog
+        open={confirmSweep}
+        title="Sweep hot wallet to treasury?"
+        message="All hot-wallet funds will move to the treasury multisig immediately (minus the Cardano tx fee + minUTxO dust)."
+        confirmLabel="Sweep"
+        tone="danger"
+        onConfirm={() => { setConfirmSweep(false); void run('sweep', async () => `Swept to treasury — tx ${(await adminApi.sweepWallet()).txHash}`); }}
+        onCancel={() => setConfirmSweep(false)}
+      />
+      <ConfirmDialog
+        open={confirmRotate}
+        title="Exchange the hot-wallet seed?"
+        message="The platform generates a new key; the old one is retired. Fund the new address from the treasury afterwards."
+        confirmLabel="Exchange seed"
+        tone="danger"
+        onConfirm={() => { setConfirmRotate(false); void run('rotate', async () => `Seed exchanged. New hot-wallet address: ${(await adminApi.rotateSeed()).address ?? '(unset)'}`); }}
+        onCancel={() => setConfirmRotate(false)}
+      />
     </section>
   );
 }

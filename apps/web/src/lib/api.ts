@@ -214,6 +214,15 @@ export interface BoardActionsView {
   history: BoardAction[];
   treasury: { address: string | null; balanceAda: number } | null;
 }
+export interface HotWalletHistoryItem {
+  id: string;
+  direction: 'TOP_UP' | 'SWEEP';
+  amountAda: number;
+  txHash: string | null;
+  at: string;
+  description: string | null;
+  initiatedBy: string | null;
+}
 
 export const treasuryApi = {
   overview: () => request<TreasuryOverview>('/dao/treasury'),
@@ -227,6 +236,9 @@ export const treasuryApi = {
   /** Per-platform hot-wallet policy (min / topup-cap). */
   hotWalletPolicy: () =>
     request<{ minAda: number; topUpMaxAda: number; autoTopUpAda: number }>('/dao/treasury/hot-wallet-policy'),
+  /** §15.3 — merged TX history: top-ups (treasury→hot) + sweeps (hot→treasury). */
+  hotWalletHistory: () =>
+    request<{ hotWalletAddress: string | null; items: HotWalletHistoryItem[] }>('/dao/treasury/hot-wallet-history'),
   approveAction: (id: string, body: { signature?: string; signingKey?: string; ts?: string }) =>
     request<{ approvals: number; threshold: number; status: string }>(`/admin/board-actions/${id}/approve`, {
       method: 'POST',

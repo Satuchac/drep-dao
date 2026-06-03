@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi, type AdminRow } from '@/lib/admin-api';
+import { ConfirmDialog } from '../confirm-dialog';
 
 export function AdminsPanel({ currentAdminId }: { currentAdminId: string }) {
   const [admins, setAdmins] = useState<AdminRow[]>([]);
@@ -34,8 +35,12 @@ export function AdminsPanel({ currentAdminId }: { currentAdminId: string }) {
     }
   };
 
-  const act = async (id: string, kind: 'remove' | 'disable') => {
-    if (!window.confirm(`${kind} this admin?`)) return;
+  const [pendingAct, setPendingAct] = useState<{ id: string; kind: 'remove' | 'disable' } | null>(null);
+  const act = (id: string, kind: 'remove' | 'disable') => setPendingAct({ id, kind });
+  const doAct = async () => {
+    if (!pendingAct) return;
+    const { id, kind } = pendingAct;
+    setPendingAct(null);
     setError(null);
     try {
       await adminApi.accounts[kind](id);
@@ -107,6 +112,15 @@ export function AdminsPanel({ currentAdminId }: { currentAdminId: string }) {
         ))}
       </ul>
       {error ? <div className="mt-2 text-sm text-red-400">{error}</div> : null}
+      <ConfirmDialog
+        open={!!pendingAct}
+        title={pendingAct ? `${pendingAct.kind === 'remove' ? 'Remove' : 'Disable'} this admin?` : ''}
+        message={pendingAct?.kind === 'remove' ? 'The admin will lose access immediately.' : 'The admin will be disabled and cannot sign in until re-enabled.'}
+        confirmLabel={pendingAct?.kind === 'remove' ? 'Remove' : 'Disable'}
+        tone="danger"
+        onConfirm={doAct}
+        onCancel={() => setPendingAct(null)}
+      />
     </section>
   );
 }

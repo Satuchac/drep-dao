@@ -34,6 +34,7 @@ import {
 import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, RationaleText } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
 import { CopyButton } from './copy-button';
+import { ConfirmDialog } from './confirm-dialog';
 import { RevenueSharingBlock } from './proposal-submit';
 
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
@@ -2400,17 +2401,26 @@ function ReviewerAllocationPanel({ id, target, onChange }: { id: string; target:
 function ReleaseReviewersButton({ id, onChange }: { id: string; onChange: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const click = async () => {
-    if (!confirm('Release the current reviewers and pick a new set? (Only allowed if no POA has been submitted yet.)')) return;
+  const [confirming, setConfirming] = useState(false);
+  const doRelease = async () => {
+    setConfirming(false);
     setBusy(true); setErr(null);
     try { await boardMilestoneApi.release(id); onChange(); } catch (e) { setErr(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
   };
   return (
     <>
-      <button onClick={click} disabled={busy} className="rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
+      <button onClick={() => setConfirming(true)} disabled={busy} className="rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
         {busy ? '…' : 're-allocate'}
       </button>
       {err ? <span className="text-[11px] text-red-600">{err}</span> : null}
+      <ConfirmDialog
+        open={confirming}
+        title="Release reviewers?"
+        message="Release the current reviewers and pick a new set. Only allowed while no POA has been submitted yet."
+        confirmLabel="Release"
+        onConfirm={doRelease}
+        onCancel={() => setConfirming(false)}
+      />
     </>
   );
 }
@@ -2943,6 +2953,7 @@ function CommentItem({
   const [editText, setEditText] = useState(c.contentMd ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const saveEdit = async () => {
     if (!editText.trim()) { setError('Comment cannot be empty.'); return; }
@@ -2952,8 +2963,9 @@ function CommentItem({
     finally { setBusy(false); }
   };
 
-  const remove = async () => {
-    if (!confirm('Delete this comment? It will show as [deleted] but stay in the thread.')) return;
+  const remove = () => setConfirmDelete(true);
+  const doRemove = async () => {
+    setConfirmDelete(false);
     setBusy(true); setError(null);
     try { await commentsApi.remove(c.id); onChange(); }
     catch (e) { setError(e instanceof Error ? e.message : 'delete failed'); }
@@ -3043,6 +3055,15 @@ function CommentItem({
           ) : null}
         </>
       ) : null}
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete comment?"
+        message="The comment will show as [deleted] but stay in the thread."
+        confirmLabel="Delete"
+        tone="danger"
+        onConfirm={doRemove}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </li>
   );
 }

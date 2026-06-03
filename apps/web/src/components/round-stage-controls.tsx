@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { boardRoundsApi, roundsApi, type RoundDetail } from '@/lib/api';
 import { ProposalCounts, StatusBadge, fmtDateTime, toLocalInput, DateField } from './round-ui';
 import { CreateRoundForm } from './rounds-section';
+import { ConfirmDialog } from './confirm-dialog';
 
 const STAGE_LABEL: Record<string, string> = {
   SUBMISSION: 'Submission',
@@ -98,6 +99,7 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
   // A round's fields (name, budget, categories, settings) are editable until review starts.
   const canEdit = round.status === 'PREPARATION' || round.status === 'SUBMISSION';
 
@@ -181,14 +183,21 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
               Close manually once funding is complete; delays expected.
             </div>
             <button
-              onClick={() => {
-                if (confirm(`Close round #${round.number}? This ends the round.`)) run(() => boardRoundsApi.close(round.id), 'close');
-              }}
+              onClick={() => setConfirmClose(true)}
               disabled={busy !== null}
               className="mt-1 rounded border border-red-500 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-40 dark:text-red-300 dark:hover:bg-red-950"
             >
               {busy === 'close' ? 'Closing…' : 'Close round'}
             </button>
+            <ConfirmDialog
+              open={confirmClose}
+              title={`Close round #${round.number}?`}
+              message="This ends the round. New milestone POAs / votes will no longer be accepted."
+              confirmLabel="Close round"
+              tone="danger"
+              onConfirm={() => { setConfirmClose(false); void run(() => boardRoundsApi.close(round.id), 'close'); }}
+              onCancel={() => setConfirmClose(false)}
+            />
           </div>
         ) : null}
         {!next && round.status !== 'FUNDING' ? (

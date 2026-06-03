@@ -192,11 +192,95 @@ export class TreasuryService {
   /** §15.3 — board-callable sweep of ALL hot-wallet funds back into the
    *  multisig treasury. Single-click: the hot wallet is single-sig (its
    *  mnemonic is platform-held) so no multisig threshold is required to move
-   *  funds INTO the treasury — funds-in is always a safe direction. Returns
-   *  the broadcast tx hash so the UI can link the explorer. */
+   *  funds INTO the treasury. We persist the sweep so the Treasury history
+   *  panel can show what moved + link the explorer even after a refresh. */
   async sweepHotWallet(userId: string) {
     if (!(await this.boardDrep(userId))) throw new ForbiddenException('board members only');
-    return this.anchor.sweepToMultisig();
+    // Snapshot the balance BEFORE the sweep — this is what the tx is moving
+    // (minus the fee). The post-sweep balance read would already be 0 / dust.
+    const hotAddr = this.anchor.hotWalletAddress();
+    let preBalance = 0n;
+    if (hotAddr) {
+      const m = await this.cardano.addressBalance([hotAddr]).catch(() => new Map<string, bigint>());
+      preBalance = m.get(hotAddr) ?? 0n;
+    }
+    const r = await this.anchor.sweepToMultisig();
+    // Best-effort persistence — never block the user on a history-record
+    // failure (the on-chain tx already broadcast).
+    try {
+      await this.prisma.hotWalletSweep.create({
+        data: {
+          txHash: r.txHash,
+          amountLovelace: preBalance,
+          fromAddress: hotAddr ?? '',
+          toAddress: r.to,
+          initiatedByUserId: userId,
+        },
+      });
+    } catch (e) {
+      // Unique-conflict on txHash means we already persisted (e.g. retry) —
+      // that's fine.
+      void e;
+    }
+    return r;
+  }
+
+  /**
+   * §15.3 — merged hot-wallet TX history. Combines:
+   *   • TREASURY → HOT (top-ups): CONFIRMED OPS-kind MultisigActions whose
+   *     destAddress matches the hot wallet.
+   *   • HOT → TREASURY (sweeps): rows from the HotWalletSweep table.
+   * Sorted newest first; capped at 50.
+   */
+  async hotWalletHistory(limit = 50) {
+    const hotAddr = this.anchor.hotWalletAddress();
+    if (!hotAddr) return { items: [], hotWalletAddress: null };
+    const [topups, sweeps] = await Promise.all([
+      this.prisma.multisigAction.findMany({
+        where: { kind: 'OPS', status: 'CONFIRMED', destAddress: hotAddr },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+      }),
+      this.prisma.hotWalletSweep.findMany({
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        include: { initiatedBy: { select: { displayName: true } } },
+      }),
+    ]);
+    type Item = {
+      id: string;
+      direction: 'TOP_UP' | 'SWEEP'; // TOP_UP = treasury→hot, SWEEP = hot→treasury
+      amountAda: number;
+      txHash: string | null;
+      at: Date;
+      description: string | null;
+      initiatedBy: string | null;
+    };
+    const items: Item[] = [];
+    for (const t of topups) {
+      items.push({
+        id: t.id,
+        direction: 'TOP_UP',
+        amountAda: t.amountAda ? Number(t.amountAda) / ADA : 0,
+        txHash: t.txHash,
+        at: t.paidAt ?? t.createdAt,
+        description: t.description,
+        initiatedBy: null, // board signed; multiple signers — leave blank
+      });
+    }
+    for (const s of sweeps) {
+      items.push({
+        id: s.id,
+        direction: 'SWEEP',
+        amountAda: Number(s.amountLovelace) / ADA,
+        txHash: s.txHash,
+        at: s.createdAt,
+        description: null,
+        initiatedBy: s.initiatedBy?.displayName ?? null,
+      });
+    }
+    items.sort((a, b) => b.at.getTime() - a.at.getTime());
+    return { items: items.slice(0, limit), hotWalletAddress: hotAddr };
   }
 
   /** Surface the per-platform constants the UI needs (top-up cap, low-balance

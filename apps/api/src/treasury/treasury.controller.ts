@@ -58,6 +58,14 @@ export class TreasuryController {
     return this.treasury.hotWalletPolicy();
   }
 
+  /** §15.3 — merged hot-wallet TX history (top-ups + sweeps). Visible to any
+   *  logged-in user; the treasury balances are public anyway. */
+  @UseGuards(JwtAuthGuard)
+  @Get('dao/treasury/hot-wallet-history')
+  hotWalletHistory() {
+    return this.treasury.hotWalletHistory();
+  }
+
   @UseGuards(JwtAuthGuard, BoardGuard)
   @Post('admin/board-actions/:id/approve')
   approve(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ApproveActionDto) {
