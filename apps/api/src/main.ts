@@ -5,6 +5,20 @@ import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
+// JSON.stringify can't serialize BigInt natively — endpoints returning raw
+// Prisma rows with BigInt columns (amounts in lovelace, etc.) used to 500.
+// Teach BigInt how to serialize itself as a string ONCE here so every
+// endpoint is safe. Clients parse `Number(value)` or `BigInt(value)` as
+// needed. Defined as a non-enumerable property so it never leaks into
+// JSON.stringify({...new BigInt}) iterations.
+if (!('toJSON' in BigInt.prototype)) {
+  Object.defineProperty(BigInt.prototype, 'toJSON', {
+    value: function () { return this.toString(); },
+    writable: true,
+    configurable: true,
+  });
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);

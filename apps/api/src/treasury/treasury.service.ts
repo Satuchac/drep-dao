@@ -178,7 +178,7 @@ export class TreasuryService {
     if (amountAda > HOT_WALLET_TOPUP_MAX_ADA) {
       throw new BadRequestException(`a single top-up is capped at ${HOT_WALLET_TOPUP_MAX_ADA} ₳ — split into multiple top-ups if you need more`);
     }
-    return this.prisma.multisigAction.create({
+    const row = await this.prisma.multisigAction.create({
       data: {
         kind: 'OPS',
         status: 'PENDING_SIGS',
@@ -187,6 +187,9 @@ export class TreasuryService {
         description: `Top up the anchor hot wallet (board-requested)`,
       },
     });
+    // Strip BigInt so the JSON serializer doesn't choke; the UI only needs
+    // a confirmation it landed.
+    return { id: row.id, status: row.status, amountAda };
   }
 
   /** §15.3 — board-callable sweep of ALL hot-wallet funds back into the

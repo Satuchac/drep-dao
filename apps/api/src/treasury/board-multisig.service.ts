@@ -299,7 +299,13 @@ export class BoardMultisigService {
     const existing = await this.prisma.multisigAction.findFirst({
       where: { kind: 'MIGRATION', fromConfigId, status: { in: ['PENDING_SIGS', 'READY', 'BROADCASTED'] } },
     });
-    if (existing) return existing;
+    if (existing) {
+      return {
+        id: existing.id,
+        status: existing.status,
+        amountAda: existing.amountAda ? Number(existing.amountAda) / LOVELACE : 0,
+      };
+    }
 
     const balMap = await this.cardano.addressBalance([from.bech32Address]).catch(() => new Map<string, bigint>());
     const balanceLovelace = balMap.get(from.bech32Address) ?? 0n;
@@ -307,7 +313,7 @@ export class BoardMultisigService {
       throw new ConflictException('the old multisig has no on-chain funds — nothing to migrate');
     }
 
-    return this.prisma.multisigAction.create({
+    const created = await this.prisma.multisigAction.create({
       data: {
         kind: 'MIGRATION',
         status: 'PENDING_SIGS',
@@ -318,6 +324,12 @@ export class BoardMultisigService {
         toConfigId: to.id,
       },
     });
+    // Strip BigInt for JSON.
+    return {
+      id: created.id,
+      status: created.status,
+      amountAda: Number(balanceLovelace) / LOVELACE,
+    };
   }
 
   /** Hash-only check (used by status() to detect rotation). */
