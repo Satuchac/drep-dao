@@ -7,6 +7,7 @@ import { adminApi, type AdminHealth, type AuditRow } from '@/lib/admin-api';
 import { AdminGenesis } from '@/components/admin/admin-genesis';
 import { AdminsPanel } from '@/components/admin/admins-panel';
 import { WalletPanel } from '@/components/admin/wallet-panel';
+import { ResetPanel } from '@/components/admin/reset-panel';
 import { fmtDateTime } from '@/components/round-ui';
 
 export default function AdminDashboard() {
@@ -73,6 +74,8 @@ export default function AdminDashboard() {
       <WalletPanel />
 
       <AdminsPanel currentAdminId={admin.adminId} />
+
+      <ResetPanel />
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">Audit log</h2>

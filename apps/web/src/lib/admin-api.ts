@@ -102,6 +102,13 @@ export const adminApi = {
   wallet: () => request<AdminWalletStatus>('/wallet'),
   sweepWallet: () => request<{ txHash: string; to: string }>('/wallet/sweep', { method: 'POST' }),
   rotateSeed: () => request<{ address: string | null }>('/wallet/rotate-seed', { method: 'POST' }),
+  /** §23 — destructive wipe of DAO state (proposals/board/multisig/etc.).
+   *  Keeps admin accounts, audit log, anchor secret, governance config. */
+  resetDaoState: () =>
+    request<{ ok: boolean; wipedTables: number }>('/reset', {
+      method: 'POST',
+      body: JSON.stringify({ confirm: 'RESET DAO STATE' }),
+    }),
   accounts: {
     invite: (username: string, email: string) =>
       request<{ token: string; expiresAt: string }>('/admins/invite', {
