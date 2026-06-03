@@ -222,6 +222,49 @@ export class TreasuryService {
     return { id: row.id, status: row.status, amountAda };
   }
 
+  /** §15.4 — any board member can initiate an arbitrary transfer of ADA from
+   *  the treasury (multisig) to an address of their choice. Requires the
+   *  same 3-of-N board signing flow (via the Approve & sign queue) and a
+   *  written context that gets recorded as the action description (audit
+   *  trail). Refuses when the destination address is malformed, the amount
+   *  is non-positive, or the live treasury balance can't cover it. */
+  async prepareBoardTransfer(userId: string, dto: { destAddress: string; amountAda: number; context: string }) {
+    if (!(await this.boardDrep(userId))) throw new ForbiddenException('board members only');
+    const dest = (dto.destAddress ?? '').trim();
+    if (!/^addr(_test)?[a-z0-9]+$/i.test(dest)) {
+      throw new BadRequestException('destAddress must be a Cardano bech32 address (addr… / addr_test…)');
+    }
+    if (!Number.isFinite(dto.amountAda) || dto.amountAda <= 0) {
+      throw new BadRequestException('amountAda must be a positive number');
+    }
+    const context = (dto.context ?? '').trim();
+    if (context.length < 10) {
+      throw new BadRequestException('please provide at least 10 characters of context — every transfer is audited');
+    }
+    if (context.length > 2000) {
+      throw new BadRequestException('context is capped at 2000 characters');
+    }
+    // Live balance precheck so the user sees the gap before queueing sigs.
+    const treasury = await this.resolveTreasuryAddress();
+    if (treasury) {
+      const bal = await this.cardano.addressBalance([treasury]);
+      const have = Number(bal.get(treasury) ?? 0n) / ADA;
+      if (have < dto.amountAda) {
+        throw new ConflictException(`treasury holds only ${have.toLocaleString()} ₳ — can't queue a ${dto.amountAda.toLocaleString()} ₳ transfer`);
+      }
+    }
+    const row = await this.prisma.multisigAction.create({
+      data: {
+        kind: 'BOARD_TRANSFER',
+        status: 'PENDING_SIGS',
+        amountAda: BigInt(Math.round(dto.amountAda * ADA)),
+        destAddress: dest,
+        description: context,
+      },
+    });
+    return { id: row.id, status: row.status, amountAda: dto.amountAda, destAddress: dest };
+  }
+
   /** §15.3 — board-callable sweep of ALL hot-wallet funds back into the
    *  multisig treasury. Single-click: the hot wallet is single-sig (its
    *  mnemonic is platform-held) so no multisig threshold is required to move

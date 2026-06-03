@@ -1,0 +1,140 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { treasuryApi, type TreasuryOverview } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
+
+/**
+ * §15.4 — any board member can initiate an arbitrary outbound treasury
+ * transfer (rotation, ad-hoc payouts, refunds, etc.). The form takes a
+ * destination address, an amount in ADA, and a written context that becomes
+ * the action description (audit trail). The request creates a
+ * BOARD_TRANSFER MultisigAction; from there it follows the standard 3-of-N
+ * Approve & sign flow (every board member sees it in the queue below).
+ *
+ * Self-hides for non-board users. The "Transaction context" field is
+ * collapsible to keep the form compact when not in use.
+ */
+export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
+  const { profile } = useAuth();
+  const isBoard = !!profile?.roles.includes('BOARD');
+  const [overview, setOverview] = useState<TreasuryOverview | null>(null);
+  const [dest, setDest] = useState('');
+  const [amount, setAmount] = useState('');
+  const [context, setContext] = useState('');
+  const [showContext, setShowContext] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    treasuryApi.overview().then(setOverview).catch(() => setOverview(null));
+  }, []);
+  useEffect(load, [load]);
+
+  if (!isBoard) return null;
+
+  const treasuryAda = overview?.treasury.balanceAda ?? 0;
+  const amt = Number(amount);
+  const validAmount = Number.isFinite(amt) && amt > 0 && amt <= treasuryAda;
+  const validAddr = /^addr(_test)?[a-z0-9]+$/i.test(dest.trim());
+  const validContext = context.trim().length >= 10 && context.trim().length <= 2000;
+  const canSubmit = validAddr && validAmount && validContext && !busy;
+
+  const submit = async () => {
+    setError(null); setSuccess(null); setBusy(true);
+    try {
+      await treasuryApi.prepareTransfer({
+        destAddress: dest.trim(),
+        amountAda: amt,
+        context: context.trim(),
+      });
+      setSuccess(`Transfer of ${amt.toLocaleString()} ₳ queued — awaiting 3-of-N board signatures in the queue below.`);
+      setDest(''); setAmount(''); setContext('');
+      load();
+      onChange?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="rounded-lg border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="font-semibold">Send from treasury</div>
+        <span className="text-xs text-neutral-500 tabular-nums">
+          treasury balance {treasuryAda.toLocaleString()} ₳
+        </span>
+      </div>
+      <p className="mt-1 text-xs text-neutral-500">
+        Any board member can queue an outbound transfer. It then needs 3-of-N board signatures in the
+        Approve&nbsp;&amp;&nbsp;sign queue below; on the 3rd signature the platform builds + broadcasts the tx.
+      </p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_8rem]">
+        <label className="block text-xs">
+          Destination address
+          <input
+            value={dest}
+            onChange={(e) => { setDest(e.target.value); setSuccess(null); }}
+            placeholder="addr1… or addr_test1…"
+            className="mt-0.5 block w-full rounded-md border border-neutral-300 px-2 py-1 font-mono text-[11px] dark:border-neutral-700 dark:bg-neutral-900"
+          />
+        </label>
+        <label className="block text-xs">
+          Amount (₳)
+          <input
+            type="number"
+            min={1}
+            max={treasuryAda || undefined}
+            value={amount}
+            onChange={(e) => { setAmount(e.target.value); setSuccess(null); }}
+            placeholder="0"
+            className="mt-0.5 block w-full rounded-md border border-neutral-300 px-2 py-1 text-sm tabular-nums dark:border-neutral-700 dark:bg-neutral-900"
+          />
+        </label>
+      </div>
+      {/* Context — collapsible so the form is compact when idle. Required (10
+          char min). Becomes the MultisigAction.description so every signer
+          sees WHY they're approving. */}
+      <div className="mt-2 rounded border border-neutral-200 dark:border-neutral-800">
+        <button
+          type="button"
+          onClick={() => setShowContext((v) => !v)}
+          className="flex w-full items-center justify-between px-2 py-1 text-xs font-semibold text-neutral-700 dark:text-neutral-300"
+        >
+          <span>
+            Transaction context (audit trail) — required
+            <span className={`ml-2 text-[11px] font-normal ${validContext ? 'text-emerald-600' : 'text-neutral-500'}`}>
+              {context.trim().length}/10 min
+            </span>
+          </span>
+          <span>{showContext ? '▾ hide' : '▸ show'}</span>
+        </button>
+        {showContext ? (
+          <textarea
+            value={context}
+            onChange={(e) => { setContext(e.target.value); setSuccess(null); }}
+            placeholder="Why is this transfer needed? E.g. 'Rotate funds from legacy treasury to new multisig (genesis bootstrap)', 'Reimburse Alice for hardware wallet purchase, see invoice #42', …"
+            rows={3}
+            className="block w-full resize-y rounded-b border-t border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900"
+          />
+        ) : null}
+      </div>
+      {error ? <div className="mt-2 text-xs text-red-600">{error}</div> : null}
+      {success ? <div className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">{success}</div> : null}
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          disabled={!canSubmit}
+          onClick={submit}
+          className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
+        >
+          {busy ? '…' : 'Queue transfer'}
+        </button>
+        {!validAddr && dest ? <span className="text-[11px] text-amber-700 dark:text-amber-300">address looks invalid (need addr… / addr_test…)</span> : null}
+        {amount && !validAmount ? <span className="text-[11px] text-amber-700 dark:text-amber-300">amount must be {'>'}0 and ≤ {treasuryAda.toLocaleString()} ₳</span> : null}
+      </div>
+    </section>
+  );
+}

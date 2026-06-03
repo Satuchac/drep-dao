@@ -9,6 +9,11 @@ import { MultisigBroadcastService } from './multisig-broadcast.service';
 export class PrepareTopUpDto {
   @IsNumber() @Min(1) amountAda!: number;
 }
+export class BoardTransferDto {
+  @IsString() @MaxLength(200) destAddress!: string;
+  @IsNumber() @Min(0.000001) amountAda!: number;
+  @IsString() @MaxLength(2000) context!: string;
+}
 // No body needed — sweeps the entire hot-wallet balance.
 export class EmptyDto {}
 export class ApproveActionDto {
@@ -48,6 +53,15 @@ export class TreasuryController {
   @Post('admin/treasury/prepare-topup')
   prepareTopUp(@CurrentUser() ctx: AuthContext, @Body() dto: PrepareTopUpDto) {
     return this.treasury.prepareTopUp(ctx.userId, dto.amountAda);
+  }
+
+  /** §15.4 — any board member queues an arbitrary outbound transfer from
+   *  the multisig. Goes through the standard 3-of-N Approve & sign flow;
+   *  written context becomes the action description (audit trail). */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Post('admin/treasury/prepare-transfer')
+  prepareTransfer(@CurrentUser() ctx: AuthContext, @Body() dto: BoardTransferDto) {
+    return this.treasury.prepareBoardTransfer(ctx.userId, dto);
   }
 
   /** §15.3 — sweep the entire hot-wallet balance back into the multisig

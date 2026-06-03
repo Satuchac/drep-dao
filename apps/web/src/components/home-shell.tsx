@@ -17,6 +17,7 @@ import { ProposalDetail } from './proposal-detail';
 import { JoinDaoButton } from './join-dao-button';
 import { NotificationBadge } from './notification-badge';
 import { WalletStatusBanner } from './wallet-status-banner';
+import { useMyAreaTodoCount } from '@/lib/use-my-area-todo';
 import { HealthBadge } from '@/app/health-badge';
 
 type View = 'overview' | 'members' | 'me' | 'rounds' | 'proposals' | 'internal' | 'proofs' | 'treasury' | 'setup';
@@ -74,6 +75,8 @@ export function HomeShell() {
   }
 
   const isBoard = profile.roles.includes('BOARD');
+  const canVote = profile.roles.includes('DREP') || profile.roles.includes('DAO_MEMBER') || profile.roles.includes('EXPERT');
+  const myAreaTodo = useMyAreaTodoCount(isBoard, canVote);
   const nav = NAV.filter((n) => !n.boardOnly || isBoard);
   const canJoin =
     profile.onchainDrep.registered &&
@@ -87,19 +90,29 @@ export function HomeShell() {
       <aside className="lg:w-56 lg:shrink-0">
         <h1 className="mb-4 text-xl font-bold tracking-tight">DRep DAO</h1>
         <nav className="space-y-1">
-          {nav.map((n) => (
-            <button
-              key={n.key}
-              onClick={() => setView(n.key)}
-              className={`block w-full rounded-md px-3 py-2 text-left text-sm ${
-                view === n.key
-                  ? 'bg-emerald-600 font-medium text-white'
-                  : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
-              }`}
-            >
-              {n.label}
-            </button>
-          ))}
+          {nav.map((n) => {
+            // §20 — mirror the in-area to-do count next to "My area" so users
+            // see how much is awaiting them without opening the menu.
+            const badge = n.key === 'me' && myAreaTodo > 0 ? myAreaTodo : 0;
+            return (
+              <button
+                key={n.key}
+                onClick={() => setView(n.key)}
+                className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm ${
+                  view === n.key
+                    ? 'bg-emerald-600 font-medium text-white'
+                    : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
+                }`}
+              >
+                <span>{n.label}</span>
+                {badge ? (
+                  <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white tabular-nums">
+                    {badge}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
         </nav>
         <div className="mt-6 border-t border-neutral-200 pt-3 text-xs text-neutral-400 dark:border-neutral-800">
           <HealthBadge />

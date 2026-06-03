@@ -27,6 +27,7 @@ import { PreferencesPanel } from './preferences-panel';
 import { RewardAddressPanel } from './reward-address-panel';
 import { MultisigSetup } from './multisig-setup';
 import { HotWalletControls } from './hot-wallet-controls';
+import { SendFromTreasuryPanel } from './send-from-treasury-panel';
 import { LeaveDao } from './leave-dao';
 import { BackButton } from './round-ui';
 
@@ -121,6 +122,10 @@ export function MemberArea() {
   });
 
   if (isBoard) {
+    // §15 — Treasury is its own tab. Multisig setup, hot-wallet controls,
+    // approve-and-sign (BoardActions), and the board-initiated send-ADA flow
+    // all live here; Actions stays for the non-treasury board to-dos.
+    tabs.push({ key: 'treasury', label: 'Treasury', badge: todo.treasury, node: <TreasuryTab /> });
     tabs.push({ key: 'sign', label: 'Actions', badge: todo.actions, node: <ActionsTab /> });
     tabs.push({ key: 'rounds', label: 'Round control', node: <RoundStageControls /> });
     tabs.push({ key: 'apps', label: 'Applications', badge: todo.applications, node: <ApplicationsTab /> });
@@ -153,28 +158,50 @@ function VotingReviewsTab() {
   );
 }
 
-/** Board "Actions" tab: the to-do panels + a "Show history" switch that also reveals done items. */
-function ActionsTab() {
+/** Board "Treasury" tab: everything that touches the multisig — setup, hot
+ *  wallet controls, the board-initiated send-ADA form, and the Approve&sign
+ *  queue. Separated from Actions so the latter stays focused on review/audit
+ *  to-dos (fees, pledges, stop-funding, budget settlements). */
+function TreasuryTab() {
   const [showHistory, setShowHistory] = useState(false);
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-neutral-500">
-          Board to-dos: treasury/hot-wallet approvals, submission-fee confirmations, and budget-change settlements (top-ups to collect / refunds to return).
+          Treasury operations: multisig setup, hot-wallet top-ups/sweeps, board-initiated transfers, and the
+          Approve&nbsp;&amp;&nbsp;sign queue for every multisig action.
         </p>
         <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
           <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
           Show history
         </label>
       </div>
-      {/* §15 — multisig setup is also surfaced here so board members can submit
-          their signing key right from the Actions tab (it self-hides once they've
-          submitted; the same panel lives on the Treasury page). */}
       <MultisigSetup />
-      {/* §15.3 — hot-wallet board controls (top-up + sweep) so a low-balance
-          hot wallet can be addressed without leaving the Actions tab. */}
       <HotWalletControls />
+      <SendFromTreasuryPanel />
       <BoardActions history={showHistory} />
+    </div>
+  );
+}
+
+/** Board "Actions" tab: review/audit to-dos that aren't treasury moves —
+ *  submission-fee confirmations, pledge confirmations, stop-funding votes,
+ *  budget-change settlements. */
+function ActionsTab() {
+  const [showHistory, setShowHistory] = useState(false);
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-neutral-500">
+          Board to-dos: submission-fee confirmations, pledge confirmations, stop-funding votes, and
+          budget-change settlements (top-ups to collect / refunds to return).
+          Multisig signing and hot-wallet ops live in <strong>Treasury</strong>.
+        </p>
+        <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
+          <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
+          Show history
+        </label>
+      </div>
       <StopFundingBoardPanel />
       <FeeConfirmations history={showHistory} />
       <PledgeConfirmations />
@@ -211,11 +238,11 @@ function ApplicationsTab() {
  * proposals" awaiting this DRep's vote. Light polling.
  */
 function useTodoCounts(isBoard: boolean, canVote: boolean) {
-  const [counts, setCounts] = useState({ actions: 0, applications: 0, voting: 0, internal: 0, mine: 0 });
+  const [counts, setCounts] = useState({ treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0 });
   useEffect(() => {
     let alive = true;
     const poll = async () => {
-      const next = { actions: 0, applications: 0, voting: 0, internal: 0, mine: 0 };
+      const next = { treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0 };
       if (isBoard) {
         const [a, f, p, dapps, eapps, rem, stop, pl] = await Promise.allSettled([
           treasuryApi.boardActions(),
@@ -227,8 +254,11 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
           milestonesApi.pendingStopFunding(), // §11 — stop-funding awaiting THIS board member's 1p1v vote
           boardPledgeApi.pending(), // §3 — pledge payments to confirm
         ]);
+        // §15 — multisig sign queue (boardActions) is the Treasury tab; the
+        // remaining review/audit items (fees, pledges, payouts, stop-funding)
+        // stay in Actions.
+        next.treasury = a.status === 'fulfilled' ? a.value.count : 0;
         next.actions =
-          (a.status === 'fulfilled' ? a.value.count : 0) +
           (f.status === 'fulfilled' ? f.value.length : 0) +
           (p.status === 'fulfilled' ? p.value.length : 0) +
           (stop.status === 'fulfilled' ? stop.value.count : 0) +

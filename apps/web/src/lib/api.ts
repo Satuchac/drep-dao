@@ -234,6 +234,13 @@ export const treasuryApi = {
     request<BoardActionsView>(`/me/board-actions${history ? '?history=1' : ''}`),
   prepareTopUp: (amountAda: number) =>
     request<{ id: string }>('/admin/treasury/prepare-topup', { method: 'POST', body: JSON.stringify({ amountAda }) }),
+  /** §15.4 — board-initiated arbitrary outbound transfer; goes through the
+   *  standard 3-of-N Approve & sign flow. Context is the audit description. */
+  prepareTransfer: (body: { destAddress: string; amountAda: number; context: string }) =>
+    request<{ id: string; status: string; amountAda: number; destAddress: string }>(
+      '/admin/treasury/prepare-transfer',
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
   /** §15.3 — sweep entire hot-wallet balance back into the multisig treasury. */
   sweepHotWallet: () =>
     request<{ txHash: string; to: string }>('/admin/treasury/sweep-hot-wallet', { method: 'POST' }),
