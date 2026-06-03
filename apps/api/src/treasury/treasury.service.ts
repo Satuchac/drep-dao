@@ -244,15 +244,12 @@ export class TreasuryService {
     if (context.length > 2000) {
       throw new BadRequestException('context is capped at 2000 characters');
     }
-    // Live balance precheck so the user sees the gap before queueing sigs.
-    const treasury = await this.resolveTreasuryAddress();
-    if (treasury) {
-      const bal = await this.cardano.addressBalance([treasury]);
-      const have = Number(bal.get(treasury) ?? 0n) / ADA;
-      if (have < dto.amountAda) {
-        throw new ConflictException(`treasury holds only ${have.toLocaleString()} ₳ — can't queue a ${dto.amountAda.toLocaleString()} ₳ transfer`);
-      }
-    }
+    // No queue-time balance precheck on purpose: a board member may want to
+    // queue + collect authorizations BEFORE funds arrive (e.g. waiting on an
+    // incoming sweep). The 3rd-signature path (approve()) already refuses to
+    // push to READY when the treasury can't cover the amount, so queueing
+    // when underfunded is harmless — boardActionsFor() also flags it with
+    // `insufficient: true` so signers see the gap before they approve.
     const row = await this.prisma.multisigAction.create({
       data: {
         kind: 'BOARD_TRANSFER',

@@ -36,9 +36,13 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
 
   const treasuryAda = overview?.treasury.balanceAda ?? 0;
   const amt = Number(amount);
-  const validAmount = Number.isFinite(amt) && amt > 0 && amt <= treasuryAda;
+  const validAmount = Number.isFinite(amt) && amt > 0;
+  const insufficient = validAmount && amt > treasuryAda;
   const validAddr = /^addr(_test)?[a-z0-9]+$/i.test(dest.trim());
   const validContext = context.trim().length >= 10 && context.trim().length <= 2000;
+  // Queueing is allowed even when underfunded — the 3rd-signature gate refuses
+  // to broadcast when the balance is short, so the action just sits PENDING_SIGS
+  // until funds arrive (useful when a board member knows a sweep is coming).
   const canSubmit = validAddr && validAmount && validContext && !busy;
 
   const submit = async () => {
@@ -87,7 +91,6 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
           <input
             type="number"
             min={1}
-            max={treasuryAda || undefined}
             value={amount}
             onChange={(e) => { setAmount(e.target.value); setSuccess(null); }}
             placeholder="0"
@@ -122,6 +125,13 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
           />
         ) : null}
       </div>
+      {insufficient ? (
+        <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-1.5 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          ⚠ Treasury holds {treasuryAda.toLocaleString()} ₳ — short of the {amt.toLocaleString()} ₳ you&apos;re queueing.
+          The action can still be queued and authorized; it just won&apos;t broadcast on the 3rd signature until the
+          treasury has the funds.
+        </div>
+      ) : null}
       {error ? <div className="mt-2 text-xs text-red-600">{error}</div> : null}
       {success ? <div className="mt-2 text-xs text-emerald-700 dark:text-emerald-300">{success}</div> : null}
       <div className="mt-2 flex items-center gap-2">
@@ -133,7 +143,7 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
           {busy ? '…' : 'Queue transfer'}
         </button>
         {!validAddr && dest ? <span className="text-[11px] text-amber-700 dark:text-amber-300">address looks invalid (need addr… / addr_test…)</span> : null}
-        {amount && !validAmount ? <span className="text-[11px] text-amber-700 dark:text-amber-300">amount must be {'>'}0 and ≤ {treasuryAda.toLocaleString()} ₳</span> : null}
+        {amount && !validAmount ? <span className="text-[11px] text-amber-700 dark:text-amber-300">amount must be {'>'} 0</span> : null}
       </div>
     </section>
   );
