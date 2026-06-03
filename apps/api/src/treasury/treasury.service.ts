@@ -10,6 +10,10 @@ const ADA = 1_000_000;
 const APPROVAL_THRESHOLD = 3; // 3-of-5 board multisig
 const HOT_WALLET_MIN_ADA = 100; // below this, the platform prepares a top-up
 const HOT_WALLET_TOPUP_ADA = 500;
+// §15.3 — hard cap on a single board-prepared top-up. The hot wallet only
+// pays Cardano fees for anchor txs, so a small running balance is enough;
+// large amounts shouldn't sit there unsigned. Configurable later if needed.
+const HOT_WALLET_TOPUP_MAX_ADA = 1000;
 
 @Injectable()
 export class TreasuryService {
@@ -156,25 +160,53 @@ export class TreasuryService {
         kind: 'OPS',
         status: 'PENDING_SIGS',
         amountAda: BigInt(HOT_WALLET_TOPUP_ADA * ADA),
-        description: `Top up the anchor hot wallet (${hot.slice(0, 24)}…) — balance below ${HOT_WALLET_MIN_ADA} ₳`,
+        // destAddress = hot wallet so the Actions UI shows the full destination + Copy button.
+        destAddress: hot,
+        description: `Top up the anchor hot wallet — balance below ${HOT_WALLET_MIN_ADA} ₳`,
       },
     });
   }
 
-  /** Board member explicitly prepares a top-up (in addition to the auto-trigger). */
+  /** §15.3 — board member explicitly prepares a top-up (in addition to the
+   *  auto-trigger). Capped at HOT_WALLET_TOPUP_MAX_ADA so we never sit a
+   *  large balance on a single-sig hot wallet. */
   async prepareTopUp(userId: string, amountAda: number) {
     if (!(await this.boardDrep(userId))) throw new ForbiddenException('board members only');
     const hot = this.anchor.hotWalletAddress();
     if (!hot) throw new BadRequestException('no hot wallet configured');
     if (!(amountAda > 0)) throw new BadRequestException('amount must be > 0');
+    if (amountAda > HOT_WALLET_TOPUP_MAX_ADA) {
+      throw new BadRequestException(`a single top-up is capped at ${HOT_WALLET_TOPUP_MAX_ADA} ₳ — split into multiple top-ups if you need more`);
+    }
     return this.prisma.multisigAction.create({
       data: {
         kind: 'OPS',
         status: 'PENDING_SIGS',
         amountAda: BigInt(Math.round(amountAda * ADA)),
-        description: `Top up the anchor hot wallet (${hot.slice(0, 24)}…)`,
+        destAddress: hot,
+        description: `Top up the anchor hot wallet (board-requested)`,
       },
     });
+  }
+
+  /** §15.3 — board-callable sweep of ALL hot-wallet funds back into the
+   *  multisig treasury. Single-click: the hot wallet is single-sig (its
+   *  mnemonic is platform-held) so no multisig threshold is required to move
+   *  funds INTO the treasury — funds-in is always a safe direction. Returns
+   *  the broadcast tx hash so the UI can link the explorer. */
+  async sweepHotWallet(userId: string) {
+    if (!(await this.boardDrep(userId))) throw new ForbiddenException('board members only');
+    return this.anchor.sweepToMultisig();
+  }
+
+  /** Surface the per-platform constants the UI needs (top-up cap, low-balance
+   *  threshold) so the form can validate locally + show the right help text. */
+  hotWalletPolicy() {
+    return {
+      minAda: HOT_WALLET_MIN_ADA,
+      topUpMaxAda: HOT_WALLET_TOPUP_MAX_ADA,
+      autoTopUpAda: HOT_WALLET_TOPUP_ADA,
+    };
   }
 
   /** A board member approves an action with a CIP-30 signature (3-of-5 to proceed). */

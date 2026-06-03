@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { treasuryApi, type TreasuryOverview as Overview } from '@/lib/api';
 import { MultisigSetup } from './multisig-setup';
+import { HotWalletControls } from './hot-wallet-controls';
 
 const ada = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 const BUCKET_COLOR: Record<string, string> = {
@@ -47,6 +48,8 @@ export function TreasuryOverview() {
               warn={data.hotWallet.balanceAda < data.hotWallet.minAda ? `below ${data.hotWallet.minAda} ₳ — top-up needed` : undefined}
             />
           </div>
+          {/* §15.3 — board controls for the hot wallet (top up + sweep). Self-hides for non-board. */}
+          <HotWalletControls />
 
           {/* Budget buckets — allocated, with spent overlaid as a bar. */}
           <div className="space-y-3">

@@ -26,6 +26,7 @@ import { BoardPayments } from './board-payments';
 import { PreferencesPanel } from './preferences-panel';
 import { RewardAddressPanel } from './reward-address-panel';
 import { MultisigSetup } from './multisig-setup';
+import { HotWalletControls } from './hot-wallet-controls';
 import { LeaveDao } from './leave-dao';
 import { BackButton } from './round-ui';
 
@@ -170,6 +171,9 @@ function ActionsTab() {
           their signing key right from the Actions tab (it self-hides once they've
           submitted; the same panel lives on the Treasury page). */}
       <MultisigSetup />
+      {/* §15.3 — hot-wallet board controls (top-up + sweep) so a low-balance
+          hot wallet can be addressed without leaving the Actions tab. */}
+      <HotWalletControls />
       <BoardActions history={showHistory} />
       <StopFundingBoardPanel />
       <FeeConfirmations history={showHistory} />

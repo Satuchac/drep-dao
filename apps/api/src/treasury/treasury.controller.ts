@@ -8,6 +8,8 @@ import { TreasuryService } from './treasury.service';
 export class PrepareTopUpDto {
   @IsNumber() @Min(1) amountAda!: number;
 }
+// No body needed — sweeps the entire hot-wallet balance.
+export class EmptyDto {}
 export class ApproveActionDto {
   @IsOptional() @IsString() @MaxLength(8000) signature?: string;
   @IsOptional() @IsString() @MaxLength(8000) signingKey?: string;
@@ -38,6 +40,22 @@ export class TreasuryController {
   @Post('admin/treasury/prepare-topup')
   prepareTopUp(@CurrentUser() ctx: AuthContext, @Body() dto: PrepareTopUpDto) {
     return this.treasury.prepareTopUp(ctx.userId, dto.amountAda);
+  }
+
+  /** §15.3 — sweep the entire hot-wallet balance back into the multisig
+   *  treasury. Single-click; the hot wallet is single-sig so no multisig
+   *  threshold is required for an inbound-to-treasury move. */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Post('admin/treasury/sweep-hot-wallet')
+  sweepHotWallet(@CurrentUser() ctx: AuthContext) {
+    return this.treasury.sweepHotWallet(ctx.userId);
+  }
+
+  /** Hot-wallet policy (low threshold, top-up cap) used by the form UI. */
+  @UseGuards(JwtAuthGuard)
+  @Get('dao/treasury/hot-wallet-policy')
+  hotWalletPolicy() {
+    return this.treasury.hotWalletPolicy();
   }
 
   @UseGuards(JwtAuthGuard, BoardGuard)

@@ -221,6 +221,12 @@ export const treasuryApi = {
     request<BoardActionsView>(`/me/board-actions${history ? '?history=1' : ''}`),
   prepareTopUp: (amountAda: number) =>
     request<{ id: string }>('/admin/treasury/prepare-topup', { method: 'POST', body: JSON.stringify({ amountAda }) }),
+  /** §15.3 — sweep entire hot-wallet balance back into the multisig treasury. */
+  sweepHotWallet: () =>
+    request<{ txHash: string; to: string }>('/admin/treasury/sweep-hot-wallet', { method: 'POST' }),
+  /** Per-platform hot-wallet policy (min / topup-cap). */
+  hotWalletPolicy: () =>
+    request<{ minAda: number; topUpMaxAda: number; autoTopUpAda: number }>('/dao/treasury/hot-wallet-policy'),
   approveAction: (id: string, body: { signature?: string; signingKey?: string; ts?: string }) =>
     request<{ approvals: number; threshold: number; status: string }>(`/admin/board-actions/${id}/approve`, {
       method: 'POST',
