@@ -14,6 +14,9 @@ import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, boardPledgeAp
 export function useMyAreaTodoCount(isBoard: boolean, canVote: boolean): number {
   const [total, setTotal] = useState(0);
   useEffect(() => {
+    // Skip polling entirely for logged-out / role-less viewers — every
+    // endpoint would 401 and contribute 0 anyway.
+    if (!isBoard && !canVote) { setTotal(0); return; }
     let alive = true;
     const poll = async () => {
       let n = 0;

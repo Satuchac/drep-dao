@@ -56,6 +56,14 @@ export function HomeShell() {
     }
   }, [profile, setParams]);
 
+  // §20 — left-nav My-area to-do badge. Computed for every render (even
+  // logged-out / loading) so the hook ordering matches the post-login render
+  // — Rules of Hooks forbid calling a hook only after an early return. The
+  // hook itself returns 0 when there's no role/auth, so the badge is hidden.
+  const isBoard = profile?.roles.includes('BOARD') ?? false;
+  const canVote = profile?.roles.includes('DREP') || profile?.roles.includes('DAO_MEMBER') || profile?.roles.includes('EXPERT') || false;
+  const myAreaTodo = useMyAreaTodoCount(isBoard, canVote);
+
   // Logged out (or restoring): centered landing with the wallet login.
   if (loading || !profile) {
     return (
@@ -74,9 +82,6 @@ export function HomeShell() {
     );
   }
 
-  const isBoard = profile.roles.includes('BOARD');
-  const canVote = profile.roles.includes('DREP') || profile.roles.includes('DAO_MEMBER') || profile.roles.includes('EXPERT');
-  const myAreaTodo = useMyAreaTodoCount(isBoard, canVote);
   const nav = NAV.filter((n) => !n.boardOnly || isBoard);
   const canJoin =
     profile.onchainDrep.registered &&
