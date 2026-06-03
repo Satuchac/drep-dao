@@ -101,9 +101,16 @@ export class MultisigBroadcastService {
 
     const txBody = txb.build();
     void totalIn; // reserved for future fee-estimation diagnostics
-    const txBodyHex = Buffer.from(txBody.to_bytes()).toString('hex');
-    await this.prisma.multisigAction.update({ where: { id: actionId }, data: { txCbor: txBodyHex } });
-    return { txBodyHex, sourceAddress: source.bech32Address, scriptHash: source.scriptHash };
+    // CIP-30 signTx expects a full Transaction CBOR (an Array of
+    // [body, witnessSet, isValid, auxData]), NOT just the TransactionBody
+    // (a Map). We wrap with an empty witness set + isValid=true; each
+    // wallet's signTx(partialSign=true) call returns ONLY its own
+    // TransactionWitnessSet which we later combine server-side.
+    const emptyWs = CSL.TransactionWitnessSet.new();
+    const tx = CSL.Transaction.new(txBody, emptyWs);
+    const txHex = Buffer.from(tx.to_bytes()).toString('hex');
+    await this.prisma.multisigAction.update({ where: { id: actionId }, data: { txCbor: txHex } });
+    return { txBodyHex: txHex, sourceAddress: source.bech32Address, scriptHash: source.scriptHash };
   }
 
   /** Accept one board member's witness for an action. Verifies the witness
@@ -194,7 +201,9 @@ export class MultisigBroadcastService {
     if (!action.txCbor) throw new ConflictException('tx body not prepared');
     const source = await this.resolveSource(action);
 
-    const txBody = CSL.TransactionBody.from_hex(action.txCbor);
+    // action.txCbor is the full Transaction CBOR (Array). Extract the body.
+    const cachedTx = CSL.Transaction.from_hex(action.txCbor);
+    const txBody = cachedTx.body();
     const vkeyWitnesses = CSL.Vkeywitnesses.new();
     // Dedup by keyHash so two rows from the same key only contribute once.
     const seen = new Set<string>();
