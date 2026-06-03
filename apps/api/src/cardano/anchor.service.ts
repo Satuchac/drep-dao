@@ -84,13 +84,30 @@ export class AnchorService implements OnModuleInit {
    */
   async walletStatus() {
     const hot = this.hotWalletAddress();
-    const treasury = this.treasuryAddress ?? null;
-    const addrs = [hot, treasury].filter((a): a is string => !!a);
+    const envTreasury = this.treasuryAddress ?? null;
+    // §15.3 — the actual on-chain treasury is the assembled multisig once
+    // it exists. The env TREASURY_ADDRESS is a legacy fallback used only
+    // while no multisig has been built (fresh install / after reset).
+    const active = await this.prisma.multisigConfig.findFirst({
+      where: { replacedAt: null },
+      orderBy: { assembledAt: 'desc' },
+      select: { bech32Address: true, threshold: true, totalKeys: true },
+    });
+    const activeMultisigAddress = active?.bech32Address ?? null;
+    const addrs = [hot, envTreasury, activeMultisigAddress].filter((a): a is string => !!a);
     const bal = await this.cardano.addressBalance(addrs);
     const ada = (a: string | null) => (a ? Number(bal.get(a) ?? 0n) / 1_000_000 : 0);
     return {
       hotWallet: { address: hot, balanceAda: ada(hot), configured: !!this.mnemonic },
-      treasury: { address: treasury, balanceAda: ada(treasury), configured: !!treasury },
+      treasury: { address: envTreasury, balanceAda: ada(envTreasury), configured: !!envTreasury },
+      activeMultisig: active
+        ? {
+            address: active.bech32Address,
+            balanceAda: ada(active.bech32Address),
+            threshold: active.threshold,
+            totalKeys: active.totalKeys,
+          }
+        : null,
     };
   }
 

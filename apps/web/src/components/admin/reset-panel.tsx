@@ -16,7 +16,7 @@ import { ConfirmDialog } from '../confirm-dialog';
  * multisig signing keys → platform assembles the multisig → fund it → test
  * the full round flow.
  */
-export function ResetPanel() {
+export function ResetPanel({ onReset }: { onReset?: () => void }) {
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -28,6 +28,10 @@ export function ResetPanel() {
     try {
       const r = await adminApi.resetDaoState();
       setMsg(`DAO state wiped (${r.wipedTables} tables truncated). You can now re-upload the founding-board JSON above.`);
+      // Tell the parent so it can re-mount the Genesis + Wallet panels (they
+      // cache their data on mount; without this they'd keep showing the
+      // pre-reset board until the user hard-refreshes the page).
+      onReset?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'reset failed');
     } finally {

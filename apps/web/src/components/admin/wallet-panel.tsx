@@ -55,7 +55,31 @@ export function WalletPanel() {
         <>
           <dl className="space-y-2 text-xs">
             <WalletRow label="Hot wallet" address={w.hotWallet.address} balanceAda={w.hotWallet.balanceAda} configured={w.hotWallet.configured} />
-            <WalletRow label="Treasury (multisig)" address={w.treasury.address} balanceAda={w.treasury.balanceAda} configured={w.treasury.configured} />
+            <WalletRow
+              label={w.activeMultisig ? 'Treasury (env legacy)' : 'Treasury (env)'}
+              address={w.treasury.address}
+              balanceAda={w.treasury.balanceAda}
+              configured={w.treasury.configured}
+            />
+            {/* §15.3 — the assembled multisig is the platform's actual on-chain
+                home once it exists. Inbound flows (fees, pledges) route here;
+                payouts come from here. Null until board members submit their
+                signing keys. */}
+            {w.activeMultisig ? (
+              <WalletRow
+                label={`Active multisig (${w.activeMultisig.threshold}-of-${w.activeMultisig.totalKeys})`}
+                address={w.activeMultisig.address}
+                balanceAda={w.activeMultisig.balanceAda}
+                configured={true}
+              />
+            ) : (
+              <div className="rounded border border-amber-700/60 bg-amber-950/30 px-2 py-1.5 text-xs text-amber-200">
+                <strong>Active multisig: not yet assembled.</strong> The platform is using the env
+                <code className="mx-1 font-mono">TREASURY_ADDRESS</code> above as a fallback. Once board members
+                submit their signing keys (from <code className="font-mono">/</code> → Treasury), the platform will
+                derive the multisig + start routing fees/pledges/payouts to it.
+              </div>
+            )}
           </dl>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">

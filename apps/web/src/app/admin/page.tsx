@@ -15,6 +15,10 @@ export default function AdminDashboard() {
   const router = useRouter();
   const [health, setHealth] = useState<AdminHealth | null>(null);
   const [audit, setAudit] = useState<AuditRow[]>([]);
+  // Bump after a destructive reset to force AdminGenesis + WalletPanel to
+  // re-mount + re-fetch (otherwise they keep showing pre-reset state until
+  // the user hard-refreshes the page).
+  const [resetGen, setResetGen] = useState(0);
 
   useEffect(() => {
     if (!loading && !admin) router.replace('/admin/login');
@@ -69,13 +73,13 @@ export default function AdminDashboard() {
         )}
       </section>
 
-      <AdminGenesis onBoardChange={refreshOverview} />
+      <AdminGenesis key={`genesis-${resetGen}`} onBoardChange={refreshOverview} />
 
-      <WalletPanel />
+      <WalletPanel key={`wallet-${resetGen}`} />
 
       <AdminsPanel currentAdminId={admin.adminId} />
 
-      <ResetPanel />
+      <ResetPanel onReset={() => { setResetGen((n) => n + 1); refreshOverview(); }} />
 
       <section className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-400">Audit log</h2>

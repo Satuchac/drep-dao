@@ -38,7 +38,13 @@ export interface AuditRow {
 
 export interface AdminWalletStatus {
   hotWallet: { address: string | null; balanceAda: number; configured: boolean };
+  /** Legacy env TREASURY_ADDRESS — only the platform's home while no
+   *  multisig is assembled (fresh install / after reset). */
   treasury: { address: string | null; balanceAda: number; configured: boolean };
+  /** §15.3 — the assembled native-script multisig. Null until board members
+   *  have submitted their signing keys and the script is derived. Once set,
+   *  this is the platform's actual on-chain treasury home. */
+  activeMultisig: { address: string; balanceAda: number; threshold: number; totalKeys: number } | null;
 }
 
 export interface GenesisState {
