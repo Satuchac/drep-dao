@@ -252,8 +252,7 @@ export class BoardMultisigService {
     if (seats.some((s) => !s.multisigKey)) return null;
 
     const keyHashes = seats.map((s) => s.multisigKey!.paymentKeyHash.toLowerCase()).sort();
-    const required = Math.min(this.threshold, keyHashes.length);
-    const built = this.buildNativeScript(keyHashes, required);
+    const built = this.buildNativeScript(keyHashes);
 
     const active = await this.active();
     if (active && active.scriptHash === built.scriptHash) return active; // no-op
@@ -261,7 +260,8 @@ export class BoardMultisigService {
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
       const created = await tx.multisigConfig.create({
-        data: { scriptJson: built.scriptJson, scriptHash: built.scriptHash, bech32Address: built.bech32Address, threshold: required, totalKeys: keyHashes.length },
+        // §15 — N-of-N: threshold equals totalKeys; every member must sign.
+        data: { scriptJson: built.scriptJson, scriptHash: built.scriptHash, bech32Address: built.bech32Address, threshold: keyHashes.length, totalKeys: keyHashes.length },
       });
       // Stamp the previous active as replaced + link to the new one.
       if (active) {
@@ -335,18 +335,19 @@ export class BoardMultisigService {
   /** Hash-only check (used by status() to detect rotation). */
   private async computeScriptHashFromKeyHashes(keyHashes: string[]): Promise<string | null> {
     if (keyHashes.length === 0) return null;
-    const required = Math.min(this.threshold, keyHashes.length);
-    return this.buildNativeScript(keyHashes, required).scriptHash;
+    return this.buildNativeScript(keyHashes).scriptHash;
   }
 
-  private buildNativeScript(keyHashes: string[], required: number) {
+  /** §15 — N-of-N native script: ALL submitted board keys must sign. The
+   *  one-phase signing flow needs this (an M-of-N script breaks CIP-30
+   *  wallet UX, see MultisigBroadcastService). */
+  private buildNativeScript(keyHashes: string[]) {
     const scripts = CSL.NativeScripts.new();
     for (const kh of keyHashes) {
       const ed = CSL.Ed25519KeyHash.from_hex(kh);
       scripts.add(CSL.NativeScript.new_script_pubkey(CSL.ScriptPubkey.new(ed)));
     }
-    const nofk = CSL.ScriptNOfK.new(required, scripts);
-    const top = CSL.NativeScript.new_script_n_of_k(nofk);
+    const top = CSL.NativeScript.new_script_all(CSL.ScriptAll.new(scripts));
     const scriptHashObj = top.hash();
     const scriptHash = scriptHashObj.to_hex();
     const bech32Address = CSL.EnterpriseAddress.new(
@@ -354,8 +355,7 @@ export class BoardMultisigService {
       CSL.Credential.from_scripthash(scriptHashObj),
     ).to_address().to_bech32();
     const scriptJson = {
-      type: 'atLeast' as const,
-      required,
+      type: 'all' as const,
       scripts: keyHashes.map((keyHash) => ({ type: 'sig' as const, keyHash })),
     };
     return { scriptJson, scriptHash, bech32Address };

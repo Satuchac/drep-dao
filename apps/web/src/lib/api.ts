@@ -196,13 +196,6 @@ export interface BoardAction {
   approvals: number;
   threshold: number;
   mineApproved: boolean;
-  /** §15 — 'AUTHORIZE' (phase 1: collecting CIP-30 commits) vs 'SIGN'
-   *  (phase 2: M committed; collecting real tx witnesses). */
-  phase: 'AUTHORIZE' | 'SIGN';
-  /** Count of phase-1 commits. */
-  commitments: number;
-  /** Whether the viewer has already committed (phase 1). */
-  mineCommitted: boolean;
   createdAt: string;
   // §11/§15 — payout-specific link + insufficiency hint. Null for non-payout
   // kinds (REWARD_PAYOUT / OPS / etc.); always set for PROJECT_FUNDING.
@@ -266,14 +259,6 @@ export const treasuryApi = {
    *  via CIP-30 api.signTx(txBodyHex, partialSign=true). */
   txBody: (id: string) =>
     request<{ txBodyHex: string; sourceAddress: string; scriptHash: string }>(`/admin/board-actions/${id}/tx-body`),
-  /** §15 phase-1 — board member commits to signing this action with a CIP-30
-   *  data-signature. Once threshold commits are collected, the action moves
-   *  to phase 2 (real tx signing). */
-  commitToAction: (id: string, body: { signature: string; key: string; ts: string }) =>
-    request<{ status: string; commitments: number; threshold: number; ready: boolean }>(
-      `/admin/board-actions/${id}/commit`,
-      { method: 'POST', body: JSON.stringify(body) },
-    ),
   /** §15.4 — any single board member can cancel a pending multisig action.
    *  Reason becomes part of the audit history. */
   cancelAction: (id: string, reason: string) =>

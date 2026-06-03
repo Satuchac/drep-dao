@@ -28,11 +28,6 @@ export class SubmitWitnessDto {
   /** Hex-encoded TransactionWitnessSet returned by api.signTx(txCbor, true). */
   @IsString() @MaxLength(50000) witnessHex!: string;
 }
-export class CommitDto {
-  @IsString() @MaxLength(8000) signature!: string;
-  @IsString() @MaxLength(8000) key!: string;
-  @IsString() @MaxLength(40) ts!: string;
-}
 export class CancelActionDto {
   @IsString() @MaxLength(500) reason!: string;
 }
@@ -89,20 +84,10 @@ export class TreasuryController {
     return this.broadcast.prepareTxBody(id);
   }
 
-  /** §15 phase-1 — board member CIP-30-signs a cheap commit message to
-   *  authorize signing this action. Once the threshold of authorizations is
-   *  collected, the platform snapshots those M signers' keyhashes and the
-   *  action moves to phase 2 where the tx body can be built + signed. */
-  @UseGuards(JwtAuthGuard, BoardGuard)
-  @Post('admin/board-actions/:id/commit')
-  commit(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: CommitDto) {
-    return this.broadcast.commitToSign(id, ctx.userId, dto);
-  }
-
-  /** §15 phase-2 — submit a committed board member's vkey witness for a
-   *  multisig action. When all M committed witnesses are collected, the
-   *  platform combines them with the native script, submits via Koios, and
-   *  marks the action CONFIRMED with the on-chain tx hash. */
+  /** §15 — submit a board member's vkey witness for a multisig action. When
+   *  all N (every board member's) witnesses are collected, the platform
+   *  combines them with the native script, submits via Koios, and marks the
+   *  action CONFIRMED with the on-chain tx hash. */
   @UseGuards(JwtAuthGuard, BoardGuard)
   @Post('admin/board-actions/:id/witness')
   witness(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SubmitWitnessDto) {
