@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { treasuryApi, type TreasuryOverview as Overview } from '@/lib/api';
+import { MultisigSetup } from './multisig-setup';
 
 const ada = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 const BUCKET_COLOR: Record<string, string> = {
@@ -29,6 +30,9 @@ export function TreasuryOverview() {
         </p>
       </div>
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
+      {/* §15 — multisig setup panel above the balances: roster of board key
+          submissions + assembled script address (or "not yet built" banner). */}
+      <MultisigSetup />
       {!data ? (
         <p className="text-sm text-neutral-500">Loading…</p>
       ) : (

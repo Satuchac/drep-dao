@@ -104,6 +104,25 @@ export class UsersService {
     return this.getPreferences(userId);
   }
 
+  /** §15.4 — DReps + board members provide a payment address for rewards.
+   *  Edited freely; RewardEntry stamps `paidToAddress` at payment time so
+   *  past payouts always show their then-current destination. */
+  async getRewardPaymentAddress(userId: string) {
+    const u = await this.prisma.appUser.findUnique({ where: { id: userId }, select: { rewardPaymentAddress: true } });
+    return { rewardPaymentAddress: u?.rewardPaymentAddress ?? null };
+  }
+  async setRewardPaymentAddress(userId: string, address: string | null) {
+    const v = (address ?? '').trim();
+    if (v && !/^addr(_test)?[a-z0-9]+$/i.test(v)) {
+      throw new Error('payment address must be a Cardano bech32 address (addr… / addr_test…)');
+    }
+    await this.prisma.appUser.update({
+      where: { id: userId },
+      data: { rewardPaymentAddress: v || null },
+    });
+    return this.getRewardPaymentAddress(userId);
+  }
+
   async getProfile(userId: string): Promise<UserProfile | null> {
     const user = await this.prisma.appUser.findUnique({
       where: { id: userId },

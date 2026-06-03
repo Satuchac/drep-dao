@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, milestonesApi, type MyExpert, type EntryEligibility } from '@/lib/api';
+import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type EntryEligibility } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -24,6 +24,8 @@ import { FeeConfirmations } from './fee-confirmations';
 import { PledgeConfirmations } from './pledge-confirmations';
 import { BoardPayments } from './board-payments';
 import { PreferencesPanel } from './preferences-panel';
+import { RewardAddressPanel } from './reward-address-panel';
+import { MultisigSetup } from './multisig-setup';
 import { LeaveDao } from './leave-dao';
 import { BackButton } from './round-ui';
 
@@ -80,6 +82,9 @@ export function MemberArea() {
         ) : showApply ? (
           <section className={card}><ApplyOptions registeredDRep={isRegisteredDRep} onExpertChange={loadExpert} /></section>
         ) : null}
+        {/* §15.4 — DReps + board members register a payment address here so
+            they can receive rewards. Amber-nags when empty. */}
+        {isMember ? <RewardAddressPanel /> : null}
         <section className={card}><PreferencesPanel /></section>
       </div>
     ),
@@ -106,6 +111,7 @@ export function MemberArea() {
   tabs.push({
     key: 'proposals',
     label: 'My proposals',
+    badge: todo.mine,
     node: (
       <div className="space-y-4">
         <ProposalSubmit />
@@ -160,6 +166,10 @@ function ActionsTab() {
           Show history
         </label>
       </div>
+      {/* §15 — multisig setup is also surfaced here so board members can submit
+          their signing key right from the Actions tab (it self-hides once they've
+          submitted; the same panel lives on the Treasury page). */}
+      <MultisigSetup />
       <BoardActions history={showHistory} />
       <StopFundingBoardPanel />
       <FeeConfirmations history={showHistory} />
@@ -197,12 +207,11 @@ function ApplicationsTab() {
  * proposals" awaiting this DRep's vote. Light polling.
  */
 function useTodoCounts(isBoard: boolean, canVote: boolean) {
-  const [counts, setCounts] = useState({ actions: 0, applications: 0, voting: 0, internal: 0 });
+  const [counts, setCounts] = useState({ actions: 0, applications: 0, voting: 0, internal: 0, mine: 0 });
   useEffect(() => {
-    if (!isBoard && !canVote) return;
     let alive = true;
     const poll = async () => {
-      const next = { actions: 0, applications: 0, voting: 0, internal: 0 };
+      const next = { actions: 0, applications: 0, voting: 0, internal: 0, mine: 0 };
       if (isBoard) {
         const [a, f, p, dapps, eapps, rem, stop, pl] = await Promise.allSettled([
           treasuryApi.boardActions(),
@@ -229,6 +238,19 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
         try { next.voting = (await filteringApi.votingTasks()).total; } catch { /* leave 0 */ }
         try { next.internal = (await internalProposalsApi.pendingCount()).count; } catch { /* 0 */ }
       }
+      // §11.2 — count submitter to-dos: any of my proposals with a REJECTED
+      // milestone needing a fresh POA. Backend tags those rows red with a
+      // "POA rejected" label in the enrichment, so we just count them.
+      try {
+        const mine = await proposalsApi.mine();
+        next.mine = mine.filter((p) => p.progress?.tone === 'red' && p.progress.label.includes('POA rejected')).length;
+      } catch { /* 0 */ }
+      // §15.4 — every DRep/board member needs a reward payment address; nag
+      // until one is set. Counts toward the Profile tab.
+      try {
+        const r = await rewardAddressApi.get();
+        if (!r.rewardPaymentAddress) next.mine += 1;
+      } catch { /* 0 */ }
       if (alive) setCounts(next);
     };
     poll();

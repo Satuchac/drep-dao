@@ -27,6 +27,10 @@ model AppUser {
   // §20 personal preferences: which block explorer this member's on-chain links use.
   explorerPref       String? @map("explorer_pref") // cardanoscan | cexplorer | adastat | custom
   explorerCustomTxUrl String? @map("explorer_custom_tx_url") // template with {hash} when explorerPref='custom'
+  // §15.4 — payment address for receiving rewards (DReps + board members).
+  // Editable; RewardEntry stamps the address it was paid to at the time of
+  // payment so changing this later doesn't rewrite history.
+  rewardPaymentAddress String? @map("reward_payment_address")
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   drep                   Drep?
@@ -41,6 +45,7 @@ model AppUser {
   stopFundingsProposed   StopFundingProposal[]    @relation("StopProposerUser")
   budgetChangesRequested BudgetChangeRequest[]    @relation("BudgetChangeRequester")
   budgetChangesDecided   BudgetChangeRequest[]    @relation("BudgetChangeDecider")
+  boardMultisigKey       BoardMultisigKey[]
 
   @@map("app_user")
 }
@@ -742,6 +747,10 @@ model RewardEntry {
   amountAda           BigInt    @map("amount_ada")
   paidInTx            String?   @map("paid_in_tx")
   paidAt              DateTime? @map("paid_at") @db.Timestamptz(6)
+  // §15.4 — destination address at the time of payment. Preserved even if
+  // the DRep later updates their reward address on their profile, so the
+  // treasury history page can show exactly where each old payment went.
+  paidToAddress       String?   @map("paid_to_address")
 
   rewardCalculation RewardCalculation @relation(fields: [rewardCalculationId], references: [id])
   drep              Drep              @relation(fields: [drepId], references: [id])
@@ -758,13 +767,25 @@ model MultisigAction {
   kind        String // REWARD_PAYOUT, PROJECT_FUNDING, PLEDGE_RETURN, OPS, LEFTOVER_RETURN
   txCbor      String?  @map("tx_cbor")
   txHash      String?  @map("tx_hash")
-  status      String // PENDING_SIGS, BROADCASTED, CONFIRMED, FAILED
+  status      String // PENDING_SIGS, READY, BROADCASTED, CONFIRMED, FAILED
   amountAda   BigInt?  @map("amount_ada")
   description String?
+  // §11/§15 — for PROJECT_FUNDING (milestone payouts) we keep a structured link
+  // back to the proposal + milestone so the UI can show the full destination
+  // address, the proposal title, and stamp the milestone PAID once the on-chain
+  // tx is confirmed (no description-text parsing).
+  proposalId    String?   @map("proposal_id") @db.Uuid
+  milestoneId   String?   @map("milestone_id") @db.Uuid
+  milestoneIdx  Int?      @map("milestone_idx")
+  proposalTitle String?   @map("proposal_title")
+  destAddress   String?   @map("dest_address")
+  paidAt        DateTime? @map("paid_at") @db.Timestamptz(6)
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   signatures MultisigSignature[]
 
+  @@index([proposalId])
+  @@index([milestoneId])
   @@map("multisig_action")
 }
 
@@ -1037,7 +1058,46 @@ model BoardSeat {
   displayName String   @map("display_name")
   addedAt     DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
 
+  multisigKey BoardMultisigKey?
+
   @@map("board_seat")
+}
+
+// §15 — per-board-member multisig signing key. One row per seat. Used by
+// MultisigConfig assembly: once every seat has a key, the platform composes
+// the `atLeast 3 of 5` native script and stores its derived address.
+model BoardMultisigKey {
+  id                   String   @id @default(uuid()) @db.Uuid
+  boardSeatId          String   @unique @map("board_seat_id") @db.Uuid
+  userId               String   @map("user_id") @db.Uuid
+  paymentKeyHash       String   @unique @map("payment_key_hash")
+  paymentBech32        String?  @map("payment_bech32")
+  hardwareAttested     Boolean  @default(false) @map("hardware_attested")
+  attestationSignature String   @map("attestation_signature")
+  attestationKey       String   @map("attestation_key")
+  attestationTs        String   @map("attestation_ts")
+  submittedAt          DateTime @default(now()) @map("submitted_at") @db.Timestamptz(6)
+
+  boardSeat BoardSeat @relation(fields: [boardSeatId], references: [id])
+  user      AppUser   @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("board_multisig_key")
+}
+
+// §15 — the assembled multisig. One active row at a time; latest by
+// assembledAt is the active script. Keeping history lets the treasury page
+// label past payments with their then-current address.
+model MultisigConfig {
+  id            String   @id @default(uuid()) @db.Uuid
+  scriptJson    Json     @map("script_json")
+  scriptHash    String   @unique @map("script_hash")
+  bech32Address String   @unique @map("bech32_address")
+  threshold     Int
+  totalKeys     Int      @map("total_keys")
+  assembledAt   DateTime @default(now()) @map("assembled_at") @db.Timestamptz(6)
+
+  @@map("multisig_config")
 }
 
 // Singleton (id always 1) — platform-wide operational state.
