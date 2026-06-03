@@ -16,6 +16,7 @@ import { InternalProposals } from './internal-proposals';
 import { ProposalDetail } from './proposal-detail';
 import { JoinDaoButton } from './join-dao-button';
 import { NotificationBadge } from './notification-badge';
+import { WalletStatusBanner } from './wallet-status-banner';
 import { HealthBadge } from '@/app/health-badge';
 
 type View = 'overview' | 'members' | 'me' | 'rounds' | 'proposals' | 'internal' | 'proofs' | 'treasury' | 'setup';
@@ -146,6 +147,10 @@ export function HomeShell() {
             View profile →
           </button>
         </div>
+        {/* §20 — persistent warning when the user is logged in but the wallet
+            extension is no longer injected (disabled / different browser
+            profile / restart). Polls every 5s so re-enabling clears it. */}
+        <WalletStatusBanner />
         {canJoin ? <JoinDaoButton onJoin={() => setView('me')} /> : null}
       </div>
     </div>

@@ -239,8 +239,10 @@ export class TreasuryService {
 
   /**
    * §15.3 — merged hot-wallet TX history. Combines:
-   *   • TREASURY → HOT (top-ups): CONFIRMED OPS-kind MultisigActions whose
-   *     destAddress matches the hot wallet.
+   *   • TREASURY → HOT (top-ups): every OPS-kind MultisigAction whose
+   *     destAddress matches the hot wallet, regardless of status — so the
+   *     UI can show "pending signatures" / "awaiting broadcast" / "PAID"
+   *     all in one place (not just the CONFIRMED end-state).
    *   • HOT → TREASURY (sweeps): rows from the HotWalletSweep table.
    * Sorted newest first; capped at 50.
    */
@@ -249,7 +251,8 @@ export class TreasuryService {
     if (!hotAddr) return { items: [], hotWalletAddress: null };
     const [topups, sweeps] = await Promise.all([
       this.prisma.multisigAction.findMany({
-        where: { kind: 'OPS', status: 'CONFIRMED', destAddress: hotAddr },
+        where: { kind: 'OPS', destAddress: hotAddr },
+        include: { signatures: { select: { id: true } } },
         orderBy: { createdAt: 'desc' },
         take: limit,
       }),
@@ -261,12 +264,15 @@ export class TreasuryService {
     ]);
     type Item = {
       id: string;
-      direction: 'TOP_UP' | 'SWEEP'; // TOP_UP = treasury→hot, SWEEP = hot→treasury
+      direction: 'TOP_UP' | 'SWEEP';
       amountAda: number;
       txHash: string | null;
       at: Date;
       description: string | null;
       initiatedBy: string | null;
+      status: string;       // PENDING_SIGS / READY / BROADCASTED / CONFIRMED / FAILED / SWEPT
+      approvals?: number;   // for top-ups: how many sigs collected
+      threshold?: number;   // for top-ups: how many needed (always 3)
     };
     const items: Item[] = [];
     for (const t of topups) {
@@ -277,7 +283,10 @@ export class TreasuryService {
         txHash: t.txHash,
         at: t.paidAt ?? t.createdAt,
         description: t.description,
-        initiatedBy: null, // board signed; multiple signers — leave blank
+        initiatedBy: null,
+        status: t.status,
+        approvals: t.signatures.length,
+        threshold: APPROVAL_THRESHOLD,
       });
     }
     for (const s of sweeps) {
@@ -289,6 +298,7 @@ export class TreasuryService {
         at: s.createdAt,
         description: null,
         initiatedBy: s.initiatedBy?.displayName ?? null,
+        status: 'SWEPT',
       });
     }
     items.sort((a, b) => b.at.getTime() - a.at.getTime());

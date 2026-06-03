@@ -222,6 +222,10 @@ export interface HotWalletHistoryItem {
   at: string;
   description: string | null;
   initiatedBy: string | null;
+  /** PENDING_SIGS / READY / BROADCASTED / CONFIRMED / FAILED (top-ups) or SWEPT. */
+  status: string;
+  approvals?: number;
+  threshold?: number;
 }
 
 export const treasuryApi = {
