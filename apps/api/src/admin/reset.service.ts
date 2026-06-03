@@ -69,11 +69,13 @@ export class ResetService {
       await tx.platformState.updateMany({
         data: { genesisApprovedAt: null, genesisApprovedBy: null, genesisPayload: undefined as never },
       });
-      // Disable triggers temporarily? Not needed — CASCADE on FKs handles it.
-      // We avoid TRUNCATE ON appUser so login/JWT still works for the admin
-      // who is running this; users will be re-derived on next login.
-      const sql = tables.map((t) => `TRUNCATE TABLE "${t}" RESTART IDENTITY CASCADE`).join('; ');
-      await tx.$executeRawUnsafe(sql);
+      // ONE TRUNCATE statement with a comma-separated table list. Prisma sends
+      // queries as prepared statements which reject ';' multi-command bodies;
+      // CASCADE handles transitive children (votes, comments, snapshots, …).
+      // We deliberately don't TRUNCATE app_user so the admin's session and
+      // related users keep working — they'll be re-derived on next login.
+      const list = tables.map((t) => `"${t}"`).join(', ');
+      await tx.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
     });
     this.logger.warn('ADMIN RESET — DAO state wiped (proposals, rounds, board, multisig, votes, anchors, rewards).');
     return { ok: true, wipedTables: tables.length };
