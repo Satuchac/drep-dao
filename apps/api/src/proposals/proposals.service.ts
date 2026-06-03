@@ -278,6 +278,27 @@ export class ProposalsService {
    * not just the pitch text. Accepts a transaction client so it can be called
    * mid-transaction (snapshot the pre-update state, then mutate).
    */
+  /** §15.3 — resolve the on-chain address the platform expects inbound funds at
+   *  (submission fees, pledges, revenue sharing). Prefers the active multisig
+   *  once assembled; falls back to dedicated env vars, then TREASURY_ADDRESS. */
+  private async resolveInboundAddress(kind: 'fee' | 'pledge'): Promise<string> {
+    const active = await this.prisma.multisigConfig.findFirst({
+      where: { replacedAt: null },
+      orderBy: { assembledAt: 'desc' },
+      select: { bech32Address: true },
+    });
+    if (active?.bech32Address) return active.bech32Address;
+    if (kind === 'pledge') {
+      return this.config.get<string>('PLEDGE_ADDRESS')
+        ?? this.config.get<string>('SUBMISSION_FEE_ADDRESS')
+        ?? this.config.get<string>('TREASURY_ADDRESS')
+        ?? '';
+    }
+    return this.config.get<string>('SUBMISSION_FEE_ADDRESS')
+      ?? this.config.get<string>('TREASURY_ADDRESS')
+      ?? '';
+  }
+
   private async buildProposalSnapshot(tx: Prisma.TransactionClient | typeof this.prisma, proposalId: string) {
     const p = await tx.proposal.findUnique({
       where: { id: proposalId },
@@ -474,10 +495,7 @@ export class ProposalsService {
     const p = await this.prisma.proposal.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('proposal not found');
     if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
-    const pledgeAddress = this.config.get<string>('PLEDGE_ADDRESS')
-      ?? this.config.get<string>('SUBMISSION_FEE_ADDRESS')
-      ?? this.config.get<string>('TREASURY_ADDRESS')
-      ?? '';
+    const pledgeAddress = await this.resolveInboundAddress('pledge');
     const requiredAda = toAda(p.pledgeAmountAda);
     const hash = p.pledgeTxHash;
     if (!pledgeAddress || !hash || requiredAda <= 0) {
@@ -508,8 +526,7 @@ export class ProposalsService {
     const p = await this.prisma.proposal.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('proposal not found');
     if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
-    const feeAddress = this.config.get<string>('SUBMISSION_FEE_ADDRESS')
-      ?? this.config.get<string>('TREASURY_ADDRESS') ?? '';
+    const feeAddress = await this.resolveInboundAddress('fee');
     // The stored fee only exists once the team has submitted. While the proposal
     // is still a DRAFT we compute the EXPECTED fee from the form's current state
     // (requested amount + commercial flag + round settings) so the on-chain
@@ -640,10 +657,7 @@ export class ProposalsService {
         round: { select: { number: true } },
       },
     });
-    const pledgeAddress = this.config.get<string>('PLEDGE_ADDRESS')
-      ?? this.config.get<string>('SUBMISSION_FEE_ADDRESS')
-      ?? this.config.get<string>('TREASURY_ADDRESS')
-      ?? '';
+    const pledgeAddress = await this.resolveInboundAddress('pledge');
     return Promise.all(
       rows.map(async (p) => {
         const verification = pledgeAddress && p.pledgeTxHash
@@ -708,6 +722,7 @@ export class ProposalsService {
         round: { select: { number: true } },
       },
     });
+    const hintAddress = await this.resolveInboundAddress('fee');
     return rows.map((p) => ({
       id: p.id,
       publicId: p.publicId,
@@ -716,9 +731,9 @@ export class ProposalsService {
       categoryName: p.category?.name ?? null,
       submitter: p.submitterUser?.displayName ?? null,
       revenueSharingMd: typeof p.revenueSharing === 'string' ? p.revenueSharing : null,
-      // The submission-fee address is the canonical "send things to the platform"
-      // address — surfaced here so the board can sanity-check on-chain receipts.
-      hintAddress: this.config.get<string>('SUBMISSION_FEE_ADDRESS') ?? '',
+      // The submission-fee address (multisig when assembled, else env) — surfaced
+      // here so the board can sanity-check on-chain receipts.
+      hintAddress,
     }));
   }
 
@@ -1289,7 +1304,7 @@ export class ProposalsService {
         round: { select: { number: true } },
       },
     });
-    const feeAddress = this.config.get<string>('SUBMISSION_FEE_ADDRESS') ?? this.config.get<string>('TREASURY_ADDRESS') ?? '';
+    const feeAddress = await this.resolveInboundAddress('fee');
     return Promise.all(
       rows.map(async (p) => {
         // The submitter may have entered several tx hashes (corrected/replaced) — show & verify

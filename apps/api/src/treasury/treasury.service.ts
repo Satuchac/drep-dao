@@ -35,8 +35,25 @@ export class TreasuryService {
    * (rewards, operations, per-round) with allocated / spent / remaining, plus
    * the anchor hot wallet. Budgets are configurable; spend is read from data.
    */
+  /**
+   * §15.3 — the LIVE treasury address. Once the board has assembled the
+   * multisig, that script address is the canonical home; the env
+   * TREASURY_ADDRESS is only used as a fallback while no multisig exists
+   * (fresh install, or after a reset). Inbound flows (submission fees,
+   * pledges) and outbound flows (payouts, top-ups) all read through here so
+   * the address auto-rotates when the board changes.
+   */
+  async resolveTreasuryAddress(): Promise<string | null> {
+    const active = await this.prisma.multisigConfig.findFirst({
+      where: { replacedAt: null },
+      orderBy: { assembledAt: 'desc' },
+      select: { bech32Address: true },
+    });
+    return active?.bech32Address ?? this.config.get<string>('TREASURY_ADDRESS') ?? null;
+  }
+
   async overview() {
-    const treasury = this.config.get<string>('TREASURY_ADDRESS') || null;
+    const treasury = await this.resolveTreasuryAddress();
     const hot = this.anchor.hotWalletAddress();
     const addrs = [treasury, hot].filter((a): a is string => !!a);
     const bal = await this.cardano.addressBalance(addrs);
@@ -89,7 +106,7 @@ export class TreasuryService {
     if (!board) return { count: 0, actions: [], history: [], treasury: null };
     await this.maybePrepareTopUp(); // platform prepares a top-up if the hot wallet is low
 
-    const treasuryAddress = this.config.get<string>('TREASURY_ADDRESS') || null;
+    const treasuryAddress = await this.resolveTreasuryAddress();
     const balMap = treasuryAddress ? await this.cardano.addressBalance([treasuryAddress]) : new Map<string, bigint>();
     const treasuryBalanceAda = treasuryAddress ? Number(balMap.get(treasuryAddress) ?? 0n) / ADA : 0;
 
@@ -354,7 +371,7 @@ export class TreasuryService {
       // here so the board knows to wait for funds (or cancel) instead of
       // collecting a 4th/5th signature that can't be acted on.
       if (action.amountAda) {
-        const treasuryAddr = this.config.get<string>('TREASURY_ADDRESS') || null;
+        const treasuryAddr = await this.resolveTreasuryAddress();
         if (treasuryAddr) {
           const bal = await this.cardano.addressBalance([treasuryAddr]);
           const treasuryLovelace = bal.get(treasuryAddr) ?? 0n;
