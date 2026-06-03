@@ -60,28 +60,51 @@ export function MultisigSetup() {
 
       {/* Active assembled config (collapsible). */}
       {status.active ? (
-        <div className="mt-2 rounded border border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40">
-          <button
-            type="button"
-            onClick={() => setShowActive((v) => !v)}
-            className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-200"
-          >
-            <span>✓ Active multisig · {status.active.threshold}-of-{status.active.totalKeys} · {status.active.balanceAda.toLocaleString()} ₳ on-chain</span>
-            <span>{showActive ? '▾ hide' : '▸ show'}</span>
-          </button>
-          {showActive ? (
-            <div className="px-2 pb-2 text-xs">
-              <div className="text-[11px] text-neutral-500">Script address (on-chain home)</div>
-              <div className="mt-0.5 flex items-start gap-2">
-                <div className="flex-1 break-all font-mono text-[11px] text-neutral-700 dark:text-neutral-300">{status.active.bech32Address}</div>
-                <CopyButton text={status.active.bech32Address} label="Copy" />
+        <>
+          <div className="mt-2 rounded border border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40">
+            <button
+              type="button"
+              onClick={() => setShowActive((v) => !v)}
+              className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-200"
+            >
+              <span>✓ Active multisig · {status.active.threshold}-of-{status.active.totalKeys} · {status.active.balanceAda.toLocaleString()} ₳ on-chain</span>
+              <span>{showActive ? '▾ hide' : '▸ show'}</span>
+            </button>
+            {showActive ? (
+              <div className="px-2 pb-2 text-xs">
+                <div className="text-[11px] text-neutral-500">Script address (on-chain home)</div>
+                <div className="mt-0.5 flex items-start gap-2">
+                  <div className="flex-1 break-all font-mono text-[11px] text-neutral-700 dark:text-neutral-300">{status.active.bech32Address}</div>
+                  <CopyButton text={status.active.bech32Address} label="Copy" />
+                </div>
+                <div className="mt-1 text-[11px] text-neutral-500">
+                  Script hash: <span className="font-mono">{status.active.scriptHash}</span>
+                </div>
               </div>
-              <div className="mt-1 text-[11px] text-neutral-500">
-                Script hash: <span className="font-mono">{status.active.scriptHash}</span>
-              </div>
+            ) : null}
+          </div>
+          {/* §15.3 — bootstrap CTA: the multisig is built but holds 0 ₳.
+              The platform doesn't sign for the legacy env TREASURY_ADDRESS, so
+              a board member with that key has to send funds in from their own
+              wallet. Once anything lands, the platform routes every inbound +
+              outbound flow through this address automatically. */}
+          {status.active.balanceAda === 0 ? (
+            <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+              <div className="font-semibold">Bootstrap funds to start using this multisig</div>
+              <p className="mt-1">
+                The multisig is assembled but on-chain balance is <strong>0 ₳</strong>. Send some tADA to the
+                script address above from any wallet that controls funds (e.g. the legacy treasury wallet, or any
+                board member&apos;s personal wallet). Inbound flows (submission fees, pledges) already route
+                here automatically — they&apos;ll pile up once proposals start.
+              </p>
+              <p className="mt-1 text-[11px]">
+                Outbound payouts work via the standard board signing flow once 3-of-{status.active.totalKeys}{' '}
+                board members have signed via <strong>Actions → Approve &amp; sign</strong> (each click signs the
+                tx with their HW wallet; the platform combines witnesses + broadcasts on the 3rd signature).
+              </p>
             </div>
           ) : null}
-        </div>
+        </>
       ) : (
         <div className="mt-2 rounded border border-amber-300 bg-amber-100/50 p-2 text-xs dark:border-amber-900 dark:bg-amber-900/30">
           <strong>Multisig not yet built.</strong> Every board seat must submit a payment verification key

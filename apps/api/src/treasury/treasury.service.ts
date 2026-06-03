@@ -80,8 +80,12 @@ export class TreasuryService {
     });
 
     const buckets = [
-      bucket('rewards', 'Rewards', this.num('REWARDS_BUDGET_ADA', 600_000_000), Number(rewardsPaid._sum.amountAda ?? 0n) / ADA, this.config.get<string>('REWARDS_ADDRESS') || treasury),
-      bucket('operations', 'Operations', this.num('OPERATIONS_BUDGET_ADA', 600_000_000), Number(opsSpent._sum.amountAda ?? 0n) / ADA, this.config.get<string>('OPERATIONS_ADDRESS') || treasury),
+      // Budget caps default to 0 ₳ — they only show real numbers when the
+      // operator sets REWARDS_BUDGET_ADA / OPERATIONS_BUDGET_ADA explicitly.
+      // The previous 600M default was nonsensical right after a reset
+      // ("allocated 1.2B ₳" when the treasury actually held 19K).
+      bucket('rewards', 'Rewards', this.num('REWARDS_BUDGET_ADA', 0), Number(rewardsPaid._sum.amountAda ?? 0n) / ADA, this.config.get<string>('REWARDS_ADDRESS') || treasury),
+      bucket('operations', 'Operations', this.num('OPERATIONS_BUDGET_ADA', 0), Number(opsSpent._sum.amountAda ?? 0n) / ADA, this.config.get<string>('OPERATIONS_ADDRESS') || treasury),
       ...rounds.map((r) =>
         bucket(`round-${r.number}`, `Round #${r.number}${r.name ? ` — ${r.name}` : ''}`, Number(r.budgetAda) / ADA, 0, r.multisigAddress || treasury),
       ),

@@ -69,6 +69,11 @@ export class ResetService {
       await tx.platformState.updateMany({
         data: { genesisApprovedAt: null, genesisApprovedBy: null, genesisPayload: undefined as never },
       });
+      // §15.4 — reward addresses are tied to "this user is a DRep / board
+      // member who gets paid". DRep registry is wiped, so the address is
+      // meaningless until the user is re-admitted — clear it on every
+      // app_user row so the post-reset state matches a fresh install.
+      await tx.appUser.updateMany({ data: { rewardPaymentAddress: null } });
       // ONE TRUNCATE statement with a comma-separated table list. Prisma sends
       // queries as prepared statements which reject ';' multi-command bodies;
       // CASCADE handles transitive children (votes, comments, snapshots, …).
