@@ -9,7 +9,7 @@ import { ConfirmDialog } from './confirm-dialog';
 
 /** §15.3 — pending board/treasury actions the platform prepared, awaiting 3-of-5 approval. */
 export function BoardActions({ onChange, history = false }: { onChange?: () => void; history?: boolean }) {
-  const { profile, signTx } = useAuth();
+  const { profile, signTx, signMessage } = useAuth();
   const { txUrl } = useExplorer();
   const [actions, setActions] = useState<BoardAction[]>([]);
   const [past, setPast] = useState<BoardAction[]>([]);
@@ -39,13 +39,38 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
       else delete next[id];
       return next;
     });
-  /** §15 — real native-script multisig approval:
-   *    1. fetch the unsigned tx body from the backend (built once, cached)
-   *    2. ask the wallet to sign it via CIP-30 signTx(partialSign=true)
-   *    3. submit the wallet's witness CBOR
-   *    4. backend combines witnesses + native script + broadcasts when N
-   *       distinct vkey witnesses are collected
-   */
+  /** §15 phase 1 — Authorize: board member CIP-30 data-signs a cheap commit
+   *  message so the platform knows they're committing to be one of the M
+   *  signers. Once M commits are in, the action moves to phase 2 and the
+   *  same M sign the real tx body. */
+  const COMMIT_MSG = (actionId: string, stake: string, ts: string) =>
+    ['drep-dao | multisig commit', `action:${actionId}`, `signer:${stake}`, `ts:${ts}`].join('\n');
+
+  const authorize = async (a: BoardAction) => {
+    setErr(a.id, null); setBusy(a.id);
+    try {
+      if (!profile) { setErr(a.id, 'Connect your wallet to authorize.'); return; }
+      const ts = new Date().toISOString();
+      const msg = COMMIT_MSG(a.id, profile.user.stakeAddress, ts);
+      const s = await signMessage(msg);
+      if (!s) {
+        setErr(a.id, 'Could not reach your wallet. Open the wallet extension and try again.');
+        return;
+      }
+      await treasuryApi.commitToAction(a.id, { signature: s.signature, key: s.key, ts });
+      load();
+      onChange?.();
+    } catch (e) {
+      setErr(a.id, e instanceof Error ? e.message : 'Authorization cancelled.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** §15 phase 2 — Sign: only available once M authorizations are collected.
+   *  Fetches the cached tx body (built with the M committed keyhashes as
+   *  required_signers), asks the wallet to signTx(partialSign=true), submits
+   *  the witness. Backend combines + broadcasts on the Mth witness. */
   const approve = async (a: BoardAction) => {
     setErr(a.id, null);
     setBusy(a.id);
@@ -57,7 +82,7 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
       const { txBodyHex } = await treasuryApi.txBody(a.id);
       const witnessHex = await signTx(txBodyHex);
       if (!witnessHex) {
-        setErr(a.id, 'Could not reach the wallet you logged in with. Open the wallet extension (or re-connect from the login card on the right) and click Approve & sign again.');
+        setErr(a.id, 'Could not reach the wallet you logged in with. Open the wallet extension (or re-connect from the login card on the right) and click Sign again.');
         return;
       }
       const r = await treasuryApi.submitWitness(a.id, witnessHex);
@@ -140,17 +165,43 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
                 Approval at threshold will be blocked until the treasury is topped up.
               </div>
             ) : null}
+            {/* §15 — two-phase progress: phase 1 collects M cheap CIP-30
+                authorizations; phase 2 collects the M real tx witnesses from
+                the SAME members chosen at phase-1 close (their keyhashes are
+                baked into required_signers). */}
             <div className="mt-1 text-xs text-neutral-500">
-              {a.approvals}/{a.threshold} approvals{a.mineApproved ? ' · you approved ✓' : ''}
+              {a.phase === 'AUTHORIZE' ? (
+                <>
+                  Phase 1 — authorizations: {a.commitments}/{a.threshold}
+                  {a.mineCommitted ? ' · you authorized ✓' : ''}
+                </>
+              ) : (
+                <>
+                  Phase 2 — tx signatures: {a.approvals}/{a.threshold}
+                  {a.mineApproved ? ' · you signed ✓' : ''}
+                </>
+              )}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button
-                disabled={busy === a.id || a.mineApproved}
-                onClick={() => approve(a)}
-                className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
-              >
-                {a.mineApproved ? 'Approved' : busy === a.id ? 'Signing…' : 'Approve & sign'}
-              </button>
+              {a.phase === 'AUTHORIZE' ? (
+                <button
+                  disabled={busy === a.id || a.mineCommitted}
+                  onClick={() => authorize(a)}
+                  className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                  title="Authorize signing — cheap CIP-30 data-signature. Once 3 board members authorize, the platform builds the real tx and asks those 3 to sign it with their HW wallets."
+                >
+                  {a.mineCommitted ? 'Authorized' : busy === a.id ? 'Authorizing…' : 'Authorize'}
+                </button>
+              ) : (
+                <button
+                  disabled={busy === a.id || a.mineApproved}
+                  onClick={() => approve(a)}
+                  className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                  title="Sign the prepared tx with your HW wallet. Only the 3 board members who authorized in phase 1 can sign."
+                >
+                  {a.mineApproved ? 'Signed' : busy === a.id ? 'Signing…' : 'Sign tx with HW wallet'}
+                </button>
+              )}
               {/* §15.4 — any single board member can cancel a pending action.
                   Marks it FAILED with the cancellation reason in the audit
                   trail. Hidden once the tx is on-chain (BROADCASTED/CONFIRMED). */}

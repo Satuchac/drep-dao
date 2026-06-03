@@ -47,6 +47,7 @@ model AppUser {
   budgetChangesDecided   BudgetChangeRequest[]    @relation("BudgetChangeDecider")
   boardMultisigKey       BoardMultisigKey[]
   hotWalletSweeps        HotWalletSweep[]
+  multisigCommitments    MultisigCommitment[]
 
   @@map("app_user")
 }
@@ -92,6 +93,7 @@ model Drep {
   admissionVotesCast      AdmissionVote[]       @relation("AdmissionVoter")
   stopFundingsProposed    StopFundingProposal[] @relation("StopProposer")
   stopFundingVotesCast    StopFundingVote[]     @relation("StopVoter")
+  multisigCommitments     MultisigCommitment[]
 
   @@map("drep")
 }
@@ -786,11 +788,17 @@ model MultisigAction {
   // destAddress + the active MultisigConfig).
   fromConfigId  String?   @map("from_config_id") @db.Uuid
   toConfigId    String?   @map("to_config_id")   @db.Uuid
+  // §15 phase-2 — snapshot of which M multisig keyhashes were chosen at the
+  // moment threshold authorizations were collected. The tx body is built
+  // with these as required_signers; tx-witness submissions are gated to
+  // exactly these signers. Null while still in phase-1 (collecting commits).
+  committedKeyHashes String[] @map("committed_key_hashes")
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
-  signatures MultisigSignature[]
-  fromConfig MultisigConfig?     @relation("MultisigActionFromConfig", fields: [fromConfigId], references: [id])
-  toConfig   MultisigConfig?     @relation("MultisigActionToConfig",   fields: [toConfigId],   references: [id])
+  signatures  MultisigSignature[]
+  commitments MultisigCommitment[]
+  fromConfig  MultisigConfig?     @relation("MultisigActionFromConfig", fields: [fromConfigId], references: [id])
+  toConfig    MultisigConfig?     @relation("MultisigActionToConfig",   fields: [toConfigId],   references: [id])
 
   @@index([proposalId])
   @@index([milestoneId])
@@ -809,6 +817,30 @@ model MultisigSignature {
 
   @@unique([actionId, boardDrepId])
   @@map("multisig_signature")
+}
+
+// §15 phase-1 — a board member's cheap CIP-30 data-sig saying "I commit to
+// signing this action with my HW wallet". Once `threshold` commitments are
+// collected, the platform builds the tx body with exactly those members'
+// keyhashes in required_signers, and they then submit real tx witnesses.
+model MultisigCommitment {
+  id          String   @id @default(uuid()) @db.Uuid
+  actionId    String   @map("action_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  drepId      String   @map("drep_id") @db.Uuid
+  keyHash     String   @map("key_hash")
+  signature   String
+  signingKey  String   @map("signing_key")
+  ts          String
+  committedAt DateTime @default(now()) @map("committed_at") @db.Timestamptz(6)
+
+  action MultisigAction @relation(fields: [actionId], references: [id], onDelete: Cascade)
+  user   AppUser        @relation(fields: [userId], references: [id])
+  drep   Drep           @relation(fields: [drepId], references: [id])
+
+  @@unique([actionId, userId])
+  @@index([actionId])
+  @@map("multisig_commitment")
 }
 
 model CardanoTxObservation {
