@@ -178,6 +178,15 @@ export class TreasuryService {
     if (amountAda > HOT_WALLET_TOPUP_MAX_ADA) {
       throw new BadRequestException(`a single top-up is capped at ${HOT_WALLET_TOPUP_MAX_ADA} ₳ — split into multiple top-ups if you need more`);
     }
+    // Dedup: refuse if a top-up is already pending. The board should sign or
+    // cancel that one before queueing another (and avoids the duplicate-row
+    // pile-up if the UI is double-clicked while waiting on a response).
+    const open = await this.prisma.multisigAction.findFirst({
+      where: { kind: 'OPS', status: 'PENDING_SIGS', destAddress: hot },
+    });
+    if (open) {
+      throw new ConflictException('a hot-wallet top-up is already pending signatures — sign or wait for that one before queueing another');
+    }
     const row = await this.prisma.multisigAction.create({
       data: {
         kind: 'OPS',

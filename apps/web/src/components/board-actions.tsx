@@ -15,7 +15,10 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
   const [past, setPast] = useState<BoardAction[]>([]);
   const [treasury, setTreasury] = useState<{ address: string | null; balanceAda: number } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // §15.3 — per-action error map so the message appears next to the button
+  // the user clicked (the previous single-error state lived at the section
+  // top, easy to miss when there are several actions and you've scrolled).
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const load = useCallback(() => {
     treasuryApi
@@ -25,12 +28,19 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
   }, [history]);
   useEffect(load, [load]);
 
+  const setErr = (id: string, msg: string | null) =>
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (msg) next[id] = msg;
+      else delete next[id];
+      return next;
+    });
   const approve = async (a: BoardAction) => {
-    setError(null);
+    setErr(a.id, null);
     setBusy(a.id);
     try {
       if (!profile) {
-        setError('Connect your wallet to sign this action.');
+        setErr(a.id, 'Connect your wallet to sign this action.');
         return;
       }
       const ts = new Date().toISOString();
@@ -41,19 +51,21 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
         voterStakeAddress: profile.user.stakeAddress,
         ts,
       });
-      // A treasury approval MUST be signed by the board member's own wallet. signMessage
-      // throws if the user cancels (→ caught below, nothing recorded) and returns null only
-      // if the logged-in wallet can't be found.
+      // A treasury approval MUST be signed by the board member's own wallet.
+      // signMessage throws if the user cancels (caught below); returns null
+      // only when the wallet you logged in with isn't injected (e.g.
+      // extension disabled / different browser profile). Give a concrete
+      // instruction in that case so the user can act.
       const s = await signMessage(message);
       if (!s) {
-        setError('Could not reach the wallet you logged in with — open it and try again. Nothing was approved.');
+        setErr(a.id, 'Could not reach the wallet you logged in with. Open the wallet extension (or re-connect from the login card on the right) and click Approve & sign again.');
         return;
       }
       await treasuryApi.approveAction(a.id, { signature: s.signature, signingKey: s.key, ts });
       load();
       onChange?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Approve cancelled — nothing was recorded.');
+      setErr(a.id, e instanceof Error ? e.message : 'Approve cancelled — nothing was recorded.');
     } finally {
       setBusy(null);
     }
@@ -85,7 +97,6 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
           )}
         </div>
       ) : null}
-      {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {actions.length === 0 ? <div className="text-xs text-neutral-500">Nothing awaiting signatures.</div> : null}
       <ul className="space-y-2">
         {actions.map((a) => (
@@ -100,10 +111,20 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
               </span>
               {a.amountAda != null ? <span className="tabular-nums text-neutral-500">{a.amountAda.toLocaleString()} ₳</span> : null}
             </div>
-            {/* Full destination address (no truncation) + copy button. */}
+            {/* Full destination address (no truncation) + copy button. Label
+                changes by action kind so it reads naturally:
+                  • PROJECT_FUNDING → "Send to (team payout address)"
+                  • OPS top-up      → "Send to (anchor hot wallet)"
+                  • REWARD_PAYOUT   → "Send to (DRep reward address)"
+                  • anything else   → "Send to (destination)" */}
             {a.destAddress ? (
               <div className="mt-1">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Send to (team payout address)</div>
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+                  {a.kind === 'PROJECT_FUNDING' ? 'Send to (team payout address)'
+                    : a.kind === 'OPS' ? 'Send to (anchor hot wallet)'
+                    : a.kind === 'REWARD_PAYOUT' ? 'Send to (DRep reward address)'
+                    : 'Send to (destination)'}
+                </div>
                 <div className="mt-0.5 flex items-start gap-2">
                   <div className="flex-1 break-all font-mono text-[11px] text-neutral-600 dark:text-neutral-400">{a.destAddress}</div>
                   <CopyButton text={a.destAddress} label="Copy" />
@@ -127,6 +148,11 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
             >
               {a.mineApproved ? 'Approved' : busy === a.id ? 'Signing…' : 'Approve & sign'}
             </button>
+            {errors[a.id] ? (
+              <div className="mt-1 rounded border border-red-300 bg-red-50 p-1.5 text-[11px] text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+                {errors[a.id]}
+              </div>
+            ) : null}
             {/* §11/§15 — once the threshold is reached, the board broadcasts the
                 assembled tx from their wallet and pastes the on-chain hash here.
                 Backend verifies via Koios and flips the action to CONFIRMED. */}
