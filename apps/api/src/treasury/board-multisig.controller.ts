@@ -1,5 +1,5 @@
-import { IsBoolean, IsString, MaxLength } from 'class-validator';
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { IsBoolean, IsString, IsUUID, MaxLength } from 'class-validator';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
@@ -11,6 +11,10 @@ export class SubmitMultisigKeyDto {
   @IsString() @MaxLength(8000) signature!: string;
   @IsString() @MaxLength(8000) key!: string;
   @IsString() @MaxLength(40) ts!: string;
+}
+
+export class PrepareMigrationDto {
+  @IsUUID() fromConfigId!: string;
 }
 
 @Controller()
@@ -33,5 +37,15 @@ export class BoardMultisigController {
   @Post('admin/multisig/key')
   submit(@CurrentUser() ctx: AuthContext, @Body() dto: SubmitMultisigKeyDto) {
     return this.multisig.submitKey(ctx.userId, dto);
+  }
+
+  /** §15.2 — any current board member can prepare a migration MultisigAction
+   *  from an old (replaced) multisig to the new active one. The OLD board
+   *  members sign that action (their keyhashes are in the old script);
+   *  Phase 2 will assemble + broadcast the actual native-script tx. */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Post('admin/multisig/prepare-migration')
+  prepareMigration(@CurrentUser() ctx: AuthContext, @Body() dto: PrepareMigrationDto) {
+    return this.multisig.prepareMigration(ctx.userId, dto.fromConfigId);
   }
 }

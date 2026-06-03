@@ -187,7 +187,7 @@ export class InternalProposalsService {
       select: { id: true, drepIdOnchain: true, user: { select: { drepKeyHash: true } } },
     });
     const boardHashes = new Set(
-      (await this.prisma.boardSeat.findMany({ select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
+      (await this.prisma.boardSeat.findMany({ where: { removedAt: null }, select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
     );
     const board = (d: (typeof dreps)[number]) => (d.user?.drepKeyHash ? boardHashes.has(d.user.drepKeyHash) : false);
     if (scope === VotersScope.BOARD_ONLY) return dreps.filter(board);
@@ -576,7 +576,12 @@ export class InternalProposalsService {
       throw new BadRequestException('election has no valid candidate set');
     }
     await this.prisma.$transaction(async (tx) => {
-      await tx.boardSeat.deleteMany({});
+      // §15 — soft-delete the OUTGOING board so their multisig keys remain
+      // linked (needed to sign the migration tx out of the old wallet). The
+      // partial unique index on drep_key_hash only covers active rows, so a
+      // re-elected member's new seat won't conflict with their archived one.
+      const now = new Date();
+      await tx.boardSeat.updateMany({ where: { removedAt: null }, data: { removedAt: now } });
       for (const c of candidates) {
         await tx.boardSeat.create({
           data: { drepKeyHash: c.drepKeyHash, drepId: c.drepIdOnchain, displayName: c.displayName },
@@ -665,6 +670,6 @@ export class InternalProposalsService {
   private async isBoardUser(userId: string): Promise<boolean> {
     const u = await this.prisma.appUser.findUnique({ where: { id: userId }, select: { drepKeyHash: true } });
     if (!u?.drepKeyHash) return false;
-    return !!(await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: u.drepKeyHash } }));
+    return !!(await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: u.drepKeyHash } }));
   }
 }

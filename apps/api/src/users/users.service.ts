@@ -133,7 +133,7 @@ export class UsersService {
     // §17.5 — board membership is keyed by the wallet's on-chain DRep key hash
     // matching a genesis board seat (NOT by stake address / a DB flag).
     const seat = user.drepKeyHash
-      ? await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: user.drepKeyHash } })
+      ? await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: user.drepKeyHash } })
       : null;
     const isBoard = seat !== null;
 

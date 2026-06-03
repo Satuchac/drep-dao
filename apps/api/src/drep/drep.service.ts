@@ -36,7 +36,7 @@ export class DrepService {
    * on-chain voting power (Koios `amount`); merit is the clamped ledger sum.
    */
   async listDaoMembers() {
-    const seats = await this.prisma.boardSeat.findMany({ orderBy: { addedAt: 'asc' } });
+    const seats = await this.prisma.boardSeat.findMany({ where: { removedAt: null }, orderBy: { addedAt: 'asc' } });
     const boardKeys = new Set(seats.map((s) => s.drepKeyHash));
     const admitted = await this.prisma.drep.findMany({
       where: { status: DRepStatus.ADMITTED },
@@ -343,7 +343,7 @@ export class DrepService {
       select: { txHash: true },
     });
     // Fall back to the board-seat name when a board member hasn't set a display name.
-    const seats = await this.prisma.boardSeat.findMany();
+    const seats = await this.prisma.boardSeat.findMany({ where: { removedAt: null } });
     const seatName = new Map(seats.map((s) => [s.drepKeyHash, s.displayName]));
     const voterLabel = (v: (typeof votes)[number]) =>
       v.voter.user.displayName ??
@@ -447,10 +447,12 @@ export class DrepService {
     if (!drep) throw new NotFoundException('no DRep profile');
     if (drep.status !== DRepStatus.ADMITTED) throw new ConflictException('you are not an active DAO member');
     const seat = drep.user.drepKeyHash
-      ? await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: drep.user.drepKeyHash } })
+      ? await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: drep.user.drepKeyHash } })
       : null;
     await this.prisma.$transaction(async (tx) => {
-      if (seat) await tx.boardSeat.delete({ where: { drepKeyHash: seat.drepKeyHash } }); // board member resigns
+      // §15 — soft-delete the seat so their multisig key (if any) remains
+      // associated for signing the migration tx out of the old wallet.
+      if (seat) await tx.boardSeat.update({ where: { id: seat.id }, data: { removedAt: new Date() } });
       await tx.drep.update({ where: { id: drep.id }, data: { status: DRepStatus.REMOVED } });
     });
     return { status: DRepStatus.REMOVED, resignedBoardSeat: !!seat };
@@ -551,7 +553,7 @@ export class DrepService {
     if (board.id === applicant.id) throw new BadRequestException('cannot vote on your own application');
     // Enforce board-only here too (defence in depth beyond the controller guard).
     const seat = board.user.drepKeyHash
-      ? await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: board.user.drepKeyHash } })
+      ? await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: board.user.drepKeyHash } })
       : null;
     if (!seat) throw new ForbiddenException('only seated board members can vote on admissions');
 
@@ -593,7 +595,7 @@ export class DrepService {
     const yes = votes.filter((v) => v.choice === 'YES').length;
     const no = votes.filter((v) => v.choice === 'NO').length;
     const threshold = await this.approvalThreshold();
-    const boardCount = await this.prisma.boardSeat.count();
+    const boardCount = await this.prisma.boardSeat.count({ where: { removedAt: null } });
 
     let status: string = applicant.status;
     if (yes >= threshold) {
@@ -674,7 +676,7 @@ export class DrepService {
     }
     if (target.id === board.id) throw new BadRequestException('cannot propose your own removal');
     const targetIsBoard = target.user.drepKeyHash
-      ? (await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: target.user.drepKeyHash } })) !== null
+      ? (await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: target.user.drepKeyHash } })) !== null
       : false;
     if (targetIsBoard) throw new BadRequestException('board members are managed via genesis, not removal votes');
     const open = await this.prisma.drepRemoval.findFirst({ where: { targetDrepId, status: 'PENDING' } });
@@ -701,7 +703,7 @@ export class DrepService {
     const yes = votes.filter((v) => v.choice === 'YES').length;
     const no = votes.filter((v) => v.choice === 'NO').length;
     const threshold = await this.approvalThreshold();
-    const boardCount = await this.prisma.boardSeat.count();
+    const boardCount = await this.prisma.boardSeat.count({ where: { removedAt: null } });
 
     let status = 'PENDING';
     if (yes >= threshold) status = 'APPROVED';
@@ -819,7 +821,7 @@ export class DrepService {
 
   /** Admitted non-board DReps that the board may propose to remove. */
   async listRemovableMembers() {
-    const seats = await this.prisma.boardSeat.findMany();
+    const seats = await this.prisma.boardSeat.findMany({ where: { removedAt: null } });
     const boardKeys = new Set(seats.map((s) => s.drepKeyHash));
     const dreps = await this.prisma.drep.findMany({
       where: { status: DRepStatus.ADMITTED },
@@ -837,7 +839,7 @@ export class DrepService {
       where: { id: { in: unique } },
       include: { user: { select: { displayName: true, drepKeyHash: true } } },
     });
-    const seats = await this.prisma.boardSeat.findMany();
+    const seats = await this.prisma.boardSeat.findMany({ where: { removedAt: null } });
     const seatName = new Map(seats.map((s) => [s.drepKeyHash, s.displayName]));
     const out = new Map<string, string>();
     for (const d of dreps) {
@@ -856,7 +858,7 @@ export class DrepService {
       include: { user: { select: { drepKeyHash: true } } },
     });
     if (!d || !d.user.drepKeyHash) throw new ForbiddenException('board members only');
-    const seat = await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: d.user.drepKeyHash } });
+    const seat = await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: d.user.drepKeyHash } });
     if (!seat) throw new ForbiddenException('only seated board members');
     return { id: d.id, drepKeyHash: d.user.drepKeyHash };
   }

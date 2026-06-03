@@ -141,7 +141,7 @@ export class GenesisService {
 
   async getState() {
     const state = await this.ensureState();
-    const seats = await this.prisma.boardSeat.findMany({ orderBy: { addedAt: 'asc' } });
+    const seats = await this.prisma.boardSeat.findMany({ where: { removedAt: null }, orderBy: { addedAt: 'asc' } });
     const proposedRaw = await this.redis.client.get(PROPOSED_KEY);
     const proposed = proposedRaw ? (JSON.parse(proposedRaw) as FoundingMember[]) : null;
     return {
@@ -194,13 +194,13 @@ export class GenesisService {
     }
     const statuses = await this.cardano.verifyDReps(members.map((m) => m.drep_id));
 
-    const current = await this.prisma.boardSeat.count();
+    const current = await this.prisma.boardSeat.count({ where: { removedAt: null } });
     let seated = 0;
     let skippedFull = 0;
     for (const m of members) {
       if (!statuses.get(m.drep_id)?.registered) continue; // defensively skip if it changed on-chain
       const keyHash = statuses.get(m.drep_id)?.keyHashHex ?? drepKeyHashFromId(m.drep_id);
-      const exists = await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: keyHash } });
+      const exists = await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: keyHash } });
       if (exists) continue; // incremental: skip already-seated
       if (current + seated >= MAX_BOARD) {
         skippedFull++;
@@ -244,10 +244,10 @@ export class GenesisService {
     const statuses = await this.verifyOrThrow([member]); // registered + active on-chain, else 400
     const keyHash = statuses.get(member.drep_id)?.keyHashHex ?? drepKeyHashFromId(member.drep_id);
 
-    if (await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: keyHash } })) {
+    if (await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: keyHash } })) {
       throw new ConflictException(`${member.drep_id} is already a board member`);
     }
-    if ((await this.prisma.boardSeat.count()) >= MAX_BOARD) {
+    if ((await this.prisma.boardSeat.count({ where: { removedAt: null } })) >= MAX_BOARD) {
       throw new ConflictException(`board is capped at ${MAX_BOARD} members — remove one first`);
     }
 
@@ -269,10 +269,12 @@ export class GenesisService {
   async removeBoardMember(adminId: string, drepId: string, ip?: string, userAgent?: string) {
     if (!this.isValidDRepId(drepId)) throw new BadRequestException('drep_id must be a valid bech32 drep1… id');
     const keyHash = drepKeyHashFromId(drepId);
-    const seat = await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: keyHash } });
+    const seat = await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: keyHash } });
     if (!seat) throw new NotFoundException('not a current board member');
 
-    await this.prisma.boardSeat.delete({ where: { drepKeyHash: keyHash } });
+    // §15 — soft-delete so the seat's multisig key (if any) stays linked for
+    // signing migration tx out of the old wallet.
+    await this.prisma.boardSeat.update({ where: { id: seat.id }, data: { removedAt: new Date() } });
     await this.audit.log({
       adminId,
       action: 'BOARD_MEMBER_REMOVED',

@@ -143,7 +143,7 @@ export class DvService {
   async optIn(userId: string, proposalId: string) {
     const drep = await this.prisma.drep.findUnique({ where: { userId }, include: { user: { select: { drepKeyHash: true } } } });
     if (!drep) throw new ForbiddenException('DReps only');
-    const seat = drep.user.drepKeyHash ? await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: drep.user.drepKeyHash } }) : null;
+    const seat = drep.user.drepKeyHash ? await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: drep.user.drepKeyHash } }) : null;
     if (!seat) throw new ForbiddenException('only board members opt in; admitted DReps vote by default');
     const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
     if (!proposal || proposal.stage !== ProposalStage.DEBATE_VOTE) throw new ConflictException('proposal is not in the DEBATE_VOTE stage');
@@ -222,7 +222,7 @@ export class DvService {
     // profile. Non-board DReps are unaffected.
     if (!drep.votesOnFundingProposals) {
       const seat = drep.user.drepKeyHash
-        ? await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: drep.user.drepKeyHash } })
+        ? await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: drep.user.drepKeyHash } })
         : null;
       if (seat) {
         throw new ForbiddenException(
@@ -280,7 +280,7 @@ export class DvService {
       select: { id: true, votesOnFundingProposals: true, user: { select: { drepKeyHash: true } } },
     });
     const boardHashes = new Set(
-      (await this.prisma.boardSeat.findMany({ select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
+      (await this.prisma.boardSeat.findMany({ where: { removedAt: null }, select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
     );
     const skipDrepIds = new Set(
       dreps
@@ -399,7 +399,7 @@ export class DvService {
     // §8.2 — a board member who has opted out has their weight zeroed in the
     // public vote list so the audit row makes sense alongside the tally.
     const boardHashes = new Set(
-      (await this.prisma.boardSeat.findMany({ select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
+      (await this.prisma.boardSeat.findMany({ where: { removedAt: null }, select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
     );
     return votes.map((v) => {
       const isBoard = !!v.drep.user?.drepKeyHash && boardHashes.has(v.drep.user.drepKeyHash);

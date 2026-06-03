@@ -247,24 +247,61 @@ export interface MultisigSeatRow {
   hardwareAttested: boolean;
   submittedAt: string | null;
 }
+export interface MultisigActiveConfig {
+  id: string;
+  scriptHash: string;
+  bech32Address: string;
+  threshold: number;
+  totalKeys: number;
+  assembledAt: string;
+  balanceAda: number;
+}
+export interface MultisigHistoryEntry extends MultisigActiveConfig {
+  replacedAt: string;
+  replacedByConfigId: string | null;
+  keyHashes: string[];
+}
+export interface MultisigInactiveSigner {
+  boardSeatId: string;
+  userId: string;
+  displayName: string;
+  drepId: string;
+  keyHash: string;
+  paymentBech32: string | null;
+}
+export interface MultisigPendingMigration {
+  id: string;
+  fromConfigId: string | null;
+  toConfigId: string | null;
+  amountAda: number | null;
+  status: string;
+  approvals: number;
+  threshold: number;
+  txHash: string | null;
+  createdAt: string;
+}
 export interface MultisigStatus {
   threshold: number;
   total: number;
   submitted: number;
-  ready: boolean;
-  active: {
-    scriptHash: string;
-    bech32Address: string;
-    threshold: number;
-    totalKeys: number;
-    assembledAt: string;
-  } | null;
+  allSubmitted: boolean;
+  rotationInProgress: boolean;
+  active: MultisigActiveConfig | null;
+  history: MultisigHistoryEntry[];
   seats: MultisigSeatRow[];
+  inactiveSigners: MultisigInactiveSigner[];
+  migrationsPending: MultisigPendingMigration[];
 }
 export const multisigApi = {
   status: () => request<MultisigStatus>('/dao/multisig/status'),
   submitKey: (body: { paymentBech32: string; hardwareAttested: boolean; signature: string; key: string; ts: string }) =>
     request<MultisigStatus>('/admin/multisig/key', { method: 'POST', body: JSON.stringify(body) }),
+  /** §15.2 — board prepares a migration tx out of an old (replaced) multisig. */
+  prepareMigration: (fromConfigId: string) =>
+    request<{ id: string; status: string }>('/admin/multisig/prepare-migration', {
+      method: 'POST',
+      body: JSON.stringify({ fromConfigId }),
+    }),
 };
 
 // §15.4 — user's payment address for rewards. Editable; historical RewardEntry

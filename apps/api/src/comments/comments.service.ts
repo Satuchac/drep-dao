@@ -34,7 +34,7 @@ export class CommentsService {
     });
     // §7/§20 — show each author's role (board / expert / DAO member) beside the name.
     const boardHashes = new Set(
-      (await this.prisma.boardSeat.findMany({ select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
+      (await this.prisma.boardSeat.findMany({ where: { removedAt: null }, select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
     );
     // §8.1 — Debate-stage comments from a DRep who is eligible to vote on this
     // round (admitted + in the round's eligibility list) get a distinct purple

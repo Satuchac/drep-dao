@@ -1064,7 +1064,7 @@ export class ProposalsService {
         })
       : [];
     const boardKeys = new Set(
-      (await this.prisma.boardSeat.findMany({ select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
+      (await this.prisma.boardSeat.findMany({ where: { removedAt: null }, select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
     );
     const skipDrepIds = new Set(
       snapDreps

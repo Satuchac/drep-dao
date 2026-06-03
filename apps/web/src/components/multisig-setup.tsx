@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { multisigApi, type MultisigStatus } from '@/lib/api';
+import { multisigApi, type MultisigStatus, type MultisigHistoryEntry } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { CopyButton } from './copy-button';
 
@@ -9,10 +9,14 @@ const MULTISIG_KEY_MESSAGE = (stakeAddress: string, paymentBech32: string, ts: s
   ['drep-dao | multisig key attestation', `seat:${stakeAddress}`, `pay:${paymentBech32}`, `ts:${ts}`].join('\n');
 
 /**
- * §15 — multisig setup panel. Shows on the Treasury page so anyone can see
- * who's submitted what. Renders a per-board roster; for the logged-in board
- * member without a key, embeds the submission form (HW-wallet attestation +
- * CIP-30 challenge sign).
+ * §15 — multisig setup + rotation panel. Sections:
+ *   • Status line (threshold + how many keys collected) + rotation banner
+ *   • Active config card (script address, balance) — collapsible
+ *   • Per-seat roster — collapsible
+ *   • Submission form (only for the logged-in board member without a key)
+ *   • Old multisigs (history) — collapsible; each entry shows balance + a
+ *     "Migrate funds" button (board members) when balance > 0 and active
+ *     config exists.
  */
 export function MultisigSetup() {
   const [status, setStatus] = useState<MultisigStatus | null>(null);
@@ -26,6 +30,10 @@ export function MultisigSetup() {
   const isBoard = !!profile?.roles.includes('BOARD');
   const mySeat = status?.seats.find((s) => s.userId === profile?.user.id);
 
+  const [showActive, setShowActive] = useState(true);
+  const [showRoster, setShowRoster] = useState(true);
+  const [showHistory, setShowHistory] = useState(true);
+
   if (error) return <div className="text-sm text-red-600">{error}</div>;
   if (!status) return null;
 
@@ -38,60 +46,88 @@ export function MultisigSetup() {
         </span>
       </div>
 
+      {/* §15.2 — rotation banner: there's an active wallet but the current
+          board's keys would assemble to a different script (re-election in
+          progress, or new seats need to submit). */}
+      {status.rotationInProgress ? (
+        <div className="mt-2 rounded border border-amber-400 bg-amber-100/60 p-2 text-xs dark:border-amber-800 dark:bg-amber-900/40">
+          <strong>Rotation in progress.</strong>{' '}
+          {status.allSubmitted
+            ? 'All new keys collected — the platform will assemble the new multisig on the next status refresh.'
+            : `${status.submitted}/${status.total} new keys collected. The current (old) multisig remains active until the new one is assembled.`}
+        </div>
+      ) : null}
+
+      {/* Active assembled config (collapsible). */}
       {status.active ? (
-        <div className="mt-2 rounded border border-emerald-300 bg-emerald-50 p-2 text-xs dark:border-emerald-900 dark:bg-emerald-950/40">
-          <div className="font-semibold text-emerald-800 dark:text-emerald-200">
-            ✓ Multisig assembled · {status.active.threshold}-of-{status.active.totalKeys}
-          </div>
-          <div className="mt-1">
-            <div className="text-[11px] text-neutral-500">Script address (on-chain home)</div>
-            <div className="mt-0.5 flex items-start gap-2">
-              <div className="flex-1 break-all font-mono text-[11px] text-neutral-700 dark:text-neutral-300">{status.active.bech32Address}</div>
-              <CopyButton text={status.active.bech32Address} label="Copy" />
+        <div className="mt-2 rounded border border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40">
+          <button
+            type="button"
+            onClick={() => setShowActive((v) => !v)}
+            className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-200"
+          >
+            <span>✓ Active multisig · {status.active.threshold}-of-{status.active.totalKeys} · {status.active.balanceAda.toLocaleString()} ₳ on-chain</span>
+            <span>{showActive ? '▾ hide' : '▸ show'}</span>
+          </button>
+          {showActive ? (
+            <div className="px-2 pb-2 text-xs">
+              <div className="text-[11px] text-neutral-500">Script address (on-chain home)</div>
+              <div className="mt-0.5 flex items-start gap-2">
+                <div className="flex-1 break-all font-mono text-[11px] text-neutral-700 dark:text-neutral-300">{status.active.bech32Address}</div>
+                <CopyButton text={status.active.bech32Address} label="Copy" />
+              </div>
+              <div className="mt-1 text-[11px] text-neutral-500">
+                Script hash: <span className="font-mono">{status.active.scriptHash}</span>
+              </div>
             </div>
-          </div>
-          <div className="mt-1 text-[11px] text-neutral-500">
-            Script hash: <span className="font-mono">{status.active.scriptHash}</span>
-          </div>
+          ) : null}
         </div>
       ) : (
         <div className="mt-2 rounded border border-amber-300 bg-amber-100/50 p-2 text-xs dark:border-amber-900 dark:bg-amber-900/30">
           <strong>Multisig not yet built.</strong> Every board seat must submit a payment verification key
-          before the platform can assemble the on-chain script. Inbound / outbound treasury operations
-          are not active until then.
+          before the platform can assemble the on-chain script.
         </div>
       )}
 
-      {/* Per-seat roster */}
-      <div className="mt-3">
-        <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Board roster</div>
-        <ul className="mt-1 space-y-1 text-xs">
-          {status.seats.map((s) => (
-            <li key={s.seatId} className="rounded border border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-900">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <span className="font-medium">{s.displayName}</span>
-                  <span className="ml-2 break-all font-mono text-[11px] text-neutral-500">{s.drepId}</span>
+      {/* Per-seat roster (collapsible). */}
+      <div className="mt-3 rounded border border-neutral-200 dark:border-neutral-800">
+        <button
+          type="button"
+          onClick={() => setShowRoster((v) => !v)}
+          className="flex w-full items-center justify-between px-2 py-1 text-xs font-semibold text-neutral-700 dark:text-neutral-300"
+        >
+          <span>Board roster ({status.submitted}/{status.total} keys submitted)</span>
+          <span>{showRoster ? '▾ hide' : '▸ show'}</span>
+        </button>
+        {showRoster ? (
+          <ul className="space-y-1 px-2 pb-2 text-xs">
+            {status.seats.map((s) => (
+              <li key={s.seatId} className="rounded border border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-900">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="font-medium">{s.displayName}</span>
+                    <span className="ml-2 break-all font-mono text-[11px] text-neutral-500">{s.drepId}</span>
+                  </div>
+                  {s.hasKey ? (
+                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                      ✓ key submitted{s.hardwareAttested ? ' · HW' : ''}
+                    </span>
+                  ) : (
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                      ⏳ awaiting key
+                    </span>
+                  )}
                 </div>
-                {s.hasKey ? (
-                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                    ✓ key submitted{s.hardwareAttested ? ' · HW' : ''}
-                  </span>
-                ) : (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                    ⏳ awaiting key
-                  </span>
-                )}
-              </div>
-              {s.hasKey && s.paymentBech32 ? (
-                <div className="mt-1 break-all font-mono text-[11px] text-neutral-500">{s.paymentBech32}</div>
-              ) : null}
-              {s.hasKey && s.keyHash ? (
-                <div className="mt-0.5 text-[11px] text-neutral-500">key hash: <span className="font-mono">{s.keyHash}</span></div>
-              ) : null}
-            </li>
-          ))}
-        </ul>
+                {s.hasKey && s.paymentBech32 ? (
+                  <div className="mt-1 break-all font-mono text-[11px] text-neutral-500">{s.paymentBech32}</div>
+                ) : null}
+                {s.hasKey && s.keyHash ? (
+                  <div className="mt-0.5 text-[11px] text-neutral-500">key hash: <span className="font-mono">{s.keyHash}</span></div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
 
       {/* My-seat submission form (only when I AM a board member without a key) */}
@@ -103,7 +139,94 @@ export function MultisigSetup() {
           You&apos;ve submitted your multisig key — thanks. To rotate, contact the other board members.
         </div>
       ) : null}
+
+      {/* §15.2 — previous multisigs (collapsible). Each entry shows live
+          balance + a "Migrate funds" CTA (board members only) when funds
+          remain at the old address. */}
+      {status.history.length > 0 ? (
+        <div className="mt-3 rounded border border-neutral-200 dark:border-neutral-800">
+          <button
+            type="button"
+            onClick={() => setShowHistory((v) => !v)}
+            className="flex w-full items-center justify-between px-2 py-1 text-xs font-semibold text-neutral-700 dark:text-neutral-300"
+          >
+            <span>
+              Previous multisigs ({status.history.length})
+              {status.history.some((h) => h.balanceAda > 0)
+                ? <> · <span className="text-amber-700 dark:text-amber-300">⚠ {status.history.filter((h) => h.balanceAda > 0).length} still hold funds — migration pending</span></>
+                : null}
+            </span>
+            <span>{showHistory ? '▾ hide' : '▸ show'}</span>
+          </button>
+          {showHistory ? (
+            <ul className="space-y-2 px-2 pb-2">
+              {status.history.map((h) => (
+                <HistoryRow
+                  key={h.id}
+                  h={h}
+                  isBoard={isBoard}
+                  pending={status.migrationsPending.find((m) => m.fromConfigId === h.id) ?? null}
+                  onChange={load}
+                />
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+function HistoryRow({ h, isBoard, pending, onChange }: { h: MultisigHistoryEntry; isBoard: boolean; pending: { id: string; status: string; approvals: number; threshold: number } | null; onChange: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const prepare = async () => {
+    setError(null); setBusy(true);
+    try { await multisigApi.prepareMigration(h.id); onChange(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'failed'); }
+    finally { setBusy(false); }
+  };
+  const hasFunds = h.balanceAda > 0;
+  return (
+    <li className="rounded border border-neutral-200 bg-white p-2 text-xs dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-medium">
+          {h.threshold}-of-{h.totalKeys} multisig
+          <span className="ml-2 text-neutral-500">replaced {new Date(h.replacedAt).toLocaleDateString()}</span>
+        </span>
+        <span className={`tabular-nums ${hasFunds ? 'text-amber-700 dark:text-amber-300' : 'text-neutral-500'}`}>
+          {h.balanceAda.toLocaleString()} ₳ on-chain
+        </span>
+      </div>
+      <div className="mt-1">
+        <div className="text-[11px] text-neutral-500">Script address</div>
+        <div className="mt-0.5 flex items-start gap-2">
+          <div className="flex-1 break-all font-mono text-[11px] text-neutral-600 dark:text-neutral-400">{h.bech32Address}</div>
+          <CopyButton text={h.bech32Address} label="Copy" />
+        </div>
+      </div>
+      <div className="mt-1 text-[11px] text-neutral-500">
+        Signers: {h.keyHashes.length} key{h.keyHashes.length === 1 ? '' : 's'} (need {h.threshold} to migrate)
+      </div>
+      {pending ? (
+        <div className="mt-1 rounded border border-amber-300 bg-amber-50 p-1.5 text-[11px] dark:border-amber-900 dark:bg-amber-950/40">
+          Migration prepared · {pending.approvals}/{pending.threshold} old-board signatures · status: <span className="font-mono">{pending.status}</span>
+        </div>
+      ) : hasFunds && isBoard ? (
+        <div className="mt-1 flex items-center gap-2">
+          <button
+            onClick={prepare}
+            disabled={busy}
+            className="rounded border border-emerald-500 px-2 py-0.5 text-emerald-700 disabled:opacity-40 dark:text-emerald-300"
+          >
+            {busy ? '…' : 'Prepare migration to active multisig'}
+          </button>
+          {error ? <span className="text-red-600">{error}</span> : null}
+        </div>
+      ) : !hasFunds ? (
+        <div className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-300">✓ Empty — no migration needed.</div>
+      ) : null}
+    </li>
   );
 }
 
@@ -124,30 +247,17 @@ function SubmitKeyForm({ onChange }: { onChange: () => void }) {
       setError('Paste a Cardano payment address (addr… / addr_test…) from your hardware wallet.');
       return;
     }
-    if (!hardware) {
-      setError('Please confirm the key is on a hardware wallet.');
-      return;
-    }
+    if (!hardware) { setError('Please confirm the key is on a hardware wallet.'); return; }
     setBusy(true);
     try {
       const ts = new Date().toISOString();
       const message = MULTISIG_KEY_MESSAGE(profile.user.stakeAddress, addr, ts);
-      // CIP-30: sign with the wallet that holds the multisig key. This is
-      // typically DIFFERENT from the wallet you're logged in with (the DRep
-      // wallet). Most browser wallets sign with the active address — switch
-      // wallets/accounts first if needed.
       const sig = await signMessage(message);
       if (!sig) {
         setError('Could not reach a wallet to sign. Open the HW-wallet extension and try again.');
         return;
       }
-      await multisigApi.submitKey({
-        paymentBech32: addr,
-        hardwareAttested: hardware,
-        signature: sig.signature,
-        key: sig.key,
-        ts,
-      });
+      await multisigApi.submitKey({ paymentBech32: addr, hardwareAttested: hardware, signature: sig.signature, key: sig.key, ts });
       setPaymentBech32('');
       onChange();
     } catch (e) {

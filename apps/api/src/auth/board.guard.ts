@@ -27,8 +27,8 @@ export class BoardGuard implements CanActivate {
     });
     if (!user?.drepKeyHash) throw new ForbiddenException('board members only');
 
-    const seat = await this.prisma.boardSeat.findUnique({
-      where: { drepKeyHash: user.drepKeyHash },
+    const seat = await this.prisma.boardSeat.findFirst({
+      where: { removedAt: null, drepKeyHash: user.drepKeyHash },
     });
     if (!seat) throw new ForbiddenException('board members only');
     return true;

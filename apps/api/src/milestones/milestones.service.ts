@@ -412,7 +412,7 @@ export class MilestonesService {
     const drep = await this.prisma.drep.findUnique({ where: { userId }, include: { user: { select: { drepKeyHash: true } } } });
     if (!drep) throw new ForbiddenException('DReps only');
     const assigned = await this.prisma.milestoneAssignment.findFirst({ where: { milestoneId, reviewerDrepId: drep.id, releasedAt: null } });
-    const board = drep.user.drepKeyHash ? await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: drep.user.drepKeyHash } }) : null;
+    const board = drep.user.drepKeyHash ? await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: drep.user.drepKeyHash } }) : null;
     if (!assigned && !board) throw new ForbiddenException('you are not assigned to review this milestone');
 
     const existing = await this.prisma.vote.findFirst({ where: { milestoneId, drepId: drep.id, phase: VotePhase.MILESTONE } });
@@ -583,7 +583,7 @@ export class MilestonesService {
     });
     let role: 'REVIEWER' | 'BOARD' | null = null;
     const isBoard = drep?.user.drepKeyHash
-      ? !!(await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: drep.user.drepKeyHash } }))
+      ? !!(await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: drep.user.drepKeyHash } }))
       : false;
     if (isBoard) role = 'BOARD';
     else if (drep) {
@@ -632,7 +632,7 @@ export class MilestonesService {
       include: { user: { select: { drepKeyHash: true } } },
     });
     if (!drep?.user.drepKeyHash) throw new ForbiddenException('board members only');
-    const seat = await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: drep.user.drepKeyHash } });
+    const seat = await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: drep.user.drepKeyHash } });
     if (!seat) throw new ForbiddenException('board members only');
 
     const s = await this.prisma.stopFundingProposal.findUnique({ where: { id: stopId } });
@@ -753,7 +753,7 @@ export class MilestonesService {
       include: { user: { select: { drepKeyHash: true } } },
     });
     if (!drep?.user.drepKeyHash) return [];
-    const seat = await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: drep.user.drepKeyHash } });
+    const seat = await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: drep.user.drepKeyHash } });
     if (!seat) return [];
     const active = await this.prisma.stopFundingProposal.findMany({
       where: { status: 'ACTIVE' },
@@ -795,7 +795,7 @@ export class MilestonesService {
       include: { user: { select: { drepKeyHash: true } } },
     });
     if (!drep?.user.drepKeyHash) return 0;
-    const seat = await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: drep.user.drepKeyHash } });
+    const seat = await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: drep.user.drepKeyHash } });
     if (!seat) return 0;
     const active = await this.prisma.stopFundingProposal.findMany({
       where: { status: 'ACTIVE' },

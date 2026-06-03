@@ -288,7 +288,7 @@ export class TreasuryService {
       include: { user: { select: { drepKeyHash: true, stakeAddress: true } } },
     });
     if (!d?.user.drepKeyHash) return null;
-    const seat = await this.prisma.boardSeat.findUnique({ where: { drepKeyHash: d.user.drepKeyHash } });
+    const seat = await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: d.user.drepKeyHash } });
     return seat ? { id: d.id, stakeAddress: d.user.stakeAddress } : null;
   }
 }

@@ -780,9 +780,16 @@ model MultisigAction {
   proposalTitle String?   @map("proposal_title")
   destAddress   String?   @map("dest_address")
   paidAt        DateTime? @map("paid_at") @db.Timestamptz(6)
+  // §15.2 — for MIGRATION-kind actions: which old wallet the funds leave and
+  // which new wallet they land at. Both null for normal payouts (use
+  // destAddress + the active MultisigConfig).
+  fromConfigId  String?   @map("from_config_id") @db.Uuid
+  toConfigId    String?   @map("to_config_id")   @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   signatures MultisigSignature[]
+  fromConfig MultisigConfig?     @relation("MultisigActionFromConfig", fields: [fromConfigId], references: [id])
+  toConfig   MultisigConfig?     @relation("MultisigActionToConfig",   fields: [toConfigId],   references: [id])
 
   @@index([proposalId])
   @@index([milestoneId])
@@ -1052,14 +1059,19 @@ model AdminLoginAttempt {
 // genesis). A wallet is a board member when its CIP-95 DRep key hash matches a
 // seat. Decoupled from app_user so seats exist before a member first logs in.
 model BoardSeat {
-  id          String   @id @default(uuid()) @db.Uuid
-  drepKeyHash String   @unique @map("drep_key_hash") // 28-byte DRep credential hex
-  drepId      String   @map("drep_id") // bech32 drep1... as provided
-  displayName String   @map("display_name")
-  addedAt     DateTime @default(now()) @map("added_at") @db.Timestamptz(6)
+  id          String    @id @default(uuid()) @db.Uuid
+  drepKeyHash String    @map("drep_key_hash") // 28-byte DRep credential hex
+  drepId      String    @map("drep_id") // bech32 drep1... as provided
+  displayName String    @map("display_name")
+  addedAt     DateTime  @default(now()) @map("added_at") @db.Timestamptz(6)
+  // §15 — soft-delete so the link to past multisig keys is preserved when the
+  // board is re-elected. Active seats: removedAt IS NULL. Unique drepKeyHash
+  // is enforced via a partial index on active rows (see migration).
+  removedAt   DateTime? @map("removed_at") @db.Timestamptz(6)
 
   multisigKey BoardMultisigKey?
 
+  @@index([removedAt])
   @@map("board_seat")
 }
 
@@ -1085,17 +1097,26 @@ model BoardMultisigKey {
   @@map("board_multisig_key")
 }
 
-// §15 — the assembled multisig. One active row at a time; latest by
-// assembledAt is the active script. Keeping history lets the treasury page
-// label past payments with their then-current address.
+// §15 — the assembled multisig. The active row is the most recent one with
+// replacedAt IS NULL; older configs are kept around so the UI can show prior
+// addresses (still on-chain holding funds until a migration tx runs) and so
+// past payment history stays meaningful after rotation.
 model MultisigConfig {
-  id            String   @id @default(uuid()) @db.Uuid
-  scriptJson    Json     @map("script_json")
-  scriptHash    String   @unique @map("script_hash")
-  bech32Address String   @unique @map("bech32_address")
-  threshold     Int
-  totalKeys     Int      @map("total_keys")
-  assembledAt   DateTime @default(now()) @map("assembled_at") @db.Timestamptz(6)
+  id                 String    @id @default(uuid()) @db.Uuid
+  scriptJson         Json      @map("script_json")
+  scriptHash         String    @unique @map("script_hash")
+  bech32Address      String    @unique @map("bech32_address")
+  threshold          Int
+  totalKeys          Int       @map("total_keys")
+  assembledAt        DateTime  @default(now()) @map("assembled_at") @db.Timestamptz(6)
+  // §15.2 — set when a successor MultisigConfig is assembled.
+  replacedAt         DateTime? @map("replaced_at") @db.Timestamptz(6)
+  replacedByConfigId String?   @map("replaced_by_config_id") @db.Uuid
+
+  replacedBy        MultisigConfig?  @relation("MultisigSuccession", fields: [replacedByConfigId], references: [id])
+  predecessors      MultisigConfig[] @relation("MultisigSuccession")
+  migrationsFrom    MultisigAction[] @relation("MultisigActionFromConfig")
+  migrationsTo      MultisigAction[] @relation("MultisigActionToConfig")
 
   @@map("multisig_config")
 }
