@@ -755,7 +755,7 @@ function PayoutBadge({ payout }: { payout: MilestoneView['payout'] }) {
   }
   if (payout.status === 'READY') {
     return (
-      <span className={`${base} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200`} title="3-of-5 reached — board is broadcasting the multisig tx.">
+      <span className={`${base} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200`} title="All board signatures collected — board is broadcasting the multisig tx.">
         Payment ready — awaiting broadcast
       </span>
     );

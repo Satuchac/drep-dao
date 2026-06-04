@@ -7,7 +7,7 @@ import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
 import { ConfirmDialog } from './confirm-dialog';
 
-/** §15.3 — pending board/treasury actions the platform prepared, awaiting 3-of-5 approval.
+/** §15.3 — pending board/treasury actions the platform prepared, awaiting N-of-N approval.
  *  `refreshKey` is a parent-controlled counter — bumping it triggers an
  *  immediate refetch so newly-queued actions (top-ups, sweeps, transfers)
  *  appear without a page reload. */
@@ -83,8 +83,9 @@ export function BoardActions({ onChange, history = false, refreshKey = 0 }: { on
     <section className="space-y-2 rounded-lg border border-amber-300 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
       <h3 className="text-base font-semibold">Actions to sign</h3>
       <p className="text-xs text-neutral-500">
-        The platform prepared these treasury/hot-wallet actions. Each needs {actions[0]?.threshold ?? past[0]?.threshold ?? 3} of 5 board
-        signatures before it can be executed on-chain.
+        The platform prepared these treasury/hot-wallet actions. Each needs <strong>every board member</strong>{' '}
+        (currently {actions[0]?.threshold ?? past[0]?.threshold ?? '?'}-of-{actions[0]?.threshold ?? past[0]?.threshold ?? '?'})
+        to sign before it can be executed on-chain — the multisig is N-of-N for the 1-phase signing flow.
       </p>
       {/* §15 — treasury source-of-truth: address + live on-chain balance, so the
           board can see at a glance whether pending payouts can be covered. */}
@@ -146,7 +147,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0 }: { on
             ) : null}
             {/* §15 — 1-phase N-of-N progress: every board member must sign. */}
             <div className="mt-1 text-xs text-neutral-500">
-              Signatures: {a.approvals}/{a.threshold}{a.mineApproved ? ' · you signed ✓' : ''}
+              Signatures: {a.approvals} of {a.threshold} needed ({a.threshold}-of-{a.threshold} multisig){a.mineApproved ? ' · you signed ✓' : ''}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <button
@@ -311,7 +312,7 @@ function PayoutTxVerify({ action, onChange }: { action: BoardAction; onChange: (
     <div className="mt-2 rounded border border-neutral-300 bg-neutral-50 p-2 text-xs dark:border-neutral-700 dark:bg-neutral-900">
       <div className="font-semibold text-neutral-700 dark:text-neutral-300">Broadcast tx hash</div>
       <div className="text-[11px] text-neutral-500">
-        After your wallet broadcasts the assembled 3-of-5 multisig tx, paste the on-chain hash here. The platform verifies the payment and flips this action to PAID.
+        After your wallet broadcasts the assembled multisig tx, paste the on-chain hash here. The platform verifies the payment and flips this action to PAID.
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <input
