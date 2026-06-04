@@ -2,31 +2,39 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { ConfigService } from '@nestjs/config';
 import * as CSL from '@emurgo/cardano-serialization-lib-nodejs';
 import { PrismaService } from '../prisma/prisma.service';
+import { verifyCip30Signature } from '../auth/cip30';
 
 const LOVELACE = 1_000_000;
+const SIGNING_THRESHOLD = 3; // §15 — 3-of-5 board signatures required to broadcast
 
 /**
- * §15 — real native-script multisig broadcast — 1-phase, N-of-N.
+ * §15 — real native-script multisig broadcast — 3-of-5, 2-phase.
  *
- * Cardano's CIP-30 + native-script combination doesn't allow a true M-of-N
- * flow without an out-of-band commit step picking the M signers BEFORE
- * building the tx. So we use N-of-N: every board member must sign every
- * action. Fault tolerance comes from re-electing a smaller board (not from
- * the script).
+ * Cardano CIP-30 + native scripts won't let us collect M-of-N witnesses in
+ * a single click per signer: the tx body's required_signers list has to
+ * name which M keys WILL sign before we can build the body, and the build
+ * step has to happen BEFORE any wallet can sign. So we run a small
+ * Authorize → Sign ceremony:
  *
- * Per action:
- *   1. prepareTxBody(actionId) — fetch UTxOs at the source script address,
- *      build an unsigned Cardano tx body via CSL with
- *      `required_signers = all N script keys`, cache the full Transaction
- *      hex on the action so every signer signs the SAME bytes.
- *   2. submitWitness(actionId, witnessHex, userId) — board member's wallet
- *      called `api.signTx(txBodyHex, partialSign=true)` and returned a
- *      TransactionWitnessSet. We verify the embedded vkey hash is in the
- *      action's native script (so a non-board signer can't poison the set),
- *      store it as a MultisigSignature. When all N witnesses are collected:
- *   3. combineAndSubmit(actionId) — merge every vkey witness + the native
- *      script into one TransactionWitnessSet, wrap the cached tx body,
- *      submit via Koios `/submittx`, stamp the action CONFIRMED + tx hash.
+ *   Phase 1 (Authorize)
+ *     Board member CIP-30 data-signs a cheap commit message ("I commit to
+ *     signing action X"). Stored as a MultisigCommitment. No HW wallet
+ *     touched; no tx fee.
+ *
+ *   Phase 2 (Sign tx) — kicks in the moment M commitments are collected
+ *     The platform snapshots those M signers' keyhashes onto the action
+ *     (committedKeyHashes), builds the unsigned tx body with EXACTLY those
+ *     M keys in required_signers, and asks each committed member to sign
+ *     it for real with their HW wallet (api.signTx, partial=true). Wallets
+ *     pop a sign prompt because their key IS in required_signers.
+ *
+ *   When all M tx witnesses are collected, the platform combines them with
+ *   the native script (ScriptNOfK(M, [N keys])) and submits via Koios.
+ *
+ * Per action methods:
+ *   1. commitToSign(actionId, userId, sig) — phase 1; promotes when threshold hit.
+ *   2. prepareTxBody(actionId)             — phase 2 only; refuses while still in 1.
+ *   3. submitWitness(actionId, hex, userId) — phase 2; combines + broadcasts at M.
  *
  * Source script is determined by action kind:
  *   • OPS / PROJECT_FUNDING / REWARD_PAYOUT / BOARD_TRANSFER → active multisig.
@@ -49,6 +57,97 @@ export class MultisigBroadcastService {
       ?? (net === 'Mainnet' ? 'https://api.koios.rest/api/v1' : 'https://preprod.koios.rest/api/v1');
   }
 
+  /** Canonical phase-1 commit message — what each board member CIP-30
+   *  data-signs to authorize signing an action. Bound to (actionId,
+   *  stakeAddress, ts) so signatures can't replay. */
+  static commitMessage(args: { actionId: string; stakeAddress: string; ts: string }): string {
+    return [
+      'drep-dao | multisig commit',
+      `action:${args.actionId}`,
+      `signer:${args.stakeAddress}`,
+      `ts:${args.ts}`,
+    ].join('\n');
+  }
+
+  /**
+   * §15 phase 1 — board member commits to signing this action. Verifies the
+   * CIP-30 data-signature (proves the user actually clicked their wallet),
+   * looks up their multisig keyhash, stores the commitment. When SIGNING_
+   * THRESHOLD commitments are collected, snapshots those M keyhashes onto
+   * the action — from that moment prepareTxBody / submitWitness work.
+   */
+  async commitToSign(actionId: string, userId: string, dto: { signature: string; key: string; ts: string }) {
+    const action = await this.prisma.multisigAction.findUnique({
+      where: { id: actionId },
+      include: { commitments: true },
+    });
+    if (!action) throw new NotFoundException('action not found');
+    if (action.status !== 'PENDING_SIGS') {
+      throw new ConflictException(`action is past the authorization phase (status ${action.status})`);
+    }
+    const source = await this.resolveSource(action);
+    const scriptKeyHashes = new Set(source.keyHashes.map((k) => k.toLowerCase()));
+
+    const user = await this.prisma.appUser.findUnique({
+      where: { id: userId },
+      select: { id: true, stakeAddress: true, drepKeyHash: true },
+    });
+    if (!user?.drepKeyHash) throw new ForbiddenException('board members only');
+    const drep = await this.prisma.drep.findUnique({ where: { userId } });
+    if (!drep) throw new ForbiddenException('signer has no DRep record');
+    const myKey = await this.prisma.boardMultisigKey.findFirst({ where: { userId } });
+    if (!myKey || !scriptKeyHashes.has(myKey.paymentKeyHash.toLowerCase())) {
+      throw new ForbiddenException('your multisig signing key is not part of the source script — cannot authorize');
+    }
+
+    const message = MultisigBroadcastService.commitMessage({
+      actionId,
+      stakeAddress: user.stakeAddress,
+      ts: dto.ts,
+    });
+    if (!verifyCip30Signature(dto.signature, dto.key, message, user.stakeAddress)) {
+      throw new BadRequestException('commit signature did not verify');
+    }
+
+    await this.prisma.multisigCommitment.upsert({
+      where: { actionId_userId: { actionId, userId } },
+      update: { keyHash: myKey.paymentKeyHash, signature: dto.signature, signingKey: dto.key, ts: dto.ts, drepId: drep.id },
+      create: { actionId, userId, drepId: drep.id, keyHash: myKey.paymentKeyHash, signature: dto.signature, signingKey: dto.key, ts: dto.ts },
+    });
+
+    // Threshold reached? Snapshot the M chosen keyhashes (insertion order)
+    // and reset any cached tx body so the next prepareTxBody rebuilds with
+    // exactly those M keys in required_signers.
+    const all = await this.prisma.multisigCommitment.findMany({ where: { actionId } });
+    if (all.length >= SIGNING_THRESHOLD && (action.committedKeyHashes?.length ?? 0) === 0) {
+      const sorted = all.sort((a, b) => a.committedAt.getTime() - b.committedAt.getTime());
+      const chosen: string[] = [];
+      const seen = new Set<string>();
+      for (const c of sorted) {
+        const kh = c.keyHash.toLowerCase();
+        if (seen.has(kh)) continue;
+        seen.add(kh);
+        chosen.push(c.keyHash);
+        if (chosen.length === SIGNING_THRESHOLD) break;
+      }
+      await this.prisma.multisigAction.update({
+        where: { id: actionId },
+        data: { committedKeyHashes: chosen, txCbor: null },
+      });
+    }
+
+    const refreshed = await this.prisma.multisigAction.findUnique({
+      where: { id: actionId },
+      include: { commitments: true },
+    });
+    return {
+      status: refreshed?.status ?? action.status,
+      commitments: refreshed?.commitments.length ?? all.length,
+      threshold: SIGNING_THRESHOLD,
+      ready: (refreshed?.committedKeyHashes?.length ?? 0) >= SIGNING_THRESHOLD,
+    };
+  }
+
   /** Returns the cached / freshly-built unsigned tx body hex for an action,
    *  plus the source script address (so the UI can say "signing as wallet X
    *  for multisig Y"). Idempotent: subsequent calls return the cached body. */
@@ -56,6 +155,13 @@ export class MultisigBroadcastService {
     const action = await this.prisma.multisigAction.findUnique({ where: { id: actionId } });
     if (!action) throw new NotFoundException('action not found');
     if (action.status === 'CONFIRMED') throw new ConflictException('action already broadcast');
+    // §15 phase-2 gate: tx body can only be built once the M signers have
+    // been chosen via commitments. The committedKeyHashes list goes into
+    // required_signers verbatim and only those M can submit witnesses.
+    const committed = action.committedKeyHashes ?? [];
+    if (committed.length < SIGNING_THRESHOLD) {
+      throw new ConflictException(`waiting on board authorizations — ${committed.length}/${SIGNING_THRESHOLD} committed`);
+    }
     const source = await this.resolveSource(action);
     if (action.txCbor) {
       return {
@@ -101,11 +207,12 @@ export class MultisigBroadcastService {
       txb.add_output(CSL.TransactionOutput.new(destAddr, CSL.Value.new(CSL.BigNum.from_str(String(action.amountAda)))));
       txb.add_change_if_needed(srcAddr);
     }
-    // required_signers = ALL N script keyhashes. This is what makes wallets
-    // pop a sign prompt for the multisig key holders (without it they refuse
-    // to sign script-locked txs they don't own), AND keeps the chain rule
-    // consistent with the N-of-N native script.
-    for (const kh of source.keyHashes) {
+    // §15 phase-2 — required_signers = the M committed keyhashes (NOT all
+    // N script keys). The ledger then enforces "these M must sign", matching
+    // what the M committed wallets will actually provide. Wallets sign
+    // because their key IS in required_signers; the native script's
+    // ScriptNOfK(M,N) is satisfied by the same M witnesses.
+    for (const kh of committed) {
       txb.add_required_signer(CSL.Ed25519KeyHash.from_hex(kh));
     }
 
@@ -135,16 +242,25 @@ export class MultisigBroadcastService {
     });
     if (!action) throw new NotFoundException('action not found');
     const source = await this.resolveSource(action);
-    const threshold = source.keyHashes.length; // N-of-N
+    // §15 — 3-of-5: threshold = SIGNING_THRESHOLD, not source.keyHashes.length.
+    const threshold = SIGNING_THRESHOLD;
     if (action.status === 'CONFIRMED') {
       return { status: 'CONFIRMED', txHash: action.txHash, approvals: action.signatures.length, threshold };
+    }
+    // §15 phase-2 — only the M committed signers may submit witnesses.
+    const committed = action.committedKeyHashes ?? [];
+    if (committed.length < SIGNING_THRESHOLD) {
+      throw new ConflictException('action is still in the authorization phase — collect commits first');
     }
     if (!action.txCbor) {
       // Lazily build the tx body if the witness arrived before prepare was called.
       await this.prepareTxBody(actionId);
       return this.submitWitness(actionId, witnessHex, userId);
     }
-    const scriptKeyHashes = new Set(source.keyHashes.map((k) => k.toLowerCase()));
+    // Accept witnesses only from keys in the committed set (not just any
+    // script key) — required_signers enforces exactly these.
+    const scriptKeyHashes = new Set(committed.map((k) => k.toLowerCase()));
+    void source;
 
     let ws: CSL.TransactionWitnessSet;
     try { ws = CSL.TransactionWitnessSet.from_hex(witnessHex); }
@@ -203,7 +319,7 @@ export class MultisigBroadcastService {
     if (!action) throw new NotFoundException('action not found');
     if (!action.txCbor) throw new ConflictException('tx body not prepared');
     const source = await this.resolveSource(action);
-    const threshold = source.keyHashes.length;
+    const threshold = SIGNING_THRESHOLD; // §15 — 3-of-5 collected witnesses suffice
 
     const cachedTx = CSL.Transaction.from_hex(action.txCbor);
     const txBody = cachedTx.body();
@@ -221,7 +337,7 @@ export class MultisigBroadcastService {
       }
     }
     if (vkeyWitnesses.len() < threshold) {
-      throw new ConflictException(`only ${vkeyWitnesses.len()} valid vkey witnesses; need all ${threshold} board members to sign`);
+      throw new ConflictException(`only ${vkeyWitnesses.len()} valid vkey witnesses; need ${threshold} board members to sign`);
     }
 
     const witnessSet = CSL.TransactionWitnessSet.new();

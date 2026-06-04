@@ -9,7 +9,7 @@ import { useAuth } from '@/lib/auth-context';
  * transfer (rotation, ad-hoc payouts, refunds, etc.). The form takes a
  * destination address, an amount in ADA, and a written context that becomes
  * the action description (audit trail). The request creates a
- * BOARD_TRANSFER MultisigAction; from there it follows the standard N-of-N
+ * BOARD_TRANSFER MultisigAction; from there it follows the standard 3-of-5
  * Approve & sign flow (every board member sees it in the queue below).
  *
  * Self-hides for non-board users. The "Transaction context" field is

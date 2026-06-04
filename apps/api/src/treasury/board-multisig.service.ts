@@ -260,8 +260,16 @@ export class BoardMultisigService {
     return this.prisma.$transaction(async (tx) => {
       const now = new Date();
       const created = await tx.multisigConfig.create({
-        // §15 — N-of-N: threshold equals totalKeys; every member must sign.
-        data: { scriptJson: built.scriptJson, scriptHash: built.scriptHash, bech32Address: built.bech32Address, threshold: keyHashes.length, totalKeys: keyHashes.length },
+        // §15 — 3-of-N (clamped to keys.length): only 3 of the submitted
+        // board keys are needed to sign each tx. Threshold is shown to the
+        // UI alongside totalKeys (e.g. "3-of-5").
+        data: {
+          scriptJson: built.scriptJson,
+          scriptHash: built.scriptHash,
+          bech32Address: built.bech32Address,
+          threshold: Math.min(this.threshold, keyHashes.length),
+          totalKeys: keyHashes.length,
+        },
       });
       // Stamp the previous active as replaced + link to the new one.
       if (active) {
@@ -338,16 +346,20 @@ export class BoardMultisigService {
     return this.buildNativeScript(keyHashes).scriptHash;
   }
 
-  /** §15 — N-of-N native script: ALL submitted board keys must sign. The
-   *  one-phase signing flow needs this (an M-of-N script breaks CIP-30
-   *  wallet UX, see MultisigBroadcastService). */
+  /** §15 — 3-of-N native script: at-least 3 of the submitted board keys
+   *  must sign. Pairs with the 2-phase Authorize → Sign ceremony in
+   *  MultisigBroadcastService: phase 1 picks WHICH 3 sign, the tx body
+   *  declares those 3 in required_signers, and the script's NOfK clause
+   *  is satisfied by their 3 witnesses. */
   private buildNativeScript(keyHashes: string[]) {
     const scripts = CSL.NativeScripts.new();
     for (const kh of keyHashes) {
       const ed = CSL.Ed25519KeyHash.from_hex(kh);
       scripts.add(CSL.NativeScript.new_script_pubkey(CSL.ScriptPubkey.new(ed)));
     }
-    const top = CSL.NativeScript.new_script_all(CSL.ScriptAll.new(scripts));
+    const required = Math.min(this.threshold, keyHashes.length);
+    const nofk = CSL.ScriptNOfK.new(required, scripts);
+    const top = CSL.NativeScript.new_script_n_of_k(nofk);
     const scriptHashObj = top.hash();
     const scriptHash = scriptHashObj.to_hex();
     const bech32Address = CSL.EnterpriseAddress.new(
@@ -355,7 +367,8 @@ export class BoardMultisigService {
       CSL.Credential.from_scripthash(scriptHashObj),
     ).to_address().to_bech32();
     const scriptJson = {
-      type: 'all' as const,
+      type: 'atLeast' as const,
+      required,
       scripts: keyHashes.map((keyHash) => ({ type: 'sig' as const, keyHash })),
     };
     return { scriptJson, scriptHash, bech32Address };

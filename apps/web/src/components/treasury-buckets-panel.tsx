@@ -53,7 +53,7 @@ export function TreasuryBucketsPanel({ onChange }: { onChange?: () => void }) {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="font-semibold">Treasury buckets ({data.buckets.length})</div>
         <span className="text-xs text-neutral-500">
-          Labeled sub-addresses of the same multisig — same N-of-N signing requirement, distinct on-chain addresses.
+          Labeled sub-addresses of the same multisig — same 3-of-5 signing requirement, distinct on-chain addresses.
         </span>
       </div>
 

@@ -27,7 +27,7 @@ export function TreasuryOverview() {
       <div>
         <h2 className="text-lg font-semibold">Treasury</h2>
         <p className="text-sm text-neutral-500">
-          The DAO&apos;s N-of-N multisig holds the budget; a low-balance hot wallet pays tx fees. Budgets:
+          The DAO&apos;s 3-of-5 multisig holds the budget; a low-balance hot wallet pays tx fees. Budgets:
           rewards, operations, and one per funding round.
         </p>
       </div>

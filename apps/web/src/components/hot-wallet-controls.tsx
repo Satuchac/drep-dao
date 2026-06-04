@@ -92,7 +92,7 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
           </span>
         </div>
         <p className="text-xs text-neutral-500">
-          Top-ups go through the standard N-of-N board signing flow (they appear in <strong>Actions to sign</strong>).
+          Top-ups go through the standard 3-of-5 board signing flow (they appear in <strong>Actions to sign</strong>).
           A sweep moves the full hot-wallet balance back into the treasury immediately (no threshold).
           A few ADA may remain at the hot wallet after a sweep due to the Cardano tx fee and minUTxO requirement.
         </p>

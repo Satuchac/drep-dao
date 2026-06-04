@@ -98,7 +98,7 @@ export function MultisigSetup() {
                 here automatically — they&apos;ll pile up once proposals start.
               </p>
               <p className="mt-1 text-[11px]">
-                Outbound payouts work via the standard board signing flow once {status.active.totalKeys}-of-{status.active.totalKeys}{' '}
+                Outbound payouts work via the standard board signing flow once {status.active.threshold}-of-{status.active.totalKeys}{' '}
                 board members have signed via <strong>Actions → Approve &amp; sign</strong> (each click signs the
                 tx with their HW wallet; the platform combines witnesses + broadcasts on the 3rd signature).
               </p>

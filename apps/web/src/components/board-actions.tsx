@@ -7,12 +7,12 @@ import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
 import { ConfirmDialog } from './confirm-dialog';
 
-/** §15.3 — pending board/treasury actions the platform prepared, awaiting N-of-N approval.
+/** §15.3 — pending board/treasury actions the platform prepared, awaiting 3-of-5 approval.
  *  `refreshKey` is a parent-controlled counter — bumping it triggers an
  *  immediate refetch so newly-queued actions (top-ups, sweeps, transfers)
  *  appear without a page reload. */
 export function BoardActions({ onChange, history = false, refreshKey = 0 }: { onChange?: () => void; history?: boolean; refreshKey?: number }) {
-  const { profile, signTx } = useAuth();
+  const { profile, signTx, signMessage } = useAuth();
   const { txUrl } = useExplorer();
   const [actions, setActions] = useState<BoardAction[]>([]);
   const [past, setPast] = useState<BoardAction[]>([]);
@@ -45,11 +45,38 @@ export function BoardActions({ onChange, history = false, refreshKey = 0 }: { on
       else delete next[id];
       return next;
     });
-  /** §15 — 1-phase N-of-N signing. The tx body has every board key in
-   *  required_signers; the wallet that holds ONE of them signs (returns 1
-   *  witness). Once every board member has signed, the backend combines +
-   *  broadcasts. The wallet MUST be on the same account that submitted the
-   *  multisig key — error path explains how to switch. */
+  /** §15 phase 1 — Authorize: board member CIP-30 data-signs a cheap commit
+   *  message so the platform knows they're committing to be one of the 3
+   *  signers. Once 3 commits are in, the action moves to phase 2 and those
+   *  same 3 sign the real tx body with their HW wallets. */
+  const COMMIT_MSG = (actionId: string, stake: string, ts: string) =>
+    ['drep-dao | multisig commit', `action:${actionId}`, `signer:${stake}`, `ts:${ts}`].join('\n');
+
+  const authorize = async (a: BoardAction) => {
+    setErr(a.id, null); setBusy(a.id);
+    try {
+      if (!profile) { setErr(a.id, 'Connect your wallet to authorize.'); return; }
+      const ts = new Date().toISOString();
+      const msg = COMMIT_MSG(a.id, profile.user.stakeAddress, ts);
+      const s = await signMessage(msg);
+      if (!s) {
+        setErr(a.id, 'Could not reach your wallet. Open the wallet extension and try again.');
+        return;
+      }
+      await treasuryApi.commitToAction(a.id, { signature: s.signature, key: s.key, ts });
+      load();
+      onChange?.();
+    } catch (e) {
+      setErr(a.id, e instanceof Error ? e.message : 'Authorization cancelled.');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** §15 phase 2 — Sign: only available once 3 authorizations are in. The
+   *  cached tx body is built with the 3 committed keyhashes as
+   *  required_signers; each committed signer's wallet pops a sign prompt
+   *  because their key IS in required_signers. */
   const approve = async (a: BoardAction) => {
     setErr(a.id, null);
     setBusy(a.id);
@@ -83,9 +110,12 @@ export function BoardActions({ onChange, history = false, refreshKey = 0 }: { on
     <section className="space-y-2 rounded-lg border border-amber-300 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
       <h3 className="text-base font-semibold">Actions to sign</h3>
       <p className="text-xs text-neutral-500">
-        The platform prepared these treasury/hot-wallet actions. Each needs <strong>every board member</strong>{' '}
-        (currently {actions[0]?.threshold ?? past[0]?.threshold ?? '?'}-of-{actions[0]?.threshold ?? past[0]?.threshold ?? '?'})
-        to sign before it can be executed on-chain — the multisig is N-of-N for the 1-phase signing flow.
+        The platform prepared these treasury/hot-wallet actions. Each one runs a two-phase ceremony:{' '}
+        <strong>Authorize</strong> (cheap CIP-30 data-sig — once {actions[0]?.threshold ?? past[0]?.threshold ?? 3} board
+        members authorize, the platform picks them as signers) → <strong>Sign</strong> (those same{' '}
+        {actions[0]?.threshold ?? past[0]?.threshold ?? 3} sign the real tx with their HW wallets and the platform
+        broadcasts on the 3rd witness). Threshold: {actions[0]?.threshold ?? past[0]?.threshold ?? 3}-of-
+        {actions[0]?.totalKeys ?? past[0]?.totalKeys ?? '?'}.
       </p>
       {/* §15 — treasury source-of-truth: address + live on-chain balance, so the
           board can see at a glance whether pending payouts can be covered. */}
@@ -145,19 +175,43 @@ export function BoardActions({ onChange, history = false, refreshKey = 0 }: { on
                 Approval at threshold will be blocked until the treasury is topped up.
               </div>
             ) : null}
-            {/* §15 — 1-phase N-of-N progress: every board member must sign. */}
+            {/* §15 — 2-phase 3-of-5 progress: phase 1 collects 3 cheap CIP-30
+                authorizations; phase 2 collects 3 real tx witnesses from the
+                same 3 members chosen at phase-1 close (their keyhashes are
+                baked into required_signers). */}
             <div className="mt-1 text-xs text-neutral-500">
-              Signatures: {a.approvals} of {a.threshold} needed ({a.threshold}-of-{a.threshold} multisig){a.mineApproved ? ' · you signed ✓' : ''}
+              {a.phase === 'AUTHORIZE' ? (
+                <>
+                  Phase 1 — authorizations: {a.commitments} of {a.threshold} needed ({a.threshold}-of-{a.totalKeys} multisig)
+                  {a.mineCommitted ? ' · you authorized ✓' : ''}
+                </>
+              ) : (
+                <>
+                  Phase 2 — tx signatures: {a.approvals} of {a.threshold} needed ({a.threshold}-of-{a.totalKeys} multisig)
+                  {a.mineApproved ? ' · you signed ✓' : ''}
+                </>
+              )}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button
-                disabled={busy === a.id || a.mineApproved}
-                onClick={() => approve(a)}
-                className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
-                title="Sign the multisig tx with your HW wallet. Make sure your wallet is on the account holding the multisig key you submitted."
-              >
-                {a.mineApproved ? 'Signed' : busy === a.id ? 'Signing…' : 'Approve & sign'}
-              </button>
+              {a.phase === 'AUTHORIZE' ? (
+                <button
+                  disabled={busy === a.id || a.mineCommitted}
+                  onClick={() => authorize(a)}
+                  className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                  title={`Authorize signing — cheap CIP-30 data-signature. Once ${a.threshold} board members authorize, the platform builds the real tx and asks those ${a.threshold} to sign it with their HW wallets.`}
+                >
+                  {a.mineCommitted ? 'Authorized' : busy === a.id ? 'Authorizing…' : 'Authorize'}
+                </button>
+              ) : (
+                <button
+                  disabled={busy === a.id || a.mineApproved}
+                  onClick={() => approve(a)}
+                  className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
+                  title={`Sign the prepared tx with your HW wallet. Only the ${a.threshold} board members who authorized in phase 1 can sign.`}
+                >
+                  {a.mineApproved ? 'Signed' : busy === a.id ? 'Signing…' : 'Sign tx with HW wallet'}
+                </button>
+              )}
               {/* §15.4 — any single board member can cancel a pending action.
                   Marks it FAILED with the cancellation reason in the audit
                   trail. Hidden once the tx is on-chain (BROADCASTED/CONFIRMED). */}

@@ -116,29 +116,38 @@ export class TreasuryService {
     const balMap = treasuryAddress ? await this.cardano.addressBalance([treasuryAddress]) : new Map<string, bigint>();
     const treasuryBalanceAda = treasuryAddress ? Number(balMap.get(treasuryAddress) ?? 0n) / ADA : 0;
 
-    // §15 — N-of-N threshold = number of keyhashes in the active multisig.
-    // Falls back to APPROVAL_THRESHOLD when no multisig yet (display-only).
+    // §15 — 3-of-5 threshold (APPROVAL_THRESHOLD); totalKeys comes from the
+    // active multisig so the UI can render "3-of-5" rather than just "3".
     const active = await this.prisma.multisigConfig.findFirst({
       where: { replacedAt: null },
       orderBy: { assembledAt: 'desc' },
-      select: { totalKeys: true },
+      select: { totalKeys: true, threshold: true },
     });
-    const threshold = active?.totalKeys ?? APPROVAL_THRESHOLD;
+    const threshold = active?.threshold ?? APPROVAL_THRESHOLD;
+    const totalKeys = active?.totalKeys ?? APPROVAL_THRESHOLD;
 
     const actions = await this.prisma.multisigAction.findMany({
       where: { status: 'PENDING_SIGS' },
-      include: { signatures: { select: { boardDrepId: true } } },
+      include: {
+        signatures: { select: { boardDrepId: true } },
+        commitments: { select: { userId: true } },
+      },
       orderBy: { createdAt: 'asc' },
     });
     type Row = {
       id: string; kind: string; description: string | null; amountAda: bigint | null; status: string;
       txHash: string | null; createdAt: Date;
       signatures: { boardDrepId: string }[];
+      commitments: { userId: string }[];
+      committedKeyHashes: string[];
       proposalId: string | null; milestoneId: string | null; milestoneIdx: number | null;
       proposalTitle: string | null; destAddress: string | null; paidAt: Date | null;
     };
     const map = (a: Row) => {
       const amt = a.amountAda ? Number(a.amountAda) / ADA : null;
+      // §15 phase tracking: AUTHORIZE while committedKeyHashes is empty;
+      // SIGN once the threshold has been hit and the M keys are snapshotted.
+      const inSignPhase = (a.committedKeyHashes?.length ?? 0) >= threshold;
       return {
         id: a.id,
         kind: a.kind,
@@ -147,8 +156,12 @@ export class TreasuryService {
         status: a.status,
         txHash: a.txHash,
         approvals: a.signatures.length,
+        commitments: a.commitments.length,
         threshold,
+        totalKeys,
+        phase: inSignPhase ? 'SIGN' : 'AUTHORIZE',
         mineApproved: a.signatures.some((s) => s.boardDrepId === board.id),
+        mineCommitted: a.commitments.some((c) => c.userId === userId),
         createdAt: a.createdAt,
         proposalId: a.proposalId,
         milestoneId: a.milestoneId,
@@ -163,13 +176,18 @@ export class TreasuryService {
     const history = includeHistory
       ? ((await this.prisma.multisigAction.findMany({
           where: { status: { not: 'PENDING_SIGS' } },
-          include: { signatures: { select: { boardDrepId: true } } },
+          include: {
+            signatures: { select: { boardDrepId: true } },
+            commitments: { select: { userId: true } },
+          },
           orderBy: { createdAt: 'desc' },
           take: 50,
         })) as unknown as Row[]).map(map)
       : [];
     return {
-      count: view.filter((a) => !a.mineApproved).length,
+      // Count an action as a to-do when the user hasn't completed the
+      // CURRENT phase yet: phase 1 → commit, phase 2 → sign.
+      count: view.filter((a) => (a.phase === 'AUTHORIZE' ? !a.mineCommitted : !a.mineApproved)).length,
       actions: view,
       history,
       treasury: { address: treasuryAddress, balanceAda: treasuryBalanceAda },
