@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { treasuryBucketsApi, type TreasuryBucket } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { CopyButton } from './copy-button';
+import { ConfirmDialog } from './confirm-dialog';
 
 /**
  * §15.5 — labeled treasury buckets. Lists every bucket under the active
@@ -58,7 +59,7 @@ export function TreasuryBucketsPanel({ onChange }: { onChange?: () => void }) {
 
       {/* Primary (bare multisig) always shown. */}
       {primary ? (
-        <BucketRow b={primary} />
+        <BucketRow b={primary} isBoard={isBoard} onChange={load} />
       ) : null}
 
       {/* Labeled buckets — collapsible to keep the panel compact when many. */}
@@ -74,7 +75,7 @@ export function TreasuryBucketsPanel({ onChange }: { onChange?: () => void }) {
           </button>
           {showHistory ? (
             <ul className="space-y-1 px-2 pb-2">
-              {labeled.map((b) => <li key={b.id}><BucketRow b={b} /></li>)}
+              {labeled.map((b) => <li key={b.id}><BucketRow b={b} isBoard={isBoard} onChange={load} /></li>)}
             </ul>
           ) : null}
         </div>
@@ -111,7 +112,36 @@ export function TreasuryBucketsPanel({ onChange }: { onChange?: () => void }) {
   );
 }
 
-function BucketRow({ b }: { b: TreasuryBucket }) {
+function BucketRow({ b, isBoard, onChange }: { b: TreasuryBucket; isBoard: boolean; onChange: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(b.label);
+  const [confirmDel, setConfirmDel] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const startEdit = () => { setDraft(b.label); setEditing(true); setError(null); };
+  const saveRename = async () => {
+    const v = draft.trim();
+    if (v.length < 2 || v === b.label) { setEditing(false); return; }
+    setBusy(true); setError(null);
+    try { await treasuryBucketsApi.rename(b.id, v); setEditing(false); onChange(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'rename failed'); }
+    finally { setBusy(false); }
+  };
+  const doDelete = async () => {
+    setConfirmDel(false);
+    setBusy(true); setError(null);
+    try { await treasuryBucketsApi.remove(b.id); onChange(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'delete failed'); }
+    finally { setBusy(false); }
+  };
+
+  // Show rename/delete only for board members on non-primary buckets. Delete
+  // is also disabled if the bucket has any on-chain funds — the backend
+  // refuses but we hint here so the button isn't a tease.
+  const canManage = isBoard && !b.isPrimary;
+  const empty = b.balanceAda === 0;
+
   return (
     <div className={`mt-1 rounded border p-2 text-xs ${
       b.isPrimary
@@ -119,17 +149,66 @@ function BucketRow({ b }: { b: TreasuryBucket }) {
         : 'border-neutral-200 bg-neutral-50/60 dark:border-neutral-800 dark:bg-neutral-800/30'
     }`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-medium">
-          {b.label}
-          {b.isPrimary ? <span className="ml-2 text-[10px] uppercase tracking-wide text-emerald-700 dark:text-emerald-400">primary</span> : null}
+        <span className="flex items-center gap-2 font-medium">
+          {editing ? (
+            <>
+              <input
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') void saveRename(); if (e.key === 'Escape') setEditing(false); }}
+                maxLength={64}
+                className="rounded border border-neutral-300 px-1.5 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+              />
+              <button disabled={busy} onClick={saveRename} className="text-emerald-700 hover:underline dark:text-emerald-300">save</button>
+              <button disabled={busy} onClick={() => setEditing(false)} className="text-neutral-500 hover:underline">cancel</button>
+            </>
+          ) : (
+            <>
+              {b.label}
+              {b.isPrimary ? <span className="ml-1 text-[10px] uppercase tracking-wide text-emerald-700 dark:text-emerald-400">primary</span> : null}
+              {canManage ? (
+                <button onClick={startEdit} className="text-[11px] text-neutral-500 hover:underline" title="Rename (label only — on-chain address stays the same)">rename</button>
+              ) : null}
+            </>
+          )}
         </span>
-        <span className="tabular-nums text-neutral-700 dark:text-neutral-300">{b.balanceAda.toLocaleString()} ₳ on-chain</span>
+        <span className="flex items-center gap-2">
+          <span className="tabular-nums text-neutral-700 dark:text-neutral-300">{b.balanceAda.toLocaleString()} ₳ on-chain</span>
+          {canManage ? (
+            <button
+              disabled={busy || !empty}
+              onClick={() => setConfirmDel(true)}
+              title={empty ? 'Delete this empty bucket' : 'Drain funds first — delete is only allowed when balance is 0 ₳'}
+              className="rounded border border-red-400 px-1.5 py-0.5 text-[11px] text-red-700 hover:bg-red-50 disabled:opacity-40 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950"
+            >
+              delete
+            </button>
+          ) : null}
+        </span>
       </div>
       <div className="mt-1 flex items-start gap-2">
         <div className="flex-1 break-all font-mono text-[11px] text-neutral-600 dark:text-neutral-400">{b.bech32Address}</div>
         <CopyButton text={b.bech32Address} label="Copy" />
       </div>
       {b.createdBy ? <div className="mt-0.5 text-[10px] text-neutral-500">created by {b.createdBy}</div> : null}
+      {error ? <div className="mt-1 text-[11px] text-red-600">{error}</div> : null}
+      <ConfirmDialog
+        open={confirmDel}
+        title={`Delete bucket "${b.label}"?`}
+        tone="danger"
+        confirmLabel="Delete bucket"
+        cancelLabel="Keep it"
+        onCancel={() => setConfirmDel(false)}
+        onConfirm={doDelete}
+        message={
+          <>
+            The bucket label + on-chain address are removed from the platform. Past actions that referenced
+            this bucket stay in history (the reference is just nulled). The script address remains on-chain;
+            anyone could still send funds to it — but the platform won&apos;t spend from it anymore.
+          </>
+        }
+      />
     </div>
   );
 }

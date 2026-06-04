@@ -369,6 +369,16 @@ export const treasuryBucketsApi = {
       '/admin/treasury/buckets',
       { method: 'POST', body: JSON.stringify({ label }) },
     ),
+  /** Cosmetic rename — the on-chain address stays the same (the label hash
+   *  is baked into the script bytes at creation). */
+  rename: (id: string, label: string) =>
+    request<{ id: string; label: string }>(`/admin/treasury/buckets/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ label }),
+    }),
+  /** Delete an EMPTY bucket (refused while funds remain at the address). */
+  remove: (id: string) =>
+    request<{ ok: boolean }>(`/admin/treasury/buckets/${id}`, { method: 'DELETE' }),
 };
 
 // §15.4 — user's payment address for rewards. Editable; historical RewardEntry

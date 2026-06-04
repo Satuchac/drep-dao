@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as CSL from '@emurgo/cardano-serialization-lib-nodejs';
 import { createHash } from 'node:crypto';
@@ -116,6 +116,62 @@ export class TreasuryBucketsService {
    *  service can build a tx out of it. */
   async findById(bucketId: string) {
     return this.prisma.treasuryBucket.findUnique({ where: { id: bucketId } });
+  }
+
+  /** §15.5 — cosmetic rename. Label inside the script bytes is FROZEN at
+   *  creation (it's part of the script_hash and on-chain address); changing
+   *  the displayed label here doesn't move funds. */
+  async rename(userId: string, bucketId: string, newLabel: string) {
+    if (!(await this.isBoard(userId))) throw new ForbiddenException('board members only');
+    const trimmed = (newLabel ?? '').trim();
+    if (trimmed.length < 2 || trimmed.length > MAX_LABEL_LEN) {
+      throw new BadRequestException(`label must be 2–${MAX_LABEL_LEN} characters`);
+    }
+    if (trimmed.toLowerCase() === 'primary') {
+      throw new BadRequestException('"Primary" is reserved for the bare multisig bucket');
+    }
+    const bucket = await this.prisma.treasuryBucket.findUnique({ where: { id: bucketId } });
+    if (!bucket) throw new NotFoundException('bucket not found');
+    if (bucket.isPrimary) throw new ConflictException('the primary bucket cannot be renamed');
+    if (bucket.label === trimmed) return bucket;
+    // Reject duplicate labels under the same multisig config.
+    const dup = await this.prisma.treasuryBucket.findFirst({ where: { configId: bucket.configId, label: trimmed, NOT: { id: bucketId } } });
+    if (dup) throw new ConflictException('a bucket with that label already exists');
+    return this.prisma.treasuryBucket.update({ where: { id: bucketId }, data: { label: trimmed } });
+  }
+
+  /** §15.5 — delete a bucket. Refused for the primary (it's the multisig
+   *  itself) and for any bucket with funds on-chain (the address would be
+   *  orphaned — drain it first via the Send-from-treasury flow). */
+  async remove(userId: string, bucketId: string) {
+    if (!(await this.isBoard(userId))) throw new ForbiddenException('board members only');
+    const bucket = await this.prisma.treasuryBucket.findUnique({ where: { id: bucketId } });
+    if (!bucket) throw new NotFoundException('bucket not found');
+    if (bucket.isPrimary) throw new ConflictException('the primary bucket cannot be deleted');
+    // Live balance check — refuse if funds remain at the bucket address.
+    const balMap = await this.cardano.addressBalance([bucket.bech32Address]).catch(() => new Map<string, bigint>());
+    const lovelace = balMap.get(bucket.bech32Address) ?? 0n;
+    if (lovelace > 0n) {
+      const ada = Number(lovelace) / LOVELACE;
+      throw new ConflictException(
+        `bucket still holds ${ada.toLocaleString()} ₳ on-chain — drain it via Send from treasury first, then delete.`,
+      );
+    }
+    // Refuse if there are referencing actions still pending. Confirmed/failed
+    // actions can stay (history), but the FK is on a nullable column so we
+    // null them out for cleanliness.
+    const pending = await this.prisma.multisigAction.count({
+      where: { sourceBucketId: bucketId, status: { in: ['PENDING_SIGS', 'READY', 'BROADCASTED'] } },
+    });
+    if (pending > 0) {
+      throw new ConflictException('there are pending multisig actions using this bucket — cancel or wait for them to confirm first.');
+    }
+    await this.prisma.multisigAction.updateMany({
+      where: { sourceBucketId: bucketId },
+      data: { sourceBucketId: null },
+    });
+    await this.prisma.treasuryBucket.delete({ where: { id: bucketId } });
+    return { ok: true };
   }
 
   /** Convenience: the active multisig's primary bucket id (auto-creating it). */

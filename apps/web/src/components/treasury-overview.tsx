@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { treasuryApi, type TreasuryOverview as Overview } from '@/lib/api';
 import { MultisigSetup } from './multisig-setup';
 import { HotWalletControls } from './hot-wallet-controls';
+import { TreasuryBucketsPanel } from './treasury-buckets-panel';
 
 const ada = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 const BUCKET_COLOR: Record<string, string> = {
@@ -48,6 +49,11 @@ export function TreasuryOverview() {
               warn={data.hotWallet.balanceAda < data.hotWallet.minAda ? `below ${data.hotWallet.minAda} ₳ — top-up needed` : undefined}
             />
           </div>
+          {/* §15.5 — labeled buckets under the active multisig (with live
+              balances + Copy). The panel self-renders create + rename + delete
+              controls only for board members; everyone else sees the read-only
+              roster. */}
+          <TreasuryBucketsPanel />
           {/* §15.3 — board controls for the hot wallet (top up + sweep). Self-hides for non-board. */}
           <HotWalletControls />
 

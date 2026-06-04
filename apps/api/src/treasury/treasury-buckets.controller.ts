@@ -1,11 +1,14 @@
 import { IsString, MaxLength, MinLength } from 'class-validator';
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { TreasuryBucketsService } from './treasury-buckets.service';
 
 export class CreateBucketDto {
+  @IsString() @MinLength(2) @MaxLength(64) label!: string;
+}
+export class RenameBucketDto {
   @IsString() @MinLength(2) @MaxLength(64) label!: string;
 }
 
@@ -25,5 +28,19 @@ export class TreasuryBucketsController {
   @Post('admin/treasury/buckets')
   create(@CurrentUser() ctx: AuthContext, @Body() dto: CreateBucketDto) {
     return this.buckets.create(ctx.userId, dto.label);
+  }
+
+  /** Board-only — cosmetic rename (address stays the same). */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Patch('admin/treasury/buckets/:id')
+  rename(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: RenameBucketDto) {
+    return this.buckets.rename(ctx.userId, id, dto.label);
+  }
+
+  /** Board-only — delete an EMPTY bucket. */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Delete('admin/treasury/buckets/:id')
+  remove(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.buckets.remove(ctx.userId, id);
   }
 }
