@@ -359,6 +359,11 @@ export interface TreasuryBucket {
   label: string;          // "Primary" for the bare-multisig row, otherwise the user-chosen label
   bech32Address: string;
   isPrimary: boolean;
+  /** §15.6 — per-operation default flags; the platform routes auto-generated
+   *  actions of each kind to the bucket flagged for it. */
+  isDefaultFunding: boolean;
+  isDefaultRewards: boolean;
+  isDefaultOperations: boolean;
   balanceAda: number;
   createdBy: string | null;
 }
@@ -379,6 +384,15 @@ export const treasuryBucketsApi = {
   /** Delete an EMPTY bucket (refused while funds remain at the address). */
   remove: (id: string) =>
     request<{ ok: boolean }>(`/admin/treasury/buckets/${id}`, { method: 'DELETE' }),
+  /** §15.6 — set / clear a per-operation default flag (FUNDING/REWARDS/
+   *  OPERATIONS). The platform routes auto-generated actions of each kind
+   *  to the bucket flagged for it (fallback: primary). Toggling true on
+   *  one bucket auto-clears the same flag on others. */
+  setDefault: (id: string, operation: 'FUNDING' | 'REWARDS' | 'OPERATIONS', value: boolean) =>
+    request<{ ok: boolean }>(`/admin/treasury/buckets/${id}/default`, {
+      method: 'POST',
+      body: JSON.stringify({ operation, value }),
+    }),
 };
 
 // §15.4 — user's payment address for rewards. Editable; historical RewardEntry

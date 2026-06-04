@@ -136,11 +136,19 @@ function BucketRow({ b, isBoard, onChange }: { b: TreasuryBucket; isBoard: boole
     finally { setBusy(false); }
   };
 
-  // Show rename/delete only for board members on non-primary buckets. Delete
-  // is also disabled if the bucket has any on-chain funds — the backend
-  // refuses but we hint here so the button isn't a tease.
-  const canManage = isBoard && !b.isPrimary;
+  // Rename is allowed for ANY bucket the board owns — including primary
+  // (the label is cosmetic; the script address doesn't change). Delete is
+  // refused for primary (it's the bare multisig) and for any bucket holding
+  // funds; we surface the disable here so the button isn't a tease.
+  const canRename = isBoard;
+  const canDelete = isBoard && !b.isPrimary;
   const empty = b.balanceAda === 0;
+  const toggleDefault = async (op: 'FUNDING' | 'REWARDS' | 'OPERATIONS', value: boolean) => {
+    setError(null); setBusy(true);
+    try { await treasuryBucketsApi.setDefault(b.id, op, value); onChange(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'failed'); }
+    finally { setBusy(false); }
+  };
 
   return (
     <div className={`mt-1 rounded border p-2 text-xs ${
@@ -167,7 +175,7 @@ function BucketRow({ b, isBoard, onChange }: { b: TreasuryBucket; isBoard: boole
             <>
               {b.label}
               {b.isPrimary ? <span className="ml-1 text-[10px] uppercase tracking-wide text-emerald-700 dark:text-emerald-400">primary</span> : null}
-              {canManage ? (
+              {canRename ? (
                 <button onClick={startEdit} className="text-[11px] text-neutral-500 hover:underline" title="Rename (label only — on-chain address stays the same)">rename</button>
               ) : null}
             </>
@@ -175,7 +183,7 @@ function BucketRow({ b, isBoard, onChange }: { b: TreasuryBucket; isBoard: boole
         </span>
         <span className="flex items-center gap-2">
           <span className="tabular-nums text-neutral-700 dark:text-neutral-300">{b.balanceAda.toLocaleString()} ₳ on-chain</span>
-          {canManage ? (
+          {canDelete ? (
             <button
               disabled={busy || !empty}
               onClick={() => setConfirmDel(true)}
@@ -186,6 +194,34 @@ function BucketRow({ b, isBoard, onChange }: { b: TreasuryBucket; isBoard: boole
             </button>
           ) : null}
         </span>
+      </div>
+      {/* §15.6 — per-operation default chips. The platform auto-routes
+          milestone payouts to the FUNDING bucket, hot-wallet top-ups to
+          OPERATIONS, and reward payouts to REWARDS. Toggling on one bucket
+          clears the same op on others (single default per op per multisig). */}
+      <div className="mt-1.5 flex flex-wrap items-center gap-1">
+        <span className="text-[10px] uppercase tracking-wide text-neutral-500">default for:</span>
+        {(['FUNDING', 'REWARDS', 'OPERATIONS'] as const).map((op) => {
+          const on = op === 'FUNDING' ? b.isDefaultFunding
+                   : op === 'REWARDS' ? b.isDefaultRewards
+                                      : b.isDefaultOperations;
+          const label = op.charAt(0) + op.slice(1).toLowerCase();
+          return (
+            <button
+              key={op}
+              disabled={busy || !isBoard}
+              onClick={() => toggleDefault(op, !on)}
+              title={isBoard ? `Toggle whether platform-generated ${label} actions spend from this bucket` : `Default for ${label}: ${on ? 'yes' : 'no'}`}
+              className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ${
+                on
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-80'
+                  : 'border border-neutral-300 text-neutral-600 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'
+              }`}
+            >
+              {on ? '✓ ' : ''}{label}
+            </button>
+          );
+        })}
       </div>
       <div className="mt-1 flex items-start gap-2">
         <div className="flex-1 break-all font-mono text-[11px] text-neutral-600 dark:text-neutral-400">{b.bech32Address}</div>

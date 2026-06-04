@@ -3,6 +3,7 @@ import { ROUND_SETTING_DEFAULTS, ProposalStage, ProposalStatus, RoundStatus, Vot
 import { GovSubject, VotingStyle } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnchorService } from '../cardano/anchor.service';
+import { TreasuryBucketsService } from '../treasury/treasury-buckets.service';
 
 const LOVELACE = 1_000_000;
 /** §11 — board majority needed to APPROVE a stop-funding (1 member · 1 vote, 3-of-5 default). */
@@ -36,6 +37,7 @@ export class MilestonesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly anchor: AnchorService,
+    private readonly buckets: TreasuryBucketsService,
   ) {}
 
   // ===========================================================================
@@ -538,6 +540,10 @@ export class MilestonesService {
     });
     if (existing) return;
     const label = `Milestone #${idx + 1} payout — ${publicId ? `${publicId}: ` : ''}${title}`;
+    // §15.6 — route this disbursement to the bucket marked default-FUNDING
+    // by the board (or the primary if none is). Lets the board separate
+    // funds: one bucket for milestone payouts, another for rewards, etc.
+    const sourceBucket = await this.buckets.defaultBucketFor('FUNDING');
     await this.prisma.multisigAction.create({
       data: {
         kind: 'PROJECT_FUNDING',
@@ -549,6 +555,7 @@ export class MilestonesService {
         milestoneIdx: idx,
         proposalTitle: title,
         destAddress: payoutAddress,
+        sourceBucketId: sourceBucket?.id ?? null,
       },
     });
   }

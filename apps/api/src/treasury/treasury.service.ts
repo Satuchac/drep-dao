@@ -4,6 +4,7 @@ import { boardActionMessage } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { AnchorService } from '../cardano/anchor.service';
+import { TreasuryBucketsService } from './treasury-buckets.service';
 import { verifyCip30Signature } from '../auth/cip30';
 
 const ADA = 1_000_000;
@@ -22,6 +23,7 @@ export class TreasuryService {
     private readonly config: ConfigService,
     private readonly cardano: CardanoQueryService,
     private readonly anchor: AnchorService,
+    private readonly buckets: TreasuryBucketsService,
   ) {}
 
   private num(key: string, fallback: number): number {
@@ -182,6 +184,8 @@ export class TreasuryService {
     if (open) return;
     const bal = await this.cardano.addressBalance([hot]);
     if (Number(bal.get(hot) ?? 0n) / ADA >= HOT_WALLET_MIN_ADA) return;
+    // §15.6 — route to the OPERATIONS default bucket (fallback primary).
+    const bucket = await this.buckets.defaultBucketFor('OPERATIONS');
     await this.prisma.multisigAction.create({
       data: {
         kind: 'OPS',
@@ -190,6 +194,7 @@ export class TreasuryService {
         // destAddress = hot wallet so the Actions UI shows the full destination + Copy button.
         destAddress: hot,
         description: `Top up the anchor hot wallet — balance below ${HOT_WALLET_MIN_ADA} ₳`,
+        sourceBucketId: bucket?.id ?? null,
       },
     });
   }
@@ -214,6 +219,8 @@ export class TreasuryService {
     if (open) {
       throw new ConflictException('a hot-wallet top-up is already pending signatures — sign or wait for that one before queueing another');
     }
+    // §15.6 — route to the OPERATIONS default bucket (fallback primary).
+    const bucket = await this.buckets.defaultBucketFor('OPERATIONS');
     const row = await this.prisma.multisigAction.create({
       data: {
         kind: 'OPS',
@@ -221,6 +228,7 @@ export class TreasuryService {
         amountAda: BigInt(Math.round(amountAda * ADA)),
         destAddress: hot,
         description: `Top up the anchor hot wallet (board-requested)`,
+        sourceBucketId: bucket?.id ?? null,
       },
     });
     // Strip BigInt so the JSON serializer doesn't choke; the UI only needs

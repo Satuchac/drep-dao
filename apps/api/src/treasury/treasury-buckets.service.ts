@@ -71,6 +71,9 @@ export class TreasuryBucketsService {
         label: r.label || 'Primary',
         bech32Address: r.bech32Address,
         isPrimary: r.isPrimary,
+        isDefaultFunding: r.isDefaultFunding,
+        isDefaultRewards: r.isDefaultRewards,
+        isDefaultOperations: r.isDefaultOperations,
         balanceAda: Number(balMap.get(r.bech32Address) ?? 0n) / LOVELACE,
         createdBy: r.createdBy?.displayName ?? null,
       })),
@@ -120,24 +123,67 @@ export class TreasuryBucketsService {
 
   /** §15.5 — cosmetic rename. Label inside the script bytes is FROZEN at
    *  creation (it's part of the script_hash and on-chain address); changing
-   *  the displayed label here doesn't move funds. */
+   *  the displayed label here doesn't move funds. Renaming the PRIMARY is
+   *  allowed (e.g. to give it a domain-specific name like "Funding") — the
+   *  isPrimary flag stays true and its bare-multisig script is unchanged. */
   async rename(userId: string, bucketId: string, newLabel: string) {
     if (!(await this.isBoard(userId))) throw new ForbiddenException('board members only');
     const trimmed = (newLabel ?? '').trim();
     if (trimmed.length < 2 || trimmed.length > MAX_LABEL_LEN) {
       throw new BadRequestException(`label must be 2–${MAX_LABEL_LEN} characters`);
     }
-    if (trimmed.toLowerCase() === 'primary') {
-      throw new BadRequestException('"Primary" is reserved for the bare multisig bucket');
-    }
     const bucket = await this.prisma.treasuryBucket.findUnique({ where: { id: bucketId } });
     if (!bucket) throw new NotFoundException('bucket not found');
-    if (bucket.isPrimary) throw new ConflictException('the primary bucket cannot be renamed');
     if (bucket.label === trimmed) return bucket;
-    // Reject duplicate labels under the same multisig config.
+    // Reject duplicate labels under the same multisig config (case-sensitive
+    // by Prisma default — fine, the form trims and shows the exact label).
     const dup = await this.prisma.treasuryBucket.findFirst({ where: { configId: bucket.configId, label: trimmed, NOT: { id: bucketId } } });
     if (dup) throw new ConflictException('a bucket with that label already exists');
     return this.prisma.treasuryBucket.update({ where: { id: bucketId }, data: { label: trimmed } });
+  }
+
+  /** §15.6 — set or unset a bucket as the default for an operation kind.
+   *  Setting true on bucket B for op X auto-clears the same flag on every
+   *  OTHER bucket of the same multisig config (partial unique enforces this
+   *  at the DB layer too — we clear first to avoid the conflict). */
+  async setDefault(userId: string, bucketId: string, operation: 'FUNDING' | 'REWARDS' | 'OPERATIONS', value: boolean) {
+    if (!(await this.isBoard(userId))) throw new ForbiddenException('board members only');
+    const bucket = await this.prisma.treasuryBucket.findUnique({ where: { id: bucketId } });
+    if (!bucket) throw new NotFoundException('bucket not found');
+    const column = operation === 'FUNDING'    ? 'isDefaultFunding'
+                 : operation === 'REWARDS'    ? 'isDefaultRewards'
+                                              : 'isDefaultOperations';
+    await this.prisma.$transaction(async (tx) => {
+      if (value) {
+        await tx.treasuryBucket.updateMany({
+          where: { configId: bucket.configId, NOT: { id: bucketId } },
+          data: { [column]: false },
+        });
+      }
+      await tx.treasuryBucket.update({ where: { id: bucketId }, data: { [column]: value } });
+    });
+    return { ok: true };
+  }
+
+  /** §15.6 — look up the default bucket for an operation. Falls back to the
+   *  primary when no explicit default is set, so platform-generated actions
+   *  always have a source. Returns null only when no multisig exists. */
+  async defaultBucketFor(operation: 'FUNDING' | 'REWARDS' | 'OPERATIONS') {
+    const active = await this.prisma.multisigConfig.findFirst({
+      where: { replacedAt: null },
+      orderBy: { assembledAt: 'desc' },
+    });
+    if (!active) return null;
+    // Auto-create the primary so we always have a fallback.
+    await this.ensurePrimary(active.id, active.bech32Address, active.scriptJson as object, active.scriptHash);
+    const column = operation === 'FUNDING'    ? 'isDefaultFunding'
+                 : operation === 'REWARDS'    ? 'isDefaultRewards'
+                                              : 'isDefaultOperations';
+    const tagged = await this.prisma.treasuryBucket.findFirst({
+      where: { configId: active.id, [column]: true },
+    });
+    if (tagged) return tagged;
+    return this.prisma.treasuryBucket.findFirst({ where: { configId: active.id, isPrimary: true } });
   }
 
   /** §15.5 — delete a bucket. Refused for the primary (it's the multisig

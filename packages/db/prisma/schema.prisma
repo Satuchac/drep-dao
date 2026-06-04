@@ -1192,6 +1192,12 @@ model TreasuryBucket {
   scriptHash    String   @unique
   bech32Address String   @unique
   isPrimary     Boolean  @default(false)
+  // §15.6 — per-operation default flags. At most one bucket per (config, op)
+  // can be true (enforced by partial unique indexes in migration). When
+  // false everywhere, platform-generated actions fall back to the primary.
+  isDefaultFunding    Boolean @default(false) @map("is_default_funding")
+  isDefaultRewards    Boolean @default(false) @map("is_default_rewards")
+  isDefaultOperations Boolean @default(false) @map("is_default_operations")
   createdById   String?  @db.Uuid
   createdAt     DateTime @default(now()) @db.Timestamptz(6)
 
