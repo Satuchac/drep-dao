@@ -278,16 +278,35 @@ export class ProposalsService {
    * not just the pitch text. Accepts a transaction client so it can be called
    * mid-transaction (snapshot the pre-update state, then mutate).
    */
-  /** §15.3 — resolve the on-chain address the platform expects inbound funds at
-   *  (submission fees, pledges, revenue sharing). Prefers the active multisig
-   *  once assembled; falls back to dedicated env vars, then TREASURY_ADDRESS. */
+  /** §15.3/§15.6 — resolve the on-chain address the platform expects inbound
+   *  funds at. Routing precedence:
+   *    1. the bucket the board flagged for this op (SUBMISSION_FEES / PLEDGE),
+   *    2. the primary bucket of the active multisig (if no flag is set),
+   *    3. dedicated env vars then TREASURY_ADDRESS (fresh install / no
+   *       multisig yet).
+   *
+   *  Doing this via raw Prisma (rather than calling TreasuryBucketsService)
+   *  avoids a cross-module dep + keeps proposals.service self-contained.
+   */
   private async resolveInboundAddress(kind: 'fee' | 'pledge'): Promise<string> {
     const active = await this.prisma.multisigConfig.findFirst({
       where: { replacedAt: null },
       orderBy: { assembledAt: 'desc' },
-      select: { bech32Address: true },
+      select: { id: true, bech32Address: true },
     });
-    if (active?.bech32Address) return active.bech32Address;
+    if (active) {
+      const column = kind === 'fee' ? 'isDefaultSubmissionFees' : 'isDefaultPledge';
+      const tagged = await this.prisma.treasuryBucket.findFirst({
+        where: { configId: active.id, [column]: true },
+        select: { bech32Address: true },
+      });
+      if (tagged) return tagged.bech32Address;
+      const primary = await this.prisma.treasuryBucket.findFirst({
+        where: { configId: active.id, isPrimary: true },
+        select: { bech32Address: true },
+      });
+      return primary?.bech32Address ?? active.bech32Address;
+    }
     if (kind === 'pledge') {
       return this.config.get<string>('PLEDGE_ADDRESS')
         ?? this.config.get<string>('SUBMISSION_FEE_ADDRESS')

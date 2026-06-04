@@ -31,17 +31,31 @@ export class PublicConfigController {
     const active = await this.prisma.multisigConfig.findFirst({
       where: { replacedAt: null },
       orderBy: { assembledAt: 'desc' },
-      select: { bech32Address: true },
+      select: { id: true, bech32Address: true },
     });
     const multisig = active?.bech32Address ?? null;
+    // §15.6 — when a board has flagged a specific bucket as default for
+    // submission fees / pledge, that's the address we hand to submitters.
+    // Fallback to the primary bucket (== bare multisig), then env vars.
+    let submissionFeeAddress: string | null = multisig;
+    let pledgeAddress: string | null = multisig;
+    if (active) {
+      const [feeBucket, pledgeBucket, primaryBucket] = await Promise.all([
+        this.prisma.treasuryBucket.findFirst({ where: { configId: active.id, isDefaultSubmissionFees: true }, select: { bech32Address: true } }),
+        this.prisma.treasuryBucket.findFirst({ where: { configId: active.id, isDefaultPledge: true }, select: { bech32Address: true } }),
+        this.prisma.treasuryBucket.findFirst({ where: { configId: active.id, isPrimary: true }, select: { bech32Address: true } }),
+      ]);
+      submissionFeeAddress = feeBucket?.bech32Address ?? primaryBucket?.bech32Address ?? multisig;
+      pledgeAddress        = pledgeBucket?.bech32Address ?? primaryBucket?.bech32Address ?? multisig;
+    }
     return {
       network: this.config.get<string>('CARDANO_NETWORK') ?? 'Preprod',
       explorer: String(val('CARDANO_EXPLORER') ?? PLATFORM_CONFIG_DEFAULTS.CARDANO_EXPLORER),
-      submissionFeeAddress: multisig
+      submissionFeeAddress: submissionFeeAddress
         ?? this.config.get<string>('SUBMISSION_FEE_ADDRESS')
         ?? this.config.get<string>('TREASURY_ADDRESS')
         ?? null,
-      pledgeAddress: multisig
+      pledgeAddress: pledgeAddress
         ?? this.config.get<string>('PLEDGE_ADDRESS')
         ?? this.config.get<string>('SUBMISSION_FEE_ADDRESS')
         ?? this.config.get<string>('TREASURY_ADDRESS')

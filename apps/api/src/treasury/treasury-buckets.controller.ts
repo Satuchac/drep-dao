@@ -12,7 +12,8 @@ export class RenameBucketDto {
   @IsString() @MinLength(2) @MaxLength(64) label!: string;
 }
 export class SetDefaultDto {
-  @IsIn(['FUNDING', 'REWARDS', 'OPERATIONS']) operation!: 'FUNDING' | 'REWARDS' | 'OPERATIONS';
+  @IsIn(['FUNDING', 'REWARDS', 'OPERATIONS', 'SUBMISSION_FEES', 'PLEDGE'])
+  operation!: 'FUNDING' | 'REWARDS' | 'OPERATIONS' | 'SUBMISSION_FEES' | 'PLEDGE';
   @IsBoolean() value!: boolean;
 }
 

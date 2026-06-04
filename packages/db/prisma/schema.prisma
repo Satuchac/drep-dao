@@ -1195,9 +1195,13 @@ model TreasuryBucket {
   // §15.6 — per-operation default flags. At most one bucket per (config, op)
   // can be true (enforced by partial unique indexes in migration). When
   // false everywhere, platform-generated actions fall back to the primary.
+  // OUTBOUND: where the platform spends FROM for each kind.
   isDefaultFunding    Boolean @default(false) @map("is_default_funding")
   isDefaultRewards    Boolean @default(false) @map("is_default_rewards")
   isDefaultOperations Boolean @default(false) @map("is_default_operations")
+  // INBOUND: where the platform tells submitters to pay INTO.
+  isDefaultSubmissionFees Boolean @default(false) @map("is_default_submission_fees")
+  isDefaultPledge         Boolean @default(false) @map("is_default_pledge")
   createdById   String?  @db.Uuid
   createdAt     DateTime @default(now()) @db.Timestamptz(6)
 

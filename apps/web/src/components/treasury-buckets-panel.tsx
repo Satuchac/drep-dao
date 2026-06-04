@@ -143,7 +143,10 @@ function BucketRow({ b, isBoard, onChange }: { b: TreasuryBucket; isBoard: boole
   const canRename = isBoard;
   const canDelete = isBoard && !b.isPrimary;
   const empty = b.balanceAda === 0;
-  const toggleDefault = async (op: 'FUNDING' | 'REWARDS' | 'OPERATIONS', value: boolean) => {
+  const toggleDefault = async (
+    op: 'FUNDING' | 'REWARDS' | 'OPERATIONS' | 'SUBMISSION_FEES' | 'PLEDGE',
+    value: boolean,
+  ) => {
     setError(null); setBusy(true);
     try { await treasuryBucketsApi.setDefault(b.id, op, value); onChange(); }
     catch (e) { setError(e instanceof Error ? e.message : 'failed'); }
@@ -195,33 +198,35 @@ function BucketRow({ b, isBoard, onChange }: { b: TreasuryBucket; isBoard: boole
           ) : null}
         </span>
       </div>
-      {/* §15.6 — per-operation default chips. The platform auto-routes
-          milestone payouts to the FUNDING bucket, hot-wallet top-ups to
-          OPERATIONS, and reward payouts to REWARDS. Toggling on one bucket
-          clears the same op on others (single default per op per multisig). */}
+      {/* §15.6 — per-operation default chips. Five ops in two groups so
+          the strip stays readable.
+            OUTBOUND (spend from): Funding, Rewards, Operations
+            INBOUND (receive at):  Submission fees, Pledge
+          Toggling one bucket clears the same op on others (single default
+          per op per multisig). */}
       <div className="mt-1.5 flex flex-wrap items-center gap-1">
         <span className="text-[10px] uppercase tracking-wide text-neutral-500">default for:</span>
-        {(['FUNDING', 'REWARDS', 'OPERATIONS'] as const).map((op) => {
-          const on = op === 'FUNDING' ? b.isDefaultFunding
-                   : op === 'REWARDS' ? b.isDefaultRewards
-                                      : b.isDefaultOperations;
-          const label = op.charAt(0) + op.slice(1).toLowerCase();
-          return (
-            <button
-              key={op}
-              disabled={busy || !isBoard}
-              onClick={() => toggleDefault(op, !on)}
-              title={isBoard ? `Toggle whether platform-generated ${label} actions spend from this bucket` : `Default for ${label}: ${on ? 'yes' : 'no'}`}
-              className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                on
-                  ? 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-80'
-                  : 'border border-neutral-300 text-neutral-600 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'
-              }`}
-            >
-              {on ? '✓ ' : ''}{label}
-            </button>
-          );
-        })}
+        {([
+          ['FUNDING',         'Funding',         b.isDefaultFunding,         'milestone payouts spend from this bucket'],
+          ['REWARDS',         'Rewards',         b.isDefaultRewards,         'DRep / board reward payouts spend from this bucket'],
+          ['OPERATIONS',      'Operations',      b.isDefaultOperations,      'hot-wallet top-ups spend from this bucket'],
+          ['SUBMISSION_FEES', 'Submission fees', b.isDefaultSubmissionFees,  'submitters are told to pay submission fees here'],
+          ['PLEDGE',          'Pledge',          b.isDefaultPledge,          'submitters are told to pay skin-in-the-game pledges here'],
+        ] as const).map(([op, label, on, hint]) => (
+          <button
+            key={op}
+            disabled={busy || !isBoard}
+            onClick={() => toggleDefault(op, !on)}
+            title={isBoard ? hint : `Default for ${label}: ${on ? 'yes' : 'no'}`}
+            className={`rounded-full px-2 py-0.5 text-[10px] font-medium transition-colors ${
+              on
+                ? 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-80'
+                : 'border border-neutral-300 text-neutral-600 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'
+            }`}
+          >
+            {on ? '✓ ' : ''}{label}
+          </button>
+        ))}
       </div>
       <div className="mt-1 flex items-start gap-2">
         <div className="flex-1 break-all font-mono text-[11px] text-neutral-600 dark:text-neutral-400">{b.bech32Address}</div>

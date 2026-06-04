@@ -364,6 +364,8 @@ export interface TreasuryBucket {
   isDefaultFunding: boolean;
   isDefaultRewards: boolean;
   isDefaultOperations: boolean;
+  isDefaultSubmissionFees: boolean;
+  isDefaultPledge: boolean;
   balanceAda: number;
   createdBy: string | null;
 }
@@ -388,7 +390,7 @@ export const treasuryBucketsApi = {
    *  OPERATIONS). The platform routes auto-generated actions of each kind
    *  to the bucket flagged for it (fallback: primary). Toggling true on
    *  one bucket auto-clears the same flag on others. */
-  setDefault: (id: string, operation: 'FUNDING' | 'REWARDS' | 'OPERATIONS', value: boolean) =>
+  setDefault: (id: string, operation: 'FUNDING' | 'REWARDS' | 'OPERATIONS' | 'SUBMISSION_FEES' | 'PLEDGE', value: boolean) =>
     request<{ ok: boolean }>(`/admin/treasury/buckets/${id}/default`, {
       method: 'POST',
       body: JSON.stringify({ operation, value }),

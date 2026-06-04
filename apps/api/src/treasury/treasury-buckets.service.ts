@@ -8,6 +8,19 @@ import { CardanoQueryService } from '../cardano/cardano-query.service';
 const LOVELACE = 1_000_000;
 const MAX_LABEL_LEN = 64;
 
+/** §15.6 — every operation kind whose default bucket the board can pick. */
+export type BucketOperation =
+  | 'FUNDING' | 'REWARDS' | 'OPERATIONS'   // outbound
+  | 'SUBMISSION_FEES' | 'PLEDGE';          // inbound
+
+const OPERATION_COLUMN: Record<BucketOperation, string> = {
+  FUNDING:         'isDefaultFunding',
+  REWARDS:         'isDefaultRewards',
+  OPERATIONS:      'isDefaultOperations',
+  SUBMISSION_FEES: 'isDefaultSubmissionFees',
+  PLEDGE:          'isDefaultPledge',
+};
+
 /**
  * §15.5 — labeled treasury buckets (sub-addresses of the same multisig).
  *
@@ -74,6 +87,8 @@ export class TreasuryBucketsService {
         isDefaultFunding: r.isDefaultFunding,
         isDefaultRewards: r.isDefaultRewards,
         isDefaultOperations: r.isDefaultOperations,
+        isDefaultSubmissionFees: r.isDefaultSubmissionFees,
+        isDefaultPledge: r.isDefaultPledge,
         balanceAda: Number(balMap.get(r.bech32Address) ?? 0n) / LOVELACE,
         createdBy: r.createdBy?.displayName ?? null,
       })),
@@ -145,14 +160,18 @@ export class TreasuryBucketsService {
   /** §15.6 — set or unset a bucket as the default for an operation kind.
    *  Setting true on bucket B for op X auto-clears the same flag on every
    *  OTHER bucket of the same multisig config (partial unique enforces this
-   *  at the DB layer too — we clear first to avoid the conflict). */
-  async setDefault(userId: string, bucketId: string, operation: 'FUNDING' | 'REWARDS' | 'OPERATIONS', value: boolean) {
+   *  at the DB layer too — we clear first to avoid the conflict).
+   *
+   *  Operations:
+   *   • FUNDING / REWARDS / OPERATIONS — outbound (platform spends from here)
+   *   • SUBMISSION_FEES / PLEDGE       — inbound (platform tells submitters
+   *     to pay here)
+   */
+  async setDefault(userId: string, bucketId: string, operation: BucketOperation, value: boolean) {
     if (!(await this.isBoard(userId))) throw new ForbiddenException('board members only');
     const bucket = await this.prisma.treasuryBucket.findUnique({ where: { id: bucketId } });
     if (!bucket) throw new NotFoundException('bucket not found');
-    const column = operation === 'FUNDING'    ? 'isDefaultFunding'
-                 : operation === 'REWARDS'    ? 'isDefaultRewards'
-                                              : 'isDefaultOperations';
+    const column = OPERATION_COLUMN[operation];
     await this.prisma.$transaction(async (tx) => {
       if (value) {
         await tx.treasuryBucket.updateMany({
@@ -166,9 +185,9 @@ export class TreasuryBucketsService {
   }
 
   /** §15.6 — look up the default bucket for an operation. Falls back to the
-   *  primary when no explicit default is set, so platform-generated actions
-   *  always have a source. Returns null only when no multisig exists. */
-  async defaultBucketFor(operation: 'FUNDING' | 'REWARDS' | 'OPERATIONS') {
+   *  primary when no explicit default is set, so flows always have a target.
+   *  Returns null only when no multisig exists. */
+  async defaultBucketFor(operation: BucketOperation) {
     const active = await this.prisma.multisigConfig.findFirst({
       where: { replacedAt: null },
       orderBy: { assembledAt: 'desc' },
@@ -176,9 +195,7 @@ export class TreasuryBucketsService {
     if (!active) return null;
     // Auto-create the primary so we always have a fallback.
     await this.ensurePrimary(active.id, active.bech32Address, active.scriptJson as object, active.scriptHash);
-    const column = operation === 'FUNDING'    ? 'isDefaultFunding'
-                 : operation === 'REWARDS'    ? 'isDefaultRewards'
-                                              : 'isDefaultOperations';
+    const column = OPERATION_COLUMN[operation];
     const tagged = await this.prisma.treasuryBucket.findFirst({
       where: { configId: active.id, [column]: true },
     });
