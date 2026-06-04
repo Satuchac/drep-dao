@@ -48,6 +48,7 @@ model AppUser {
   boardMultisigKey       BoardMultisigKey[]
   hotWalletSweeps        HotWalletSweep[]
   multisigCommitments    MultisigCommitment[]
+  treasuryBucketsCreated TreasuryBucket[]
 
   @@map("app_user")
 }
@@ -793,12 +794,16 @@ model MultisigAction {
   // with these as required_signers; tx-witness submissions are gated to
   // exactly these signers. Null while still in phase-1 (collecting commits).
   committedKeyHashes String[] @map("committed_key_hashes")
+  // §15.5 — for BOARD_TRANSFER (and similar) actions: which labeled bucket
+  // the funds come from. NULL = primary (bare multisig) bucket.
+  sourceBucketId  String? @map("source_bucket_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   signatures  MultisigSignature[]
   commitments MultisigCommitment[]
   fromConfig  MultisigConfig?     @relation("MultisigActionFromConfig", fields: [fromConfigId], references: [id])
   toConfig    MultisigConfig?     @relation("MultisigActionToConfig",   fields: [toConfigId],   references: [id])
+  sourceBucket TreasuryBucket?    @relation("MultisigActionSourceBucket", fields: [sourceBucketId], references: [id])
 
   @@index([proposalId])
   @@index([milestoneId])
@@ -1169,8 +1174,33 @@ model MultisigConfig {
   predecessors      MultisigConfig[] @relation("MultisigSuccession")
   migrationsFrom    MultisigAction[] @relation("MultisigActionFromConfig")
   migrationsTo      MultisigAction[] @relation("MultisigActionToConfig")
+  buckets           TreasuryBucket[]
 
   @@map("multisig_config")
+}
+
+// §15.5 — labeled treasury sub-addresses sharing the same multisig. Each
+// bucket = wrapped multisig script with a label hash embedded, producing a
+// distinct on-chain address while preserving the N-of-N signing requirement.
+// `isPrimary` flags the bare (unlabeled) multisig address; non-primary rows
+// are board-created buckets ("Submission fees", "Rewards", …).
+model TreasuryBucket {
+  id            String   @id @default(uuid()) @db.Uuid
+  configId      String   @db.Uuid
+  label         String
+  scriptJson    Json
+  scriptHash    String   @unique
+  bech32Address String   @unique
+  isPrimary     Boolean  @default(false)
+  createdById   String?  @db.Uuid
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+
+  config        MultisigConfig   @relation(fields: [configId], references: [id], onDelete: Cascade)
+  createdBy     AppUser?         @relation(fields: [createdById], references: [id])
+  actionsAsSource MultisigAction[] @relation("MultisigActionSourceBucket")
+
+  @@unique([configId, label])
+  @@map("treasury_bucket")
 }
 
 // Singleton (id always 1) — platform-wide operational state.

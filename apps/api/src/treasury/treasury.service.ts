@@ -234,7 +234,7 @@ export class TreasuryService {
    *  written context that gets recorded as the action description (audit
    *  trail). Refuses when the destination address is malformed, the amount
    *  is non-positive, or the live treasury balance can't cover it. */
-  async prepareBoardTransfer(userId: string, dto: { destAddress: string; amountAda: number; context: string }) {
+  async prepareBoardTransfer(userId: string, dto: { destAddress: string; amountAda: number; context: string; sourceBucketId?: string }) {
     if (!(await this.boardDrep(userId))) throw new ForbiddenException('board members only');
     const dest = (dto.destAddress ?? '').trim();
     if (!/^addr(_test)?[a-z0-9]+$/i.test(dest)) {
@@ -256,6 +256,18 @@ export class TreasuryService {
     // push to READY when the treasury can't cover the amount, so queueing
     // when underfunded is harmless — boardActionsFor() also flags it with
     // `insufficient: true` so signers see the gap before they approve.
+    // §15.5 — validate sourceBucketId (must belong to the active multisig).
+    // NULL = primary bucket; the broadcast service falls back to the active
+    // multisig's bare script in that case.
+    let sourceBucketId: string | null = null;
+    if (dto.sourceBucketId) {
+      const bucket = await this.prisma.treasuryBucket.findUnique({ where: { id: dto.sourceBucketId } });
+      const active = await this.prisma.multisigConfig.findFirst({ where: { replacedAt: null }, orderBy: { assembledAt: 'desc' } });
+      if (!bucket || !active || bucket.configId !== active.id) {
+        throw new BadRequestException('sourceBucketId does not belong to the active multisig');
+      }
+      sourceBucketId = bucket.id;
+    }
     const row = await this.prisma.multisigAction.create({
       data: {
         kind: 'BOARD_TRANSFER',
@@ -263,6 +275,7 @@ export class TreasuryService {
         amountAda: BigInt(Math.round(dto.amountAda * ADA)),
         destAddress: dest,
         description: context,
+        sourceBucketId,
       },
     });
     return { id: row.id, status: row.status, amountAda: dto.amountAda, destAddress: dest };

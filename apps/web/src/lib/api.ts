@@ -235,8 +235,10 @@ export const treasuryApi = {
   prepareTopUp: (amountAda: number) =>
     request<{ id: string }>('/admin/treasury/prepare-topup', { method: 'POST', body: JSON.stringify({ amountAda }) }),
   /** §15.4 — board-initiated arbitrary outbound transfer; goes through the
-   *  standard 3-of-N Approve & sign flow. Context is the audit description. */
-  prepareTransfer: (body: { destAddress: string; amountAda: number; context: string }) =>
+   *  standard 3-of-N Approve & sign flow. Context is the audit description.
+   *  sourceBucketId picks WHICH labeled bucket the funds come from
+   *  (null/omitted = the primary/bare multisig bucket). */
+  prepareTransfer: (body: { destAddress: string; amountAda: number; context: string; sourceBucketId?: string }) =>
     request<{ id: string; status: string; amountAda: number; destAddress: string }>(
       '/admin/treasury/prepare-transfer',
       { method: 'POST', body: JSON.stringify(body) },
@@ -349,6 +351,24 @@ export const multisigApi = {
       method: 'POST',
       body: JSON.stringify({ fromConfigId }),
     }),
+};
+
+// §15.5 — labeled treasury buckets (sub-addresses of the same multisig).
+export interface TreasuryBucket {
+  id: string;
+  label: string;          // "Primary" for the bare-multisig row, otherwise the user-chosen label
+  bech32Address: string;
+  isPrimary: boolean;
+  balanceAda: number;
+  createdBy: string | null;
+}
+export const treasuryBucketsApi = {
+  list: () => request<{ multisigConfigured: boolean; buckets: TreasuryBucket[] }>('/dao/treasury/buckets'),
+  create: (label: string) =>
+    request<{ id: string; label: string; bech32Address: string; scriptHash: string }>(
+      '/admin/treasury/buckets',
+      { method: 'POST', body: JSON.stringify({ label }) },
+    ),
 };
 
 // §15.4 — user's payment address for rewards. Editable; historical RewardEntry

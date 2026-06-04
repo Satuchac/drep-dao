@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { treasuryApi, configApi, type TreasuryOverview, type PublicConfig } from '@/lib/api';
+import { treasuryApi, configApi, treasuryBucketsApi, type TreasuryOverview, type PublicConfig, type TreasuryBucket } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 
 /**
@@ -20,6 +20,8 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
   const isBoard = !!profile?.roles.includes('BOARD');
   const [overview, setOverview] = useState<TreasuryOverview | null>(null);
   const [cfg, setCfg] = useState<PublicConfig | null>(null);
+  const [buckets, setBuckets] = useState<TreasuryBucket[]>([]);
+  const [sourceBucketId, setSourceBucketId] = useState<string>(''); // '' = primary
   const [dest, setDest] = useState('');
   const [amount, setAmount] = useState('');
   const [context, setContext] = useState('');
@@ -31,6 +33,7 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
   const load = useCallback(() => {
     treasuryApi.overview().then(setOverview).catch(() => setOverview(null));
     configApi.get().then(setCfg).catch(() => setCfg(null));
+    treasuryBucketsApi.list().then((r) => setBuckets(r.buckets)).catch(() => setBuckets([]));
   }, []);
   useEffect(load, [load]);
 
@@ -52,7 +55,12 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
     );
   }
 
-  const treasuryAda = overview?.treasury.balanceAda ?? 0;
+  // The picked source's live balance (defaults to primary). When buckets
+  // are available, the dropdown lets the board switch between them.
+  const selectedBucket = sourceBucketId
+    ? buckets.find((b) => b.id === sourceBucketId)
+    : buckets.find((b) => b.isPrimary);
+  const treasuryAda = selectedBucket?.balanceAda ?? overview?.treasury.balanceAda ?? 0;
   const amt = Number(amount);
   const validAmount = Number.isFinite(amt) && amt > 0;
   const insufficient = validAmount && amt > treasuryAda;
@@ -70,6 +78,7 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
         destAddress: dest.trim(),
         amountAda: amt,
         context: context.trim(),
+        sourceBucketId: sourceBucketId || undefined,
       });
       setSuccess(`Transfer of ${amt.toLocaleString()} ₳ queued — awaiting 3-of-N board signatures in the queue below.`);
       setDest(''); setAmount(''); setContext('');
@@ -91,9 +100,28 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
         </span>
       </div>
       <p className="mt-1 text-xs text-neutral-500">
-        Any board member can queue an outbound transfer. It then needs 3-of-N board signatures in the
-        Approve&nbsp;&amp;&nbsp;sign queue below; on the 3rd signature the platform builds + broadcasts the tx.
+        Any board member can queue an outbound transfer. It then needs every board signature in the
+        Approve&nbsp;&amp;&nbsp;sign queue below; on the last signature the platform builds + broadcasts the tx.
       </p>
+      {/* §15.5 — Source bucket picker. Only shown when more than the
+          primary bucket exists; otherwise the primary is the implicit
+          source and we don't clutter the form. */}
+      {buckets.length > 1 ? (
+        <label className="mt-2 block text-xs">
+          Source bucket
+          <select
+            value={sourceBucketId}
+            onChange={(e) => { setSourceBucketId(e.target.value); setSuccess(null); }}
+            className="mt-0.5 block w-full rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+          >
+            {buckets.map((b) => (
+              <option key={b.id} value={b.isPrimary ? '' : b.id}>
+                {b.label} — {b.balanceAda.toLocaleString()} ₳
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_8rem]">
         <label className="block text-xs">
           Destination address

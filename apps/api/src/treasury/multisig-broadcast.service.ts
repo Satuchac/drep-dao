@@ -79,10 +79,11 @@ export class MultisigBroadcastService {
     const txb = CSL.TransactionBuilder.new(this.builderCfg(pp));
     const srcAddr = CSL.Address.from_bech32(source.bech32Address);
 
-    // Build the native script that locks the source UTxOs: N-of-N (every key
-    // must sign). Attach it with every input so the builder sizes the
-    // witness set + fee correctly.
-    const nativeScript = this.buildNativeScript(source.keyHashes);
+    // Build the native script that actually locks the source UTxOs. For a
+    // labeled bucket this is the wrapped script (bucket = multisig + label
+    // clause); for the primary multisig or migration source it's the bare
+    // multisig script. Both spend with the same N board witnesses.
+    const nativeScript = this.scriptJsonToCSL(source.spendingScriptJson);
 
     let totalIn = 0n;
     for (const u of utxos) {
@@ -226,7 +227,9 @@ export class MultisigBroadcastService {
     const witnessSet = CSL.TransactionWitnessSet.new();
     witnessSet.set_vkeys(vkeyWitnesses);
     const nativeScripts = CSL.NativeScripts.new();
-    nativeScripts.add(this.buildNativeScript(source.keyHashes));
+    // Attach the exact script that locks the source UTxOs (bare multisig
+    // for primary/migration; wrapped script for labeled buckets).
+    nativeScripts.add(this.scriptJsonToCSL(source.spendingScriptJson));
     witnessSet.set_native_scripts(nativeScripts);
 
     const tx = CSL.Transaction.new(txBody, witnessSet);
@@ -252,18 +255,41 @@ export class MultisigBroadcastService {
     return { status: 'CONFIRMED', txHash, approvals: vkeyWitnesses.len(), threshold };
   }
 
-  /** Resolve which script address + keyhashes the action moves funds OUT of. */
-  private async resolveSource(action: { kind: string; fromConfigId: string | null }): Promise<{ bech32Address: string; scriptHash: string; keyHashes: string[]; threshold: number }> {
+  /** Resolve which script address + script (for witness packing) + signing
+   *  keyhashes the action moves funds OUT of. The script attached to inputs
+   *  is the *bucket's* full script (which embeds the multisig); the
+   *  threshold + required-signer keys still come from the underlying
+   *  multisig. */
+  private async resolveSource(action: { kind: string; fromConfigId: string | null; sourceBucketId?: string | null }): Promise<{ bech32Address: string; scriptHash: string; keyHashes: string[]; threshold: number; spendingScriptJson: object }> {
     if (action.kind === 'MIGRATION' && action.fromConfigId) {
       const c = await this.prisma.multisigConfig.findUnique({ where: { id: action.fromConfigId } });
       if (!c) throw new ConflictException('migration source multisig missing');
       const keyHashes = ((c.scriptJson as { scripts?: { keyHash: string }[] } | null)?.scripts ?? []).map((s) => s.keyHash);
-      return { bech32Address: c.bech32Address, scriptHash: c.scriptHash, keyHashes, threshold: c.threshold };
+      return { bech32Address: c.bech32Address, scriptHash: c.scriptHash, keyHashes, threshold: c.threshold, spendingScriptJson: c.scriptJson as object };
+    }
+    // §15.5 — bucket-aware lookup. When the action targets a labeled bucket,
+    // we spend from THAT bucket's address with THAT bucket's script (which
+    // wraps the multisig + a label clause). Signing requirements come from
+    // the multisig keys (same N keys, same N-of-N rule).
+    if (action.sourceBucketId) {
+      const bucket = await this.prisma.treasuryBucket.findUnique({
+        where: { id: action.sourceBucketId },
+        include: { config: true },
+      });
+      if (!bucket) throw new ConflictException('source bucket missing');
+      const keyHashes = ((bucket.config.scriptJson as { scripts?: { keyHash: string }[] } | null)?.scripts ?? []).map((s) => s.keyHash);
+      return {
+        bech32Address: bucket.bech32Address,
+        scriptHash: bucket.scriptHash,
+        keyHashes,
+        threshold: bucket.config.threshold,
+        spendingScriptJson: bucket.scriptJson as object,
+      };
     }
     const active = await this.prisma.multisigConfig.findFirst({ where: { replacedAt: null }, orderBy: { assembledAt: 'desc' } });
     if (!active) throw new ConflictException('no active multisig — assemble the board signing keys first');
     const keyHashes = ((active.scriptJson as { scripts?: { keyHash: string }[] } | null)?.scripts ?? []).map((s) => s.keyHash);
-    return { bech32Address: active.bech32Address, scriptHash: active.scriptHash, keyHashes, threshold: active.threshold };
+    return { bech32Address: active.bech32Address, scriptHash: active.scriptHash, keyHashes, threshold: active.threshold, spendingScriptJson: active.scriptJson as object };
   }
 
   /** N-of-N native script: every key in the multisig must sign. */
@@ -274,6 +300,33 @@ export class MultisigBroadcastService {
       scripts.add(CSL.NativeScript.new_script_pubkey(CSL.ScriptPubkey.new(ed)));
     }
     return CSL.NativeScript.new_script_all(CSL.ScriptAll.new(scripts));
+  }
+
+  /** Reconstruct a CSL.NativeScript from our stored JSON shape. Mirrors the
+   *  reader in TreasuryBucketsService so labeled buckets can be re-built
+   *  byte-for-byte at submit time. */
+  private scriptJsonToCSL(json: object): CSL.NativeScript {
+    const node = json as { type: string; required?: number; scripts?: object[] };
+    if (node.type === 'sig') {
+      const kh = (json as { keyHash: string }).keyHash;
+      return CSL.NativeScript.new_script_pubkey(CSL.ScriptPubkey.new(CSL.Ed25519KeyHash.from_hex(kh)));
+    }
+    if (node.type === 'all') {
+      const arr = CSL.NativeScripts.new();
+      for (const child of node.scripts ?? []) arr.add(this.scriptJsonToCSL(child));
+      return CSL.NativeScript.new_script_all(CSL.ScriptAll.new(arr));
+    }
+    if (node.type === 'any') {
+      const arr = CSL.NativeScripts.new();
+      for (const child of node.scripts ?? []) arr.add(this.scriptJsonToCSL(child));
+      return CSL.NativeScript.new_script_any(CSL.ScriptAny.new(arr));
+    }
+    if (node.type === 'atLeast') {
+      const arr = CSL.NativeScripts.new();
+      for (const child of node.scripts ?? []) arr.add(this.scriptJsonToCSL(child));
+      return CSL.NativeScript.new_script_n_of_k(CSL.ScriptNOfK.new(node.required ?? 0, arr));
+    }
+    throw new Error(`unknown native-script node type: ${node.type}`);
   }
 
   private builderCfg(pp: Record<string, string | number>) {

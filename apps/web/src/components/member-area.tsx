@@ -28,6 +28,7 @@ import { RewardAddressPanel } from './reward-address-panel';
 import { MultisigSetup } from './multisig-setup';
 import { HotWalletControls } from './hot-wallet-controls';
 import { SendFromTreasuryPanel } from './send-from-treasury-panel';
+import { TreasuryBucketsPanel } from './treasury-buckets-panel';
 import { LeaveDao } from './leave-dao';
 import { BackButton } from './round-ui';
 
@@ -182,6 +183,7 @@ function TreasuryTab() {
         </label>
       </div>
       <MultisigSetup />
+      <TreasuryBucketsPanel onChange={bumpRefresh} />
       <HotWalletControls onChange={bumpRefresh} />
       <SendFromTreasuryPanel onChange={bumpRefresh} />
       <BoardActions history={showHistory} refreshKey={refreshKey} onChange={bumpRefresh} />

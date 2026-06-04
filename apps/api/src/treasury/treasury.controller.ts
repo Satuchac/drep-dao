@@ -13,6 +13,8 @@ export class BoardTransferDto {
   @IsString() @MaxLength(200) destAddress!: string;
   @IsNumber() @Min(0.000001) amountAda!: number;
   @IsString() @MaxLength(2000) context!: string;
+  /** §15.5 — optional source bucket id. Null/missing = primary bucket. */
+  @IsOptional() @IsString() @MaxLength(40) sourceBucketId?: string;
 }
 // No body needed — sweeps the entire hot-wallet balance.
 export class EmptyDto {}
