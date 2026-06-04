@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { treasuryApi, type TreasuryOverview } from '@/lib/api';
+import { treasuryApi, configApi, type TreasuryOverview, type PublicConfig } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 
 /**
@@ -19,6 +19,7 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
   const { profile } = useAuth();
   const isBoard = !!profile?.roles.includes('BOARD');
   const [overview, setOverview] = useState<TreasuryOverview | null>(null);
+  const [cfg, setCfg] = useState<PublicConfig | null>(null);
   const [dest, setDest] = useState('');
   const [amount, setAmount] = useState('');
   const [context, setContext] = useState('');
@@ -29,10 +30,27 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
 
   const load = useCallback(() => {
     treasuryApi.overview().then(setOverview).catch(() => setOverview(null));
+    configApi.get().then(setCfg).catch(() => setCfg(null));
   }, []);
   useEffect(load, [load]);
 
   if (!isBoard) return null;
+  // §15.3 — without the assembled multisig there's no on-chain source to
+  // build a tx from (the platform doesn't sign the env TREASURY_ADDRESS),
+  // so queueing a transfer would just create a row that can't be acted on.
+  // Self-hides until the board completes setup.
+  if (cfg && !cfg.multisigConfigured) {
+    return (
+      <section className="rounded-lg border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="font-semibold">Send from treasury</div>
+        <div className="mt-1 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          The board hasn&apos;t finished assembling the multisig yet. Until every seat has submitted a signing key
+          (see <strong>Treasury multisig — setup</strong> above), the platform doesn&apos;t have a script address
+          to send funds out of. The form returns once the multisig is built.
+        </div>
+      </section>
+    );
+  }
 
   const treasuryAda = overview?.treasury.balanceAda ?? 0;
   const amt = Number(amount);

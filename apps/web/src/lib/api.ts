@@ -938,6 +938,10 @@ export interface PublicConfig {
   pledgeAddress: string | null;
   anchorMetadataLabel: number;
   internalThresholds: { default: number; important: number };
+  /** §15.3 — true once the board has assembled the on-chain multisig. UI
+   *  uses this to gate features that only make sense when the script
+   *  address exists (e.g. queueing board-initiated transfers). */
+  multisigConfigured: boolean;
 }
 export const configApi = { get: () => request<PublicConfig>('/config') };
 
