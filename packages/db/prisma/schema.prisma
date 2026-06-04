@@ -24,6 +24,9 @@ model AppUser {
   displayName  String?  @map("display_name")
   drepKeyHash  String?  @map("drep_key_hash") // CIP-95 DRep key hash (on-chain DRep identity), if any
   drepRegistered Boolean @default(false) @map("drep_registered") // verified on-chain (registered + active) at last login
+  // §15 treasury multisig: the board member's registered PAYMENT key hash (28-byte hex)
+  // — the credential their wallet signs a treasury spend with (≠ the DRep/stake key).
+  treasuryKeyHash String? @map("treasury_key_hash")
   // §20 personal preferences: which block explorer this member's on-chain links use.
   explorerPref       String? @map("explorer_pref") // cardanoscan | cexplorer | adastat | custom
   explorerCustomTxUrl String? @map("explorer_custom_tx_url") // template with {hash} when explorerPref='custom'
@@ -642,16 +645,35 @@ model RewardEntry {
 model MultisigAction {
   id          String   @id @default(uuid()) @db.Uuid
   kind        String // REWARD_PAYOUT, PROJECT_FUNDING, PLEDGE_RETURN, OPS, LEFTOVER_RETURN
-  txCbor      String?  @map("tx_cbor")
+  txCbor      String?  @map("tx_cbor") // unsigned spend tx (built at prepare) the board signs
   txHash      String?  @map("tx_hash")
-  status      String // PENDING_SIGS, BROADCASTED, CONFIRMED, FAILED
+  status      String // PENDING_SIGS, READY, BROADCASTED, CONFIRMED, FAILED
   amountAda   BigInt?  @map("amount_ada")
+  recipient   String? // bech32 destination of the spend (e.g. the hot wallet for a top-up)
+  policyId    String?  @map("policy_id") @db.Uuid // treasury policy whose script funds this
   description String?
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   signatures MultisigSignature[]
 
   @@map("multisig_action")
+}
+
+// §15 — the board's confirmed 3-of-5 native-script policy: the assembled script,
+// its hash, and the derived treasury address. Built from the board members'
+// registered payment key hashes; once CONFIRMED it funds every MultisigAction.
+model TreasuryPolicy {
+  id              String    @id @default(uuid()) @db.Uuid
+  scriptHash      String    @unique @map("script_hash") // native-script hash (policy id) hex
+  scriptCbor      String    @map("script_cbor") // the native script, hex — re-derivable + verifiable
+  address         String // bech32 treasury (enterprise script) address
+  required        Int // signatures needed (3)
+  memberKeyHashes Json      @map("member_key_hashes") // ordered [{ keyHash, drepKeyHash?, name? }]
+  status          String // DRAFT, CONFIRMED, RETIRED
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  confirmedAt     DateTime? @map("confirmed_at") @db.Timestamptz(6)
+
+  @@map("treasury_policy")
 }
 
 model MultisigSignature {

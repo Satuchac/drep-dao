@@ -92,12 +92,21 @@ PENDING_SIGS ──(3-of-5 approvals)──▶ READY ──(assemble+broadcast)�
                                                                                   └─▶ FAILED
 ```
 
-`PENDING_SIGS → READY` is built. **`READY → BROADCASTED` is the next on-chain
-step:** turn the 3 collected approvals into real native-script witnesses and
-submit the multisig payment. It's intentionally deferred until the on-chain
-3-of-5 script + funded treasury exist on Preprod, because it must sign a *real*
-transaction, not a message. Until then the platform proves the full
-prepare → notify → 3-of-5 approve loop with verifiable signatures.
+**`READY → BROADCASTED` is now built** (`MultisigService` + `apps/api/src/treasury/multisig.ts`,
+offline-proven in `tools/test-multisig.cjs`). The board first **registers a treasury
+signing key** (their wallet payment key hash) and **assembles + confirms** the `atLeast 3`
+native script → `TreasuryPolicy` (script + derived enterprise address). Then, per action,
+the platform builds the **unsigned spend tx** (treasury UTxOs → recipient, change back),
+each board member **`signTx`-partial-signs** it in their wallet, and the server verifies the
+vkey witness (signs this tx + is a policy key) and stores it. At **3 distinct witnesses** it
+**merges the witnesses + native script and submits** to Koios `/submittx` (→ BROADCASTED;
+on submit failure it stays READY for a board **Retry broadcast**). Submission degrades
+gracefully when the treasury address is unfunded (mirrors the anchor wallet), so the full
+register → confirm → sign → broadcast loop is exercised before mainnet funding.
+
+The earlier CIP-30 `signData` **message** approval (`TreasuryService.approve`) remains as a
+fallback recorded-approval path until a policy is confirmed; once confirmed, approving an
+action signs the **real transaction**.
 
 ## Data model (Prisma, §24.9)
 

@@ -5,9 +5,11 @@ import { authApi, type UserProfile } from './api';
 import {
   detectDRepId,
   getDRepKeyHex,
+  getPaymentKeyHash,
   getStakeAddress,
   listInjectedWallets,
   signMessageWithStakeKey,
+  signTxWithWallet,
   utf8ToHex,
   type Cip30Api,
   type Cip30WalletEntry,
@@ -25,6 +27,10 @@ interface AuthState {
   detectDRepId: () => Promise<string | null>;
   /** Sign a message with the connected wallet's stake key (CIP-30 signData); null if unavailable. */
   signMessage: (message: string) => Promise<{ signature: string; key: string } | null>;
+  /** §15 — partial-sign a treasury spend tx (CIP-30 signTx); returns the witness-set hex, or null if no wallet. */
+  signTx: (txHex: string) => Promise<string | null>;
+  /** §15 — the connected wallet's treasury PAYMENT key hash (to register for the multisig); null if no wallet. */
+  getTreasuryKeyHash: () => Promise<string | null>;
 }
 
 // Remember WHICH wallet the user logged in with, so signing after a page reload
@@ -100,6 +106,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return await signMessageWithStakeKey(api, message);
   }, []);
 
+  // Re-acquire the SAME wallet the user logged in with (cf. signMessage), or null if unknown.
+  const reacquire = useCallback(async (): Promise<Cip30Api | null> => {
+    let api = walletApiRef.current;
+    if (!api) {
+      const key = walletKeyRef.current;
+      const entry = key ? listInjectedWallets().find((w) => w.key === key) : null;
+      if (!entry) return null;
+      api = (await getStakeAddress(entry)).api; // enable() may throw if the user rejects → propagate
+      walletApiRef.current = api;
+    }
+    return api;
+  }, []);
+
+  // §15 — partial-sign a treasury spend tx. Throws if the user cancels (never record an
+  // unsigned witness); null only when the logged-in wallet can't be reached.
+  const signTx = useCallback(async (txHex: string) => {
+    const api = await reacquire();
+    if (!api) return null;
+    return signTxWithWallet(api, txHex);
+  }, [reacquire]);
+
+  // §15 — the wallet's treasury payment key hash, for registering the multisig signing key.
+  const getTreasuryKeyHash = useCallback(async () => {
+    const api = await reacquire();
+    if (!api) return null;
+    return getPaymentKeyHash(api);
+  }, [reacquire]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -112,6 +146,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         refreshWallets,
         detectDRepId: detect,
         signMessage,
+        signTx,
+        getTreasuryKeyHash,
       }}
     >
       {children}

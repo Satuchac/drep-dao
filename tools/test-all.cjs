@@ -19,7 +19,9 @@ if (!fs.existsSync(path.join(__dirname, '..', 'apps/api/dist/drep/drep.service.j
 }
 
 // Order matters: genesis leaves the 5-board seated; the rest build on it.
+// (test-multisig is offline crypto — no DB/Koios — so it runs first, fast.)
 const SUITES = [
+  ['test-multisig', '§15 native-script 3-of-5 treasury: script/address determinism, 3-of-5 assembly, quorum + membership (offline)'],
   ['test-genesis', 'Genesis: JSON load, partial load, add/remove, incremental'],
   ['test-cast', 'Cast roles: board / voting DRep / ADA holder + genesis verify'],
   ['test-dao', 'DAO membership: board auto-member, join + 3-of-5 admission'],

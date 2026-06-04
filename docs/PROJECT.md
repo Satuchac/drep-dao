@@ -388,10 +388,12 @@ through *oversight* and *funding*:
 - Pending actions appear as a **red-circle badge** in the login card showing the
   count of actions *awaiting this member's signature*. Clicking it jumps to
   *My area*, where the **"Actions to sign"** panel lists each action.
-- A board member **approves** an action with a **free CIP-30 signature** over a
-  canonical message (`boardActionMessage(...)`); the API verifies it and records
-  a `MultisigSignature`. At 3 approvals the action flips to `READY` (assembled
-  native-multisig tx → broadcast is the next on-chain step).
+- Once the **3-of-5 native-script policy is confirmed** (§15), approving an action
+  **`signTx`-signs the real transaction** in the board member's wallet; the API
+  verifies the vkey witness and stores it, and at **3 witnesses** merges them with
+  the native script and **broadcasts** the spend (`READY → BROADCASTED`). Before a
+  policy exists, approval falls back to a **free CIP-30 `signData`** message
+  signature (`boardActionMessage(...)`) recorded as a `MultisigSignature`.
 - The panel and badge self-hide when there's nothing to sign.
 
 ## 8. Backend modules (`apps/api/src`)
@@ -472,8 +474,13 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   board-confirmed stage transitions with auto-start/manual launch + delay shift,
   auto-start scheduler, manual round close), **Rounds list** + **Active-proposals**
   browser with per-status counts.
-- **Next on-chain step:** assemble + broadcast the **native-multisig tx** once an
-  action reaches `READY` (currently the platform collects 3-of-5 signed approvals;
-  building/signing/submitting the actual multisig payment needs the real on-chain
-  multisig set up — see `TREASURY.md`).
-- **Future hardening:** move the hot-wallet key to KMS/HSM + a signing service.
+- **Native-multisig broadcast (§15) — built.** The board **registers signing keys**
+  (wallet payment key hashes), the platform **assembles + confirms** the `atLeast 3`
+  native script → `TreasuryPolicy` (script + derived treasury address), builds each
+  **unsigned spend tx**, collects **3 real `signTx` vkey witnesses** (verified to sign
+  this tx + be a policy key), then **merges witnesses + script and submits** to the
+  chain (`READY → BROADCASTED`, board **Retry broadcast** if a submit fails). Crypto
+  core is offline-proven in `tools/test-multisig.cjs`; live submit awaits a funded
+  Preprod treasury (degrades gracefully until then). See `TREASURY.md`.
+- **Future hardening:** move the hot-wallet key to KMS/HSM + a signing service;
+  observe broadcast txs to flip `BROADCASTED → CONFIRMED`.

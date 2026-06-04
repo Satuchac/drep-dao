@@ -177,7 +177,30 @@ export const treasuryApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+
+  // §15 native-script (3-of-5) treasury policy + real on-chain broadcast.
+  registerSigningKey: (keyHash: string) =>
+    request<{ registered: boolean; keyHash: string }>('/me/treasury/signing-key', { method: 'POST', body: JSON.stringify({ keyHash }) }),
+  policy: () => request<TreasuryPolicyStatus>('/admin/treasury/policy'),
+  confirmPolicy: () =>
+    request<{ address: string; scriptHash: string; required: number }>('/admin/treasury/policy/confirm', { method: 'POST' }),
+  actionTx: (id: string) => request<{ txHex: string; txHash: string; address: string }>(`/admin/board-actions/${id}/tx`),
+  signAction: (id: string, witnessSet: string) =>
+    request<{ approvals: number; threshold: number; status: string; txHash?: string }>(`/admin/board-actions/${id}/sign`, {
+      method: 'POST',
+      body: JSON.stringify({ witnessSet }),
+    }),
+  broadcastAction: (id: string) =>
+    request<{ approvals: number; threshold: number; status: string; txHash?: string }>(`/admin/board-actions/${id}/broadcast`, { method: 'POST' }),
 };
+
+export interface TreasuryPolicyStatus {
+  required: number;
+  seats: { name: string; drepKeyHash: string; registered: boolean }[];
+  registeredCount: number;
+  canAssemble: boolean;
+  policy: { address: string; scriptHash: string; required: number; status: string; confirmedAt: string | null } | null;
+}
 
 export interface GovParam {
   key: string;
