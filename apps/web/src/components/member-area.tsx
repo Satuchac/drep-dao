@@ -164,6 +164,11 @@ function VotingReviewsTab() {
  *  to-dos (fees, pledges, stop-funding, budget settlements). */
 function TreasuryTab() {
   const [showHistory, setShowHistory] = useState(false);
+  // Bump on any treasury-affecting action (queue transfer, top-up, sweep) so
+  // BoardActions immediately refetches and the new pending row appears
+  // without a page reload.
+  const [refreshKey, setRefreshKey] = useState(0);
+  const bumpRefresh = () => setRefreshKey((n) => n + 1);
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -177,9 +182,9 @@ function TreasuryTab() {
         </label>
       </div>
       <MultisigSetup />
-      <HotWalletControls />
-      <SendFromTreasuryPanel />
-      <BoardActions history={showHistory} />
+      <HotWalletControls onChange={bumpRefresh} />
+      <SendFromTreasuryPanel onChange={bumpRefresh} />
+      <BoardActions history={showHistory} refreshKey={refreshKey} onChange={bumpRefresh} />
     </div>
   );
 }

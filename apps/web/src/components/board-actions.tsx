@@ -7,8 +7,11 @@ import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
 import { ConfirmDialog } from './confirm-dialog';
 
-/** §15.3 — pending board/treasury actions the platform prepared, awaiting 3-of-5 approval. */
-export function BoardActions({ onChange, history = false }: { onChange?: () => void; history?: boolean }) {
+/** §15.3 — pending board/treasury actions the platform prepared, awaiting 3-of-5 approval.
+ *  `refreshKey` is a parent-controlled counter — bumping it triggers an
+ *  immediate refetch so newly-queued actions (top-ups, sweeps, transfers)
+ *  appear without a page reload. */
+export function BoardActions({ onChange, history = false, refreshKey = 0 }: { onChange?: () => void; history?: boolean; refreshKey?: number }) {
   const { profile, signTx } = useAuth();
   const { txUrl } = useExplorer();
   const [actions, setActions] = useState<BoardAction[]>([]);
@@ -31,6 +34,9 @@ export function BoardActions({ onChange, history = false }: { onChange?: () => v
       .catch(() => { setActions([]); setPast([]); setTreasury(null); });
   }, [history]);
   useEffect(load, [load]);
+  // Refetch whenever the parent bumps refreshKey (e.g. SendFromTreasuryPanel
+  // just queued a transfer). Without this the row only appears on F5.
+  useEffect(() => { if (refreshKey > 0) load(); }, [refreshKey, load]);
 
   const setErr = (id: string, msg: string | null) =>
     setErrors((prev) => {
