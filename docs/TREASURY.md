@@ -70,34 +70,56 @@ address** for clean accounting:
 
 ## Board actions (preparing & signing a spend)
 
-Implemented in `apps/api/src/treasury` + `components/board-actions.tsx`:
+Implemented in `apps/api/src/treasury` (`treasury.service.ts`,
+`multisig-broadcast.service.ts`) + `components/board-actions.tsx`. A spend runs a
+**two-phase ceremony** so a native 3-of-5 script tx can be assembled deterministically
+(the fee + witness set depend on *which* 3 keys sign, so that set is fixed first):
 
 1. **Prepare** — `MultisigAction { kind, amountAda, description, status:
-   PENDING_SIGS }`. Auto-created when the hot wallet drops below
-   `HOT_WALLET_MIN_ADA (100 ₳)` → top-up of `HOT_WALLET_TOPUP_ADA (500 ₳)`; or
-   created explicitly by a board member.
-2. **Notify** — `GET /me/board-actions` returns the pending actions + a `count` of
-   those *this* member hasn't signed; that count drives the login **notification
-   badge**.
-3. **Approve** — `POST /admin/board-actions/:id/approve` with a CIP-30 signature
-   over `boardActionMessage(...)`. The API verifies it (CIP-8) and upserts a
-   `MultisigSignature` (unique per action+member).
-4. **Threshold** — at `APPROVAL_THRESHOLD (3)` signatures the action flips to
-   `READY`.
+   PENDING_SIGS }`. Created explicitly by a board member, or auto-prepared when the
+   hot wallet runs low: `maybePrepareTopUp` tops up `HOT_WALLET_TOPUP_ADA (500 ₳)`
+   when the balance is below `HOT_WALLET_MIN_ADA (100 ₳)`. The balance is read with
+   `addressBalanceStrict` (returns `null` on a Koios failure) so a transient blip is
+   never mistaken for an empty wallet → no spurious top-ups.
+2. **Phase 1 — Authorize (commit)** — `POST /admin/board-actions/:id/commit` with a
+   cheap CIP-30 `signData` over a commit message. Once `SIGNING_THRESHOLD (3)` members
+   commit, the platform snapshots exactly those 3 keyhashes onto the action
+   (`committedKeyHashes`) and it moves to phase 2 — fixing *which* 3 will sign.
+3. **Phase 2 — Sign tx (witness)** — `GET /admin/board-actions/:id/tx-body` builds the
+   unsigned tx (`required_signers` = the committed 3); each committed member `signTx`s
+   it and submits the witness via `POST /admin/board-actions/:id/witness`. **Only the 3
+   who authorized can sign** — others see "waiting for …", and the API rejects any
+   witness whose keyhash isn't in the committed set. The UI shows who authorized + who
+   has signed, by name.
+4. **Combine + broadcast** — on the 3rd witness the platform combines them with the
+   native script and submits via Koios `/submittx`; the action flips to `CONFIRMED`
+   with the on-chain tx hash.
+
+**Source of funds.** A spend sources from its `sourceBucketId` (default: the
+Operations-flagged bucket). Buckets are *separate* sub-addresses, so if the chosen
+bucket holds no UTxOs the build falls back to the **primary** multisig (where funds
+usually sit) and persists that choice, so the combine step attaches the matching
+script (else the chain rejects it with Missing/ExtraneousScriptWitnesses). Change
+returns to the same source.
+
+**Cancel.** Any board member can cancel a pending action
+(`POST /admin/board-actions/:id/cancel`) → `FAILED`, dropping it from the sign queue +
+notification count. Multiple top-ups may be queued; cancel the unwanted ones.
+
+The hot wallet is **auto-generated on boot** (independent of the multisig) and stored
+as a platform secret, so it has an address from day one and just needs funding.
 
 ### Lifecycle
 
 ```
-PENDING_SIGS ──(3-of-5 approvals)──▶ READY ──(assemble+broadcast)──▶ BROADCASTED ──▶ CONFIRMED
-                                                                                  └─▶ FAILED
+PENDING_SIGS ──(phase 1: 3 commit)──▶ PENDING_SIGS (signing) ──(phase 2: 3 witnesses → combine)──▶ CONFIRMED
+     │
+     └──(any member cancels)──▶ FAILED
 ```
 
-`PENDING_SIGS → READY` is built. **`READY → BROADCASTED` is the next on-chain
-step:** turn the 3 collected approvals into real native-script witnesses and
-submit the multisig payment. It's intentionally deferred until the on-chain
-3-of-5 script + funded treasury exist on Preprod, because it must sign a *real*
-transaction, not a message. Until then the platform proves the full
-prepare → notify → 3-of-5 approve loop with verifiable signatures.
+Real native-script broadcast is **live** on Preprod — the platform assembles the 3
+witnesses + script and submits the multisig payment; `READY`/`BROADCASTED` remain as
+intermediate states for the paste-the-tx-hash fallback path.
 
 ## Data model (Prisma, §24.9)
 
