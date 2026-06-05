@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { treasuryApi, type TreasuryOverview as Overview } from '@/lib/api';
+import { treasuryApi, treasuryBucketsApi, type TreasuryOverview as Overview, type TreasuryBucket } from '@/lib/api';
+import { CopyButton } from './copy-button';
 import { MultisigSetup } from './multisig-setup';
 import { HotWalletControls } from './hot-wallet-controls';
 import { TreasuryBucketsPanel } from './treasury-buckets-panel';
@@ -16,12 +17,23 @@ const roundColor = 'bg-violet-500';
 /** §15 — Treasury overview: budget buckets (allocated/spent/remaining) + balances. */
 export function TreasuryOverview() {
   const [data, setData] = useState<Overview | null>(null);
+  const [buckets, setBuckets] = useState<TreasuryBucket[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     treasuryApi.overview().then(setData).catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
+    // §15.5 — the multisig's sub-addresses (primary + labeled buckets), so the
+    // headline Treasury balance can be their SUM rather than just the primary.
+    treasuryBucketsApi.list().then((r) => setBuckets(r.buckets)).catch(() => setBuckets([]));
   }, []);
   useEffect(() => { load(); }, [load]);
+
+  // Total treasury = sum across every multisig sub-address (falls back to the
+  // primary balance from the overview if the bucket list isn't loaded yet).
+  const treasuryTotal = buckets.length > 0
+    ? buckets.reduce((s, b) => s + b.balanceAda, 0)
+    : (data?.treasury.balanceAda ?? 0);
+  const subAddrCount = buckets.length || 1;
 
   return (
     <div className="space-y-4">
@@ -42,7 +54,15 @@ export function TreasuryOverview() {
         <>
           {/* Balances */}
           <div className="grid gap-3 sm:grid-cols-2">
-            <Card label="Treasury (multisig) balance" value={data.treasury.configured ? `${ada(data.treasury.balanceAda)} ₳` : 'not configured'} addr={data.treasury.address} />
+            {/* Headline = SUM across all multisig sub-addresses; the per-address
+                breakdown (with Copy) lives in "Treasury buckets" below, so no
+                address is duplicated here. Highlighted in blue as the key figure. */}
+            <Card
+              label="Treasury (multisig) balance"
+              value={data.treasury.configured ? `${ada(treasuryTotal)} ₳` : 'not configured'}
+              note={data.treasury.configured ? `total across ${subAddrCount} sub-address${subAddrCount === 1 ? '' : 'es'} — see Treasury buckets below` : undefined}
+              tone="blue"
+            />
             <Card
               label="Anchor hot wallet"
               value={`${ada(data.hotWallet.balanceAda)} ₳`}
@@ -96,12 +116,21 @@ export function TreasuryOverview() {
   );
 }
 
-function Card({ label, value, addr, warn }: { label: string; value: string; addr: string | null; warn?: string }) {
+function Card({ label, value, addr, warn, note, tone = 'neutral' }: { label: string; value: string; addr?: string | null; warn?: string; note?: string; tone?: 'blue' | 'neutral' }) {
+  const wrap = tone === 'blue'
+    ? 'rounded-lg border border-blue-300 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/40'
+    : 'rounded-lg border border-neutral-200 p-3 dark:border-neutral-800';
   return (
-    <div className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+    <div className={wrap}>
       <div className="text-xs text-neutral-500">{label}</div>
-      <div className="text-lg font-semibold tabular-nums">{value}</div>
-      {addr ? <div className="mt-0.5 break-all font-mono text-[11px] text-neutral-400">{addr}</div> : null}
+      <div className={`text-lg font-semibold tabular-nums ${tone === 'blue' ? 'text-blue-800 dark:text-blue-200' : ''}`}>{value}</div>
+      {note ? <div className="mt-0.5 text-[11px] text-neutral-500">{note}</div> : null}
+      {addr ? (
+        <div className="mt-0.5 flex items-start gap-2">
+          <div className="flex-1 break-all font-mono text-[11px] text-neutral-400">{addr}</div>
+          <CopyButton text={addr} label="Copy" />
+        </div>
+      ) : null}
       {warn ? <div className="mt-1 text-xs text-amber-600">{warn}</div> : null}
     </div>
   );
