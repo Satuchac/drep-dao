@@ -162,7 +162,7 @@ export class MultisigBroadcastService {
     if (committed.length < SIGNING_THRESHOLD) {
       throw new ConflictException(`waiting on board authorizations — ${committed.length}/${SIGNING_THRESHOLD} committed`);
     }
-    const source = await this.resolveSource(action);
+    let source = await this.resolveSource(action);
     if (action.txCbor) {
       return {
         txBodyHex: action.txCbor,
@@ -174,9 +174,23 @@ export class MultisigBroadcastService {
     if (!action.destAddress) throw new ConflictException('action has no destination address');
     if (!action.amountAda) throw new ConflictException('action has no amount');
 
-    const utxos = await this.koiosPost<{ tx_hash: string; tx_index: number; value: string }[]>(
+    let utxos = await this.koiosPost<{ tx_hash: string; tx_index: number; value: string }[]>(
       '/address_utxos', { _addresses: [source.bech32Address] },
     );
+    // §15.6 — a chosen source BUCKET is its own sub-address and may be empty (the
+    // board funded the primary multisig, not that bucket). Rather than dead-end,
+    // fall back to the primary multisig (bare script), where the treasury's funds
+    // usually sit; change returns there too. The committed 3-of-5 board keys spend
+    // the primary script just the same (the bucket wrapper adds no extra signers).
+    if (!utxos.length && action.sourceBucketId) {
+      const primary = await this.resolveSource({ kind: action.kind, fromConfigId: action.fromConfigId, sourceBucketId: null });
+      if (primary.bech32Address !== source.bech32Address) {
+        const primaryUtxos = await this.koiosPost<{ tx_hash: string; tx_index: number; value: string }[]>(
+          '/address_utxos', { _addresses: [primary.bech32Address] },
+        );
+        if (primaryUtxos.length) { source = primary; utxos = primaryUtxos; }
+      }
+    }
     if (!utxos.length) {
       throw new ConflictException(`source multisig has no on-chain UTxOs (${source.bech32Address})`);
     }
