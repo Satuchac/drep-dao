@@ -42,9 +42,24 @@ export interface Cip30WalletEntry {
   key: string; // window.cardano key, e.g. "eternl"
   name: string;
   icon: string;
-  enable(): Promise<Cip30Api>;
+  enable(opts?: { extensions: { cip: number }[] }): Promise<Cip30Api>;
   isEnabled(): Promise<boolean>;
   apiVersion?: string;
+}
+
+/**
+ * §22 — enable the wallet REQUESTING the CIP-95 extension, so it exposes
+ * cip95.getPubDRepKey() (the DRep identity used for board/DRep recognition).
+ * A bare enable() leaves most wallets without the cip95 namespace, which made
+ * board members/DReps show up as "Viewer". Falls back to a plain enable for
+ * wallets that don't support CIP-95 (or if the user declines the extension).
+ */
+async function enableWallet(entry: Cip30WalletEntry): Promise<Cip30Api> {
+  try {
+    return await entry.enable({ extensions: [{ cip: 95 }] });
+  } catch {
+    return await entry.enable();
+  }
 }
 
 type CardanoWindow = Window & {
@@ -91,7 +106,7 @@ export async function connectAndSign(
   entry: Cip30WalletEntry,
   message: string,
 ): Promise<{ api: Cip30Api; stakeHex: string; stakeAddress: string; sign: () => Promise<WalletSignResult> }> {
-  const api = await entry.enable();
+  const api = await enableWallet(entry);
   const rewardAddrs = await api.getRewardAddresses();
   const stakeHex = rewardAddrs[0];
   if (!stakeHex) {
@@ -119,7 +134,7 @@ export async function signMessageWithStakeKey(
 
 /** Resolve the bech32 stake address only (used to request the nonce first). */
 export async function getStakeAddress(entry: Cip30WalletEntry): Promise<{ api: Cip30Api; stakeHex: string; stakeAddress: string }> {
-  const api = await entry.enable();
+  const api = await enableWallet(entry);
   const rewardAddrs = await api.getRewardAddresses();
   const stakeHex = rewardAddrs[0];
   if (!stakeHex) throw new Error('Wallet returned no reward (stake) address.');
