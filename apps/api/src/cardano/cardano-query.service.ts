@@ -87,8 +87,126 @@ export class CardanoQueryService {
     for (const r of rows) {
       const id = khToId.get(r.kh.toLowerCase());
       if (!id) continue;
-      const active = r.active_until != null && r.cur != null && Number(r.active_until) >= Number(r.cur);
+      // A registered DRep is active unless it carries an explicit expiry epoch in
+      // the past. No drep_distr row (active_until null) ⇒ recently registered / no
+      // delegated stake ⇒ still active (matches Koios, which keeps it registered).
+      const active = r.active_until == null || (r.cur != null && Number(r.active_until) >= Number(r.cur));
       out.set(id, { registered: !!r.registered && active, keyHashHex: r.kh, amountLovelace: BigInt(r.amount ?? '0') });
+    }
+    return out;
+  }
+
+  /** Voting power (drep_distr.amount) + current delegator count (latest vote-
+   *  delegation per stake account that points at this DRep), straight from db-sync. */
+  private async drepVotingPowerViaDbSync(pool: Pool, drepIds: string[]): Promise<Map<string, { votingPowerLovelace: bigint; delegators: number }>> {
+    const out = new Map<string, { votingPowerLovelace: bigint; delegators: number }>(
+      drepIds.map((id) => [id, { votingPowerLovelace: 0n, delegators: 0 }]),
+    );
+    const khToId = new Map<string, string>();
+    for (const id of drepIds) { try { khToId.set(drepKeyHashFromId(id).toLowerCase(), id); } catch { /* skip malformed */ } }
+    const khs = [...khToId.keys()];
+    if (khs.length === 0) return out;
+    const { rows } = await pool.query<{ kh: string; amount: string; delegators: string }>(
+      `WITH cur AS (
+         SELECT DISTINCT ON (dv.addr_id) dv.addr_id, dv.drep_hash_id
+           FROM delegation_vote dv ORDER BY dv.addr_id, dv.tx_id DESC, dv.cert_index DESC)
+       SELECT encode(dh.raw,'hex') AS kh,
+              COALESCE(dd.amount,0)::text AS amount,
+              (SELECT count(*) FROM cur WHERE cur.drep_hash_id = dh.id)::text AS delegators
+         FROM drep_hash dh
+         LEFT JOIN LATERAL (SELECT amount FROM drep_distr d WHERE d.hash_id = dh.id ORDER BY d.epoch_no DESC LIMIT 1) dd ON true
+        WHERE encode(dh.raw,'hex') = ANY($1::text[])`,
+      [khs],
+    );
+    for (const r of rows) {
+      const id = khToId.get(r.kh.toLowerCase());
+      if (!id) continue;
+      out.set(id, { votingPowerLovelace: BigInt(r.amount ?? '0'), delegators: Number(r.delegators ?? '0') });
+    }
+    return out;
+  }
+
+  /** Per-DRep delegator stakes from db-sync: each DRep's current vote-delegators
+   *  (delegation_vote) joined to their latest epoch_stake — the basis for total
+   *  power, delegator count, own (self-delegated) power, and qualifying delegators. */
+  private async entryMetricsViaDbSync(
+    pool: Pool,
+    entries: { drepId: string; ownStakeAddress?: string }[],
+    minDelegatorStakeLovelace: bigint,
+  ): Promise<Map<string, { votingPowerLovelace: bigint; delegators: number; ownVotingPowerLovelace: bigint; qualifyingDelegators: number }>> {
+    const out = new Map(entries.map((e) => [e.drepId, { votingPowerLovelace: 0n, delegators: 0, ownVotingPowerLovelace: 0n, qualifyingDelegators: 0 }]));
+    const khToEntry = new Map<string, { drepId: string; ownStakeAddress?: string }>();
+    for (const e of entries) { try { khToEntry.set(drepKeyHashFromId(e.drepId).toLowerCase(), e); } catch { /* skip */ } }
+    const khs = [...khToEntry.keys()];
+    if (khs.length === 0) return out;
+    // Total voting power comes from drep_distr (the ledger's own per-DRep tally —
+    // reliable). Per-delegator stake (for own/qualifying) is taken from the latest
+    // epoch_stake snapshot, pinned to one epoch so the lookup stays fast.
+    const { rows } = await pool.query<{ kh: string; stake_address: string | null; amount: string; total: string }>(
+      `WITH cur AS (SELECT DISTINCT ON (dv.addr_id) dv.addr_id, dv.drep_hash_id
+                      FROM delegation_vote dv ORDER BY dv.addr_id, dv.tx_id DESC, dv.cert_index DESC),
+            le AS (SELECT max(epoch_no) en FROM epoch_stake)
+       SELECT encode(dh.raw,'hex') AS kh, sa.view AS stake_address,
+              COALESCE((SELECT es.amount FROM epoch_stake es WHERE es.addr_id = cur.addr_id AND es.epoch_no = (SELECT en FROM le) LIMIT 1),0)::text AS amount,
+              (SELECT amount FROM drep_distr d WHERE d.hash_id = dh.id ORDER BY d.epoch_no DESC LIMIT 1)::text AS total
+         FROM drep_hash dh
+         LEFT JOIN cur ON cur.drep_hash_id = dh.id
+         LEFT JOIN stake_address sa ON sa.id = cur.addr_id
+        WHERE encode(dh.raw,'hex') = ANY($1::text[])`,
+      [khs],
+    );
+    const byKh = new Map<string, { total: bigint; dels: { stake_address: string; amount: bigint }[] }>();
+    for (const r of rows) {
+      const entry = byKh.get(r.kh.toLowerCase()) ?? { total: BigInt(r.total ?? '0'), dels: [] };
+      if (r.stake_address) entry.dels.push({ stake_address: r.stake_address, amount: BigInt(r.amount ?? '0') });
+      byKh.set(r.kh.toLowerCase(), entry);
+    }
+    for (const [kh, e] of khToEntry) {
+      const g = byKh.get(kh) ?? { total: 0n, dels: [] };
+      let own = 0n, qualifying = 0;
+      for (const d of g.dels) {
+        if (e.ownStakeAddress && d.stake_address === e.ownStakeAddress) own = d.amount;
+        if (d.amount >= minDelegatorStakeLovelace) qualifying++;
+      }
+      out.set(e.drepId, { votingPowerLovelace: g.total, delegators: g.dels.length, ownVotingPowerLovelace: own, qualifyingDelegators: qualifying });
+    }
+    return out;
+  }
+
+  /** Per-DRep vote counts over the most recent `windowSize` governance actions,
+   *  from db-sync (voting_procedure → drep_hash); optionally only votes carrying
+   *  an on-chain rationale (voting_anchor_id). */
+  private async activityMetricsViaDbSync(
+    pool: Pool,
+    drepIds: string[],
+    windowSize: number,
+    onlyWithRationale: boolean,
+  ): Promise<Map<string, { votesInWindow: number; windowConsidered: number }>> {
+    const out = new Map(drepIds.map((id) => [id, { votesInWindow: 0, windowConsidered: 0 }]));
+    const khToId = new Map<string, string>();
+    for (const id of drepIds) { try { khToId.set(drepKeyHashFromId(id).toLowerCase(), id); } catch { /* skip */ } }
+    const khs = [...khToId.keys()];
+    if (khs.length === 0) return out;
+    const winRes = await pool.query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM (SELECT id FROM gov_action_proposal ORDER BY id DESC LIMIT $1) w`,
+      [Math.max(1, windowSize)],
+    );
+    const windowConsidered = Number(winRes.rows[0]?.n ?? '0');
+    const { rows } = await pool.query<{ kh: string; votes: string }>(
+      `WITH win AS (SELECT id FROM gov_action_proposal ORDER BY id DESC LIMIT $2)
+       SELECT encode(dh.raw,'hex') AS kh, count(*)::text AS votes
+         FROM voting_procedure vp
+         JOIN drep_hash dh ON dh.id = vp.drep_voter
+        WHERE vp.gov_action_proposal_id IN (SELECT id FROM win)
+          AND ($3 = false OR vp.voting_anchor_id IS NOT NULL)
+          AND encode(dh.raw,'hex') = ANY($1::text[])
+        GROUP BY dh.raw`,
+      [khs, Math.max(1, windowSize), onlyWithRationale],
+    );
+    for (const id of drepIds) out.set(id, { votesInWindow: 0, windowConsidered });
+    for (const r of rows) {
+      const id = khToId.get(r.kh.toLowerCase());
+      if (id) out.set(id, { votesInWindow: Number(r.votes ?? '0'), windowConsidered });
     }
     return out;
   }
@@ -270,6 +388,23 @@ export class CardanoQueryService {
     }
     if (miss.length === 0) return out;
 
+    // Prefer db-sync when configured — voting power from drep_distr, delegator
+    // count from the current vote-delegations (delegation_vote).
+    const pool = this.dbsync();
+    if (pool) {
+      try {
+        const fromDb = await this.drepVotingPowerViaDbSync(pool, miss);
+        for (const id of miss) {
+          const v = fromDb.get(id)!;
+          out.set(id, v);
+          this.vpCache.set(id, { value: v, expiresAt: now + this.VP_TTL_MS });
+        }
+        return out;
+      } catch (e) {
+        this.logger.warn(`db-sync voting-power failed, falling back to Koios: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+
     const addrsByDrep = new Map<string, string[]>();
     const allAddrs = new Set<string>();
     let anyKoiosFailure = false;
@@ -319,6 +454,13 @@ export class CardanoQueryService {
     minDelegatorStakeLovelace: bigint,
   ): Promise<{ available: boolean; ownVotingPowerLovelace: bigint; delegators: number; qualifyingDelegators: number }> {
     const miss = { available: false, ownVotingPowerLovelace: 0n, delegators: 0, qualifyingDelegators: 0 };
+    const pool = this.dbsync();
+    if (pool) {
+      try {
+        const m = (await this.entryMetricsViaDbSync(pool, [{ drepId, ownStakeAddress }], minDelegatorStakeLovelace)).get(drepId)!;
+        return { available: true, ownVotingPowerLovelace: m.ownVotingPowerLovelace, delegators: m.delegators, qualifyingDelegators: m.qualifyingDelegators };
+      } catch (e) { this.logger.warn(`db-sync entry-metrics ${drepId}: ${e instanceof Error ? e.message : e}`); }
+    }
     try {
       const res = await fetch(`${this.base}/drep_delegators?_drep_id=${encodeURIComponent(drepId)}`, {
         signal: AbortSignal.timeout(15000),
@@ -355,6 +497,12 @@ export class CardanoQueryService {
       entries.map((e) => [e.drepId, { votingPowerLovelace: 0n, delegators: 0, ownVotingPowerLovelace: 0n, qualifyingDelegators: 0 }]),
     );
     if (entries.length === 0) return out;
+
+    const dbsyncPool = this.dbsync();
+    if (dbsyncPool) {
+      try { return await this.entryMetricsViaDbSync(dbsyncPool, entries, minDelegatorStakeLovelace); }
+      catch (e) { this.logger.warn(`db-sync entry-metrics failed, falling back to Koios: ${e instanceof Error ? e.message : e}`); }
+    }
 
     const addrsByDrep = new Map<string, string[]>();
     const allAddrs = new Set<string>();
@@ -403,6 +551,14 @@ export class CardanoQueryService {
   ): Promise<Map<string, { available: boolean; votesInWindow: number; windowConsidered: number }>> {
     const out = new Map(drepIds.map((id) => [id, { available: false, votesInWindow: 0, windowConsidered: 0 }]));
     if (drepIds.length === 0) return out;
+    const dbsyncPool = this.dbsync();
+    if (dbsyncPool) {
+      try {
+        const m = await this.activityMetricsViaDbSync(dbsyncPool, drepIds, windowSize, onlyWithRationale);
+        for (const id of drepIds) { const v = m.get(id)!; out.set(id, { available: true, votesInWindow: v.votesInWindow, windowConsidered: v.windowConsidered }); }
+        return out;
+      } catch (e) { this.logger.warn(`db-sync activity-metrics failed, falling back to Koios: ${e instanceof Error ? e.message : e}`); }
+    }
     let windowIds: Set<string>;
     try {
       const propRes = await fetch(`${this.base}/proposal_list`, { signal: AbortSignal.timeout(15000) });
@@ -450,6 +606,11 @@ export class CardanoQueryService {
     onlyWithRationale: boolean,
   ): Promise<{ available: boolean; votesInWindow: number; windowConsidered: number }> {
     const miss = { available: false, votesInWindow: 0, windowConsidered: 0 };
+    const pool = this.dbsync();
+    if (pool) {
+      try { const v = (await this.activityMetricsViaDbSync(pool, [drepId], windowSize, onlyWithRationale)).get(drepId)!; return { available: true, votesInWindow: v.votesInWindow, windowConsidered: v.windowConsidered }; }
+      catch (e) { this.logger.warn(`db-sync activity-metrics ${drepId}: ${e instanceof Error ? e.message : e}`); }
+    }
     try {
       const propRes = await fetch(`${this.base}/proposal_list`, { signal: AbortSignal.timeout(15000) });
       if (!propRes.ok) return miss;
