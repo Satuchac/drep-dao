@@ -242,8 +242,8 @@ export const treasuryApi = {
   overview: () => request<TreasuryOverview>('/dao/treasury'),
   boardActions: (history = false) =>
     request<BoardActionsView>(`/me/board-actions${history ? '?history=1' : ''}`),
-  prepareTopUp: (amountAda: number) =>
-    request<{ id: string }>('/admin/treasury/prepare-topup', { method: 'POST', body: JSON.stringify({ amountAda }) }),
+  prepareTopUp: (amountAda: number, sourceBucketId?: string) =>
+    request<{ id: string }>('/admin/treasury/prepare-topup', { method: 'POST', body: JSON.stringify({ amountAda, sourceBucketId }) }),
   /** §15.4 — board-initiated arbitrary outbound transfer; goes through the
    *  standard 3-of-N Approve & sign flow. Context is the audit description.
    *  sourceBucketId picks WHICH labeled bucket the funds come from

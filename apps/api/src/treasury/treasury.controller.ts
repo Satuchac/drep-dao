@@ -8,6 +8,8 @@ import { MultisigBroadcastService } from './multisig-broadcast.service';
 
 export class PrepareTopUpDto {
   @IsNumber() @Min(1) amountAda!: number;
+  /** §15.6 — optional source bucket id. Missing = OPERATIONS default (fallback primary). */
+  @IsOptional() @IsString() @MaxLength(40) sourceBucketId?: string;
 }
 export class BoardTransferDto {
   @IsString() @MaxLength(200) destAddress!: string;
@@ -62,7 +64,7 @@ export class TreasuryController {
   @UseGuards(JwtAuthGuard, BoardGuard)
   @Post('admin/treasury/prepare-topup')
   prepareTopUp(@CurrentUser() ctx: AuthContext, @Body() dto: PrepareTopUpDto) {
-    return this.treasury.prepareTopUp(ctx.userId, dto.amountAda);
+    return this.treasury.prepareTopUp(ctx.userId, dto.amountAda, dto.sourceBucketId);
   }
 
   /** §15.4 — any board member queues an arbitrary outbound transfer from

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { treasuryApi, type TreasuryOverview, type HotWalletHistoryItem } from '@/lib/api';
+import { treasuryApi, treasuryBucketsApi, type TreasuryOverview, type HotWalletHistoryItem, type TreasuryBucket } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
 import { ConfirmDialog } from './confirm-dialog';
@@ -29,11 +29,18 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
   const [successMsg, setSuccess] = useState<string | null>(null);
   const [confirmSweep, setConfirmSweep] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [buckets, setBuckets] = useState<TreasuryBucket[]>([]);
+  const [sourceBucketId, setSourceBucketId] = useState<string>('');
 
   const load = useCallback(() => {
     treasuryApi.overview().then(setOverview).catch(() => setOverview(null));
     treasuryApi.hotWalletPolicy().then(setPolicy).catch(() => setPolicy(null));
     treasuryApi.hotWalletHistory().then((r) => setHistory(r.items)).catch(() => setHistory([]));
+    treasuryBucketsApi.list().then((r) => {
+      setBuckets(r.buckets);
+      // Default the top-up source to the OPERATIONS-flagged bucket (fallback primary).
+      setSourceBucketId((cur) => cur || r.buckets.find((b) => b.isDefaultOperations)?.id || r.buckets.find((b) => b.isPrimary)?.id || '');
+    }).catch(() => setBuckets([]));
   }, []);
   useEffect(load, [load]);
 
@@ -55,7 +62,7 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
   const topup = async () => {
     setError(null); setSuccess(null); setBusy('topup');
     try {
-      await treasuryApi.prepareTopUp(num);
+      await treasuryApi.prepareTopUp(num, sourceBucketId || undefined);
       setSuccess(`Top-up of ${num.toLocaleString()} ₳ prepared — awaiting all board signatures in Actions.`);
       setAmount('');
       load();
@@ -103,6 +110,24 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
           </div>
         ) : null}
         <div className="flex flex-wrap items-end gap-2">
+          {/* §15.6 — source bucket: only meaningful when the multisig has more
+              than one bucket; defaults to the Operations-flagged one. */}
+          {buckets.length > 1 ? (
+            <label className="block text-xs">
+              Source bucket
+              <select
+                value={sourceBucketId}
+                onChange={(e) => setSourceBucketId(e.target.value)}
+                className="mt-0.5 block rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+              >
+                {buckets.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.label}{b.isDefaultOperations ? ' (Operations)' : ''} — {b.balanceAda.toLocaleString()} ₳
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label className="block text-xs">
             Top-up amount (₳, max {policy.topUpMaxAda.toLocaleString()})
             <input

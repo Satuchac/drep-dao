@@ -220,7 +220,7 @@ export class TreasuryService {
   /** §15.3 — board member explicitly prepares a top-up (in addition to the
    *  auto-trigger). Capped at HOT_WALLET_TOPUP_MAX_ADA so we never sit a
    *  large balance on a single-sig hot wallet. */
-  async prepareTopUp(userId: string, amountAda: number) {
+  async prepareTopUp(userId: string, amountAda: number, sourceBucketId?: string) {
     if (!(await this.boardDrep(userId))) throw new ForbiddenException('board members only');
     const hot = this.anchor.hotWalletAddress();
     if (!hot) throw new BadRequestException('no hot wallet configured');
@@ -237,8 +237,20 @@ export class TreasuryService {
     if (open) {
       throw new ConflictException('a hot-wallet top-up is already pending signatures — sign or wait for that one before queueing another');
     }
-    // §15.6 — route to the OPERATIONS default bucket (fallback primary).
-    const bucket = await this.buckets.defaultBucketFor('OPERATIONS');
+    // §15.6 — source bucket: the board can pick which bucket the funds come from;
+    // the default (no explicit choice) is the OPERATIONS-flagged bucket, falling
+    // back to the primary. An explicit choice must belong to the active multisig.
+    let sourceId: string | null;
+    if (sourceBucketId) {
+      const b = await this.prisma.treasuryBucket.findUnique({ where: { id: sourceBucketId } });
+      const active = await this.prisma.multisigConfig.findFirst({ where: { replacedAt: null }, orderBy: { assembledAt: 'desc' } });
+      if (!b || !active || b.configId !== active.id) {
+        throw new BadRequestException('sourceBucketId does not belong to the active multisig');
+      }
+      sourceId = b.id;
+    } else {
+      sourceId = (await this.buckets.defaultBucketFor('OPERATIONS'))?.id ?? null;
+    }
     const row = await this.prisma.multisigAction.create({
       data: {
         kind: 'OPS',
@@ -246,7 +258,7 @@ export class TreasuryService {
         amountAda: BigInt(Math.round(amountAda * ADA)),
         destAddress: hot,
         description: `Top up the anchor hot wallet (board-requested)`,
-        sourceBucketId: bucket?.id ?? null,
+        sourceBucketId: sourceId,
       },
     });
     // Strip BigInt so the JSON serializer doesn't choke; the UI only needs
