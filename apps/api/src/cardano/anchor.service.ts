@@ -45,13 +45,31 @@ export class AnchorService implements OnModuleInit {
   private mnemonic?: string; // mutable: an in-platform SEED rotation (admin) replaces it
   private readonly treasuryAddress?: string;
 
-  /** On boot, prefer a DB-stored (rotated) anchor seed over the env default. */
+  /**
+   * On boot, resolve the anchor hot-wallet seed in priority order:
+   *   1. a DB-stored (rotated/bootstrapped) seed in platform_secret,
+   *   2. the ANCHOR_MNEMONIC env (operator-provided),
+   *   3. otherwise the platform GENERATES its own single-sig wallet and stores it.
+   * §23 — the hot wallet is independent of the multisig: it exists from the start
+   * so the UI can surface its address + "needs funding"; the multisig later tops
+   * it up. (Prod should provide ANCHOR_MNEMONIC from a KMS instead of auto-gen.)
+   */
   async onModuleInit() {
     const row = await this.prisma.platformSecret.findUnique({ where: { key: 'ANCHOR_MNEMONIC' } });
     if (row?.value) {
       this.mnemonic = row.value;
-      this.logger.log('anchor hot-wallet seed loaded from platform_secret (rotated)');
+      this.logger.log('anchor hot-wallet seed loaded from platform_secret');
+      return;
     }
+    if (this.mnemonic) return; // operator-provided via ANCHOR_MNEMONIC env — keep it.
+    const fresh = bip39.generateMnemonic(256); // 24-word
+    await this.prisma.platformSecret.upsert({
+      where: { key: 'ANCHOR_MNEMONIC' },
+      update: { value: fresh },
+      create: { key: 'ANCHOR_MNEMONIC', value: fresh, updatedBy: null },
+    });
+    this.mnemonic = fresh;
+    this.logger.warn(`anchor hot wallet auto-generated → ${this.hotWalletAddress()} (needs funding)`);
   }
 
   constructor(
