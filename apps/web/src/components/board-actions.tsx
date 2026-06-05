@@ -266,19 +266,30 @@ export function BoardActions({ onChange, history = false, refreshKey = 0 }: { on
           <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">History</div>
           <ul className="mt-1 space-y-1">
             {past.map((a) => (
-              <li key={a.id} className="rounded border border-neutral-200 px-3 py-1.5 text-xs dark:border-neutral-800">
+              <li key={a.id} className="rounded border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span>{a.proposalTitle ? `Milestone #${(a.milestoneIdx ?? 0) + 1} payout — ${a.proposalTitle}` : (a.description ?? a.kind)}</span>
+                  <span className="font-medium">{a.proposalTitle ? `Milestone #${(a.milestoneIdx ?? 0) + 1} payout — ${a.proposalTitle}` : (a.description ?? a.kind)}</span>
                   <span className="flex items-center gap-2 text-neutral-500">
                     {a.amountAda != null ? <span className="tabular-nums">{a.amountAda.toLocaleString()} ₳</span> : null}
                     <span className="rounded bg-neutral-100 px-1.5 py-0.5 dark:bg-neutral-800">{a.status === 'CONFIRMED' ? 'PAID' : a.status}</span>
                   </span>
                 </div>
-                {a.txHash ? (
-                  <div className="mt-0.5 break-all font-mono text-[11px] text-neutral-500">
-                    tx <a href={txUrl(a.txHash)} target="_blank" rel="noreferrer" className="underline">{a.txHash} ↗</a>
-                  </div>
-                ) : null}
+                {/* Consistent metadata on EVERY item: when · who signed · on-chain tx. */}
+                <div className="mt-1 text-[11px] text-neutral-500">
+                  {new Date(a.createdAt).toLocaleString()}
+                  {a.signedBy.length > 0
+                    ? <> · Signed by <span className="text-neutral-700 dark:text-neutral-300">{a.signedBy.join(', ')}</span></>
+                    : a.committedBy.length > 0
+                      ? <> · Authorized by {a.committedBy.join(', ')}</>
+                      : null}
+                </div>
+                <div className="mt-0.5 break-all text-[11px]">
+                  {a.txHash ? (
+                    <span className="font-mono text-neutral-500">tx <a href={txUrl(a.txHash)} target="_blank" rel="noreferrer" className="underline">{a.txHash} ↗</a></span>
+                  ) : (
+                    <span className="text-neutral-400">{a.status === 'FAILED' ? 'cancelled — no on-chain tx' : 'no on-chain tx recorded'}</span>
+                  )}
+                </div>
               </li>
             ))}
           </ul>
