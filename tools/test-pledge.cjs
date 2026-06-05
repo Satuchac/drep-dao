@@ -32,6 +32,7 @@ const { ProposalsService } = require(root + '/apps/api/dist/proposals/proposals.
 const { FilteringService } = require(root + '/apps/api/dist/proposals/filtering.service.js');
 const { DvService } = require(root + '/apps/api/dist/proposals/dv.service.js');
 const { MilestonesService } = require(root + '/apps/api/dist/milestones/milestones.service.js');
+const { TreasuryBucketsService } = require(root + '/apps/api/dist/treasury/treasury-buckets.service.js');
 const { stakeKeyHashFromBech32 } = require(root + '/packages/cardano/dist/index.js');
 const personas = require(root + '/tools/persona-wallets.json');
 
@@ -48,7 +49,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const proposals = new ProposalsService(prisma, config, cardano);
   const filtering = new FilteringService(prisma, anchor);
   const dv = new DvService(prisma, config, anchor, cardano);
-  const milestones = new MilestonesService(prisma, anchor);
+  const milestones = new MilestonesService(prisma, anchor, new TreasuryBucketsService(prisma, config, cardano));
 
   const seats = await prisma.boardSeat.findMany();
   const boardDreps = await prisma.drep.findMany({

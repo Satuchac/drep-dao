@@ -50,7 +50,9 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   for (const m of members) {
     console.log(`   ${m.displayName}${m.isBoard ? '*' : ''}: stake=${m.votingPowerAda} ADA, base=${m.basePower}, merit=${m.merit}, ×${m.meritMultiplier} → power=${m.adjustedPower}`);
   }
-  const alice = members.find((m) => /Alice/.test(m.displayName));
+  // Match the Alice persona by her stable DRep ID — the board seat's displayName
+  // is whatever genesis seeded (the persona key), not necessarily the label.
+  const alice = members.find((m) => m.drepId === personas.regular.drepId);
   ok('5 board members listed', members.filter((m) => m.isBoard).length === 5, `${members.filter((m) => m.isBoard).length} board`);
   ok('Alice voting power > 0 (real on-chain stake)', alice && alice.adjustedPower > 0, alice ? `power=${alice.adjustedPower}` : 'missing');
   ok('Alice base ≈ log10(stake)', alice && Math.abs(alice.basePower - Math.log10(alice.votingPowerAda)) < 0.05);

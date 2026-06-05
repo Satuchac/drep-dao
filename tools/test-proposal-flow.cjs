@@ -26,6 +26,7 @@ const { ProposalsService } = require(root + '/apps/api/dist/proposals/proposals.
 const { FilteringService } = require(root + '/apps/api/dist/proposals/filtering.service.js');
 const { DvService } = require(root + '/apps/api/dist/proposals/dv.service.js');
 const { MilestonesService } = require(root + '/apps/api/dist/milestones/milestones.service.js');
+const { TreasuryBucketsService } = require(root + '/apps/api/dist/treasury/treasury-buckets.service.js');
 const { buildResultMetadata, GOVERNANCE_METADATA_LABEL } = require(root + '/packages/cardano/dist/index.js');
 const { CommentsService } = require(root + '/apps/api/dist/comments/comments.service.js');
 const { stakeKeyHashFromBech32 } = require(root + '/packages/cardano/dist/index.js');
@@ -44,7 +45,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const proposals = new ProposalsService(prisma, config, cardano);
   const filtering = new FilteringService(prisma, anchor);
   const dv = new DvService(prisma, config, anchor, cardano);
-  const milestones = new MilestonesService(prisma, anchor);
+  const milestones = new MilestonesService(prisma, anchor, new TreasuryBucketsService(prisma, config, cardano));
   const comments = new CommentsService(prisma);
 
   // Reviewers/voters = the seated board (admitted DReps); submitter = a non-board holder.

@@ -30,6 +30,7 @@ const { ProposalsService } = require(root + '/apps/api/dist/proposals/proposals.
 const { FilteringService } = require(root + '/apps/api/dist/proposals/filtering.service.js');
 const { DvService } = require(root + '/apps/api/dist/proposals/dv.service.js');
 const { MilestonesService } = require(root + '/apps/api/dist/milestones/milestones.service.js');
+const { TreasuryBucketsService } = require(root + '/apps/api/dist/treasury/treasury-buckets.service.js');
 const { stakeKeyHashFromBech32 } = require(root + '/packages/cardano/dist/index.js');
 const personas = require(root + '/tools/persona-wallets.json');
 
@@ -46,7 +47,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const proposals = new ProposalsService(prisma, config, cardano);
   const filtering = new FilteringService(prisma, anchor);
   const dv = new DvService(prisma, config, anchor, cardano);
-  const milestones = new MilestonesService(prisma, anchor);
+  const milestones = new MilestonesService(prisma, anchor, new TreasuryBucketsService(prisma, config, cardano));
 
   const seats = await prisma.boardSeat.findMany();
   const boardDreps = await prisma.drep.findMany({
@@ -108,6 +109,9 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
     const uid = userIdForDrep(a.drepId);
     if (uid) { await filtering.vote(uid, draft.id, 'YES', 'looks fine'); if (++v >= 3) break; }
   }
+  // §8 — D&V ballots open only once the round reaches the VOTE sub-stage (the
+  // proposal already flipped to DEBATE_VOTE on passing filtering). Advance it.
+  await prisma.round.update({ where: { id: round.id }, data: { status: 'DV' } });
   await dv.openVoting(draft.id);
   for (const d of boardDreps) await dv.optIn(d.user.id, draft.id);
   const rationale = 'I support this proposal because '.padEnd(220, 'x');
