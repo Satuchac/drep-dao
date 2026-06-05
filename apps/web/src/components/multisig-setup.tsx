@@ -18,13 +18,22 @@ const MULTISIG_KEY_MESSAGE = (stakeAddress: string, paymentBech32: string, ts: s
  *     "Migrate funds" button (board members) when balance > 0 and active
  *     config exists.
  */
-export function MultisigSetup() {
+export function MultisigSetup({ onAssembled }: { onAssembled?: () => void }) {
   const [status, setStatus] = useState<MultisigStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const load = useCallback(() => {
     multisigApi.status().then(setStatus).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
   }, []);
   useEffect(load, [load]);
+
+  // After a mutation (final key submitted, migration prepared) re-fetch our own
+  // status AND let the parent refresh its data — the Treasury balance card flips
+  // to "configured" the moment the last key assembles the multisig (submitKey
+  // assembles synchronously), so it shouldn't need a manual page reload.
+  const reload = useCallback(() => {
+    load();
+    onAssembled?.();
+  }, [load, onAssembled]);
 
   const { profile } = useAuth();
   const isBoard = !!profile?.roles.includes('BOARD');
@@ -155,7 +164,7 @@ export function MultisigSetup() {
 
       {/* My-seat submission form (only when I AM a board member without a key) */}
       {isBoard && mySeat && !mySeat.hasKey ? (
-        <SubmitKeyForm onChange={load} />
+        <SubmitKeyForm onChange={reload} />
       ) : null}
       {isBoard && mySeat?.hasKey ? (
         <div className="mt-3 rounded border border-emerald-300 bg-emerald-50 p-2 text-xs dark:border-emerald-900 dark:bg-emerald-950/40">
@@ -189,7 +198,7 @@ export function MultisigSetup() {
                   h={h}
                   isBoard={isBoard}
                   pending={status.migrationsPending.find((m) => m.fromConfigId === h.id) ?? null}
-                  onChange={load}
+                  onChange={reload}
                 />
               ))}
             </ul>
