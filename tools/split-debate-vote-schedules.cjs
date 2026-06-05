@@ -10,7 +10,7 @@
  *   node tools/split-debate-vote-schedules.cjs        # dry run
  *   node tools/split-debate-vote-schedules.cjs --apply # actually do it
  */
-const root = '/home/satucha/projects/drep-dao';
+const root = require('node:path').join(__dirname, '..');
 const { prisma } = require(root + '/packages/db/dist/index.js');
 
 const apply = process.argv.includes('--apply');

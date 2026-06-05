@@ -423,24 +423,28 @@ export class CardanoQueryService {
     );
     if (drepIds.length === 0) return out;
 
-    let res: Response;
-    try {
-      res = await fetch(`${this.base}/drep_info`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ _drep_ids: drepIds }),
-        signal: AbortSignal.timeout(15000),
-      });
-    } catch (e) {
-      // network error / timeout — surface as a clean 503, never an unhandled 500.
-      this.logger.warn(`Koios unreachable: ${e instanceof Error ? e.message : e}`);
-      throw new ServiceUnavailableException('on-chain lookup failed (Koios unreachable) — please try again');
+    // Koios on the public tier has intermittent "fetch failed" / 5xx blips. This
+    // check runs on every login, so retry a few times with backoff before giving
+    // up — a transient blip should never deny a board member their role.
+    let res: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const r = await fetch(`${this.base}/drep_info`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ _drep_ids: drepIds }),
+          signal: AbortSignal.timeout(15000),
+        });
+        if (r.ok) { res = r; break; }
+        this.logger.warn(`Koios /drep_info ${r.status} (attempt ${attempt + 1}/3)`);
+      } catch (e) {
+        this.logger.warn(`Koios unreachable (attempt ${attempt + 1}/3): ${e instanceof Error ? e.message : e}`);
+      }
+      if (attempt < 2) await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
     }
-    if (!res.ok) {
-      // e.g. Koios 500 on a malformed bech32 id. Callers validate id structure
-      // first, so this is a transient/provider issue → 503, not a 500.
-      this.logger.warn(`Koios /drep_info ${res.status}: ${await res.text().catch(() => '')}`);
-      throw new ServiceUnavailableException(`on-chain lookup failed (Koios ${res.status}) — please try again`);
+    if (!res) {
+      // exhausted retries — surface as a clean 503, never an unhandled 500.
+      throw new ServiceUnavailableException('on-chain lookup failed (Koios unreachable) — please try again');
     }
     const rows = (await res.json()) as {
       drep_id: string;

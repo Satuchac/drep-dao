@@ -10,7 +10,7 @@ require('./_test-env.cjs');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const root = '/home/satucha/projects/drep-dao';
+const root = require('node:path').join(__dirname, '..');
 for (const line of fs.readFileSync(path.join(root, '.env'), 'utf8').split('\n')) {
   const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*"?([^"\n]*)"?\s*$/);
   if (m && !process.env[m[1]]) process.env[m[1]] = m[2];

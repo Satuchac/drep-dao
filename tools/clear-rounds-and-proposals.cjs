@@ -11,7 +11,7 @@
  * Asks for confirmation unless run with --yes.
  */
 const readline = require('node:readline');
-const root = '/home/satucha/projects/drep-dao';
+const root = require('node:path').join(__dirname, '..');
 const { prisma: db } = require(root + '/packages/db/dist/index.js');
 
 const argv = process.argv.slice(2);

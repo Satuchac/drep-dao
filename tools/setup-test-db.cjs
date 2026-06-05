@@ -88,5 +88,32 @@ function run(label, cmd, args, env = {}) {
     );
   }
 
+  // Step 3b — seed the singleton platform_state row (id=1). The app creates it
+  // lazily on first genesis access; the in-process test harness calls update()
+  // before that, so seed it here (all other columns have defaults). Idempotent.
+  run(
+    'seed platform_state id=1',
+    'docker',
+    ['exec', '-i', 'drepdao-postgres', 'psql', '-U', 'drep', '-d', 'drepdao_test', '-c',
+      'INSERT INTO platform_state (id) VALUES (1) ON CONFLICT (id) DO NOTHING'],
+  );
+
+  // Step 4 — ensure a platform admin exists. test-genesis seeds the board, which
+  // is admin-gated; without an admin every suite cascades to "0 board dreps".
+  // Idempotent: only creates one when admin_user is empty (e.g. after --reset).
+  const adminCount = run(
+    'check admin_user',
+    'docker',
+    ['exec', '-i', 'drepdao-postgres', 'psql', '-U', 'drep', '-d', 'drepdao_test', '-tAc', 'SELECT count(*) FROM admin_user'],
+  );
+  if (adminCount.trim() === '0') {
+    run(
+      'create test admin',
+      'pnpm',
+      ['admin:create', '--', '--username=test', '--email=test@drep.test', '--password=test1234'],
+      { DATABASE_URL: testUrl },
+    );
+  }
+
   console.log('Test DB ready at', testUrl);
 })();
