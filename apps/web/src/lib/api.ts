@@ -206,6 +206,9 @@ export interface BoardAction {
   /** Whether the viewer has already committed (phase 1). */
   mineCommitted: boolean;
   mineApproved: boolean;
+  /** §15 — display names of who authorized (phase 1) and who has signed the tx (phase 2). */
+  committedBy: string[];
+  signedBy: string[];
   createdAt: string;
   // §11/§15 — payout-specific link + insufficiency hint. Null for non-payout
   // kinds (REWARD_PAYOUT / OPS / etc.); always set for PROJECT_FUNDING.

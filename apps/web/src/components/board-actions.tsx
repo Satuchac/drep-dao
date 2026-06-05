@@ -192,6 +192,16 @@ export function BoardActions({ onChange, history = false, refreshKey = 0 }: { on
                 </>
               )}
             </div>
+            {/* §15 — who authorized (phase 1 = the chosen signers) and who has
+                actually signed the tx (phase 2), by name. */}
+            {a.committedBy.length > 0 ? (
+              <div className="mt-0.5 text-[11px] text-neutral-500">
+                {a.phase === 'AUTHORIZE' ? 'Authorized by' : 'Authorized signers'}: <span className="text-neutral-700 dark:text-neutral-300">{a.committedBy.join(', ')}</span>
+                {a.phase === 'SIGN' ? (
+                  <> · Signed: <span className="text-emerald-700 dark:text-emerald-400">{a.signedBy.length > 0 ? a.signedBy.join(', ') : '—'}</span></>
+                ) : null}
+              </div>
+            ) : null}
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {a.phase === 'AUTHORIZE' ? (
                 <button
@@ -202,7 +212,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0 }: { on
                 >
                   {a.mineCommitted ? 'Authorized' : busy === a.id ? 'Authorizing…' : 'Authorize'}
                 </button>
-              ) : (
+              ) : a.mineCommitted ? (
                 <button
                   disabled={busy === a.id || a.mineApproved}
                   onClick={() => approve(a)}
@@ -211,6 +221,12 @@ export function BoardActions({ onChange, history = false, refreshKey = 0 }: { on
                 >
                   {a.mineApproved ? 'Signed' : busy === a.id ? 'Signing…' : 'Sign tx with HW wallet'}
                 </button>
+              ) : (
+                /* §15 — only the phase-1 signers sign the tx; everyone else just waits. */
+                <span className="text-xs text-neutral-500">
+                  Only the {a.threshold} who authorized sign this tx — waiting for{' '}
+                  {a.committedBy.filter((n) => !a.signedBy.includes(n)).join(', ') || 'them'}.
+                </span>
               )}
               {/* §15.4 — any single board member can cancel a pending action.
                   Marks it FAILED with the cancellation reason in the audit

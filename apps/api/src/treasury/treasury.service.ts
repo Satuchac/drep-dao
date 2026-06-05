@@ -129,16 +129,16 @@ export class TreasuryService {
     const actions = await this.prisma.multisigAction.findMany({
       where: { status: 'PENDING_SIGS' },
       include: {
-        signatures: { select: { boardDrepId: true } },
-        commitments: { select: { userId: true } },
+        signatures: { select: { boardDrepId: true, drep: { select: { user: { select: { displayName: true } } } } } },
+        commitments: { select: { userId: true, user: { select: { displayName: true } } } },
       },
       orderBy: { createdAt: 'asc' },
     });
     type Row = {
       id: string; kind: string; description: string | null; amountAda: bigint | null; status: string;
       txHash: string | null; createdAt: Date;
-      signatures: { boardDrepId: string }[];
-      commitments: { userId: string }[];
+      signatures: { boardDrepId: string; drep: { user: { displayName: string | null } | null } | null }[];
+      commitments: { userId: string; user: { displayName: string | null } | null }[];
       committedKeyHashes: string[];
       proposalId: string | null; milestoneId: string | null; milestoneIdx: number | null;
       proposalTitle: string | null; destAddress: string | null; paidAt: Date | null;
@@ -162,6 +162,10 @@ export class TreasuryService {
         phase: inSignPhase ? 'SIGN' : 'AUTHORIZE',
         mineApproved: a.signatures.some((s) => s.boardDrepId === board.id),
         mineCommitted: a.commitments.some((c) => c.userId === userId),
+        // §15 — who authorized (phase 1) and who has signed the tx (phase 2),
+        // so the dialog can show names instead of just counts.
+        committedBy: a.commitments.map((c) => c.user?.displayName ?? 'board member'),
+        signedBy: a.signatures.map((s) => s.drep?.user?.displayName ?? 'board member'),
         createdAt: a.createdAt,
         proposalId: a.proposalId,
         milestoneId: a.milestoneId,
