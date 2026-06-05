@@ -204,7 +204,10 @@ export class TreasuryService {
     if (!hot) return;
     const open = await this.prisma.multisigAction.findFirst({ where: { kind: 'OPS', status: 'PENDING_SIGS', description: { contains: 'hot wallet' } } });
     if (open) return;
-    const bal = await this.cardano.addressBalance([hot]);
+    // Strict read: Koios unavailable → null (NOT a 0-filled map), so a transient
+    // lookup failure is never mistaken for an empty wallet → no spurious top-up.
+    const bal = await this.cardano.addressBalanceStrict([hot]);
+    if (!bal) return;
     if (Number(bal.get(hot) ?? 0n) / ADA >= HOT_WALLET_MIN_ADA) return;
     // §15.6 — route to the OPERATIONS default bucket (fallback primary).
     const bucket = await this.buckets.defaultBucketFor('OPERATIONS');

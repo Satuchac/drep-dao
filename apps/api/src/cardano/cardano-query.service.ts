@@ -56,6 +56,35 @@ export class CardanoQueryService {
     return out;
   }
 
+  /**
+   * Like addressBalance, but returns NULL when the on-chain lookup actually
+   * fails (Koios down / timeout / non-OK) instead of a 0-filled map — so callers
+   * can distinguish "Koios unavailable" from "genuinely 0". Used before the
+   * platform auto-prepares a hot-wallet top-up, so a transient Koios failure
+   * isn't read as "empty wallet" and trigger a spurious top-up.
+   */
+  async addressBalanceStrict(addresses: string[]): Promise<Map<string, bigint> | null> {
+    if (addresses.length === 0) return new Map();
+    try {
+      const res = await fetch(`${this.base}/address_info`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _addresses: addresses }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) return null;
+      const rows = (await res.json()) as { address: string; balance: string | null }[];
+      const out = new Map<string, bigint>(addresses.map((a) => [a, 0n]));
+      for (const r of rows) {
+        if (!out.has(r.address)) continue;
+        try { out.set(r.address, r.balance ? BigInt(r.balance) : 0n); } catch { /* leave 0 */ }
+      }
+      return out;
+    } catch {
+      return null;
+    }
+  }
+
   /** Total controlled balance (Lovelace) per payment/base address, via Koios /address_info. */
   async addressBalance(addresses: string[]): Promise<Map<string, bigint>> {
     const out = new Map<string, bigint>(addresses.map((a) => [a, 0n]));
