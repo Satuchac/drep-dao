@@ -62,7 +62,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   // Board scope = the 5 board members for clean filtering.
   const round = await rounds.create({
     name: 'SUBMISSION-phase round',
-    budgetAda: 1_000_000, rewardsPoolAda: 50_000,
+    mandatoryWords: 0, budgetAda: 1_000_000, rewardsPoolAda: 50_000,
     categories: [{ name: 'Tooling', type: 'GRANT', allocatedAda: 1_000_000 }],
     eligibleDrepIds: boardDreps.map((d) => d.id),
   });
@@ -74,23 +74,23 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const cats = round.categories;
   const draftA = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: cats[0].id, title: 'A — pays fee, board approves',
-    contentMd: 'Will be confirmed.', isCommercial: true, requestedAmountAda: 1000,
+    payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Will be confirmed.', isCommercial: true, requestedAmountAda: 1000,
     milestones: [{ description: 'M1', amountAda: 1000 }],
   });
   const draftB = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: cats[0].id, title: 'B — pays fee, board approves',
-    contentMd: 'Will be confirmed.', isCommercial: true, requestedAmountAda: 1000,
+    payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Will be confirmed.', isCommercial: true, requestedAmountAda: 1000,
     milestones: [{ description: 'M1', amountAda: 1000 }],
   });
   const draftC = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: cats[0].id, title: 'C — never submitted (DRAFT)',
-    contentMd: 'Stays DRAFT.', isCommercial: true, requestedAmountAda: 1000,
+    payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Stays DRAFT.', isCommercial: true, requestedAmountAda: 1000,
     milestones: [{ description: 'M1', amountAda: 1000 }],
   });
   // A fourth proposal D submits the fee tx but the board never confirms it (PENDING).
   const draftD = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: cats[0].id, title: 'D — fee paid, board never confirms',
-    contentMd: 'Stays PENDING.', isCommercial: true, requestedAmountAda: 1000,
+    payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Stays PENDING.', isCommercial: true, requestedAmountAda: 1000,
     milestones: [{ description: 'M1', amountAda: 1000 }],
   });
 

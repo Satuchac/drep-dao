@@ -41,14 +41,14 @@ const HOUR = 3_600_000;
   console.log('\n=== P4/P7 — creation validations ===');
   await throws(
     'budget not fully allocated rejected',
-    () => rounds.create({ name: 'bad', budgetAda: 4_000_000, rewardsPoolAda: 0, categories: [{ name: 'A', allocatedAda: 1_000_000 }] }),
+    () => rounds.create({ name: 'bad', mandatoryWords: 0, budgetAda: 4_000_000, rewardsPoolAda: 0, categories: [{ name: 'A', allocatedAda: 1_000_000 }] }),
     /allocate the full budget/i,
   );
   await throws(
     'out-of-order schedule rejected',
     () =>
       rounds.create({
-        name: 'bad', budgetAda: 1_000_000, rewardsPoolAda: 0,
+        name: 'bad', mandatoryWords: 0, budgetAda: 1_000_000, rewardsPoolAda: 0,
         categories: [{ name: 'A', allocatedAda: 1_000_000 }],
         schedule: [
           { stageKey: 'submission', startsAt: iso(0), endsAt: iso(2 * HOUR) },
@@ -61,7 +61,7 @@ const HOUR = 3_600_000;
   console.log('\n=== Create a well-formed round (categories cover budget) ===');
   const round = await rounds.create({
     name: 'Stage-flow round',
-    budgetAda: 4_000_000,
+    mandatoryWords: 0, budgetAda: 4_000_000,
     rewardsPoolAda: 200_000,
     categories: [
       { name: 'Ecosystem', type: 'GRANT', allocatedAda: 3_000_000, description: 'core' },
@@ -101,7 +101,7 @@ const HOUR = 3_600_000;
   });
   const created = await proposals.createDraft(bob.id, {
     roundId: round.id, categoryId: round.categories[0].id, title: 'Counted proposal',
-    contentMd: 'Pitch.', isCommercial: false, requestedAmountAda: 1000,
+    payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Pitch.', isCommercial: false, requestedAmountAda: 1000,
     milestones: [{ description: 'Deliver', amountAda: 1000 }],
   });
   await proposals.submit(bob.id, created.id, { submissionFeeTxHash: 'devhash' });

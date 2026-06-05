@@ -64,11 +64,11 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
 
   console.log('\n=== Round + submission (commercial fee 3%) ===');
   // Scope eligibility to the board so the test is isolated from other admitted DReps.
-  const round = await rounds.create({ name: 'Flow round', budgetAda: 1_000_000, rewardsPoolAda: 50_000, categories: [{ name: 'Tooling', type: 'GRANT', allocatedAda: 1_000_000 }], eligibleDrepIds: boardDreps.map((d) => d.id) });
+  const round = await rounds.create({ name: 'Flow round', mandatoryWords: 0, budgetAda: 1_000_000, rewardsPoolAda: 50_000, categories: [{ name: 'Tooling', type: 'GRANT', allocatedAda: 1_000_000 }], eligibleDrepIds: boardDreps.map((d) => d.id) });
   await rounds.startStage(round.id, 'SUBMISSION');
   const draft = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: round.categories[0].id, title: 'Build a tool',
-    contentMd: 'Original pitch.', isCommercial: true, requestedAmountAda: 1000,
+    payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Original pitch.', isCommercial: true, requestedAmountAda: 1000,
     // §3 — every mandatory field must be non-empty at submit time (default
     // mandatoryWords = 1). Each milestone needs a title + acceptanceCriteria.
     ecosystemImpactMd: 'Benefits developers',
@@ -94,7 +94,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   // field (pitch, ecosystem impact, success metrics, payout) so the diff view can
   // show the whole change set — not just the pitch.
   await proposals.updateDraft(carol.id, draft.id, {
-    contentMd: 'Updated pitch with more detail.',
+    payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Updated pitch with more detail.',
     ecosystemImpactMd: 'Now serves three additional segments.',
     successMetricsMd: '5,000 monthly active users in 6 months.',
     payoutAddress: 'addr_test1qpd_v2',

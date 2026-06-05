@@ -66,7 +66,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   console.log('\n=== Setup: round with pledgeThresholdAda=500, three drafts ===');
   const round = await rounds.create({
     name: 'Pledge-flow round',
-    budgetAda: 1_000_000, rewardsPoolAda: 50_000,
+    mandatoryWords: 0, budgetAda: 1_000_000, rewardsPoolAda: 50_000,
     categories: [{ name: 'Tooling', type: 'GRANT', allocatedAda: 1_000_000 }],
     eligibleDrepIds: boardDreps.map((d) => d.id),
     pledgeThresholdAda: 500, // round-level minimum pledge
@@ -80,7 +80,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   try {
     await proposals.createDraft(carol.id, {
       roundId: round.id, categoryId: cat.id, title: 'Bad pledge',
-      contentMd: 'x', isCommercial: true, requestedAmountAda: 1000,
+      payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'x', isCommercial: true, requestedAmountAda: 1000,
       milestones: [{ description: 'M1', amountAda: 1000 }],
       pledgeAmountAda: 100, pledgeReturnMethod: 'per milestone',
     });
@@ -92,7 +92,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   try {
     await proposals.createDraft(carol.id, {
       roundId: round.id, categoryId: cat.id, title: 'No method',
-      contentMd: 'x', isCommercial: true, requestedAmountAda: 1000,
+      payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'x', isCommercial: true, requestedAmountAda: 1000,
       milestones: [{ description: 'M1', amountAda: 1000 }],
       pledgeAmountAda: 500,
     });
@@ -102,7 +102,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   // (3) valid pledge → ACCEPT, fields stored
   const draftA = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: cat.id, title: 'A — with pledge',
-    contentMd: 'pitch', isCommercial: true, requestedAmountAda: 1000,
+    payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'pitch', isCommercial: true, requestedAmountAda: 1000,
     milestones: [{ description: 'M1', amountAda: 500 }, { description: 'M2', amountAda: 500 }],
     pledgeAmountAda: 500, pledgeReturnMethod: 'half after each milestone',
   });
@@ -111,7 +111,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   // (4) no pledge → always allowed
   const draftB = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: cat.id, title: 'B — no pledge',
-    contentMd: 'pitch', isCommercial: true, requestedAmountAda: 1000,
+    payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'pitch', isCommercial: true, requestedAmountAda: 1000,
     milestones: [{ description: 'M1', amountAda: 1000 }],
   });
   ok('no pledge accepted (opt-out)', draftB.pledgeAmountAda === 0 || draftB.pledgeAmountAda == null);

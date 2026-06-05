@@ -84,14 +84,14 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   // reviewer candidates (and we can test the REVIEWER role on stop-funding).
   const round = await rounds.create({
     name: 'Milestone-flow round',
-    budgetAda: 1_000_000, rewardsPoolAda: 50_000,
+    mandatoryWords: 0, budgetAda: 1_000_000, rewardsPoolAda: 50_000,
     categories: [{ name: 'Tooling', type: 'GRANT', allocatedAda: 1_000_000 }],
     eligibleDrepIds: boardDreps.map((d) => d.id),
   });
   await rounds.startStage(round.id, 'SUBMISSION');
   const draft = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: round.categories[0].id, title: 'Milestone flow tool',
-    contentMd: 'Pitch.', isCommercial: true, requestedAmountAda: 1000,
+    payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Pitch.', isCommercial: true, requestedAmountAda: 1000,
     milestones: [{ description: 'M1', amountAda: 600 }, { description: 'M2', amountAda: 400 }],
   });
   await proposals.submit(carol.id, draft.id, { submissionFeeTxHash: 'feehash-mf' });

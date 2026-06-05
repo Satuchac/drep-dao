@@ -21,6 +21,12 @@ export class CardanoQueryService {
   // Single process, so a plain Map is enough; lost on restart by design.
   private readonly vpCache = new Map<string, { value: { votingPowerLovelace: bigint; delegators: number }; expiresAt: number }>();
   private readonly VP_TTL_MS = 10 * 60 * 1000;
+  // Same idea for the on-chain DRep registration check, which runs on EVERY login.
+  // A 60s TTL keeps role recognition fresh while collapsing repeated logins of the
+  // same DRep into one Koios call (the test suite alone logs in ~10 personas many
+  // times — without this it trips the public-tier 429 limit).
+  private readonly drepStatusCache = new Map<string, { value: DRepStatus; expiresAt: number }>();
+  private readonly DREP_STATUS_TTL_MS = 60 * 1000;
 
   constructor(config: ConfigService) {
     const net = config.get<string>('CARDANO_NETWORK') ?? 'Preprod';
@@ -423,6 +429,16 @@ export class CardanoQueryService {
     );
     if (drepIds.length === 0) return out;
 
+    // Serve fresh cache hits; only query Koios for the misses.
+    const now = Date.now();
+    const misses: string[] = [];
+    for (const id of drepIds) {
+      const c = this.drepStatusCache.get(id);
+      if (c && c.expiresAt > now) out.set(id, c.value);
+      else misses.push(id);
+    }
+    if (misses.length === 0) return out;
+
     // Koios on the public tier has intermittent "fetch failed" / 5xx blips. This
     // check runs on every login, so retry a few times with backoff before giving
     // up — a transient blip should never deny a board member their role.
@@ -432,7 +448,7 @@ export class CardanoQueryService {
         const r = await fetch(`${this.base}/drep_info`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ _drep_ids: drepIds }),
+          body: JSON.stringify({ _drep_ids: misses }),
           signal: AbortSignal.timeout(15000),
         });
         if (r.ok) { res = r; break; }
@@ -466,6 +482,11 @@ export class CardanoQueryService {
         }
         out.set(r.drep_id, { registered, keyHashHex: r.hex, amountLovelace });
       }
+    }
+    // Cache every miss we just resolved — including ids Koios omitted (left at the
+    // not-registered default) so we don't re-query unknown DReps each login.
+    for (const id of misses) {
+      this.drepStatusCache.set(id, { value: out.get(id)!, expiresAt: now + this.DREP_STATUS_TTL_MS });
     }
     return out;
   }

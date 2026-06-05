@@ -41,13 +41,13 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
 
   // A round with a category bounded to a 10,000–100,000 ₳ ask per proposal.
   const r = await rounds.create({
-    name: '__category_ask_test__', budgetAda: 500000, rewardsPoolAda: 1000,
+    name: '__category_ask_test__', mandatoryWords: 0, budgetAda: 500000, rewardsPoolAda: 1000,
     categories: [{ name: 'Bounded', type: 'GRANT', allocatedAda: 500000, minAda: 10000, maxAda: 100000, conditions: 'OSS only' }],
   });
   const catId = r.categories[0].id;
   const roundIds = [r.id];
   await db.round.update({ where: { id: r.id }, data: { status: 'SUBMISSION' } });
-  const mk = (amt, extra = {}) => ({ roundId: r.id, categoryId: catId, title: 't', contentMd: 'c', isCommercial: false, requestedAmountAda: amt, milestones: [{ description: 'm', amountAda: amt }], ...extra });
+  const mk = (amt, extra = {}) => ({ roundId: r.id, categoryId: catId, title: 't', payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'c', isCommercial: false, requestedAmountAda: amt, milestones: [{ description: 'm', amountAda: amt }], ...extra });
 
   try {
     await throws('request below min (5,000) rejected', () => proposals.createDraft(u.id, mk(5000)), /below.*minimum/);
@@ -66,7 +66,7 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     // Editing a draft: the frontend PATCH carries categoryId (allowed) but NOT roundId
     // (immutable). updateDraft must accept that shape and persist the change.
     const edited = await proposals.updateDraft(u.id, good.id, {
-      categoryId: catId, title: 't', contentMd: 'changed pitch', isCommercial: false, requestedAmountAda: 50000,
+      categoryId: catId, title: 't', payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'changed pitch', isCommercial: false, requestedAmountAda: 50000,
       submissionFeeTxHash: 'tx12345',
       milestones: [{ title: 'MVP', description: 'Build the MVP', acceptanceCriteria: 'Demo on Preprod', amountAda: 50000 }],
     });
@@ -82,7 +82,7 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     ok('submit moves DRAFT → PENDING (fee > 0)', submitted.status === 'PENDING', submitted.status);
     // PENDING: content/fields editable, but the requested amount is LOCKED (anti-gaming) —
     // you can't quote+pay a small fee then raise the budget for free.
-    const pendingEdit = await proposals.updateDraft(u.id, good.id, { contentMd: 'edited while pending' });
+    const pendingEdit = await proposals.updateDraft(u.id, good.id, { payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'edited while pending' });
     ok('PENDING content is editable', pendingEdit.status === 'PENDING' && pendingEdit.contentMd === 'edited while pending' && pendingEdit.requestedAmountAda === 50000, `${pendingEdit.status}/${pendingEdit.requestedAmountAda}`);
     await throws('requested amount is LOCKED while PENDING', () => proposals.updateDraft(u.id, good.id, { requestedAmountAda: 60000, milestones: [{ description: 'm', amountAda: 60000 }] }), /locked after submission/);
     // Board fee review: reject needs a reason, then sets REJECTED + the feedback the submitter sees.
@@ -122,12 +122,12 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
 
     // §12 zero-fee: a round whose OSS fee is 0% admits an open-source proposal immediately (no tx).
     const freeRound = await rounds.create({
-      name: '__category_ask_free__', budgetAda: 100000, rewardsPoolAda: 1000, feeOssPct: 0,
+      name: '__category_ask_free__', mandatoryWords: 0, budgetAda: 100000, rewardsPoolAda: 1000, feeOssPct: 0,
       categories: [{ name: 'Free', type: 'GRANT', allocatedAda: 100000 }],
     });
     roundIds.push(freeRound.id);
     await db.round.update({ where: { id: freeRound.id }, data: { status: 'SUBMISSION' } });
-    const freeDraft = await proposals.createDraft(u.id, { roundId: freeRound.id, categoryId: freeRound.categories[0].id, title: 'free', contentMd: 'c', isCommercial: false, requestedAmountAda: 1000, milestones: [{ description: 'm', amountAda: 1000 }] });
+    const freeDraft = await proposals.createDraft(u.id, { roundId: freeRound.id, categoryId: freeRound.categories[0].id, title: 'free', payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'c', isCommercial: false, requestedAmountAda: 1000, milestones: [{ description: 'm', amountAda: 1000 }] });
     const freeSubmitted = await proposals.submit(u.id, freeDraft.id, {});
     ok('zero-fee OSS proposal goes ACTIVE on submit (no tx)', freeSubmitted.status === 'ACTIVE' && freeSubmitted.stage === 'FILTERING', `${freeSubmitted.status}/${freeSubmitted.stage}`);
     ok('zero-fee proposal gets a structured publicId', /^R\d+-P\d+$/.test(freeSubmitted.publicId || ''), freeSubmitted.publicId);
