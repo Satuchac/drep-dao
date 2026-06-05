@@ -228,15 +228,11 @@ export class TreasuryService {
     if (amountAda > HOT_WALLET_TOPUP_MAX_ADA) {
       throw new BadRequestException(`a single top-up is capped at ${HOT_WALLET_TOPUP_MAX_ADA} ₳ — split into multiple top-ups if you need more`);
     }
-    // Dedup: refuse if a top-up is already pending. The board should sign or
-    // cancel that one before queueing another (and avoids the duplicate-row
-    // pile-up if the UI is double-clicked while waiting on a response).
-    const open = await this.prisma.multisigAction.findFirst({
-      where: { kind: 'OPS', status: 'PENDING_SIGS', destAddress: hot },
-    });
-    if (open) {
-      throw new ConflictException('a hot-wallet top-up is already pending signatures — sign or wait for that one before queueing another');
-    }
+    // Multiple pending top-ups are allowed on purpose: the board may want to
+    // queue more than one (different amounts / source buckets), and any unwanted
+    // ones can be cancelled in "Actions to sign" (→ FAILED, no longer notified).
+    // The UI already disables the button mid-request, which prevents accidental
+    // double-clicks; we no longer hard-block a second queued top-up here.
     // §15.6 — source bucket: the board can pick which bucket the funds come from;
     // the default (no explicit choice) is the OPERATIONS-flagged bucket, falling
     // back to the primary. An explicit choice must belong to the active multisig.
