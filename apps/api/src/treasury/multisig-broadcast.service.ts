@@ -188,7 +188,15 @@ export class MultisigBroadcastService {
         const primaryUtxos = await this.koiosPost<{ tx_hash: string; tx_index: number; value: string }[]>(
           '/address_utxos', { _addresses: [primary.bech32Address] },
         );
-        if (primaryUtxos.length) { source = primary; utxos = primaryUtxos; }
+        if (primaryUtxos.length) {
+          source = primary;
+          utxos = primaryUtxos;
+          // Persist the effective source so submitWitness + combineAndSubmit resolve
+          // the SAME (primary) script when attaching the native-script witness.
+          // Otherwise the tx (built from the primary) gets the bucket script
+          // attached at submit → MissingScriptWitnesses / ExtraneousScriptWitnesses.
+          await this.prisma.multisigAction.update({ where: { id: actionId }, data: { sourceBucketId: null } });
+        }
       }
     }
     if (!utxos.length) {
