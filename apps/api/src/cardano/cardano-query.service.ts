@@ -1,5 +1,7 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Pool } from 'pg';
+import { drepKeyHashFromId } from '@drep-dao/cardano';
 
 export interface DRepStatus {
   registered: boolean;
@@ -28,6 +30,12 @@ export class CardanoQueryService {
   private readonly drepStatusCache = new Map<string, { value: DRepStatus; expiresAt: number }>();
   private readonly DREP_STATUS_TTL_MS = 60 * 1000;
 
+  // Optional direct db-sync source. When DBSYNC_URL is set, the on-chain reads
+  // hit our own cardano-db-sync Postgres instead of the public Koios tier — no
+  // rate limit, same data. Lazily pooled; falls back to Koios when unset.
+  private readonly dbsyncUrl: string | undefined;
+  private dbsyncPool: Pool | null = null;
+
   constructor(config: ConfigService) {
     const net = config.get<string>('CARDANO_NETWORK') ?? 'Preprod';
     this.base =
@@ -36,6 +44,53 @@ export class CardanoQueryService {
         : net === 'Preview'
           ? 'https://preview.koios.rest/api/v1'
           : 'https://preprod.koios.rest/api/v1';
+    this.dbsyncUrl = config.get<string>('DBSYNC_URL') || undefined;
+  }
+
+  private dbsync(): Pool | null {
+    if (!this.dbsyncUrl) return null;
+    if (!this.dbsyncPool) {
+      this.dbsyncPool = new Pool({ connectionString: this.dbsyncUrl, max: 4, statement_timeout: 15000 });
+      this.logger.log('on-chain reads via cardano-db-sync (DBSYNC_URL set)');
+    }
+    return this.dbsyncPool;
+  }
+
+  /** §22.4 — DRep registration + active + voting power straight from db-sync,
+   *  matched by key hash (db-sync's drep_hash.view is CIP-105, our ids are
+   *  CIP-129, so we convert id → key hash). Mirrors Koios /drep_info semantics:
+   *  registered = has a live registration cert AND not expired (active_until ≥ tip epoch). */
+  private async verifyDRepsViaDbSync(pool: Pool, drepIds: string[]): Promise<Map<string, DRepStatus>> {
+    const out = new Map<string, DRepStatus>(
+      drepIds.map((id) => [id, { registered: false, keyHashHex: null, amountLovelace: 0n }]),
+    );
+    const khToId = new Map<string, string>();
+    for (const id of drepIds) {
+      try { khToId.set(drepKeyHashFromId(id).toLowerCase(), id); } catch { /* malformed id → stays not-registered */ }
+    }
+    const khs = [...khToId.keys()];
+    if (khs.length === 0) return out;
+    const { rows } = await pool.query<{ kh: string; registered: boolean; amount: string | null; active_until: string | null; cur: string | null }>(
+      `SELECT encode(dh.raw,'hex') AS kh,
+              (reg.deposit IS NOT NULL) AS registered,
+              COALESCE(dd.amount,0)::text AS amount,
+              dd.active_until::text AS active_until,
+              (SELECT max(epoch_no) FROM block) AS cur
+         FROM drep_hash dh
+         LEFT JOIN LATERAL (SELECT deposit FROM drep_registration r
+                            WHERE r.drep_hash_id = dh.id ORDER BY r.tx_id DESC, r.cert_index DESC LIMIT 1) reg ON true
+         LEFT JOIN LATERAL (SELECT amount, active_until FROM drep_distr d
+                            WHERE d.hash_id = dh.id ORDER BY d.epoch_no DESC LIMIT 1) dd ON true
+        WHERE encode(dh.raw,'hex') = ANY($1::text[])`,
+      [khs],
+    );
+    for (const r of rows) {
+      const id = khToId.get(r.kh.toLowerCase());
+      if (!id) continue;
+      const active = r.active_until != null && r.cur != null && Number(r.active_until) >= Number(r.cur);
+      out.set(id, { registered: !!r.registered && active, keyHashHex: r.kh, amountLovelace: BigInt(r.amount ?? '0') });
+    }
+    return out;
   }
 
   /** §CIP-119 — on-chain DRep metadata (name + image) per drep id, via Koios. Best-effort. */
@@ -438,6 +493,22 @@ export class CardanoQueryService {
       else misses.push(id);
     }
     if (misses.length === 0) return out;
+
+    // Prefer our own db-sync when configured — same data, no rate limit.
+    const pool = this.dbsync();
+    if (pool) {
+      try {
+        const fromDb = await this.verifyDRepsViaDbSync(pool, misses);
+        for (const id of misses) {
+          const v = fromDb.get(id)!;
+          out.set(id, v);
+          this.drepStatusCache.set(id, { value: v, expiresAt: now + this.DREP_STATUS_TTL_MS });
+        }
+        return out;
+      } catch (e) {
+        this.logger.warn(`db-sync drep query failed, falling back to Koios: ${e instanceof Error ? e.message : e}`);
+      }
+    }
 
     // Koios on the public tier has intermittent "fetch failed" / 5xx blips. This
     // check runs on every login, so retry a few times with backoff before giving
