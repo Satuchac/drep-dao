@@ -181,8 +181,8 @@ export class TreasuryService {
       ? ((await this.prisma.multisigAction.findMany({
           where: { status: { not: 'PENDING_SIGS' } },
           include: {
-            signatures: { select: { boardDrepId: true } },
-            commitments: { select: { userId: true } },
+            signatures: { select: { boardDrepId: true, drep: { select: { user: { select: { displayName: true } } } } } },
+            commitments: { select: { userId: true, user: { select: { displayName: true } } } },
           },
           orderBy: { createdAt: 'desc' },
           take: 50,
