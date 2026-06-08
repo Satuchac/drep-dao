@@ -241,8 +241,21 @@ export interface HotWalletHistoryItem {
   threshold?: number;
 }
 
+export interface TreasuryTx {
+  hash: string;
+  time: number; // unix seconds
+  direction: 'IN' | 'OUT';
+  amountAda: number;
+  label: string;
+  proposalId?: string;
+  proposalTitle?: string;
+  submitter?: string;
+  destAddress?: string;
+}
+
 export const treasuryApi = {
   overview: () => request<TreasuryOverview>('/dao/treasury'),
+  transactions: () => request<{ transactions: TreasuryTx[] }>('/dao/treasury/transactions'),
   boardActions: (history = false) =>
     request<BoardActionsView>(`/me/board-actions${history ? '?history=1' : ''}`),
   prepareTopUp: (amountAda: number, sourceBucketId?: string) =>

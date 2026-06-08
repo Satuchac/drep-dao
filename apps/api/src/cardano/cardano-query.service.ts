@@ -9,6 +9,13 @@ export interface DRepStatus {
   amountLovelace: bigint; // on-chain voting power (total delegated stake), 0 if none/unknown
 }
 
+export interface AddressTx {
+  hash: string;
+  time: number; // unix seconds
+  inLovelace: bigint; // gross lovelace the queried addresses RECEIVED in this tx
+  outLovelace: bigint; // gross lovelace the queried addresses SPENT in this tx
+}
+
 /**
  * Read-only on-chain queries via Koios (free, no key). Used to verify that a
  * DRep ID is actually registered on-chain (§22.4) before seating/admitting it.
@@ -404,6 +411,71 @@ export class CardanoQueryService {
     } catch (e) {
       this.logger.warn(`tx_info verify: ${e instanceof Error ? e.message : e}`);
       return unavail;
+    }
+  }
+
+  /**
+   * Treasury tx history — every tx that paid into OR spent from any of `addresses`,
+   * newest first, with the gross lovelace those addresses received (`inLovelace`) and
+   * spent (`outLovelace`) in that tx. `net = in - out` gives direction + amount.
+   */
+  async addressTransactions(addresses: string[], limit = 100): Promise<AddressTx[]> {
+    if (addresses.length === 0) return [];
+    const pool = this.dbsync();
+    if (pool) {
+      try {
+        const { rows } = await pool.query<{ hash: string; time: string; in_amt: string; out_amt: string }>(
+          `WITH addrs AS (SELECT unnest($1::text[]) AS address),
+                ins AS (SELECT o.tx_id, sum(o.value) AS amt FROM tx_out o JOIN addrs a ON a.address = o.address GROUP BY o.tx_id),
+                outs AS (SELECT o.consumed_by_tx_id AS tx_id, sum(o.value) AS amt
+                           FROM tx_out o JOIN addrs a ON a.address = o.address
+                          WHERE o.consumed_by_tx_id IS NOT NULL GROUP BY o.consumed_by_tx_id),
+                involved AS (SELECT tx_id FROM ins UNION SELECT tx_id FROM outs)
+           SELECT encode(t.hash,'hex') AS hash, extract(epoch FROM b.time)::bigint::text AS time,
+                  COALESCE(ins.amt,0)::text AS in_amt, COALESCE(outs.amt,0)::text AS out_amt
+             FROM involved
+             JOIN tx t ON t.id = involved.tx_id
+             JOIN block b ON b.id = t.block_id
+             LEFT JOIN ins ON ins.tx_id = involved.tx_id
+             LEFT JOIN outs ON outs.tx_id = involved.tx_id
+            ORDER BY b.time DESC LIMIT $2`,
+          [addresses, limit],
+        );
+        return rows.map((r) => ({ hash: r.hash, time: Number(r.time), inLovelace: BigInt(r.in_amt || '0'), outLovelace: BigInt(r.out_amt || '0') }));
+      } catch (e) { this.logger.warn(`db-sync address txs failed, falling back to Koios: ${e instanceof Error ? e.message : e}`); }
+    }
+    // Koios: address_txs → recent tx hashes, then tx_info → per-tx in/out amounts.
+    try {
+      const txRes = await fetch(`${this.base}/address_txs`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _addresses: addresses }), signal: AbortSignal.timeout(15000),
+      });
+      if (!txRes.ok) return [];
+      const txRows = (await txRes.json()) as { tx_hash: string; block_time?: number }[];
+      const hashes = txRows.sort((a, b) => (b.block_time ?? 0) - (a.block_time ?? 0)).slice(0, limit).map((r) => r.tx_hash);
+      if (hashes.length === 0) return [];
+      const infoRes = await fetch(`${this.base}/tx_info`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _tx_hashes: hashes }), signal: AbortSignal.timeout(15000),
+      });
+      if (!infoRes.ok) return [];
+      const set = new Set(addresses);
+      const infos = (await infoRes.json()) as {
+        tx_hash: string; tx_timestamp?: number;
+        outputs?: { payment_addr?: { bech32?: string }; value?: string }[];
+        inputs?: { payment_addr?: { bech32?: string }; value?: string }[];
+      }[];
+      return infos
+        .map((tx) => {
+          let inLovelace = 0n, outLovelace = 0n;
+          for (const o of tx.outputs ?? []) if (o.payment_addr?.bech32 && set.has(o.payment_addr.bech32)) { try { inLovelace += BigInt(o.value ?? '0'); } catch { /* skip */ } }
+          for (const i of tx.inputs ?? []) if (i.payment_addr?.bech32 && set.has(i.payment_addr.bech32)) { try { outLovelace += BigInt(i.value ?? '0'); } catch { /* skip */ } }
+          return { hash: tx.tx_hash, time: tx.tx_timestamp ?? 0, inLovelace, outLovelace };
+        })
+        .sort((a, b) => b.time - a.time);
+    } catch (e) {
+      this.logger.warn(`address_txs: ${e instanceof Error ? e.message : e}`);
+      return [];
     }
   }
 

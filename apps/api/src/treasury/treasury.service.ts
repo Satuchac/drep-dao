@@ -8,6 +8,18 @@ import { TreasuryBucketsService } from './treasury-buckets.service';
 import { verifyCip30Signature } from '../auth/cip30';
 
 const ADA = 1_000_000;
+
+export interface TreasuryTx {
+  hash: string;
+  time: number; // unix seconds
+  direction: 'IN' | 'OUT';
+  amountAda: number;
+  label: string; // e.g. "submission fee", "hot-wallet top-up", "anonymous income"
+  proposalId?: string;
+  proposalTitle?: string;
+  submitter?: string; // display name of the fee payer (incoming submission fees)
+  destAddress?: string; // recipient (outgoing board actions)
+}
 const APPROVAL_THRESHOLD = 3; // 3-of-5 board multisig
 const HOT_WALLET_MIN_ADA = 100; // below this, the platform prepares a top-up
 const HOT_WALLET_TOPUP_ADA = 500;
@@ -468,6 +480,79 @@ export class TreasuryService {
       topUpMaxAda: HOT_WALLET_TOPUP_MAX_ADA,
       autoTopUpAda: HOT_WALLET_TOPUP_ADA,
     };
+  }
+
+  /**
+   * §15 — every on-chain tx that touched a treasury address (multisig sub-addresses
+   * + hot wallet), newest first, enriched with what the platform knows:
+   *   • incoming matching a proposal's submission-fee tx → "submission fee" + proposal + submitter
+   *   • outgoing matching a board MultisigAction → the action's purpose + destination
+   *   • incoming with no known context → "anonymous income"
+   * Direction/amount from net (received − spent) at the treasury addresses.
+   */
+  async treasuryTransactions() {
+    const active = await this.prisma.multisigConfig.findFirst({ where: { replacedAt: null }, orderBy: { assembledAt: 'desc' } });
+    const bks = active
+      ? await this.prisma.treasuryBucket.findMany({ where: { configId: active.id }, select: { bech32Address: true } })
+      : [];
+    const hot = this.anchor.hotWalletAddress();
+    const addrSet = new Set<string>();
+    if (active?.bech32Address) addrSet.add(active.bech32Address);
+    for (const b of bks) if (b.bech32Address) addrSet.add(b.bech32Address);
+    if (hot) addrSet.add(hot);
+    const addresses = [...addrSet];
+    if (addresses.length === 0) return { transactions: [] as TreasuryTx[] };
+
+    const txs = await this.cardano.addressTransactions(addresses, 100);
+
+    // Submission-fee context: proposal + submitter, keyed by every fee tx hash.
+    const proposals = await this.prisma.proposal.findMany({
+      where: { OR: [{ submissionFeeTxHash: { not: null } }, { submissionFeeTxHashes: { isEmpty: false } }] },
+      select: { id: true, title: true, submissionFeeTxHash: true, submissionFeeTxHashes: true, submitterUserId: true },
+    });
+    const submitterIds = [...new Set(proposals.map((p) => p.submitterUserId).filter(Boolean) as string[])];
+    const users = submitterIds.length
+      ? await this.prisma.appUser.findMany({ where: { id: { in: submitterIds } }, select: { id: true, displayName: true } })
+      : [];
+    const nameById = new Map(users.map((u) => [u.id, u.displayName]));
+    const feeByHash = new Map<string, { id: string; title: string; submitter: string | null }>();
+    for (const p of proposals) {
+      const submitter = p.submitterUserId ? nameById.get(p.submitterUserId) ?? null : null;
+      for (const h of new Set([p.submissionFeeTxHash, ...(p.submissionFeeTxHashes ?? [])].filter(Boolean) as string[])) {
+        feeByHash.set(h, { id: p.id, title: p.title, submitter });
+      }
+    }
+
+    // Board-action context, keyed by the broadcast tx hash.
+    const actions = await this.prisma.multisigAction.findMany({
+      where: { txHash: { not: null } },
+      select: { txHash: true, kind: true, description: true, proposalTitle: true, proposalId: true, destAddress: true },
+    });
+    const actionByHash = new Map(actions.filter((a) => a.txHash).map((a) => [a.txHash as string, a]));
+    const KIND_LABEL: Record<string, string> = {
+      OPS: 'hot-wallet top-up', PROJECT_FUNDING: 'milestone payout', REWARD_PAYOUT: 'reward payout',
+      PLEDGE_RETURN: 'pledge return', LEFTOVER_RETURN: 'leftover return', MIGRATION: 'treasury migration',
+    };
+
+    const transactions: TreasuryTx[] = txs.map((t) => {
+      const net = t.inLovelace - t.outLovelace;
+      const direction: 'IN' | 'OUT' = net >= 0n ? 'IN' : 'OUT';
+      const amountAda = Number(net >= 0n ? net : -net) / ADA;
+      const fee = feeByHash.get(t.hash);
+      const action = actionByHash.get(t.hash);
+      const tx: TreasuryTx = { hash: t.hash, time: t.time, direction, amountAda, label: 'outgoing transfer' };
+      if (direction === 'IN') {
+        if (fee) { tx.label = 'submission fee'; tx.proposalId = fee.id; tx.proposalTitle = fee.title; tx.submitter = fee.submitter ?? undefined; }
+        else tx.label = 'anonymous income';
+      } else if (action) {
+        tx.label = KIND_LABEL[action.kind] ?? 'treasury spend';
+        tx.proposalId = action.proposalId ?? undefined;
+        tx.proposalTitle = action.proposalTitle ?? action.description ?? undefined;
+        tx.destAddress = action.destAddress ?? undefined;
+      }
+      return tx;
+    });
+    return { transactions };
   }
 
   /** A board member approves an action with a CIP-30 signature (3-of-5 to proceed). */

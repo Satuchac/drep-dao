@@ -17,6 +17,7 @@ import { FilteringPanel } from './filtering-panel';
 import { VotingPanel } from './voting-panel';
 import { MilestoneReviewsPanel } from './milestone-reviews-panel';
 import { BoardActions } from './board-actions';
+import { TreasuryTransactions } from './treasury-transactions';
 import { StopFundingBoardPanel } from './stop-funding-board-panel';
 import { RoundStageControls } from './round-stage-controls';
 import { InternalProposals } from './internal-proposals';
@@ -164,6 +165,7 @@ function VotingReviewsTab() {
  *  queue. Separated from Actions so the latter stays focused on review/audit
  *  to-dos (fees, pledges, stop-funding, budget settlements). */
 function TreasuryTab() {
+  const [subTab, setSubTab] = useState<'overview' | 'transactions'>('overview');
   const [showHistory, setShowHistory] = useState(false);
   // Bump on any treasury-affecting action (queue transfer, top-up, sweep) so
   // BoardActions immediately refetches and the new pending row appears
@@ -172,21 +174,44 @@ function TreasuryTab() {
   const bumpRefresh = () => setRefreshKey((n) => n + 1);
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-neutral-500">
-          Treasury operations: multisig setup, hot-wallet top-ups/sweeps, board-initiated transfers, and the
-          Approve&nbsp;&amp;&nbsp;sign queue for every multisig action.
-        </p>
-        <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
-          <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
-          Show history
-        </label>
+      {/* Horizontal sub-menu: Overview (multisig setup + balances + actions) | Transactions (on-chain history). */}
+      <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
+        {([['overview', 'Overview'], ['transactions', 'Transactions']] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setSubTab(key)}
+            className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${
+              subTab === key
+                ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400'
+                : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
-      <MultisigSetup />
-      <TreasuryBucketsPanel onChange={bumpRefresh} />
-      <HotWalletControls onChange={bumpRefresh} />
-      <SendFromTreasuryPanel onChange={bumpRefresh} />
-      <BoardActions history={showHistory} refreshKey={refreshKey} onChange={bumpRefresh} />
+
+      {subTab === 'overview' ? (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-neutral-500">
+              Treasury operations: multisig setup, hot-wallet top-ups/sweeps, board-initiated transfers, and the
+              Approve&nbsp;&amp;&nbsp;sign queue for every multisig action.
+            </p>
+            <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
+              <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
+              Show history
+            </label>
+          </div>
+          <MultisigSetup />
+          <TreasuryBucketsPanel onChange={bumpRefresh} />
+          <HotWalletControls onChange={bumpRefresh} />
+          <SendFromTreasuryPanel onChange={bumpRefresh} />
+          <BoardActions history={showHistory} refreshKey={refreshKey} onChange={bumpRefresh} />
+        </>
+      ) : (
+        <TreasuryTransactions />
+      )}
     </div>
   );
 }

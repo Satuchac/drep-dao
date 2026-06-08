@@ -55,6 +55,13 @@ export class TreasuryController {
     return this.treasury.overview();
   }
 
+  /** §15 — on-chain tx history for the treasury addresses, enriched with context. */
+  @UseGuards(JwtAuthGuard)
+  @Get('dao/treasury/transactions')
+  transactions() {
+    return this.treasury.treasuryTransactions();
+  }
+
   @UseGuards(JwtAuthGuard)
   @Get('me/board-actions')
   myActions(@CurrentUser() ctx: AuthContext, @Query('history') history?: string) {
