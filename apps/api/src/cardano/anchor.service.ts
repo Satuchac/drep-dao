@@ -399,7 +399,9 @@ export class AnchorService implements OnModuleInit {
           submitted++;
           if (built.change) pool.push(built.change); // chain: the change funds later anchors
           ok = true;
-          if (i < pending.length - 1) await this.sleep(4000); // let the change propagate to the node
+          // A local cardano-submit-api has the change in its mempool instantly, so no
+          // wait is needed; only Koios's load-balanced relays need time to propagate.
+          if (i < pending.length - 1 && !this.submitApiUrl) await this.sleep(4000);
         } catch (e) {
           // The chosen input isn't really spendable (stale db-sync / already in-flight).
           // It's now in `bad`; the loop retries this same anchor with the remaining UTxOs.
