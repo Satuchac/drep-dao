@@ -14,11 +14,15 @@ export interface TreasuryTx {
   time: number; // unix seconds
   direction: 'IN' | 'OUT';
   amountAda: number;
-  label: string; // e.g. "submission fee", "hot-wallet top-up", "anonymous income"
+  label: string; // auto-detected: "submission fee", "hot-wallet top-up", "anonymous income"…
   proposalId?: string;
   proposalTitle?: string;
   submitter?: string; // display name of the fee payer (incoming submission fees)
   destAddress?: string; // recipient (outgoing board actions)
+  // §15 — board-provided context (overrides `label` for display when set).
+  annotationTitle?: string;
+  annotationNote?: string;
+  annotatedBy?: string; // board member who set the context
 }
 const APPROVAL_THRESHOLD = 3; // 3-of-5 board multisig
 const HOT_WALLET_MIN_ADA = 100; // below this, the platform prepares a top-up
@@ -552,7 +556,41 @@ export class TreasuryService {
       }
       return tx;
     });
+
+    // Merge any board-provided context (overrides the auto label + adds an attributed note).
+    const hashes = transactions.map((t) => t.hash);
+    const annotations = hashes.length
+      ? await this.prisma.treasuryTxAnnotation.findMany({ where: { txHash: { in: hashes } } })
+      : [];
+    const annByHash = new Map(annotations.map((a) => [a.txHash, a]));
+    for (const t of transactions) {
+      const a = annByHash.get(t.hash);
+      if (a) {
+        t.annotationTitle = a.title ?? undefined;
+        t.annotationNote = a.description ?? undefined;
+        t.annotatedBy = a.byName;
+      }
+    }
     return { transactions };
+  }
+
+  /** §15 — a board member sets/updates/clears the context for a treasury tx.
+   *  Clearing both fields removes the annotation. */
+  async annotateTransaction(userId: string, txHash: string, dto: { title?: string; description?: string }) {
+    const user = await this.prisma.appUser.findUnique({ where: { id: userId }, select: { displayName: true } });
+    const byName = user?.displayName ?? 'Board member';
+    const title = dto.title?.trim() || null;
+    const description = dto.description?.trim() || null;
+    if (!title && !description) {
+      await this.prisma.treasuryTxAnnotation.deleteMany({ where: { txHash } });
+      return { ok: true };
+    }
+    await this.prisma.treasuryTxAnnotation.upsert({
+      where: { txHash },
+      update: { title, description, byUserId: userId, byName },
+      create: { txHash, title, description, byUserId: userId, byName },
+    });
+    return { ok: true };
   }
 
   /** A board member approves an action with a CIP-30 signature (3-of-5 to proceed). */

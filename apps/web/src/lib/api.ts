@@ -251,11 +251,19 @@ export interface TreasuryTx {
   proposalTitle?: string;
   submitter?: string;
   destAddress?: string;
+  annotationTitle?: string; // board-provided title (overrides label)
+  annotationNote?: string;
+  annotatedBy?: string;
 }
 
 export const treasuryApi = {
   overview: () => request<TreasuryOverview>('/dao/treasury'),
   transactions: () => request<{ transactions: TreasuryTx[] }>('/dao/treasury/transactions'),
+  annotateTx: (txHash: string, body: { title?: string; description?: string }) =>
+    request<{ ok: boolean }>(`/admin/treasury/transactions/${encodeURIComponent(txHash)}/annotate`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   boardActions: (history = false) =>
     request<BoardActionsView>(`/me/board-actions${history ? '?history=1' : ''}`),
   prepareTopUp: (amountAda: number, sourceBucketId?: string) =>

@@ -810,6 +810,22 @@ model MultisigAction {
   @@map("multisig_action")
 }
 
+// §15 — board-provided context for an on-chain treasury transaction. Overrides the
+// auto-detected label (e.g. "anonymous income" → "Intersect — Milestone 1 payment")
+// and adds a free-text note, attributed to the board member who set it.
+model TreasuryTxAnnotation {
+  id          String   @id @default(uuid()) @db.Uuid
+  txHash      String   @unique @map("tx_hash")
+  title       String?  // overrides the auto label when set
+  description String?
+  byUserId    String   @map("by_user_id") @db.Uuid
+  byName      String   @map("by_name") // snapshot of the board member's display name
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("treasury_tx_annotation")
+}
+
 model MultisigSignature {
   id          String   @id @default(uuid()) @db.Uuid
   actionId    String   @map("action_id") @db.Uuid

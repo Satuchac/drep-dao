@@ -40,6 +40,10 @@ export class CommitDto {
 export class CancelActionDto {
   @IsString() @MaxLength(500) reason!: string;
 }
+export class AnnotateTxDto {
+  @IsOptional() @IsString() @MaxLength(120) title?: string;
+  @IsOptional() @IsString() @MaxLength(2000) description?: string;
+}
 
 // §15 Treasury overview + board actions (prepare/approve multisig spends).
 @Controller()
@@ -60,6 +64,13 @@ export class TreasuryController {
   @Get('dao/treasury/transactions')
   transactions() {
     return this.treasury.treasuryTransactions();
+  }
+
+  /** §15 — a board member adds/edits context (title + note) for a treasury tx. */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Post('admin/treasury/transactions/:txHash/annotate')
+  annotateTx(@CurrentUser() ctx: AuthContext, @Param('txHash') txHash: string, @Body() dto: AnnotateTxDto) {
+    return this.treasury.annotateTransaction(ctx.userId, txHash, dto);
   }
 
   @UseGuards(JwtAuthGuard)
