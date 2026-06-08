@@ -5,6 +5,7 @@ import { boardRoundsApi, roundsApi, type RoundDetail } from '@/lib/api';
 import { ProposalCounts, StatusBadge, fmtDateTime, toLocalInput, DateField } from './round-ui';
 import { CreateRoundForm } from './rounds-section';
 import { ConfirmDialog } from './confirm-dialog';
+import { useAuth } from '@/lib/auth-context';
 
 const STAGE_LABEL: Record<string, string> = {
   SUBMISSION: 'Submission',
@@ -22,7 +23,10 @@ const STAGE_LABEL: Record<string, string> = {
  * the final stage (Funding) is closed manually. Self-hides when no round is open.
  */
 export function RoundStageControls() {
+  const { profile } = useAuth();
+  const isBoard = profile?.roles.includes('BOARD') ?? false;
   const [rounds, setRounds] = useState<RoundDetail[]>([]);
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(() => {
     roundsApi
@@ -33,20 +37,38 @@ export function RoundStageControls() {
   }, []);
   useEffect(load, [load]);
 
-  if (rounds.length === 0) return null;
+  // Non-board members with no open round have nothing to act on here.
+  if (!isBoard && rounds.length === 0) return null;
 
   return (
     <section className="space-y-3 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-      <div>
-        <h3 className="text-base font-semibold">Round stage controls</h3>
-        <p className="text-xs text-neutral-500">
-          Confirm each next stage before it begins. Check the proposals are ready, then let it auto-start at the
-          planned time or launch it early. Delays shift the new stage to start now and keep its planned length.
-        </p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h3 className="text-base font-semibold">Round stage controls</h3>
+          <p className="text-xs text-neutral-500">
+            Confirm each next stage before it begins. Check the proposals are ready, then let it auto-start at the
+            planned time or launch it early. Delays shift the new stage to start now and keep its planned length.
+          </p>
+        </div>
+        {/* §5/§6 — board members can start a new funding round straight from here
+            (same control as the Rounds section). */}
+        {isBoard ? (
+          <button
+            onClick={() => setCreating((v) => !v)}
+            className="shrink-0 rounded-md border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          >
+            {creating ? 'Cancel' : '+ Create round'}
+          </button>
+        ) : null}
       </div>
-      {rounds.map((r) => (
-        <RoundControl key={r.id} round={r} onChange={load} />
-      ))}
+
+      {creating ? <CreateRoundForm onDone={() => { setCreating(false); load(); }} /> : null}
+
+      {rounds.length === 0 ? (
+        <p className="text-sm text-neutral-500">No open round. Create one to get started.</p>
+      ) : (
+        rounds.map((r) => <RoundControl key={r.id} round={r} onChange={load} />)
+      )}
     </section>
   );
 }
