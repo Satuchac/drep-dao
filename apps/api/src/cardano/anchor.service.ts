@@ -367,43 +367,46 @@ export class AnchorService implements OnModuleInit {
     }
     const { prv, addr } = this.anchorKeys(this.mnemonic);
     const pp = await this.cardano.epochParams();
-    let utxos = await this.cardano.addressUtxos([addr.to_bech32()]);
+    // Candidate UTxOs from db-sync. db-sync can lag the node — a UTxO it still
+    // reports as unspent may already be spent on-chain — so any input the node
+    // rejects is added to `bad` and the same anchor is retried with the rest.
+    const pool = await this.cardano.addressUtxos([addr.to_bech32()]);
+    const bad = new Set<string>(); // consumed (after success) or node-rejected input refs
+    const ref = (u: Utxo) => `${u.tx_hash}#${u.tx_index}`;
 
     let submitted = 0;
     let failed = 0;
     for (let i = 0; i < pending.length; i++) {
       const a = pending[i];
-      if (utxos.length === 0) {
-        failed++;
-        this.logger.warn(`force-submit ${a.id} skipped: anchor wallet has no UTxOs`);
-        continue;
+      const event = this.metadataFromAnchor(a);
+      let ok = false;
+      // Try the largest spendable UTxO; if the node rejects it, drop it and retry.
+      while (!ok) {
+        const candidates = pool.filter((u) => !bad.has(ref(u)));
+        if (candidates.length === 0) break; // no spendable UTxO left for this anchor
+        let built: { fixedHex: string; txHash: string; change: Utxo | null; inputs: string[] };
+        try {
+          built = this.buildMetadataTx(event, candidates, pp, prv, addr);
+        } catch (e) {
+          this.logger.warn(`force-submit ${a.id} failed to build: ${e instanceof Error ? e.message : e}`);
+          break; // malformed anchor — skip it, keep the pool for the others
+        }
+        built.inputs.forEach((r) => bad.add(r)); // either spent (success) or rejected (failure)
+        try {
+          await this.submitTxHex(built.fixedHex);
+          await this.prisma.anchor.update({ where: { id: a.id }, data: { txHash: built.txHash, submittedAt: new Date() } });
+          this.logger.log(`anchored on-chain: ${built.txHash}`);
+          submitted++;
+          if (built.change) pool.push(built.change); // chain: the change funds later anchors
+          ok = true;
+          if (i < pending.length - 1) await this.sleep(4000); // let the change propagate to the node
+        } catch (e) {
+          // The chosen input isn't really spendable (stale db-sync / already in-flight).
+          // It's now in `bad`; the loop retries this same anchor with the remaining UTxOs.
+          this.logger.warn(`force-submit ${a.id}: input rejected (${built.inputs.join(',')}), retrying with remaining UTxOs — ${e instanceof Error ? e.message : e}`);
+        }
       }
-      // Build first: a build failure (e.g. a malformed anchor) leaves the UTxO untouched,
-      // so we keep chaining for the remaining anchors instead of breaking the whole batch.
-      let built: { fixedHex: string; txHash: string; change: Utxo | null };
-      try {
-        built = this.buildMetadataTx(this.metadataFromAnchor(a), utxos, pp, prv, addr);
-      } catch (e) {
-        failed++;
-        this.logger.warn(`force-submit ${a.id} failed to build: ${e instanceof Error ? e.message : e}`);
-        continue; // UTxO not spent — leave `utxos` as-is for the next anchor
-      }
-      try {
-        await this.submitTxHex(built.fixedHex);
-        await this.prisma.anchor.update({ where: { id: a.id }, data: { txHash: built.txHash, submittedAt: new Date() } });
-        this.logger.log(`anchored on-chain: ${built.txHash}`);
-        submitted++;
-        // Chain: the next tx spends this tx's change (Koios won't show it yet). Pause so
-        // the parent propagates across Koios's load-balanced relays before the child
-        // (referencing its still-unconfirmed output) hits a possibly different relay.
-        utxos = built.change ? [built.change] : [];
-        if (i < pending.length - 1 && utxos.length > 0) await this.sleep(4000);
-      } catch (e) {
-        failed++;
-        this.logger.warn(`force-submit ${a.id} failed to submit: ${e instanceof Error ? e.message : e}`);
-        // The input may now be consumed — re-read from Koios for the next attempt.
-        utxos = await this.cardano.addressUtxos([addr.to_bech32()]).catch(() => []);
-      }
+      if (!ok) failed++;
     }
     return { submitted, failed, total: pending.length };
   }
@@ -421,7 +424,7 @@ export class AnchorService implements OnModuleInit {
       publicId?: string;
       docHash?: string;
       electedBoard?: { drep: string; name: string }[];
-      votes?: { drep?: string; vote?: string; choice?: string; power?: number; weight?: number }[];
+      votes?: { drep?: string; voter?: string; vote?: string; choice?: string; power?: number; weight?: number }[];
       result?: { outcome?: string; yes?: number; no?: number; threshold?: number; totalPower?: number };
       // submission-anchor preimage fields
       proposalId?: string;
@@ -444,7 +447,9 @@ export class AnchorService implements OnModuleInit {
       })[GOVERNANCE_METADATA_LABEL];
     }
     const votes = (p.votes ?? []).map((v) => ({
-      drep: v.drep ?? '',
+      // The preimage stores the voter's DRep id under `voter` (GovVoteEvent shape);
+      // accept `drep` too for older/other anchor kinds.
+      drep: v.voter ?? v.drep ?? '',
       vote: v.vote ?? v.choice ?? '',
       power: v.power ?? v.weight,
     }));
@@ -514,7 +519,7 @@ export class AnchorService implements OnModuleInit {
     pp: Record<string, string | number>,
     prv: CSL.PrivateKey,
     addr: CSL.Address,
-  ): { fixedHex: string; txHash: string; change: Utxo | null } {
+  ): { fixedHex: string; txHash: string; change: Utxo | null; inputs: string[] } {
     if (!utxos.length) throw new Error('anchor wallet has no UTxOs');
     const txb = CSL.TransactionBuilder.new(this.builderCfg(pp));
     txb.add_json_metadatum_with_schema(
@@ -539,6 +544,12 @@ export class AnchorService implements OnModuleInit {
     fixed.sign_and_add_vkey_signature(prv);
     const txHash = fixed.transaction_hash().to_hex();
 
+    // The exact inputs selected — a batch marks any node-rejected input as bad
+    // (db-sync can lag and still offer a UTxO the node has already spent).
+    const inputRefs: string[] = [];
+    const bodyIns = built.body().inputs();
+    for (let k = 0; k < bodyIns.len(); k++) inputRefs.push(`${bodyIns.get(k).transaction_id().to_hex()}#${bodyIns.get(k).index()}`);
+
     // The single change output (back to our address) becomes the next chained input.
     const addrBech = addr.to_bech32();
     const outs = built.body().outputs();
@@ -550,7 +561,7 @@ export class AnchorService implements OnModuleInit {
         break;
       }
     }
-    return { fixedHex: fixed.to_hex(), txHash, change };
+    return { fixedHex: fixed.to_hex(), txHash, change, inputs: inputRefs };
   }
 
   private async submitTxHex(hex: string): Promise<void> {
