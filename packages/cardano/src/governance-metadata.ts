@@ -179,7 +179,8 @@ export interface AnchorSubmissionMetadata {
   round?: number;
   submitter: string; // DRep id (CIP-129) or stake/wallet address
   submitterType: 'DRep' | 'Wallet';
-  fee: { required: boolean; paid: boolean; ada: number; txHash?: string };
+  // Cardano tx metadata has no boolean type, so these flags are 'yes'/'no' strings.
+  fee: { required: 'yes' | 'no'; paid: 'yes' | 'no'; ada: number; txHash?: string };
   acceptedAt: string;
   proofHash?: string;
 }
@@ -204,8 +205,8 @@ export function buildSubmissionMetadata(p: {
     submitter: p.submitter,
     submitterType: p.submitterType,
     fee: {
-      required: p.feeRequired,
-      paid: p.feePaid,
+      required: p.feeRequired ? 'yes' : 'no',
+      paid: p.feePaid ? 'yes' : 'no',
       ada: Math.round(p.feeAda),
       ...(p.feeTxHash ? { txHash: p.feeTxHash } : {}),
     },
