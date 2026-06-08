@@ -30,9 +30,12 @@ export class CardanoQueryService {
   private readonly drepStatusCache = new Map<string, { value: DRepStatus; expiresAt: number }>();
   private readonly DREP_STATUS_TTL_MS = 60 * 1000;
 
-  // Optional direct db-sync source. When DBSYNC_URL is set, the on-chain reads
-  // hit our own cardano-db-sync Postgres instead of the public Koios tier — no
-  // rate limit, same data. Lazily pooled; falls back to Koios when unset.
+  // On-chain data source — two options, chosen by CARDANO_ONCHAIN_SOURCE:
+  //   'koios'  (default) → the public Koios tier
+  //   'dbsync'           → our own cardano-db-sync Postgres (no rate limit), set
+  //                        via DBSYNC_URL. Every db-sync read falls back to Koios
+  //                        on error, so db-sync is never a hard dependency.
+  private readonly onchainSource: 'koios' | 'dbsync';
   private readonly dbsyncUrl: string | undefined;
   private dbsyncPool: Pool | null = null;
 
@@ -45,13 +48,20 @@ export class CardanoQueryService {
           ? 'https://preview.koios.rest/api/v1'
           : 'https://preprod.koios.rest/api/v1';
     this.dbsyncUrl = config.get<string>('DBSYNC_URL') || undefined;
+    this.onchainSource = (config.get<string>('CARDANO_ONCHAIN_SOURCE') ?? 'koios').trim().toLowerCase() === 'dbsync'
+      ? 'dbsync'
+      : 'koios';
+    if (this.onchainSource === 'dbsync' && !this.dbsyncUrl) {
+      this.logger.warn('CARDANO_ONCHAIN_SOURCE=dbsync but DBSYNC_URL is unset — using Koios');
+    }
+    this.logger.log(`on-chain source: ${this.onchainSource === 'dbsync' && this.dbsyncUrl ? 'cardano-db-sync' : 'koios'}`);
   }
 
+  /** The db-sync pool when CARDANO_ONCHAIN_SOURCE=dbsync (and DBSYNC_URL is set); null ⇒ use Koios. */
   private dbsync(): Pool | null {
-    if (!this.dbsyncUrl) return null;
+    if (this.onchainSource !== 'dbsync' || !this.dbsyncUrl) return null;
     if (!this.dbsyncPool) {
       this.dbsyncPool = new Pool({ connectionString: this.dbsyncUrl, max: 4, statement_timeout: 15000 });
-      this.logger.log('on-chain reads via cardano-db-sync (DBSYNC_URL set)');
     }
     return this.dbsyncPool;
   }
@@ -215,6 +225,36 @@ export class CardanoQueryService {
   async drepMetadata(drepIds: string[]): Promise<Map<string, { name?: string; image?: string }>> {
     const out = new Map<string, { name?: string; image?: string }>();
     if (drepIds.length === 0) return out;
+    const pool = this.dbsync();
+    if (pool) {
+      try {
+        const khToId = new Map<string, string>();
+        for (const id of drepIds) { try { khToId.set(drepKeyHashFromId(id).toLowerCase(), id); } catch { /* skip */ } }
+        const khs = [...khToId.keys()];
+        if (khs.length) {
+          const { rows } = await pool.query<{ kh: string; name: string | null; image: string | null }>(
+            `SELECT encode(dh.raw,'hex') AS kh, d.given_name AS name, d.image_url AS image
+               FROM drep_hash dh
+               JOIN LATERAL (SELECT voting_anchor_id FROM drep_registration r
+                             WHERE r.drep_hash_id = dh.id AND r.voting_anchor_id IS NOT NULL
+                             ORDER BY r.tx_id DESC, r.cert_index DESC LIMIT 1) reg ON true
+               JOIN off_chain_vote_data ocd ON ocd.voting_anchor_id = reg.voting_anchor_id
+               JOIN off_chain_vote_drep_data d ON d.off_chain_vote_data_id = ocd.id
+              WHERE encode(dh.raw,'hex') = ANY($1::text[])`,
+            [khs],
+          );
+          for (const r of rows) {
+            const id = khToId.get(r.kh.toLowerCase());
+            if (id) out.set(id, { name: r.name ?? undefined, image: normalizeImageUri(r.image ?? undefined) });
+          }
+        }
+        // Only trust db-sync here if it actually returned metadata. db-sync only
+        // populates DRep off-chain data when its off-chain governance fetcher is
+        // enabled; if it's off (no rows), fall through to Koios so names/images
+        // still resolve. Low-frequency call, so the Koios hit is harmless.
+        if (out.size > 0) return out;
+      } catch (e) { this.logger.warn(`db-sync drep metadata failed, falling back to Koios: ${e instanceof Error ? e.message : e}`); }
+    }
     try {
       const res = await fetch(`${this.base}/drep_metadata`, {
         method: 'POST',
@@ -244,6 +284,11 @@ export class CardanoQueryService {
    */
   async addressBalanceStrict(addresses: string[]): Promise<Map<string, bigint> | null> {
     if (addresses.length === 0) return new Map();
+    const pool = this.dbsync();
+    if (pool) {
+      try { return await this.addressBalanceViaDbSync(pool, addresses); }
+      catch (e) { this.logger.warn(`db-sync address balance failed, falling back to Koios: ${e instanceof Error ? e.message : e}`); }
+    }
     try {
       const res = await fetch(`${this.base}/address_info`, {
         method: 'POST',
@@ -264,10 +309,28 @@ export class CardanoQueryService {
     }
   }
 
+  /** Sum of unspent tx_out at each address, straight from db-sync. */
+  private async addressBalanceViaDbSync(pool: Pool, addresses: string[]): Promise<Map<string, bigint>> {
+    const out = new Map<string, bigint>(addresses.map((a) => [a, 0n]));
+    const { rows } = await pool.query<{ address: string; bal: string }>(
+      `SELECT address, COALESCE(sum(value),0)::text AS bal
+         FROM tx_out WHERE address = ANY($1::text[]) AND consumed_by_tx_id IS NULL
+        GROUP BY address`,
+      [addresses],
+    );
+    for (const r of rows) if (out.has(r.address)) out.set(r.address, BigInt(r.bal ?? '0'));
+    return out;
+  }
+
   /** Total controlled balance (Lovelace) per payment/base address, via Koios /address_info. */
   async addressBalance(addresses: string[]): Promise<Map<string, bigint>> {
     const out = new Map<string, bigint>(addresses.map((a) => [a, 0n]));
     if (addresses.length === 0) return out;
+    const pool = this.dbsync();
+    if (pool) {
+      try { return await this.addressBalanceViaDbSync(pool, addresses); }
+      catch (e) { this.logger.warn(`db-sync address balance failed, falling back to Koios: ${e instanceof Error ? e.message : e}`); }
+    }
     try {
       const res = await fetch(`${this.base}/address_info`, {
         method: 'POST',
@@ -304,6 +367,20 @@ export class CardanoQueryService {
     const unavail = { found: false, paid: false, paidLovelace: 0n, koiosAvailable: false };
     const miss = { found: false, paid: false, paidLovelace: 0n, koiosAvailable: true };
     if (!txHash || !toAddress) return miss;
+    const pool = this.dbsync();
+    if (pool && /^[0-9a-fA-F]{64}$/.test(txHash)) {
+      try {
+        const { rows } = await pool.query<{ found: boolean; paid: string }>(
+          `SELECT EXISTS(SELECT 1 FROM tx WHERE hash = decode($1,'hex')) AS found,
+                  COALESCE((SELECT sum(o.value) FROM tx t JOIN tx_out o ON o.tx_id = t.id
+                            WHERE t.hash = decode($1,'hex') AND o.address = $2),0)::text AS paid`,
+          [txHash, toAddress],
+        );
+        if (!rows[0]?.found) return miss;
+        const paid = BigInt(rows[0].paid ?? '0');
+        return { found: true, paid: paid >= minLovelace, paidLovelace: paid, koiosAvailable: true };
+      } catch (e) { this.logger.warn(`db-sync tx verify failed, falling back to Koios: ${e instanceof Error ? e.message : e}`); }
+    }
     try {
       const res = await fetch(`${this.base}/tx_info`, {
         method: 'POST',
