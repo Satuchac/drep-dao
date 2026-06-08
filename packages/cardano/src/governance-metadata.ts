@@ -179,9 +179,11 @@ export interface AnchorSubmissionMetadata {
   round?: number;
   submitter: string; // DRep id (CIP-129) or stake/wallet address
   submitterType: 'DRep' | 'Wallet';
+  outcome: 'accepted' | 'rejected'; // the board's fee-review decision
+  reason?: string; // why it was rejected (set only when outcome === 'rejected')
   // Cardano tx metadata has no boolean type, so these flags are 'yes'/'no' strings.
   fee: { required: 'yes' | 'no'; paid: 'yes' | 'no'; ada: number; txHash?: string };
-  acceptedAt: string;
+  decidedAt: string;
   proofHash?: string;
 }
 
@@ -194,23 +196,28 @@ export function buildSubmissionMetadata(p: {
   feePaid: boolean;
   feeAda: number;
   feeTxHash?: string | null;
-  acceptedAt?: string;
+  outcome?: 'accepted' | 'rejected';
+  reason?: string | null;
+  decidedAt?: string;
   proofHash?: string;
 }): Record<string, AnchorSubmissionMetadata> {
+  const outcome = p.outcome ?? 'accepted';
   const meta: AnchorSubmissionMetadata = {
-    title: SUBJECT_TITLE.submission,
+    title: outcome === 'rejected' ? 'Funding proposal rejected (fee review)' : SUBJECT_TITLE.submission,
     subject: 'submission',
     proposalId: p.proposalId,
     ...(p.round != null ? { round: p.round } : {}),
     submitter: p.submitter,
     submitterType: p.submitterType,
+    outcome,
+    ...(outcome === 'rejected' && p.reason ? { reason: p.reason } : {}),
     fee: {
       required: p.feeRequired ? 'yes' : 'no',
       paid: p.feePaid ? 'yes' : 'no',
       ada: Math.round(p.feeAda),
       ...(p.feeTxHash ? { txHash: p.feeTxHash } : {}),
     },
-    acceptedAt: p.acceptedAt ?? new Date().toISOString(),
+    decidedAt: p.decidedAt ?? new Date().toISOString(),
     ...(p.proofHash ? { proofHash: p.proofHash } : {}),
   };
   return { [GOVERNANCE_METADATA_LABEL]: meta };

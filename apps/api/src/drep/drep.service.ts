@@ -208,6 +208,8 @@ export class DrepService {
         proposalId?: string;
         submitter?: string;
         submitterType?: string;
+        outcome?: 'accepted' | 'rejected';
+        reason?: string | null;
         fee?: { required?: boolean; paid?: boolean; ada?: number; txHash?: string | null };
       };
       // Self-describing title/detail for every kind (admission, filtering, dv, milestone, …).
@@ -216,9 +218,12 @@ export class DrepService {
       const ref = p.ref ?? p.applicant;
       // A submission anchor records acceptance facts, not a vote tally.
       if (subject === 'submission') {
+        const rejected = p.outcome === 'rejected';
+        const subTitle = rejected ? 'Funding proposal rejected (fee review)' : title;
         const feeStr = p.fee?.required ? (p.fee.paid ? `fee ${p.fee.ada ?? 0} ₳ paid` : 'fee unpaid') : 'no fee required';
-        const detail = `${p.proposalId ?? ''} · by ${(p.submitter ?? '').slice(0, 24)}${(p.submitter ?? '').length > 24 ? '…' : ''} (${p.submitterType ?? 'Wallet'}) · ${feeStr}`;
-        return { id: a.id, title, detail, kind: a.kind, label: a.metadataLabel, hash: a.hash, txHash: a.txHash, createdAt: a.createdAt };
+        const who = `${(p.submitter ?? '').slice(0, 24)}${(p.submitter ?? '').length > 24 ? '…' : ''}`;
+        const detail = `${p.proposalId ?? ''} · by ${who} (${p.submitterType ?? 'Wallet'}) · ${feeStr}${rejected && p.reason ? ` · reason: ${p.reason}` : ''}`;
+        return { id: a.id, title: subTitle, detail, kind: a.kind, label: a.metadataLabel, hash: a.hash, txHash: a.txHash, createdAt: a.createdAt };
       }
       let detail = '';
       if (p.result) {

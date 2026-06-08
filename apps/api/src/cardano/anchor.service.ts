@@ -289,15 +289,20 @@ export class AnchorService implements OnModuleInit {
     feePaid: boolean;
     feeAda: number;
     feeTxHash?: string | null;
+    outcome?: 'accepted' | 'rejected';
+    reason?: string | null;
   }): Promise<AnchorResult> {
+    const outcome = params.outcome ?? 'accepted';
     const preimage = {
       subject: GovSubject.SUBMISSION,
       proposalId: params.publicId,
       round: params.roundNumber ?? null,
       submitter: params.submitter,
       submitterType: params.submitterType,
+      outcome,
+      reason: outcome === 'rejected' ? params.reason ?? null : null,
       fee: { required: params.feeRequired, paid: params.feePaid, ada: params.feeAda, txHash: params.feeTxHash ?? null },
-      acceptedAt: new Date().toISOString(),
+      decidedAt: new Date().toISOString(),
     };
     const hash = sha256hex(JSON.stringify(preimage));
     const metadata = buildSubmissionMetadata({
@@ -309,7 +314,9 @@ export class AnchorService implements OnModuleInit {
       feePaid: params.feePaid,
       feeAda: params.feeAda,
       feeTxHash: params.feeTxHash ?? null,
-      acceptedAt: preimage.acceptedAt,
+      outcome,
+      reason: preimage.reason,
+      decidedAt: preimage.decidedAt,
       proofHash: hash,
     })[GOVERNANCE_METADATA_LABEL];
 
@@ -433,6 +440,10 @@ export class AnchorService implements OnModuleInit {
       round?: number | null;
       submitter?: string;
       submitterType?: 'DRep' | 'Wallet';
+      outcome?: 'accepted' | 'rejected';
+      reason?: string | null;
+      decidedAt?: string;
+      acceptedAt?: string; // older anchors used this name
       fee?: { required?: boolean; paid?: boolean; ada?: number; txHash?: string | null };
     };
     if ((p.subject ?? a.kind) === GovSubject.SUBMISSION) {
@@ -445,6 +456,9 @@ export class AnchorService implements OnModuleInit {
         feePaid: p.fee?.paid ?? false,
         feeAda: p.fee?.ada ?? 0,
         feeTxHash: p.fee?.txHash ?? null,
+        outcome: p.outcome ?? 'accepted',
+        reason: p.reason ?? null,
+        decidedAt: p.decidedAt ?? p.acceptedAt,
         proofHash: a.hash,
       })[GOVERNANCE_METADATA_LABEL];
     }

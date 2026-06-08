@@ -495,6 +495,13 @@ export class ProposalsService {
         where: { id },
         data: { status: ProposalStatus.REJECTED, stage: null, feeReviewFeedback: feedback },
       });
+      // Anchor the rejection on-chain too (not just acceptances), with the reason —
+      // so the public record shows why a proposal didn't make it past fee review.
+      await this.anchorActivation(
+        id,
+        { required: true, paid: !!p.submissionFeeTxHash, ada: toAda(p.submissionFeeAda), txHash: p.submissionFeeTxHash },
+        { outcome: 'rejected', reason: feedback },
+      );
     }
     return this.get(id);
   }
@@ -1576,7 +1583,11 @@ export class ProposalsService {
    * on-chain acceptance anchor: structured proposal id + submitter (DRep id, or stake address
    * if not a DRep) + the fee facts. Best-effort (degrades like every other anchor).
    */
-  private async anchorActivation(proposalRowId: string, fee: { required: boolean; paid: boolean; ada: number; txHash?: string | null }): Promise<void> {
+  private async anchorActivation(
+    proposalRowId: string,
+    fee: { required: boolean; paid: boolean; ada: number; txHash?: string | null },
+    opts?: { outcome?: 'accepted' | 'rejected'; reason?: string | null },
+  ): Promise<void> {
     if (!this.anchor) return;
     try {
       const p = await this.prisma.proposal.findUnique({
@@ -1600,6 +1611,8 @@ export class ProposalsService {
         feePaid: fee.paid,
         feeAda: fee.ada,
         feeTxHash: fee.txHash ?? null,
+        outcome: opts?.outcome ?? 'accepted',
+        reason: opts?.reason ?? null,
       });
     } catch {
       /* best-effort: never block activation on the anchor */
