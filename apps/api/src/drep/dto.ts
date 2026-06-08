@@ -21,6 +21,9 @@ export class DrepApplicationDto {
   // wallet's CIP-95 DRep key (captured at login) and verified on-chain.
   @IsOptional() @IsString() @MaxLength(100) displayName?: string;
   @IsOptional() @IsString() @MaxLength(5000) bio?: string;
+  // Optional profile photo (data URL). Empty string = none → the display falls
+  // back to the on-chain CIP-119 image, then a placeholder. Never required.
+  @IsOptional() @IsString() @MaxLength(360_000) photo?: string;
   @IsOptional() @IsObject() socials?: Record<string, unknown>;
   @IsOptional() @IsObject() contact?: Record<string, unknown>;
   @IsOptional() @IsArray() @IsString({ each: true }) subcategoryIds?: string[];

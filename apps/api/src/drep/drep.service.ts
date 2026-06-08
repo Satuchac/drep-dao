@@ -402,6 +402,12 @@ export class DrepService {
       throw new ForbiddenException(`you don't yet meet the DAO entry requirements — ${why}`);
     }
 
+    // Photo is optional: if provided it must be a data URL; empty/absent = none,
+    // and the display falls back to the on-chain CIP-119 image, then a placeholder.
+    if (dto.photo !== undefined && dto.photo !== '' && !/^data:image\/(png|jpe?g|webp|gif);base64,/.test(dto.photo)) {
+      throw new ConflictException('photo must be a data URL (data:image/<type>;base64,…)');
+    }
+
     if (dto.displayName !== undefined) {
       await this.prisma.appUser.update({ where: { id: userId }, data: { displayName: dto.displayName } });
     }
@@ -410,6 +416,7 @@ export class DrepService {
       drepIdOnchain,
       status: DRepStatus.PENDING_ADMISSION,
       bio: dto.bio ?? null,
+      photo: dto.photo && dto.photo !== '' ? dto.photo : null,
       socials: (dto.socials ?? undefined) as Prisma.InputJsonValue | undefined,
       contact: (dto.contact ?? undefined) as Prisma.InputJsonValue | undefined,
       subcategoryIds: dto.subcategoryIds ?? [],
