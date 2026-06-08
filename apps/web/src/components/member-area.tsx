@@ -63,6 +63,7 @@ export function MemberArea() {
   tabs.push({
     key: 'profile',
     label: isMember ? 'Profile' : expertApproved || expertPending ? 'Expert' : 'Get started',
+    badge: todo.profile,
     node: (
       <div className="space-y-6">
         {isMember ? (
@@ -245,11 +246,11 @@ function ApplicationsTab() {
  * proposals" awaiting this DRep's vote. Light polling.
  */
 function useTodoCounts(isBoard: boolean, canVote: boolean) {
-  const [counts, setCounts] = useState({ treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0 });
+  const [counts, setCounts] = useState({ treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0 });
   useEffect(() => {
     let alive = true;
     const poll = async () => {
-      const next = { treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0 };
+      const next = { treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0 };
       if (isBoard) {
         const [a, f, p, dapps, eapps, rem, stop, pl] = await Promise.allSettled([
           treasuryApi.boardActions(),
@@ -278,6 +279,9 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
       if (canVote) {
         try { next.voting = (await filteringApi.votingTasks()).total; } catch { /* leave 0 */ }
         try { next.internal = (await internalProposalsApi.pendingCount()).count; } catch { /* 0 */ }
+        // §15.4 — reward earners need a reward payment address; nag on the Profile
+        // tab until one is set. Submitters/viewers don't earn rewards → no nag.
+        try { const r = await rewardAddressApi.get(); if (!r.rewardPaymentAddress) next.profile += 1; } catch { /* 0 */ }
       }
       // §11.2 — count submitter to-dos: any of my proposals with a REJECTED
       // milestone needing a fresh POA. Backend tags those rows red with a
@@ -285,12 +289,6 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
       try {
         const mine = await proposalsApi.mine();
         next.mine = mine.filter((p) => p.progress?.tone === 'red' && p.progress.label.includes('POA rejected')).length;
-      } catch { /* 0 */ }
-      // §15.4 — every DRep/board member needs a reward payment address; nag
-      // until one is set. Counts toward the Profile tab.
-      try {
-        const r = await rewardAddressApi.get();
-        if (!r.rewardPaymentAddress) next.mine += 1;
       } catch { /* 0 */ }
       if (alive) setCounts(next);
     };

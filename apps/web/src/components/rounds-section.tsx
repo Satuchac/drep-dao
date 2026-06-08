@@ -95,6 +95,8 @@ export function RoundsSection() {
   const { get, setParams } = useUrlNav();
   const [rounds, setRounds] = useState<RoundSummary[]>([]);
   const [creating, setCreating] = useState(false);
+  // Round-detail sub-tab: the proposals list vs the read-only round setup.
+  const [roundTab, setRoundTab] = useState<'proposals' | 'setup'>('proposals');
   // The drilled-into round lives in the URL (?round=) so it's shareable + survives opening a proposal.
   const open = rounds.find((r) => r.id === get('round')) ?? null;
 
@@ -117,8 +119,25 @@ export function RoundsSection() {
           <StatusBadge status={open.status} />
           <ProposalCounts counts={open.proposalCounts} activeStage={open.activeStageCounts} />
         </div>
-        <RoundSettingsView roundId={open.id} />
-        <ProposalList roundId={open.id} />
+
+        {/* Horizontal menu: Proposals (the list) | Round setup (read-only settings). */}
+        <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
+          {([['proposals', 'Proposals'], ['setup', 'Round setup']] as const).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setRoundTab(key)}
+              className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${
+                roundTab === key
+                  ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400'
+                  : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {roundTab === 'setup' ? <RoundSettingsView roundId={open.id} /> : <ProposalList roundId={open.id} />}
       </section>
     );
   }

@@ -37,7 +37,9 @@ export function ProposalSubmit() {
   const [categoryId, setCategoryId] = useState('');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [amount, setAmount] = useState(50000);
+  // No default — the team must enter the requested amount (0 fails the
+  // "set a requested amount" check below, forcing them to fill it in).
+  const [amount, setAmount] = useState(0);
   const [commercial, setCommercial] = useState(false);
   // Milestone amounts start empty (0) — the team must enter them explicitly so
   // they don't drift with the requested amount. A subsequent change to
