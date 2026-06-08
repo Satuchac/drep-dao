@@ -448,14 +448,23 @@ function RevenueSharingReadOnly({ proposal: p, isBoard, onChange }: { proposal: 
     finally { setBusy(false); }
   };
   return (
-    <CollapsibleView label="Revenue sharing" hint={verified ? 'verified by the board' : 'pending board verification'}>
+    <CollapsibleView
+      label="Revenue sharing"
+      hint={verified ? 'verified by the board' : p.status === 'APPROVED' ? 'pending board verification' : 'verified by the board after approval'}
+    >
       <div className="space-y-2">
         <div className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
           verified
             ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
-            : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+            : p.status === 'APPROVED'
+              ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+              : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300'
         }`}>
-          {verified ? `✓ Verified ${fmtDateTime(p.revenueSharingVerifiedAt!)}` : '⏳ Pending board verification — milestone POAs are blocked until verified'}
+          {verified
+            ? `✓ Verified ${fmtDateTime(p.revenueSharingVerifiedAt!)}`
+            : p.status === 'APPROVED'
+              ? '⏳ Pending board verification — milestone POAs are blocked until verified'
+              : 'The board verifies these conditions once the proposal is approved (FUNDING) — nothing to confirm yet'}
         </div>
         {p.revenueSharingMd?.trim() ? (
           <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.revenueSharingMd}</Markdown>
