@@ -127,6 +127,12 @@ function PendingFeeRow({ p, onReviewed }: { p: PendingFee; onReviewed: () => voi
     }
   };
 
+  // A fee may be split across several txs (none alone reaches the amount, but
+  // together they do). Sum what reached the fee address across all confirmed txs.
+  const foundTxs = p.txs.filter((t) => t.found);
+  const foundTotal = foundTxs.reduce((s, t) => s + t.paidAda, 0);
+  const aggregateCovers = !p.feeVerified.paid && foundTotal >= p.submissionFeeAda;
+
   return (
     <li className="rounded-md border border-neutral-200 p-3 text-sm dark:border-neutral-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -168,6 +174,21 @@ function PendingFeeRow({ p, onReviewed }: { p: PendingFee; onReviewed: () => voi
         )}
       </div>
 
+      {/* Aggregate across all txs — a fee paid in several transactions still counts. */}
+      {p.txs.length > 1 && !p.feeVerified.paid ? (
+        <div
+          className={`mt-2 rounded px-2 py-1 text-xs font-medium ${
+            aggregateCovers
+              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+          }`}
+        >
+          {aggregateCovers
+            ? `✓ Paid across ${foundTxs.length} transaction${foundTxs.length === 1 ? '' : 's'}: ${foundTotal.toLocaleString()} ₳ total reached the fee address — this covers the ${p.submissionFeeAda.toLocaleString()} ₳ fee.`
+            : `Across ${foundTxs.length} confirmed tx${foundTxs.length === 1 ? '' : 's'}: ${foundTotal.toLocaleString()} ₳ of ${p.submissionFeeAda.toLocaleString()} ₳ reached the fee address — short by ${(p.submissionFeeAda - foundTotal).toLocaleString()} ₳.`}
+        </div>
+      ) : null}
+
       {/* Feedback shown to the submitter (red FEEDBACK box). Required to reject, optional to approve. */}
       <textarea
         className="mt-2 w-full rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
@@ -183,7 +204,7 @@ function PendingFeeRow({ p, onReviewed }: { p: PendingFee; onReviewed: () => voi
           onClick={() => review('APPROVE')}
           className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
         >
-          {busy ? 'Working…' : p.feeVerified.paid ? 'Approve — fee verified' : 'Approve anyway'}
+          {busy ? 'Working…' : p.feeVerified.paid ? 'Approve — fee verified' : aggregateCovers ? 'Approve — fee covered (across txs)' : 'Approve anyway'}
         </button>
         <button
           disabled={busy}
