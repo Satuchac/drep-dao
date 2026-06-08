@@ -6,6 +6,7 @@ import { CopyButton } from './copy-button';
 import { MultisigSetup } from './multisig-setup';
 import { HotWalletControls } from './hot-wallet-controls';
 import { TreasuryBucketsPanel } from './treasury-buckets-panel';
+import { TreasuryTransactions } from './treasury-transactions';
 
 const ada = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 const BUCKET_COLOR: Record<string, string> = {
@@ -16,6 +17,7 @@ const roundColor = 'bg-violet-500';
 
 /** §15 — Treasury overview: budget buckets (allocated/spent/remaining) + balances. */
 export function TreasuryOverview() {
+  const [subTab, setSubTab] = useState<'overview' | 'transactions'>('overview');
   const [data, setData] = useState<Overview | null>(null);
   const [buckets, setBuckets] = useState<TreasuryBucket[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +46,28 @@ export function TreasuryOverview() {
           rewards, operations, and one per funding round.
         </p>
       </div>
+
+      {/* §15 — Overview | Transactions sub-menu. */}
+      <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
+        {([['overview', 'Overview'], ['transactions', 'Transactions']] as const).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setSubTab(key)}
+            className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${
+              subTab === key
+                ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400'
+                : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {subTab === 'transactions' ? (
+        <TreasuryTransactions />
+      ) : (
+        <>
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {/* §15 — multisig setup panel above the balances: roster of board key
           submissions + assembled script address (or "not yet built" banner). */}
@@ -110,6 +134,8 @@ export function TreasuryOverview() {
               <span className="font-medium tabular-nums">{ada(data.totalSpentAda)} ₳</span>
             </div>
           </div>
+        </>
+      )}
         </>
       )}
     </div>
