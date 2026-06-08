@@ -493,6 +493,53 @@ export class CardanoQueryService {
   }
 
   /**
+   * Latest protocol params in the Koios `/epoch_params` shape the tx builder
+   * expects. db-sync when configured (no rate limit), else Koios. The tx-building
+   * path uses this so a Koios 429 doesn't block on-chain anchoring/sweeps.
+   */
+  async epochParams(): Promise<Record<string, string | number>> {
+    const pool = this.dbsync();
+    if (pool) {
+      try {
+        const { rows } = await pool.query<Record<string, string | number>>(
+          `SELECT min_fee_a, min_fee_b, key_deposit::text, pool_deposit::text, max_tx_size, max_val_size, coins_per_utxo_size::text
+             FROM epoch_param ORDER BY epoch_no DESC LIMIT 1`,
+        );
+        if (rows[0]) return rows[0];
+      } catch (e) { this.logger.warn(`db-sync epoch_params failed, falling back to Koios: ${e instanceof Error ? e.message : e}`); }
+    }
+    const res = await fetch(`${this.base}/epoch_params`, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) throw new Error(`koios /epoch_params: ${res.status}`);
+    return ((await res.json()) as Record<string, string | number>[])[0];
+  }
+
+  /**
+   * Unspent UTxOs at the given addresses in the Koios `/address_utxos` shape
+   * (tx_hash/tx_index/value). db-sync when configured, else Koios.
+   */
+  async addressUtxos(addresses: string[]): Promise<{ tx_hash: string; tx_index: number; value: string }[]> {
+    if (addresses.length === 0) return [];
+    const pool = this.dbsync();
+    if (pool) {
+      try {
+        const { rows } = await pool.query<{ tx_hash: string; tx_index: number; value: string }>(
+          `SELECT encode(t.hash,'hex') AS tx_hash, o.index AS tx_index, o.value::text AS value
+             FROM tx_out o JOIN tx t ON t.id = o.tx_id
+            WHERE o.address = ANY($1::text[]) AND o.consumed_by_tx_id IS NULL`,
+          [addresses],
+        );
+        return rows.map((r) => ({ tx_hash: r.tx_hash, tx_index: Number(r.tx_index), value: r.value }));
+      } catch (e) { this.logger.warn(`db-sync address_utxos failed, falling back to Koios: ${e instanceof Error ? e.message : e}`); }
+    }
+    const res = await fetch(`${this.base}/address_utxos`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ _addresses: addresses }), signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`koios /address_utxos: ${res.status}`);
+    return (await res.json()) as { tx_hash: string; tx_index: number; value: string }[];
+  }
+
+  /**
    * Controlled on-chain stake (Lovelace) per stake address, via Koios
    * /account_info `total_balance`. For a self-delegated DRep this equals their
    * voting power, and it's available immediately (no epoch lag). Best-effort:

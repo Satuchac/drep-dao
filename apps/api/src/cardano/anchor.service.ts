@@ -44,6 +44,7 @@ export class AnchorService implements OnModuleInit {
   private readonly networkId: number;
   private mnemonic?: string; // mutable: an in-platform SEED rotation (admin) replaces it
   private readonly treasuryAddress?: string;
+  private readonly submitApiUrl?: string; // optional cardano-submit-api; falls back to Koios /submittx
 
   /**
    * On boot, resolve the anchor hot-wallet seed in priority order:
@@ -87,6 +88,7 @@ export class AnchorService implements OnModuleInit {
           : 'https://preprod.koios.rest/api/v1';
     this.mnemonic = config.get<string>('ANCHOR_MNEMONIC') || undefined;
     this.treasuryAddress = config.get<string>('TREASURY_ADDRESS') || undefined;
+    this.submitApiUrl = config.get<string>('CARDANO_SUBMIT_API_URL') || undefined;
   }
 
   /** Bech32 address of the configured anchor hot wallet (or null if unset). */
@@ -137,12 +139,10 @@ export class AnchorService implements OnModuleInit {
     if (!this.mnemonic) throw new BadRequestException('no anchor hot wallet is configured');
     if (!this.treasuryAddress) throw new BadRequestException('no treasury (multisig) address is configured');
     const { prv, addr } = this.anchorKeys(this.mnemonic);
-    const utxos = await this.koiosPost<{ tx_hash: string; tx_index: number; value: string }[]>('/address_utxos', {
-      _addresses: [addr.to_bech32()],
-    });
+    const utxos = await this.cardano.addressUtxos([addr.to_bech32()]);
     if (!utxos.length) throw new BadRequestException('the hot wallet is already empty');
 
-    const pp = (await this.koiosGet<Record<string, string | number>[]>('/epoch_params'))[0];
+    const pp = await this.cardano.epochParams();
     const txb = CSL.TransactionBuilder.new(this.builderCfg(pp));
     const unspent = CSL.TransactionUnspentOutputs.new();
     for (const u of utxos) {
@@ -158,12 +158,7 @@ export class AnchorService implements OnModuleInit {
     const fixed = CSL.FixedTransaction.from_hex(txb.build_tx().to_hex());
     fixed.sign_and_add_vkey_signature(prv);
     const txHash = fixed.transaction_hash().to_hex();
-    const res = await fetch(`${this.base}/submittx`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/cbor' },
-      body: Buffer.from(fixed.to_hex(), 'hex'),
-    });
-    if (!res.ok) throw new Error(`submittx ${res.status}: ${await res.text()}`);
+    await this.submitTxHex(fixed.to_hex());
     this.logger.warn(`hot wallet swept to treasury: ${txHash}`);
     return { txHash, to: this.treasuryAddress };
   }
@@ -371,8 +366,8 @@ export class AnchorService implements OnModuleInit {
       throw new BadRequestException('no anchor hot wallet is configured — set or rotate the seed first');
     }
     const { prv, addr } = this.anchorKeys(this.mnemonic);
-    const pp = (await this.koiosGet<Record<string, string | number>[]>('/epoch_params'))[0];
-    let utxos = await this.koiosPost<Utxo[]>('/address_utxos', { _addresses: [addr.to_bech32()] });
+    const pp = await this.cardano.epochParams();
+    let utxos = await this.cardano.addressUtxos([addr.to_bech32()]);
 
     let submitted = 0;
     let failed = 0;
@@ -407,7 +402,7 @@ export class AnchorService implements OnModuleInit {
         failed++;
         this.logger.warn(`force-submit ${a.id} failed to submit: ${e instanceof Error ? e.message : e}`);
         // The input may now be consumed — re-read from Koios for the next attempt.
-        utxos = await this.koiosPost<Utxo[]>('/address_utxos', { _addresses: [addr.to_bech32()] }).catch(() => []);
+        utxos = await this.cardano.addressUtxos([addr.to_bech32()]).catch(() => []);
       }
     }
     return { submitted, failed, total: pending.length };
@@ -500,8 +495,8 @@ export class AnchorService implements OnModuleInit {
   private async submitMetadataTx(event: AnchorResultMetadata | AnchorSubmissionMetadata): Promise<string> {
     if (!this.mnemonic) throw new Error('ANCHOR_MNEMONIC not configured (anchor recorded, not submitted)');
     const { prv, addr } = this.anchorKeys(this.mnemonic);
-    const pp = (await this.koiosGet<Record<string, string | number>[]>('/epoch_params'))[0];
-    const utxos = await this.koiosPost<Utxo[]>('/address_utxos', { _addresses: [addr.to_bech32()] });
+    const pp = await this.cardano.epochParams();
+    const utxos = await this.cardano.addressUtxos([addr.to_bech32()]);
     if (!utxos.length) throw new Error('anchor wallet has no UTxOs');
     const built = this.buildMetadataTx(event, utxos, pp, prv, addr);
     await this.submitTxHex(built.fixedHex);
@@ -559,7 +554,10 @@ export class AnchorService implements OnModuleInit {
   }
 
   private async submitTxHex(hex: string): Promise<void> {
-    const res = await fetch(`${this.base}/submittx`, {
+    // Prefer a cardano-submit-api (our own node) when configured — it avoids Koios
+    // entirely for the broadcast, so a Koios daily-cap 429 can't block submission.
+    const url = this.submitApiUrl ? `${this.submitApiUrl.replace(/\/$/, '')}/api/submit/tx` : `${this.base}/submittx`;
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/cbor' },
       body: Buffer.from(hex, 'hex'),
@@ -577,20 +575,5 @@ export class AnchorService implements OnModuleInit {
     const pc = CSL.Credential.from_keyhash(payKey.to_public().to_raw_key().hash());
     const sc = CSL.Credential.from_keyhash(acct.derive(2).derive(0).to_public().to_raw_key().hash());
     return { prv: payKey.to_raw_key(), addr: CSL.BaseAddress.new(this.networkId, pc, sc).to_address() };
-  }
-
-  private async koiosGet<T>(p: string): Promise<T> {
-    const r = await fetch(`${this.base}${p}`);
-    if (!r.ok) throw new Error(`koios ${p}: ${r.status}`);
-    return (await r.json()) as T;
-  }
-  private async koiosPost<T>(p: string, body: unknown): Promise<T> {
-    const r = await fetch(`${this.base}${p}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) throw new Error(`koios ${p}: ${r.status}`);
-    return (await r.json()) as T;
   }
 }
