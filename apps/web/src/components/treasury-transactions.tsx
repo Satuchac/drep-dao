@@ -97,7 +97,13 @@ export function TreasuryTransactions() {
                   <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
                     {t.proposalTitle ? (
                       <>
-                        Proposal: <span className="font-medium">{t.proposalTitle}</span>{' '}
+                        Proposal:{' '}
+                        {t.proposalPublicId ? (
+                          <span className="rounded bg-neutral-100 px-1 font-mono text-[11px] text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
+                            {t.proposalPublicId}
+                          </span>
+                        ) : null}{' '}
+                        <span className="font-medium">{t.proposalTitle}</span>{' '}
                       </>
                     ) : null}
                     {t.submitter ? (

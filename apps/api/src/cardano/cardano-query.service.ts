@@ -36,6 +36,10 @@ export class CardanoQueryService {
   // times — without this it trips the public-tier 429 limit).
   private readonly drepStatusCache = new Map<string, { value: DRepStatus; expiresAt: number }>();
   private readonly DREP_STATUS_TTL_MS = 60 * 1000;
+  // Treasury tx history is a heavier scan; cache per address-set so repeat opens
+  // of the Transactions tab are instant (on-chain history changes slowly).
+  private readonly addrTxCache = new Map<string, { value: AddressTx[]; expiresAt: number }>();
+  private readonly ADDR_TX_TTL_MS = 30 * 1000;
 
   // On-chain data source — two options, chosen by CARDANO_ONCHAIN_SOURCE:
   //   'koios'  (default) → the public Koios tier
@@ -421,15 +425,24 @@ export class CardanoQueryService {
    */
   async addressTransactions(addresses: string[], limit = 100): Promise<AddressTx[]> {
     if (addresses.length === 0) return [];
+    const key = [...addresses].sort().join(',') + ':' + limit;
+    const cached = this.addrTxCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    const result = await this.fetchAddressTransactions(addresses, limit);
+    this.addrTxCache.set(key, { value: result, expiresAt: Date.now() + this.ADDR_TX_TTL_MS });
+    return result;
+  }
+
+  private async fetchAddressTransactions(addresses: string[], limit: number): Promise<AddressTx[]> {
+    if (addresses.length === 0) return [];
     const pool = this.dbsync();
     if (pool) {
       try {
         const { rows } = await pool.query<{ hash: string; time: string; in_amt: string; out_amt: string }>(
-          `WITH addrs AS (SELECT unnest($1::text[]) AS address),
-                ins AS (SELECT o.tx_id, sum(o.value) AS amt FROM tx_out o JOIN addrs a ON a.address = o.address GROUP BY o.tx_id),
+          `WITH ins AS (SELECT o.tx_id, sum(o.value) AS amt FROM tx_out o WHERE o.address = ANY($1::text[]) GROUP BY o.tx_id),
                 outs AS (SELECT o.consumed_by_tx_id AS tx_id, sum(o.value) AS amt
-                           FROM tx_out o JOIN addrs a ON a.address = o.address
-                          WHERE o.consumed_by_tx_id IS NOT NULL GROUP BY o.consumed_by_tx_id),
+                           FROM tx_out o WHERE o.address = ANY($1::text[]) AND o.consumed_by_tx_id IS NOT NULL
+                          GROUP BY o.consumed_by_tx_id),
                 involved AS (SELECT tx_id FROM ins UNION SELECT tx_id FROM outs)
            SELECT encode(t.hash,'hex') AS hash, extract(epoch FROM b.time)::bigint::text AS time,
                   COALESCE(ins.amt,0)::text AS in_amt, COALESCE(outs.amt,0)::text AS out_amt

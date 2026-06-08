@@ -412,10 +412,14 @@ export class ProposalsService {
       throw new BadRequestException('a submission-fee transaction hash is required for this proposal');
     }
     const history = p.submissionFeeTxHashes.includes(hash) ? p.submissionFeeTxHashes : [...p.submissionFeeTxHashes, hash];
+    // Assign the public ID at submission (not only at fee confirmation) so a
+    // PENDING proposal already shows its R<round>-P<n> id everywhere.
+    const publicId = p.publicId ?? (await this.nextPublicId(p.roundId));
     await this.prisma.proposal.update({
       where: { id },
       data: {
         status: ProposalStatus.PENDING,
+        publicId,
         submissionFeeAda: toLovelace(fee),
         submissionFeeTxHash: hash,
         submissionFeeTxHashes: history,

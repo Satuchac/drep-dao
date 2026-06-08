@@ -16,6 +16,7 @@ export interface TreasuryTx {
   amountAda: number;
   label: string; // auto-detected: "submission fee", "hot-wallet top-up", "anonymous income"…
   proposalId?: string;
+  proposalPublicId?: string; // R<round>-P<n>
   proposalTitle?: string;
   submitter?: string; // display name of the fee payer (incoming submission fees)
   destAddress?: string; // recipient (outgoing board actions)
@@ -512,27 +513,34 @@ export class TreasuryService {
     // Submission-fee context: proposal + submitter, keyed by every fee tx hash.
     const proposals = await this.prisma.proposal.findMany({
       where: { OR: [{ submissionFeeTxHash: { not: null } }, { submissionFeeTxHashes: { isEmpty: false } }] },
-      select: { id: true, title: true, submissionFeeTxHash: true, submissionFeeTxHashes: true, submitterUserId: true },
+      select: { id: true, publicId: true, title: true, submissionFeeTxHash: true, submissionFeeTxHashes: true, submitterUserId: true },
     });
     const submitterIds = [...new Set(proposals.map((p) => p.submitterUserId).filter(Boolean) as string[])];
     const users = submitterIds.length
       ? await this.prisma.appUser.findMany({ where: { id: { in: submitterIds } }, select: { id: true, displayName: true } })
       : [];
     const nameById = new Map(users.map((u) => [u.id, u.displayName]));
-    const feeByHash = new Map<string, { id: string; title: string; submitter: string | null }>();
+    const feeByHash = new Map<string, { id: string; publicId: string | null; title: string; submitter: string | null }>();
     for (const p of proposals) {
       const submitter = p.submitterUserId ? nameById.get(p.submitterUserId) ?? null : null;
       for (const h of new Set([p.submissionFeeTxHash, ...(p.submissionFeeTxHashes ?? [])].filter(Boolean) as string[])) {
-        feeByHash.set(h, { id: p.id, title: p.title, submitter });
+        feeByHash.set(h, { id: p.id, publicId: p.publicId, title: p.title, submitter });
       }
     }
 
-    // Board-action context, keyed by the broadcast tx hash.
+    // Board-action context, keyed by the broadcast tx hash (+ their proposals' public ids).
     const actions = await this.prisma.multisigAction.findMany({
       where: { txHash: { not: null } },
       select: { txHash: true, kind: true, description: true, proposalTitle: true, proposalId: true, destAddress: true },
     });
     const actionByHash = new Map(actions.filter((a) => a.txHash).map((a) => [a.txHash as string, a]));
+    const actionPropIds = [...new Set(actions.map((a) => a.proposalId).filter(Boolean) as string[])];
+    const publicIdById = new Map(
+      (actionPropIds.length
+        ? await this.prisma.proposal.findMany({ where: { id: { in: actionPropIds } }, select: { id: true, publicId: true } })
+        : []
+      ).map((p) => [p.id, p.publicId]),
+    );
     const KIND_LABEL: Record<string, string> = {
       OPS: 'hot-wallet top-up', PROJECT_FUNDING: 'milestone payout', REWARD_PAYOUT: 'reward payout',
       PLEDGE_RETURN: 'pledge return', LEFTOVER_RETURN: 'leftover return', MIGRATION: 'treasury migration',
@@ -546,11 +554,17 @@ export class TreasuryService {
       const action = actionByHash.get(t.hash);
       const tx: TreasuryTx = { hash: t.hash, time: t.time, direction, amountAda, label: 'outgoing transfer' };
       if (direction === 'IN') {
-        if (fee) { tx.label = 'submission fee'; tx.proposalId = fee.id; tx.proposalTitle = fee.title; tx.submitter = fee.submitter ?? undefined; }
-        else tx.label = 'anonymous income';
+        if (fee) {
+          tx.label = 'submission fee';
+          tx.proposalId = fee.id;
+          tx.proposalPublicId = fee.publicId ?? undefined;
+          tx.proposalTitle = fee.title;
+          tx.submitter = fee.submitter ?? undefined;
+        } else tx.label = 'anonymous income';
       } else if (action) {
         tx.label = KIND_LABEL[action.kind] ?? 'treasury spend';
         tx.proposalId = action.proposalId ?? undefined;
+        tx.proposalPublicId = action.proposalId ? publicIdById.get(action.proposalId) ?? undefined : undefined;
         tx.proposalTitle = action.proposalTitle ?? action.description ?? undefined;
         tx.destAddress = action.destAddress ?? undefined;
       }

@@ -248,6 +248,7 @@ export interface TreasuryTx {
   amountAda: number;
   label: string;
   proposalId?: string;
+  proposalPublicId?: string;
   proposalTitle?: string;
   submitter?: string;
   destAddress?: string;
