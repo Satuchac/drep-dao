@@ -28,6 +28,19 @@ export class RewardsService {
     return typeof v === 'number' ? v : (ROUND_SETTING_DEFAULTS[key] as number);
   }
 
+  /** §12.7 — a reward batch may only be paid once its stage has ended:
+   *  filtering → round past FILTERING; D&V → past VOTE; milestone → in/after FUNDING
+   *  (paid monthly); board monthly → any time. */
+  private isPayable(kind: string, status?: string | null): boolean {
+    if (kind === 'BOARD_MONTHLY') return true;
+    if (!status) return false;
+    if (kind === 'FILTER') {
+      return ([RoundStatus.DEBATE, RoundStatus.VOTE, RoundStatus.DV, RoundStatus.FUNDING, RoundStatus.CLOSED] as string[]).includes(status);
+    }
+    // DV_FIXED / DV_BONUS / MILESTONE — payable once the round reaches FUNDING.
+    return ([RoundStatus.FUNDING, RoundStatus.CLOSED] as string[]).includes(status);
+  }
+
   /** Drop a prior unpaid calc of this kind so a recompute is clean; refuse if any entry was paid. */
   private async clearCalc(where: { roundId?: string | null; kind: string; periodKey?: string }) {
     const calcs = await this.prisma.rewardCalculation.findMany({
@@ -236,12 +249,16 @@ export class RewardsService {
       },
     });
     if (!calc) throw new NotFoundException('calculation not found');
+    const status = calc.roundId
+      ? (await this.prisma.round.findUnique({ where: { id: calc.roundId }, select: { status: true } }))?.status
+      : null;
     return {
       id: calc.id,
       roundId: calc.roundId,
       kind: calc.kind,
       periodKey: calc.periodKey,
       poolAda: Number(calc.poolAda) / 1e6,
+      payable: this.isPayable(calc.kind, status),
       computedAt: calc.computedAt,
       entries: calc.entries.map((e) => ({
         id: e.id,
@@ -339,6 +356,12 @@ export class RewardsService {
       },
     });
     if (!calc) throw new NotFoundException('calculation not found');
+    const status = calc.roundId
+      ? (await this.prisma.round.findUnique({ where: { id: calc.roundId }, select: { status: true } }))?.status
+      : null;
+    if (!this.isPayable(calc.kind, status)) {
+      throw new ConflictException('this stage has not ended yet — rewards can only be paid once it closes');
+    }
     const lines = calc.entries
       .map((e) => ({ entryId: e.id, address: e.drep?.user.rewardPaymentAddress ?? e.expert?.user.rewardPaymentAddress ?? null, amountAda: Number(e.overrideAda ?? e.amountAda) / 1e6 }))
       .filter((l) => l.amountAda > 0);

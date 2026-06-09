@@ -1480,6 +1480,7 @@ export interface RewardCalcView {
   kind: string;
   periodKey: string | null;
   poolAda: number;
+  payable: boolean;
   computedAt: string;
   entries: RewardEntryView[];
 }

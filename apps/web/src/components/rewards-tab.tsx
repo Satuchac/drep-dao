@@ -87,11 +87,15 @@ function CalcCard({ calc, onChange }: { calc: RewardCalcView; onChange: () => vo
     <section className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">{KIND_LABEL[calc.kind] ?? calc.kind} · pool {calc.poolAda.toLocaleString()} ₳</h3>
-        {!allPaid ? (
+        {allPaid ? (
+          <span className="text-xs text-emerald-600">✓ all paid</span>
+        ) : !calc.payable ? (
+          <span className="text-xs text-neutral-400">payable once the stage ends</span>
+        ) : (
           <button onClick={pay} disabled={busy} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300">
             {busy ? 'Preparing…' : 'Prepare bulk payout'}
           </button>
-        ) : <span className="text-xs text-emerald-600">✓ all paid</span>}
+        )}
       </div>
       {msg ? <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{msg}</div> : null}
       <table className="mt-2 w-full text-xs">
