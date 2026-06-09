@@ -171,7 +171,8 @@ export class MultisigBroadcastService {
         keyHashes: source.keyHashes,
       };
     }
-    if (!action.destAddress) throw new ConflictException('action has no destination address');
+    // REWARD_PAYOUT is multi-output (one per linked reward entry), so it has no single destAddress.
+    if (!action.destAddress && action.kind !== 'REWARD_PAYOUT') throw new ConflictException('action has no destination address');
     if (!action.amountAda) throw new ConflictException('action has no amount');
 
     let utxos = await this.koiosPost<{ tx_hash: string; tx_index: number; value: string }[]>(
@@ -221,13 +222,35 @@ export class MultisigBroadcastService {
       totalIn += BigInt(u.value);
     }
 
-    const destAddr = CSL.Address.from_bech32(action.destAddress);
-    if (action.kind === 'MIGRATION') {
-      // Drain: route change to dest, no explicit output (change = full balance minus fee).
-      txb.add_change_if_needed(destAddr);
-    } else {
-      txb.add_output(CSL.TransactionOutput.new(destAddr, CSL.Value.new(CSL.BigNum.from_str(String(action.amountAda)))));
+    if (action.kind === 'REWARD_PAYOUT') {
+      // §12 — one output per linked reward entry (the recipient's reward address);
+      // change returns to the source. This is the "bulk transaction".
+      const entries = await this.prisma.rewardEntry.findMany({
+        where: { payoutActionId: action.id },
+        include: {
+          drep: { select: { user: { select: { rewardPaymentAddress: true } } } },
+          expert: { select: { user: { select: { rewardPaymentAddress: true } } } },
+        },
+      });
+      let added = 0;
+      for (const e of entries) {
+        const addr = e.drep?.user.rewardPaymentAddress ?? e.expert?.user.rewardPaymentAddress;
+        const amt = e.overrideAda ?? e.amountAda;
+        if (!addr || amt <= 0n) continue;
+        txb.add_output(CSL.TransactionOutput.new(CSL.Address.from_bech32(addr), CSL.Value.new(CSL.BigNum.from_str(String(amt)))));
+        added++;
+      }
+      if (added === 0) throw new ConflictException('reward payout has no payable recipients');
       txb.add_change_if_needed(srcAddr);
+    } else {
+      const destAddr = CSL.Address.from_bech32(action.destAddress!);
+      if (action.kind === 'MIGRATION') {
+        // Drain: route change to dest, no explicit output (change = full balance minus fee).
+        txb.add_change_if_needed(destAddr);
+      } else {
+        txb.add_output(CSL.TransactionOutput.new(destAddr, CSL.Value.new(CSL.BigNum.from_str(String(action.amountAda)))));
+        txb.add_change_if_needed(srcAddr);
+      }
     }
     // §15 phase-2 — required_signers = the M committed keyhashes (NOT all
     // N script keys). The ledger then enforces "these M must sign", matching
@@ -389,6 +412,19 @@ export class MultisigBroadcastService {
       where: { id: actionId },
       data: { status: 'CONFIRMED', txHash, paidAt: new Date() },
     });
+    // §12 — stamp each reward entry this payout covered as paid (immutable history).
+    if (action.kind === 'REWARD_PAYOUT') {
+      const entries = await this.prisma.rewardEntry.findMany({
+        where: { payoutActionId: actionId, paidAt: null },
+        include: { drep: { select: { user: { select: { rewardPaymentAddress: true } } } }, expert: { select: { user: { select: { rewardPaymentAddress: true } } } } },
+      });
+      for (const e of entries) {
+        await this.prisma.rewardEntry.update({
+          where: { id: e.id },
+          data: { paidAt: new Date(), paidInTx: txHash, paidToAddress: e.drep?.user.rewardPaymentAddress ?? e.expert?.user.rewardPaymentAddress ?? null },
+        });
+      }
+    }
     this.logger.warn(`multisig action ${actionId} broadcast: ${txHash}`);
     return { status: 'CONFIRMED', txHash, approvals: vkeyWitnesses.len(), threshold };
   }

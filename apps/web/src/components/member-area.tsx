@@ -26,6 +26,7 @@ import { BoardPayments } from './board-payments';
 import { PreferencesPanel } from './preferences-panel';
 import { RewardAddressPanel } from './reward-address-panel';
 import { MeritPanel } from './merit-panel';
+import { RewardsTab } from './rewards-tab';
 import { MultisigSetup } from './multisig-setup';
 import { HotWalletControls } from './hot-wallet-controls';
 import { SendFromTreasuryPanel } from './send-from-treasury-panel';
@@ -133,6 +134,7 @@ export function MemberArea() {
     tabs.push({ key: 'treasury', label: 'Treasury', badge: todo.treasury, node: <TreasuryTab /> });
     tabs.push({ key: 'sign', label: 'Actions', badge: todo.actions, node: <ActionsTab /> });
     tabs.push({ key: 'rounds', label: 'Round control', node: <RoundStageControls /> });
+    tabs.push({ key: 'rewards', label: 'Rewards', node: <RewardsTab /> });
     tabs.push({ key: 'apps', label: 'Applications', badge: todo.applications, node: <ApplicationsTab /> });
   }
 

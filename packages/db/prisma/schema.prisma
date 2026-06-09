@@ -171,6 +171,8 @@ model Expert {
 
   user                 AppUser               @relation(fields: [userId], references: [id])
   milestoneAssignments MilestoneAssignment[]
+  rewardEntries        RewardEntry[]
+  expertRewards        ExpertReward[]
 
   @@map("expert")
 }
@@ -263,6 +265,7 @@ model Round {
   proposals          Proposal[]
   quickPolls         QuickPoll[]
   rewardCalculations RewardCalculation[]
+  expertRewards      ExpertReward[]
 
   @@map("round")
 }
@@ -735,13 +738,15 @@ model MeritLedger {
 
 model RewardCalculation {
   id         String   @id @default(uuid()) @db.Uuid
-  roundId    String   @map("round_id") @db.Uuid
-  kind       String // FILTER, DV_FIXED, DV_BONUS, MILESTONE
+  roundId    String?  @map("round_id") @db.Uuid // null for BOARD_MONTHLY (not round-scoped)
+  kind       String // FILTER, DV_FIXED, DV_BONUS, MILESTONE, EXPERT, BOARD_MONTHLY
   poolAda    BigInt   @map("pool_ada")
   totalUnits Decimal? @map("total_units")
+  // §13 — for BOARD_MONTHLY: which calendar month (UTC, first day) it covers, for idempotency.
+  periodKey  String?  @map("period_key")
   computedAt DateTime @default(now()) @map("computed_at") @db.Timestamptz(6)
 
-  round   Round         @relation(fields: [roundId], references: [id])
+  round   Round?        @relation(fields: [roundId], references: [id])
   entries RewardEntry[]
 
   @@map("reward_calculation")
@@ -750,8 +755,11 @@ model RewardCalculation {
 model RewardEntry {
   id                  String    @id @default(uuid()) @db.Uuid
   rewardCalculationId String    @map("reward_calculation_id") @db.Uuid
-  drepId              String    @map("drep_id") @db.Uuid
-  amountAda           BigInt    @map("amount_ada")
+  drepId              String?   @map("drep_id") @db.Uuid // recipient: a DRep …
+  expertId            String?   @map("expert_id") @db.Uuid // … or an Expert
+  amountAda           BigInt    @map("amount_ada") // computed reward
+  overrideAda         BigInt?   @map("override_ada") // §12 — board's per-recipient override (wins when set)
+  payoutActionId      String?   @map("payout_action_id") @db.Uuid // the REWARD_PAYOUT multisig action paying it
   paidInTx            String?   @map("paid_in_tx")
   paidAt              DateTime? @map("paid_at") @db.Timestamptz(6)
   // §15.4 — destination address at the time of payment. Preserved even if
@@ -760,9 +768,31 @@ model RewardEntry {
   paidToAddress       String?   @map("paid_to_address")
 
   rewardCalculation RewardCalculation @relation(fields: [rewardCalculationId], references: [id])
-  drep              Drep              @relation(fields: [drepId], references: [id])
+  drep              Drep?             @relation(fields: [drepId], references: [id])
+  expert            Expert?           @relation(fields: [expertId], references: [id])
+  payoutAction      MultisigAction?   @relation(fields: [payoutActionId], references: [id])
 
   @@map("reward_entry")
+}
+
+// §12 — board-set ADA reward for an expert in a round, per stage. milestoneLikeDrep:
+// when true the expert also earns the per-check DRep milestone reward (this is the
+// "extra") on top of milestoneAda; when false they get only milestoneAda.
+model ExpertReward {
+  id                String   @id @default(uuid()) @db.Uuid
+  roundId           String   @map("round_id") @db.Uuid
+  expertId          String   @map("expert_id") @db.Uuid
+  filteringAda      BigInt   @default(0) @map("filtering_ada")
+  dvAda             BigInt   @default(0) @map("dv_ada")
+  milestoneAda      BigInt   @default(0) @map("milestone_ada")
+  milestoneLikeDrep Boolean  @default(false) @map("milestone_like_drep")
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  round  Round  @relation(fields: [roundId], references: [id])
+  expert Expert @relation(fields: [expertId], references: [id])
+
+  @@unique([roundId, expertId])
+  @@map("expert_reward")
 }
 
 // ===========================================================================
@@ -804,6 +834,7 @@ model MultisigAction {
 
   signatures  MultisigSignature[]
   commitments MultisigCommitment[]
+  rewardEntries RewardEntry[] // §12 — a REWARD_PAYOUT action pays many entries (multi-output)
   fromConfig  MultisigConfig?     @relation("MultisigActionFromConfig", fields: [fromConfigId], references: [id])
   toConfig    MultisigConfig?     @relation("MultisigActionToConfig",   fields: [toConfigId],   references: [id])
   sourceBucket TreasuryBucket?    @relation("MultisigActionSourceBucket", fields: [sourceBucketId], references: [id])

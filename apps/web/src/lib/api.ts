@@ -1461,6 +1461,48 @@ export interface AvoidPeriod {
   endsAt: string;
   reason: string | null;
 }
+// §12 — reward calculation + distribution (board only).
+export interface RewardEntryView {
+  id: string;
+  recipient: { type: 'DRep' | 'Expert'; name: string; address: string | null };
+  amountAda: number;
+  computedAda: number;
+  overridden: boolean;
+  paid: boolean;
+  paidInTx: string | null;
+}
+export interface RewardCalcView {
+  id: string;
+  roundId: string | null;
+  kind: string;
+  periodKey: string | null;
+  poolAda: number;
+  computedAt: string;
+  entries: RewardEntryView[];
+}
+export interface ExpertRewardRow {
+  expertId: string;
+  name: string;
+  filteringAda: number;
+  dvAda: number;
+  milestoneAda: number;
+  milestoneLikeDrep: boolean;
+}
+export const rewardsApi = {
+  overview: (roundId: string) => request<RewardCalcView[]>(`/admin/rewards/round/${roundId}`),
+  computeFiltering: (roundId: string) => request<RewardCalcView>(`/admin/rewards/round/${roundId}/compute/filtering`, { method: 'POST' }),
+  computeDv: (roundId: string) => request<{ fixed: RewardCalcView; bonus: RewardCalcView }>(`/admin/rewards/round/${roundId}/compute/dv`, { method: 'POST' }),
+  computeMilestone: (roundId: string) => request<RewardCalcView>(`/admin/rewards/round/${roundId}/compute/milestone`, { method: 'POST' }),
+  computeBoardMonthly: () => request<RewardCalcView>('/admin/rewards/board-monthly/compute', { method: 'POST', body: JSON.stringify({}) }),
+  setOverride: (entryId: string, ada: number | null) => request<{ ok: boolean }>(`/admin/rewards/entry/${entryId}`, { method: 'PATCH', body: JSON.stringify({ ada }) }),
+  preparePayout: (calcId: string, sourceBucketId?: string) => request<{ actionId: string; recipients: number; totalAda: number }>(`/admin/rewards/calc/${calcId}/prepare-payout`, { method: 'POST', body: JSON.stringify({ sourceBucketId }) }),
+  listExpertRewards: (roundId: string) => request<ExpertRewardRow[]>(`/admin/rewards/round/${roundId}/experts`),
+  setExpertReward: (roundId: string, expertId: string, dto: Partial<Omit<ExpertRewardRow, 'expertId' | 'name'>>) =>
+    request<{ ok: boolean }>(`/admin/rewards/round/${roundId}/expert/${expertId}`, { method: 'PUT', body: JSON.stringify(dto) }),
+  getBoardYearly: () => request<{ yearlyAda: number }>('/admin/rewards/board-yearly'),
+  setBoardYearly: (ada: number) => request<{ ok: boolean }>('/admin/rewards/board-yearly', { method: 'PUT', body: JSON.stringify({ ada }) }),
+};
+
 export const meritApi = {
   me: () => request<MeritInfo>('/me/merit'),
   avoidPeriods: () => request<AvoidPeriod[]>('/me/avoid-periods'),
