@@ -2337,17 +2337,19 @@ function ReviewerAllocationPanel({ id, target, onChange }: { id: string; target:
     boardMilestoneApi.candidates(id).then(setCands).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
   }, [id]);
 
-  const toggle = (drepId: string) =>
+  const toggle = (cid: string) =>
     setPicked((prev) => {
       const next = new Set(prev);
-      if (next.has(drepId)) next.delete(drepId);
-      else next.add(drepId);
+      if (next.has(cid)) next.delete(cid);
+      else next.add(cid);
       return next;
     });
   const confirm = async () => {
     setBusy(true); setError(null);
     try {
-      await boardMilestoneApi.assign(id, [...picked]);
+      const drepIds = [...picked].filter((p) => cands?.find((c) => c.id === p)?.kind === 'DRep');
+      const expertIds = [...picked].filter((p) => cands?.find((c) => c.id === p)?.kind === 'Expert');
+      await boardMilestoneApi.assign(id, drepIds, expertIds);
       setPicked(new Set());
       onChange();
     } catch (e) {
@@ -2374,12 +2376,13 @@ function ReviewerAllocationPanel({ id, target, onChange }: { id: string; target:
       </p>
       <ul className="mt-2 max-h-72 overflow-y-auto rounded border border-neutral-200 dark:border-neutral-800">
         {cands.map((c) => {
-          const sel = picked.has(c.drepId);
+          const sel = picked.has(c.id);
           return (
-            <li key={c.drepId} className={`flex items-center justify-between gap-2 border-b border-neutral-200 px-2 py-1.5 text-xs last:border-b-0 dark:border-neutral-800 ${sel ? 'bg-emerald-50 dark:bg-emerald-950/40' : ''}`}>
+            <li key={c.id} className={`flex items-center justify-between gap-2 border-b border-neutral-200 px-2 py-1.5 text-xs last:border-b-0 dark:border-neutral-800 ${sel ? 'bg-emerald-50 dark:bg-emerald-950/40' : ''}`}>
               <label className="flex flex-1 cursor-pointer items-center gap-2">
-                <input type="checkbox" checked={sel} onChange={() => toggle(c.drepId)} />
-                <span className="font-medium">{c.displayName ?? c.drepIdOnchain.slice(0, 18) + '…'}</span>
+                <input type="checkbox" checked={sel} onChange={() => toggle(c.id)} />
+                <span className="font-medium">{c.displayName ?? (c.drepIdOnchain?.slice(0, 18) ?? c.id.slice(0, 8)) + '…'}</span>
+                {c.kind === 'Expert' ? <span className="rounded bg-violet-100 px-1 text-[10px] text-violet-700 dark:bg-violet-950 dark:text-violet-300">Expert</span> : null}
                 {c.expertiseMatch ? <span title="Subcategory overlap with the proposal" className="text-amber-600">⭐ expertise</span> : null}
               </label>
               <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] tabular-nums text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">load {c.loadInRound}</span>
@@ -2457,7 +2460,7 @@ function ReplaceMilestoneReviewerPanel({ id, reviewers, onChange }: { id: string
   }, [open, id]);
 
   const assignedIds = new Set(reviewers.map((r) => r.drepId).filter(Boolean) as string[]);
-  const eligibleNew = (cands ?? []).filter((c) => !assignedIds.has(c.drepId));
+  const eligibleNew = (cands ?? []).filter((c) => !assignedIds.has(c.drepId ?? ''));
 
   const submit = async () => {
     setBusy(true); setError(null);
@@ -2514,8 +2517,8 @@ function ReplaceMilestoneReviewerPanel({ id, reviewers, onChange }: { id: string
           <span className="text-[11px] text-neutral-500">Replacement</span>
           <select value={newDrepId} onChange={(e) => setNewDrepId(e.target.value)} disabled={!cands} className="mt-0.5 w-full rounded border border-neutral-300 px-1.5 py-0.5 text-xs disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900">
             <option value="">{cands ? '— pick a replacement DRep —' : 'Loading candidates…'}</option>
-            {eligibleNew.map((c) => (
-              <option key={c.drepId} value={c.drepId}>
+            {eligibleNew.filter((c) => c.kind === 'DRep' && c.drepId).map((c) => (
+              <option key={c.drepId} value={c.drepId ?? ''}>
                 {c.displayName ?? `${c.drepIdOnchain?.slice(0, 14)}…`}
                 {c.expertiseMatch ? ' · expertise match' : ''} · load {c.loadInRound}
               </option>

@@ -13,13 +13,19 @@ export class MilestoneVoteDto {
   @IsOptional() @IsString() @MaxLength(5000) rationale?: string;
 }
 
-/** Board picks a SET of DRep reviewers (UUID list) for the whole proposal. */
+/** Board picks a SET of reviewers (DReps and/or Experts) for the whole proposal. */
 export class AssignReviewersDto {
+  @IsOptional()
   @IsArray()
-  @ArrayMinSize(1)
   @ArrayMaxSize(20)
   @IsUUID('all', { each: true })
-  drepIds!: string[];
+  drepIds?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsUUID('all', { each: true })
+  expertIds?: string[];
 }
 
 /** Board swaps one assigned milestone reviewer for another DRep (vacancy / illness). */
@@ -125,7 +131,14 @@ export class MilestonesController {
   @UseGuards(JwtAuthGuard, BoardGuard)
   @Post('admin/proposals/:id/assign-milestone-reviewers')
   assign(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AssignReviewersDto) {
-    return this.milestones.assignReviewers(id, dto.drepIds, ctx.userId);
+    return this.milestones.assignReviewers(
+      id,
+      [
+        ...(dto.drepIds ?? []).map((d) => ({ kind: 'DRep' as const, id: d })),
+        ...(dto.expertIds ?? []).map((e) => ({ kind: 'Expert' as const, id: e })),
+      ],
+      ctx.userId,
+    );
   }
 
   /** Release the currently-assigned reviewers (only if no POA submitted yet). */

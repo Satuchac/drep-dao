@@ -78,25 +78,43 @@ export class MilestonesService {
     const load = new Map(loadRows.filter((r) => r.reviewerDrepId).map((r) => [r.reviewerDrepId as string, r._count._all]));
 
     const propSubs = new Set(proposal.subcategoryIds ?? []);
-    const out = eligible
+    const dreps = eligible
       .filter((e) => e.drepId !== proposal.submitterDrepId)
-      .map((e) => {
-        const match = propSubs.size > 0 && e.drep.subcategoryIds.some((s) => propSubs.has(s));
-        return {
-          drepId: e.drep.id,
-          drepIdOnchain: e.drep.drepIdOnchain,
-          displayName: e.drep.user?.displayName ?? null,
-          subcategoryIds: e.drep.subcategoryIds,
-          expertiseMatch: !!match,
-          loadInRound: load.get(e.drep.id) ?? 0,
-        };
-      })
-      .sort((a, b) =>
-        Number(b.expertiseMatch) - Number(a.expertiseMatch) ||
-        a.loadInRound - b.loadInRound ||
-        (a.displayName ?? '').localeCompare(b.displayName ?? ''),
-      );
-    return out;
+      .map((e) => ({
+        kind: 'DRep' as const,
+        id: e.drep.id,
+        drepId: e.drep.id as string | null,
+        drepIdOnchain: e.drep.drepIdOnchain as string | null,
+        displayName: e.drep.user?.displayName ?? null,
+        subcategoryIds: e.drep.subcategoryIds,
+        expertiseMatch: propSubs.size > 0 && e.drep.subcategoryIds.some((s) => propSubs.has(s)),
+        loadInRound: load.get(e.drep.id) ?? 0,
+      }));
+
+    // §12 — board-approved experts can review milestones like DReps.
+    const experts = await this.prisma.expert.findMany({ where: { approvedByBoard: true }, select: { id: true, displayName: true, subcategoryIds: true } });
+    const eLoadRows = await this.prisma.milestoneAssignment.groupBy({
+      by: ['reviewerExpertId'],
+      where: { milestone: { proposalId: { in: roundProposalIds } }, releasedAt: null },
+      _count: { _all: true },
+    });
+    const eLoad = new Map(eLoadRows.filter((r) => r.reviewerExpertId).map((r) => [r.reviewerExpertId as string, r._count._all]));
+    const expertCands = experts.map((ex) => ({
+      kind: 'Expert' as const,
+      id: ex.id,
+      drepId: null as string | null,
+      drepIdOnchain: null,
+      displayName: ex.displayName,
+      subcategoryIds: ex.subcategoryIds,
+      expertiseMatch: propSubs.size > 0 && ex.subcategoryIds.some((s) => propSubs.has(s)),
+      loadInRound: eLoad.get(ex.id) ?? 0,
+    }));
+
+    return [...dreps, ...expertCands].sort((a, b) =>
+      Number(b.expertiseMatch) - Number(a.expertiseMatch) ||
+      a.loadInRound - b.loadInRound ||
+      (a.displayName ?? '').localeCompare(b.displayName ?? ''),
+    );
   }
 
   /**
@@ -106,7 +124,7 @@ export class MilestonesService {
    * override, else platform default). Idempotent: if any active assignment exists,
    * the call is rejected (call `release` first to re-allocate).
    */
-  async assignReviewers(proposalId: string, drepIds: string[], boardUserId: string) {
+  async assignReviewers(proposalId: string, reviewers: { kind: 'DRep' | 'Expert'; id: string }[], boardUserId: string) {
     const proposal = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
       include: { milestones: { select: { id: true } }, round: { select: { milestoneReviewerCount: true, status: true } } },
@@ -120,24 +138,32 @@ export class MilestonesService {
     }
 
     const want = proposal.round?.milestoneReviewerCount ?? ROUND_SETTING_DEFAULTS.milestoneReviewerCount;
-    const unique = [...new Set(drepIds)];
-    if (unique.length !== drepIds.length) throw new BadRequestException('duplicate DReps in the selection');
+    const unique = [...new Map(reviewers.map((r) => [`${r.kind}:${r.id}`, r])).values()];
+    if (unique.length !== reviewers.length) throw new BadRequestException('duplicate reviewers in the selection');
     if (unique.length !== want) {
       throw new BadRequestException(`please pick exactly ${want} reviewer${want === 1 ? '' : 's'} (you selected ${unique.length})`);
     }
-    if (unique.includes(proposal.submitterDrepId ?? '')) {
+    const drepIds = unique.filter((r) => r.kind === 'DRep').map((r) => r.id);
+    const expertIds = unique.filter((r) => r.kind === 'Expert').map((r) => r.id);
+    if (drepIds.includes(proposal.submitterDrepId ?? '')) {
       throw new BadRequestException('the submitter cannot review their own milestones');
     }
-
-    // Validate each pick is an admitted, round-eligible DRep.
-    const valid = new Set(
-      (await this.prisma.roundDrepEligibility.findMany({
-        where: { roundId: proposal.roundId ?? undefined, drepId: { in: unique }, drep: { status: 'ADMITTED' } },
-        select: { drepId: true },
-      })).map((e) => e.drepId),
-    );
-    const bad = unique.filter((id) => !valid.has(id));
-    if (bad.length) throw new BadRequestException(`not an admitted reviewer for this round: ${bad.join(', ')}`);
+    // DReps must be admitted + round-eligible; experts must be board-approved.
+    if (drepIds.length) {
+      const valid = new Set(
+        (await this.prisma.roundDrepEligibility.findMany({
+          where: { roundId: proposal.roundId ?? undefined, drepId: { in: drepIds }, drep: { status: 'ADMITTED' } },
+          select: { drepId: true },
+        })).map((e) => e.drepId),
+      );
+      const bad = drepIds.filter((id) => !valid.has(id));
+      if (bad.length) throw new BadRequestException(`not an admitted reviewer for this round: ${bad.join(', ')}`);
+    }
+    if (expertIds.length) {
+      const valid = new Set((await this.prisma.expert.findMany({ where: { id: { in: expertIds }, approvedByBoard: true }, select: { id: true } })).map((e) => e.id));
+      const bad = expertIds.filter((id) => !valid.has(id));
+      if (bad.length) throw new BadRequestException(`not a board-approved expert: ${bad.join(', ')}`);
+    }
 
     const hasActive = await this.prisma.milestoneAssignment.findFirst({
       where: { milestone: { proposalId }, releasedAt: null },
@@ -146,9 +172,10 @@ export class MilestonesService {
 
     const now = new Date();
     await this.prisma.milestoneAssignment.createMany({
-      data: proposal.milestones.flatMap((m) =>
-        unique.map((drepId) => ({ milestoneId: m.id, reviewerDrepId: drepId, confirmedByBoardAt: now })),
-      ),
+      data: proposal.milestones.flatMap((m) => [
+        ...drepIds.map((drepId) => ({ milestoneId: m.id, reviewerDrepId: drepId, confirmedByBoardAt: now })),
+        ...expertIds.map((expertId) => ({ milestoneId: m.id, reviewerExpertId: expertId, confirmedByBoardAt: now })),
+      ]),
     });
     void boardUserId; // recorded via the AdminAudit log middleware on the controller
     return this.forProposal(proposalId);
@@ -414,20 +441,31 @@ export class MilestonesService {
     if (!m) throw new NotFoundException('milestone not found');
     if (m.status !== 'POA_SUBMITTED') throw new ConflictException('milestone is not open for review (no current POA)');
     const drep = await this.prisma.drep.findUnique({ where: { userId }, include: { user: { select: { drepKeyHash: true } } } });
-    if (!drep) throw new ForbiddenException('DReps only');
-    const assigned = await this.prisma.milestoneAssignment.findFirst({ where: { milestoneId, reviewerDrepId: drep.id, releasedAt: null } });
-    const board = drep.user.drepKeyHash ? await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: drep.user.drepKeyHash } }) : null;
-    if (!assigned && !board) throw new ForbiddenException('you are not assigned to review this milestone');
-
-    const existing = await this.prisma.vote.findFirst({ where: { milestoneId, drepId: drep.id, phase: VotePhase.MILESTONE } });
-    if (existing) {
-      await this.prisma.vote.update({ where: { id: existing.id }, data: { choice, rationale: rationale ?? null } });
+    if (drep) {
+      const assigned = await this.prisma.milestoneAssignment.findFirst({ where: { milestoneId, reviewerDrepId: drep.id, releasedAt: null } });
+      const board = drep.user.drepKeyHash ? await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: drep.user.drepKeyHash } }) : null;
+      if (!assigned && !board) throw new ForbiddenException('you are not assigned to review this milestone');
+      const existing = await this.prisma.vote.findFirst({ where: { milestoneId, drepId: drep.id, phase: VotePhase.MILESTONE } });
+      if (existing) {
+        await this.prisma.vote.update({ where: { id: existing.id }, data: { choice, rationale: rationale ?? null } });
+      } else {
+        await this.prisma.vote.create({ data: { proposalId: m.proposalId, milestoneId, drepId: drep.id, phase: VotePhase.MILESTONE, choice, rationale: rationale ?? null } });
+      }
+      // §13.2 — DReps earn +0.5 for checking a milestone (idempotent); misses are
+      // penalized by the daily sweep. Experts are paid in ADA, not merit.
+      await this.merit?.tryAward(drep.id, 'MILESTONE_CHECK', milestoneId);
     } else {
-      await this.prisma.vote.create({ data: { proposalId: m.proposalId, milestoneId, drepId: drep.id, phase: VotePhase.MILESTONE, choice, rationale: rationale ?? null } });
+      // §12 — an assigned, board-approved expert reviews like a DRep (own vote table).
+      const expert = await this.prisma.expert.findFirst({ where: { userId, approvedByBoard: true }, select: { id: true } });
+      if (!expert) throw new ForbiddenException('only DReps or assigned experts may review');
+      const assigned = await this.prisma.milestoneAssignment.findFirst({ where: { milestoneId, reviewerExpertId: expert.id, releasedAt: null } });
+      if (!assigned) throw new ForbiddenException('you are not assigned to review this milestone');
+      await this.prisma.milestoneExpertVote.upsert({
+        where: { milestoneId_expertId: { milestoneId, expertId: expert.id } },
+        update: { choice, rationale: rationale ?? null },
+        create: { milestoneId, expertId: expert.id, choice, rationale: rationale ?? null },
+      });
     }
-    // §13.2 — checking a milestone earns +0.5 (idempotent per milestone). Missed
-    // checks past the review window are penalized by the daily sweep.
-    await this.merit?.tryAward(drep.id, 'MILESTONE_CHECK', milestoneId);
     await this.maybeDecide(milestoneId);
     return this.result(milestoneId);
   }
@@ -833,12 +871,25 @@ export class MilestonesService {
       include: { drep: { select: { drepIdOnchain: true, user: { select: { displayName: true } } } } },
       orderBy: { castAt: 'asc' },
     });
-    return votes.map((v) => ({
+    const drepVotes = votes.map((v) => ({
       drep: v.drep.drepIdOnchain,
       displayName: v.drep.user?.displayName ?? null,
       choice: v.choice,
       rationale: v.rationale ?? null,
     }));
+    // §12 — assigned experts review like DReps; their votes count toward the tally.
+    const eVotes = await this.prisma.milestoneExpertVote.findMany({
+      where: { milestoneId },
+      include: { expert: { select: { displayName: true } } },
+      orderBy: { castAt: 'asc' },
+    });
+    const expertVotes = eVotes.map((v) => ({
+      drep: '',
+      displayName: `${v.expert.displayName} · Expert`,
+      choice: v.choice,
+      rationale: v.rationale ?? null,
+    }));
+    return [...drepVotes, ...expertVotes];
   }
 
   /** §11/§15 — milestone payout status: the PROJECT_FUNDING multisig action.

@@ -1309,22 +1309,24 @@ export const boardPaymentsApi = {
     request<{ status: string }>(`/admin/proposals/payments/${id}/settle`, { method: 'POST', body: JSON.stringify({ txHash }) }),
 };
 export interface MilestoneCandidate {
-  drepId: string;
-  drepIdOnchain: string;
+  kind: 'DRep' | 'Expert';
+  id: string;
+  drepId: string | null;
+  drepIdOnchain: string | null;
   displayName: string | null;
   subcategoryIds: string[];
   expertiseMatch: boolean;
   loadInRound: number;
 }
 export const boardMilestoneApi = {
-  /** Ranked candidate DReps with expertise + per-round milestone-review load count. */
+  /** Ranked candidate reviewers (DReps + experts) with expertise + per-round load. */
   candidates: (proposalId: string) =>
     request<MilestoneCandidate[]>(`/admin/proposals/${proposalId}/milestone-candidates`),
-  /** Board selects exactly `milestoneReviewerCount` DReps for the proposal. */
-  assign: (proposalId: string, drepIds: string[]) =>
+  /** Board selects exactly `milestoneReviewerCount` reviewers (DReps and/or experts). */
+  assign: (proposalId: string, drepIds: string[], expertIds: string[] = []) =>
     request<MilestoneView[]>(`/admin/proposals/${proposalId}/assign-milestone-reviewers`, {
       method: 'POST',
-      body: JSON.stringify({ drepIds }),
+      body: JSON.stringify({ drepIds, expertIds }),
     }),
   /** Release the currently-assigned reviewers (only before any POA has been submitted). */
   release: (proposalId: string) =>

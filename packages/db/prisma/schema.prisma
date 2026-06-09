@@ -173,6 +173,7 @@ model Expert {
   milestoneAssignments MilestoneAssignment[]
   rewardEntries        RewardEntry[]
   expertRewards        ExpertReward[]
+  milestoneVotes       MilestoneExpertVote[]
 
   @@map("expert")
 }
@@ -511,6 +512,7 @@ model Milestone {
   poas        MilestonePoa[]
   assignments MilestoneAssignment[]
   votes       Vote[]
+  expertVotes MilestoneExpertVote[]
 
   @@unique([proposalId, idx])
   @@map("milestone")
@@ -655,6 +657,23 @@ model Vote {
 
   @@index([proposalId, drepId])
   @@map("vote")
+}
+
+// §11/§12 — an Expert assigned to a milestone reviews it like a DRep. Kept in its
+// own table so the DRep-centric Vote model (and filtering/D&V tallies) stay untouched.
+model MilestoneExpertVote {
+  id          String   @id @default(uuid()) @db.Uuid
+  milestoneId String   @map("milestone_id") @db.Uuid
+  expertId    String   @map("expert_id") @db.Uuid
+  choice      String // YES, NO
+  rationale   String?
+  castAt      DateTime @default(now()) @map("cast_at") @db.Timestamptz(6)
+
+  milestone Milestone @relation(fields: [milestoneId], references: [id])
+  expert    Expert    @relation(fields: [expertId], references: [id])
+
+  @@unique([milestoneId, expertId])
+  @@map("milestone_expert_vote")
 }
 
 // §8.2 — board members do NOT vote on funding D&V by default; they must explicitly

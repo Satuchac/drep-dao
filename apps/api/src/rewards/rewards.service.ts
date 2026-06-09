@@ -176,13 +176,13 @@ export class RewardsService {
     }
     // experts: per §12 switch — like-DRep → per-check reward + extra; else flat milestoneAda.
     const experts = await this.prisma.expertReward.findMany({ where: { roundId } });
-    const expertChecks = new Map<string, number>(); // expert milestone checks via their assignments
-    const eaCounts = await this.prisma.milestoneAssignment.groupBy({
-      by: ['reviewerExpertId'],
-      where: { reviewerExpertId: { not: null }, milestoneId: { in: milestones.map((m) => m.id) } },
+    const expertChecks = new Map<string, number>(); // expert milestone checks performed (their votes)
+    const evCounts = await this.prisma.milestoneExpertVote.groupBy({
+      by: ['expertId'],
+      where: { milestoneId: { in: milestones.map((m) => m.id) } },
       _count: { _all: true },
     });
-    for (const c of eaCounts) if (c.reviewerExpertId) expertChecks.set(c.reviewerExpertId, c._count._all);
+    for (const c of evCounts) expertChecks.set(c.expertId, c._count._all);
     for (const r of experts) {
       const checks = expertChecks.get(r.expertId) ?? 0;
       let amt = r.milestoneAda; // the flat / extra payment
