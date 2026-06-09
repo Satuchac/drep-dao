@@ -240,6 +240,9 @@ model Round {
   milestoneAutoExtensionDays         Int? @map("milestone_auto_extension_days")
   milestoneCheckPeriodDays           Int? @map("milestone_check_period_days")
   milestoneBoardExtraExtensionDays   Int? @map("milestone_board_extra_extension_days")
+  // §13 — days the board has to pay out an approved milestone before the whole
+  // board loses merit (the signers who pay it in time earn merit). Default 5.
+  boardPayoutDeadlineDays            Int? @map("board_payout_deadline_days")
   // §3 — proposer pledge.
   pledgeThresholdAda              Int? @map("pledge_threshold_ada")
   pledgeGraceDays                 Int? @map("pledge_grace_days")

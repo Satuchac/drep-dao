@@ -635,6 +635,7 @@ export interface RoundSettingsInput {
   milestoneAutoExtensionDays?: number;
   milestoneCheckPeriodDays?: number;
   milestoneBoardExtraExtensionDays?: number;
+  boardPayoutDeadlineDays?: number;
   pledgeThresholdAda?: number;
   pledgeGraceDays?: number;
   filterResubmissionsAllowed?: number;
@@ -1447,4 +1448,24 @@ export const internalProposalsApi = {
       `/internal-proposals/${id}/install-board`,
       { method: 'POST' },
     ),
+};
+
+// §13 — merit points + avoid-period ("vacancy") signalling.
+export interface MeritInfo {
+  points: number;
+  ledger: { delta: number; reason: string; at: string }[];
+}
+export interface AvoidPeriod {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+  reason: string | null;
+}
+export const meritApi = {
+  me: () => request<MeritInfo>('/me/merit'),
+  avoidPeriods: () => request<AvoidPeriod[]>('/me/avoid-periods'),
+  setAvoid: (startsAt: string, endsAt: string, reason?: string) =>
+    request<AvoidPeriod>('/me/avoid-period', { method: 'POST', body: JSON.stringify({ startsAt, endsAt, reason }) }),
+  removeAvoid: (id: string) => request<{ ok: boolean }>(`/me/avoid-period/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  runSweep: () => request<{ ok: boolean }>('/admin/merit/sweep', { method: 'POST' }),
 };

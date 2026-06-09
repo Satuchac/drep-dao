@@ -87,6 +87,7 @@ export const ROUND_SETTING_DEFAULTS = {
   milestoneAutoExtensionDays: 28,
   milestoneCheckPeriodDays: 10,
   milestoneBoardExtraExtensionDays: 90,
+  boardPayoutDeadlineDays: 5,
   pledgeThresholdAda: 0,
   pledgeGraceDays: 14,
   // §7.4 — after a filtering rejection the submitter can revise + resubmit while the
@@ -136,6 +137,7 @@ export const ROUND_SETTING_META: Record<RoundSettingKey, string> = {
   milestoneAutoExtensionDays: 'Automatic grace extension granted to a late milestone (days).',
   milestoneCheckPeriodDays: 'Window reviewers have to check a delivered milestone (days).',
   milestoneBoardExtraExtensionDays: 'Extra milestone extension the board may grant on request (days).',
+  boardPayoutDeadlineDays: 'Days the board has to pay an approved milestone before all board members lose merit (§13).',
   pledgeThresholdAda: 'Requested amount above which a proposer must post a refundable pledge (ADA; 0 disables pledges).',
   pledgeGraceDays: 'Days a proposer has to post the required pledge.',
   filterResubmissionsAllowed:
@@ -219,10 +221,36 @@ export const MeritReason = {
   BOARD_ROUND_CONFIGURE: 'BOARD_ROUND_CONFIGURE', // +10
   BOARD_REWARD_DISTRIBUTE: 'BOARD_REWARD_DISTRIBUTE', // +10
   BOARD_LEDGER_MONTHLY: 'BOARD_LEDGER_MONTHLY', // +2
+  BOARD_PAYOUT_SIGNED: 'BOARD_PAYOUT_SIGNED', // +5 per signer — paid a delivered milestone in time
   MISSED_DV: 'MISSED_DV', // -1
   MISSED_FILTER: 'MISSED_FILTER', // -1
   MISSED_MILESTONE: 'MISSED_MILESTONE', // -1
   MISSED_QUICK_POLL: 'MISSED_QUICK_POLL', // -0.5
   BOARD_REWARD_LATE: 'BOARD_REWARD_LATE', // -10
+  BOARD_PAYOUT_LATE: 'BOARD_PAYOUT_LATE', // -10 collective — milestone payout missed the deadline
 } as const;
 export type MeritReason = (typeof MeritReason)[keyof typeof MeritReason];
+
+/** §13.2/13.3 — point delta per reason. Gains are awarded when the action happens;
+ *  misses are deducted by the daily sweep when a window/deadline lapses (skipped if
+ *  an avoid period covers it). Board rewards are collective except the per-signer payout. */
+export const MERIT_DELTAS: Record<MeritReason, number> = {
+  DV_VOTE: 1,
+  DV_VOTE_INTERNAL: 1,
+  FILTER_COMPLETE: 1,
+  MILESTONE_CHECK: 0.5,
+  INTERNAL_SUBMIT: 1,
+  QUICK_POLL_VOTE: 1,
+  BOARD_ROUND_START: 10,
+  BOARD_ROUND_END: 10,
+  BOARD_ROUND_CONFIGURE: 10,
+  BOARD_REWARD_DISTRIBUTE: 10,
+  BOARD_LEDGER_MONTHLY: 2,
+  BOARD_PAYOUT_SIGNED: 5,
+  MISSED_DV: -1,
+  MISSED_FILTER: -1,
+  MISSED_MILESTONE: -1,
+  MISSED_QUICK_POLL: -0.5,
+  BOARD_REWARD_LATE: -10,
+  BOARD_PAYOUT_LATE: -10,
+};

@@ -48,6 +48,7 @@ export class RoundSettingsInput {
   @IsOptional() @IsInt() @Min(0) milestoneAutoExtensionDays?: number;
   @IsOptional() @IsInt() @Min(0) milestoneCheckPeriodDays?: number;
   @IsOptional() @IsInt() @Min(0) milestoneBoardExtraExtensionDays?: number;
+  @IsOptional() @IsInt() @Min(0) boardPayoutDeadlineDays?: number;
   // §3 — proposer pledge.
   @IsOptional() @IsInt() @Min(0) pledgeThresholdAda?: number;
   @IsOptional() @IsInt() @Min(0) pledgeGraceDays?: number;

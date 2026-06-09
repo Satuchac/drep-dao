@@ -25,6 +25,7 @@ import { PledgeConfirmations } from './pledge-confirmations';
 import { BoardPayments } from './board-payments';
 import { PreferencesPanel } from './preferences-panel';
 import { RewardAddressPanel } from './reward-address-panel';
+import { MeritPanel } from './merit-panel';
 import { MultisigSetup } from './multisig-setup';
 import { HotWalletControls } from './hot-wallet-controls';
 import { SendFromTreasuryPanel } from './send-from-treasury-panel';
@@ -89,6 +90,8 @@ export function MemberArea() {
         {/* §15.4 — DReps + board members register a payment address here so
             they can receive rewards. Amber-nags when empty. */}
         {isMember ? <RewardAddressPanel /> : null}
+        {/* §13 — merit points + ledger + avoid-period (vacancy) signalling. */}
+        {isMember ? <section className={card}><MeritPanel /></section> : null}
         <section className={card}><PreferencesPanel /></section>
       </div>
     ),

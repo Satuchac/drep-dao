@@ -33,6 +33,7 @@ export function finalPower(stakeLovelace: bigint, meritPoints: number): number {
   return basePower(stakeLovelace) * meritMultiplier(meritPoints);
 }
 
+
 export interface TallyInput {
   /** Sum of FinalPower of voters who chose YES. */
   yesPower: number;

@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -24,6 +25,7 @@ import { GovSubject, VotingStyle } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnchorService } from '../cardano/anchor.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
+import { MeritService } from '../merit/merit.service';
 
 const LOVELACE = 1_000_000n;
 
@@ -34,6 +36,7 @@ export class DvService {
     private readonly config: ConfigService,
     private readonly anchor: AnchorService,
     private readonly cardano: CardanoQueryService,
+    @Optional() private readonly merit?: MeritService,
   ) {}
 
   /**
@@ -248,6 +251,9 @@ export class DvService {
         data: { proposalId, drepId: drep.id, phase: VotePhase.DEBATE_VOTE, choice, rationale },
       });
     }
+    // §13.2/§4.4 — YES/NO earns +1 (idempotent per proposal); ABSTAIN earns 0.
+    // Missed ballots (no avoid signaled) are penalized by the daily sweep.
+    if (choice !== VoteChoice.ABSTAIN) await this.merit?.tryAward(drep.id, 'DV_VOTE', proposalId);
     return this.result(proposalId);
   }
 

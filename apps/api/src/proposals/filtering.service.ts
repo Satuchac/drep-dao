@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   ROUND_SETTING_DEFAULTS,
@@ -19,12 +20,14 @@ import { GovSubject, VotingStyle } from '@drep-dao/cardano';
 import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnchorService } from '../cardano/anchor.service';
+import { MeritService } from '../merit/merit.service';
 
 @Injectable()
 export class FilteringService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly anchor: AnchorService,
+    @Optional() private readonly merit?: MeritService,
   ) {}
 
   /**
@@ -52,8 +55,15 @@ export class FilteringService {
       where: { roundId: proposal.roundId ?? undefined, drep: { status: 'ADMITTED' } },
       select: { drepId: true, drep: { select: { subcategoryIds: true } } },
     });
-    const cands = eligible.filter((e) => e.drepId !== proposal.submitterDrepId);
+    let cands = eligible.filter((e) => e.drepId !== proposal.submitterDrepId);
     if (cands.length === 0) throw new BadRequestException('no eligible reviewers in this round');
+    // §13.4 — DReps who signalled an avoid period aren't drawn (unless excluding
+    // them would leave nobody, in which case the board reassigns manually).
+    if (this.merit) {
+      const avail: typeof cands = [];
+      for (const c of cands) if (!(await this.merit.isInAvoidPeriod(c.drepId))) avail.push(c);
+      if (avail.length > 0) cands = avail;
+    }
 
     // §7.1 equal-participation: how many times each DRep has been drawn this round.
     const roundProposals = await this.prisma.proposal.findMany({
@@ -239,6 +249,9 @@ export class FilteringService {
         data: { proposalId, drepId: drep.id, phase: VotePhase.FILTERING, choice, rationale: rationale ?? null },
       });
     }
+    // §13.2 — completing a filtering review earns +1 merit (idempotent per proposal,
+    // so re-casting doesn't re-award). Missed reviews are penalized by the daily sweep.
+    await this.merit?.tryAward(drep.id, 'FILTER_COMPLETE', proposalId);
     await this.maybeDecide(proposalId);
     return this.result(proposalId);
   }

@@ -1,9 +1,10 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ROUND_SETTING_DEFAULTS, ProposalStage, ProposalStatus, RoundStatus, VoteChoice, VotePhase } from '@drep-dao/shared';
 import { GovSubject, VotingStyle } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnchorService } from '../cardano/anchor.service';
 import { TreasuryBucketsService } from '../treasury/treasury-buckets.service';
+import { MeritService } from '../merit/merit.service';
 
 const LOVELACE = 1_000_000;
 /** §11 — board majority needed to APPROVE a stop-funding (1 member · 1 vote, 3-of-5 default). */
@@ -38,6 +39,7 @@ export class MilestonesService {
     private readonly prisma: PrismaService,
     private readonly anchor: AnchorService,
     private readonly buckets: TreasuryBucketsService,
+    @Optional() private readonly merit?: MeritService,
   ) {}
 
   // ===========================================================================
@@ -423,6 +425,9 @@ export class MilestonesService {
     } else {
       await this.prisma.vote.create({ data: { proposalId: m.proposalId, milestoneId, drepId: drep.id, phase: VotePhase.MILESTONE, choice, rationale: rationale ?? null } });
     }
+    // §13.2 — checking a milestone earns +0.5 (idempotent per milestone). Missed
+    // checks past the review window are penalized by the daily sweep.
+    await this.merit?.tryAward(drep.id, 'MILESTONE_CHECK', milestoneId);
     await this.maybeDecide(milestoneId);
     return this.result(milestoneId);
   }

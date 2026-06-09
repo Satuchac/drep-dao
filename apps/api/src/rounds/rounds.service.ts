@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { DRepStatus, ProposalStatus, RoundStatus, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { DvService } from '../proposals/dv.service';
+import { MeritService } from '../merit/merit.service';
 import { CreateRoundDto, UpdateRoundDto, CategoryInput, ScheduleInput, ConfirmStageDto, RoundSettingsInput } from './dto';
 
 const LOVELACE = 1_000_000;
@@ -68,6 +69,7 @@ export class RoundsService {
     // (which build RoundsService manually) don't have to mock DvService.
     @Optional() @Inject(forwardRef(() => DvService))
     private readonly dv?: DvService,
+    @Optional() private readonly merit?: MeritService,
   ) {}
 
   /** §6 — board creates a round in PREPARATION with categories, schedule, eligibility. */
@@ -99,6 +101,9 @@ export class RoundsService {
         eligibilities: { create: eligibleDrepIds.map((drepId) => ({ drepId })) },
       },
     });
+    // §13.2 — board collective merit for configuring + starting a round.
+    await this.merit?.awardBoard('BOARD_ROUND_CONFIGURE', round.id);
+    await this.merit?.awardBoard('BOARD_ROUND_START', round.id);
     return this.get(round.id);
   }
 
@@ -251,6 +256,7 @@ export class RoundsService {
         milestoneAutoExtensionDays: r.milestoneAutoExtensionDays,
         milestoneCheckPeriodDays: r.milestoneCheckPeriodDays,
         milestoneBoardExtraExtensionDays: r.milestoneBoardExtraExtensionDays,
+        boardPayoutDeadlineDays: r.boardPayoutDeadlineDays,
         pledgeThresholdAda: r.pledgeThresholdAda,
         pledgeGraceDays: r.pledgeGraceDays,
         filterResubmissionsAllowed: r.filterResubmissionsAllowed,
@@ -450,7 +456,9 @@ export class RoundsService {
     const round = await this.prisma.round.findUnique({ where: { id } });
     if (!round) throw new NotFoundException('round not found');
     if (round.status === RoundStatus.CLOSED) throw new ConflictException('round is already closed');
-    return this.transitionTo(id, RoundStatus.CLOSED, userId);
+    const closed = await this.transitionTo(id, RoundStatus.CLOSED, userId);
+    await this.merit?.awardBoard('BOARD_ROUND_END', id); // §13.2 — collective merit for ending a round
+    return closed;
   }
 
   /** §5.4/§26.5 — transition to an explicit stage (kept for board tooling/back-compat). */
