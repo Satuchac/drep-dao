@@ -218,6 +218,7 @@ export interface BoardAction {
   proposalTitle: string | null;
   destAddress: string | null;
   paidAt: string | null;
+  recipients: { name: string; ada: number }[];
   insufficient: boolean;
 }
 
@@ -1481,6 +1482,7 @@ export interface RewardCalcView {
   periodKey: string | null;
   poolAda: number;
   payable: boolean;
+  payout: { actionId: string; status: string; txHash: string | null } | null;
   computedAt: string;
   entries: RewardEntryView[];
 }

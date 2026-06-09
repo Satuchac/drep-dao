@@ -168,6 +168,20 @@ export function BoardActions({ onChange, history = false, refreshKey = 0 }: { on
                 </div>
               </div>
             ) : null}
+            {/* §12 — a reward payout pays many recipients in one tx; show the full list. */}
+            {a.recipients.length > 0 ? (
+              <div className="mt-1.5 rounded border border-neutral-200 p-2 dark:border-neutral-800">
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Recipients ({a.recipients.length})</div>
+                <ul className="space-y-0.5 text-xs">
+                  {a.recipients.map((r, i) => (
+                    <li key={i} className="flex justify-between gap-2">
+                      <span>{r.name}</span>
+                      <span className="tabular-nums text-neutral-500">{r.ada.toLocaleString()} ₳</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             {/* Insufficient-funds warning — server-computed against live balance. */}
             {a.insufficient && a.amountAda != null && treasury ? (
               <div className="mt-1 rounded border border-red-300 bg-red-50 p-1.5 text-[11px] text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">

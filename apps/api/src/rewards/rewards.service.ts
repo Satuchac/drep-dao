@@ -252,6 +252,9 @@ export class RewardsService {
     const status = calc.roundId
       ? (await this.prisma.round.findUnique({ where: { id: calc.roundId }, select: { status: true } }))?.status
       : null;
+    // A pending/sent REWARD_PAYOUT action for this calc (if one was already prepared).
+    const linkedId = calc.entries.find((e) => e.payoutActionId)?.payoutActionId ?? null;
+    const action = linkedId ? await this.prisma.multisigAction.findUnique({ where: { id: linkedId }, select: { id: true, status: true, txHash: true } }) : null;
     return {
       id: calc.id,
       roundId: calc.roundId,
@@ -259,6 +262,7 @@ export class RewardsService {
       periodKey: calc.periodKey,
       poolAda: Number(calc.poolAda) / 1e6,
       payable: this.isPayable(calc.kind, status),
+      payout: action ? { actionId: action.id, status: action.status, txHash: action.txHash } : null,
       computedAt: calc.computedAt,
       entries: calc.entries.map((e) => ({
         id: e.id,

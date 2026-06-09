@@ -148,6 +148,8 @@ export class TreasuryService {
       include: {
         signatures: { select: { boardDrepId: true, drep: { select: { user: { select: { displayName: true } } } } } },
         commitments: { select: { userId: true, user: { select: { displayName: true } } } },
+        // §12 — REWARD_PAYOUT is multi-output; surface the per-recipient list for the board to review.
+        rewardEntries: { select: { amountAda: true, overrideAda: true, drep: { select: { user: { select: { displayName: true } } } }, expert: { select: { displayName: true } } } },
       },
       orderBy: { createdAt: 'asc' },
     });
@@ -156,6 +158,7 @@ export class TreasuryService {
       txHash: string | null; createdAt: Date;
       signatures: { boardDrepId: string; drep: { user: { displayName: string | null } | null } | null }[];
       commitments: { userId: string; user: { displayName: string | null } | null }[];
+      rewardEntries: { amountAda: bigint; overrideAda: bigint | null; drep: { user: { displayName: string | null } | null } | null; expert: { displayName: string } | null }[];
       committedKeyHashes: string[];
       proposalId: string | null; milestoneId: string | null; milestoneIdx: number | null;
       proposalTitle: string | null; destAddress: string | null; paidAt: Date | null;
@@ -190,6 +193,11 @@ export class TreasuryService {
         proposalTitle: a.proposalTitle,
         destAddress: a.destAddress,
         paidAt: a.paidAt,
+        // §12 — per-recipient list for a reward payout (empty for single-output actions).
+        recipients: a.rewardEntries.map((e) => ({
+          name: e.drep?.user?.displayName ?? e.expert?.displayName ?? 'recipient',
+          ada: Number(e.overrideAda ?? e.amountAda) / ADA,
+        })),
         insufficient: amt != null && treasuryBalanceAda < amt,
       };
     };
@@ -370,6 +378,10 @@ export class TreasuryService {
         description: action.description ? `${action.description}\n\n${note}` : note,
       },
     });
+    // §12 — a cancelled reward payout frees its (unpaid) entries so the board can recompute + re-prepare.
+    if (action.kind === 'REWARD_PAYOUT') {
+      await this.prisma.rewardEntry.updateMany({ where: { payoutActionId: actionId, paidAt: null }, data: { payoutActionId: null } });
+    }
     return { id: actionId, status: 'FAILED' };
   }
 

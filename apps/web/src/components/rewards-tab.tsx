@@ -87,7 +87,13 @@ function CalcCard({ calc, onChange }: { calc: RewardCalcView; onChange: () => vo
     <section className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">{KIND_LABEL[calc.kind] ?? calc.kind} · pool {calc.poolAda.toLocaleString()} ₳</h3>
-        {allPaid ? (
+        {calc.payout ? (
+          calc.payout.status === 'CONFIRMED' || calc.payout.status === 'BROADCASTED' ? (
+            <span className="text-xs text-emerald-600">✓ paid on-chain</span>
+          ) : (
+            <span className="text-xs text-amber-600">⏳ payout prepared — review &amp; sign in Treasury → Actions</span>
+          )
+        ) : allPaid ? (
           <span className="text-xs text-emerald-600">✓ all paid</span>
         ) : !calc.payable ? (
           <span className="text-xs text-neutral-400">payable once the stage ends</span>
