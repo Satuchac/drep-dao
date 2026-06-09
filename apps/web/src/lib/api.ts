@@ -1467,6 +1467,7 @@ export interface AvoidPeriod {
 export interface RewardEntryView {
   id: string;
   recipient: { type: 'DRep' | 'Expert'; name: string; address: string | null };
+  units: number | null;
   amountAda: number;
   computedAda: number;
   overridden: boolean;

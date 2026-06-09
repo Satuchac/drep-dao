@@ -777,6 +777,7 @@ model RewardEntry {
   drepId              String?   @map("drep_id") @db.Uuid // recipient: a DRep …
   expertId            String?   @map("expert_id") @db.Uuid // … or an Expert
   amountAda           BigInt    @map("amount_ada") // computed reward
+  units               Int?      @map("units") // §12 — votes/checks that earned it (display)
   overrideAda         BigInt?   @map("override_ada") // §12 — board's per-recipient override (wins when set)
   payoutActionId      String?   @map("payout_action_id") @db.Uuid // the REWARD_PAYOUT multisig action paying it
   paidInTx            String?   @map("paid_in_tx")

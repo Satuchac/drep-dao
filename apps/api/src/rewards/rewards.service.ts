@@ -72,7 +72,7 @@ export class RewardsService {
     if (votes.length > 0) {
       const perVote = pool / BigInt(votes.length);
       for (const [drepId, n] of byDrep) {
-        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: calc.id, drepId, amountAda: perVote * BigInt(n) } });
+        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: calc.id, drepId, amountAda: perVote * BigInt(n), units: n } });
       }
     }
     await this.addExpertFlat(calc.id, roundId, 'filteringAda');
@@ -109,7 +109,7 @@ export class RewardsService {
     if (totalCast > 0) {
       const perVote = fixedPool / BigInt(totalCast);
       for (const [drepId, n] of castByDrep) {
-        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: fixedCalc.id, drepId, amountAda: perVote * BigInt(n) } });
+        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: fixedCalc.id, drepId, amountAda: perVote * BigInt(n), units: n } });
       }
     }
 
@@ -125,7 +125,7 @@ export class RewardsService {
     if (totalWeight > 0) {
       for (const [drepId, w] of weights) {
         const amt = BigInt(Math.round(Number(bonusPool) * (w / totalWeight)));
-        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: bonusCalc.id, drepId, amountAda: amt } });
+        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: bonusCalc.id, drepId, amountAda: amt, units: castByDrep.get(drepId) ?? 0 } });
       }
     }
     await this.addExpertFlat(fixedCalc.id, roundId, 'dvAda');
@@ -171,7 +171,7 @@ export class RewardsService {
     const perCheck = totalChecks > 0 ? pool / BigInt(totalChecks) : 0n;
     if (perCheck > 0n) {
       for (const [drepId, n] of byDrep) {
-        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: calc.id, drepId, amountAda: perCheck * BigInt(n) } });
+        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: calc.id, drepId, amountAda: perCheck * BigInt(n), units: n } });
       }
     }
     // experts: per §12 switch — like-DRep → per-check reward + extra; else flat milestoneAda.
@@ -187,7 +187,7 @@ export class RewardsService {
       const checks = expertChecks.get(r.expertId) ?? 0;
       let amt = r.milestoneAda; // the flat / extra payment
       if (r.milestoneLikeDrep && checks > 0) amt = amt + perCheck * BigInt(checks); // + DRep-equivalent
-      if (amt > 0n) await this.prisma.rewardEntry.create({ data: { rewardCalculationId: calc.id, expertId: r.expertId, amountAda: amt } });
+      if (amt > 0n) await this.prisma.rewardEntry.create({ data: { rewardCalculationId: calc.id, expertId: r.expertId, amountAda: amt, units: checks } });
     }
     return this.calcView(calc.id);
   }
@@ -248,6 +248,7 @@ export class RewardsService {
         recipient: e.drep
           ? { type: 'DRep' as const, name: e.drep.user.displayName ?? e.drep.drepIdOnchain.slice(0, 16), address: e.drep.user.rewardPaymentAddress }
           : { type: 'Expert' as const, name: e.expert?.displayName ?? '?', address: e.expert?.user.rewardPaymentAddress ?? null },
+        units: e.units,
         amountAda: Number(e.overrideAda ?? e.amountAda) / 1e6,
         computedAda: Number(e.amountAda) / 1e6,
         overridden: e.overrideAda != null,

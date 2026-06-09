@@ -95,12 +95,12 @@ function CalcCard({ calc, onChange }: { calc: RewardCalcView; onChange: () => vo
       </div>
       {msg ? <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{msg}</div> : null}
       <table className="mt-2 w-full text-xs">
-        <thead><tr className="text-left text-neutral-400"><th className="font-normal">Recipient</th><th className="font-normal">Computed</th><th className="font-normal">Pay</th><th></th></tr></thead>
+        <thead><tr className="text-left text-neutral-400"><th className="font-normal">Recipient</th><th className="font-normal">{calc.kind === 'MILESTONE' ? 'Checks' : 'Votes'}</th><th className="font-normal">Computed</th><th className="font-normal">Pay</th><th></th></tr></thead>
         <tbody>
           {calc.entries.map((e) => <EntryRow key={e.id} e={e} onChange={onChange} />)}
           {calc.entries.length === 0 ? <tr><td colSpan={4} className="py-1 text-neutral-400">No recipients.</td></tr> : null}
         </tbody>
-        <tfoot><tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">Total</td><td></td><td className="pt-1 tabular-nums">{total.toLocaleString()} ₳</td><td></td></tr></tfoot>
+        <tfoot><tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">Total</td><td className="pt-1 tabular-nums">{calc.entries.reduce((s, e) => s + (e.units ?? 0), 0)}</td><td></td><td className="pt-1 tabular-nums">{total.toLocaleString()} ₳</td><td></td></tr></tfoot>
       </table>
     </section>
   );
@@ -118,6 +118,7 @@ function EntryRow({ e, onChange }: { e: RewardCalcView['entries'][number]; onCha
   return (
     <tr className="border-t border-neutral-100 dark:border-neutral-900">
       <td className="py-1">{e.recipient.name} <span className="text-neutral-400">{e.recipient.type}</span>{!e.recipient.address ? <span className="text-amber-600"> · no reward address</span> : null}</td>
+      <td className="py-1 tabular-nums text-neutral-600 dark:text-neutral-300">{e.units ?? '—'}</td>
       <td className="py-1 tabular-nums text-neutral-500">{e.computedAda.toLocaleString()} ₳</td>
       <td className="py-1">
         {e.paid ? <span className="text-emerald-600">paid</span> : (
