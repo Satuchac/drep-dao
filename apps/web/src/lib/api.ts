@@ -1472,6 +1472,7 @@ export interface RewardEntryView {
   id: string;
   recipient: { type: 'DRep' | 'Expert'; name: string; address: string | null };
   units: number | null;
+  power: number | null; // §12.5 — final voting power used in the D&V bonus weighting (null otherwise)
   amountAda: number;
   computedAda: number;
   overridden: boolean;

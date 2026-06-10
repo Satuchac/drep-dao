@@ -263,6 +263,13 @@ export class RewardsService {
     // A pending/sent REWARD_PAYOUT action for this calc (if one was already prepared).
     const linkedId = calc.entries.find((e) => e.payoutActionId)?.payoutActionId ?? null;
     const action = linkedId ? await this.prisma.multisigAction.findUnique({ where: { id: linkedId }, select: { id: true, status: true, txHash: true } }) : null;
+    // §12.5 — for the D&V bonus, surface the final voting power that drove the weighting so
+    // the per-recipient differences are explainable in the UI.
+    let powerByDrep: Map<string, number> | null = null;
+    if (calc.kind === 'DV_BONUS' && calc.roundId) {
+      const props = await this.prisma.proposal.findMany({ where: { roundId: calc.roundId }, select: { id: true } });
+      powerByDrep = await this.drepFinalPower(props.map((p) => p.id));
+    }
     return {
       id: calc.id,
       roundId: calc.roundId,
@@ -278,6 +285,7 @@ export class RewardsService {
           ? { type: 'DRep' as const, name: e.drep.user.displayName ?? e.drep.drepIdOnchain.slice(0, 16), address: e.drep.user.rewardPaymentAddress }
           : { type: 'Expert' as const, name: e.expert?.displayName ?? '?', address: e.expert?.user.rewardPaymentAddress ?? null },
         units: e.units,
+        power: e.drepId && powerByDrep ? powerByDrep.get(e.drepId) ?? null : null,
         amountAda: Number(e.overrideAda ?? e.amountAda) / 1e6,
         computedAda: Number(e.amountAda) / 1e6,
         overridden: e.overrideAda != null,

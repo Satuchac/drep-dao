@@ -10,6 +10,8 @@ const KIND_LABEL: Record<string, string> = {
   MILESTONE: 'Milestone review',
   BOARD_MONTHLY: 'Board monthly',
 };
+// Order the reward cards by stage: filtering → D&V fixed → D&V bonus → milestone → experts/board.
+const KIND_ORDER: Record<string, number> = { FILTER: 0, DV_FIXED: 1, DV_BONUS: 2, MILESTONE: 3, EXPERT: 4, BOARD_MONTHLY: 5 };
 const inputCls = 'w-24 rounded border border-neutral-300 px-1.5 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900';
 
 export function RewardsTab() {
@@ -70,7 +72,7 @@ function Overview({ roundId }: { roundId: string }) {
       </div>
       {msg ? <div className="text-xs text-red-600">{msg}</div> : null}
       {calcs && calcs.length === 0 ? <p className="text-sm text-neutral-500">Nothing computed yet — use the buttons above.</p> : null}
-      {calcs?.map((c) => <CalcCard key={c.id} calc={c} buckets={buckets} onChange={load} />)}
+      {calcs?.slice().sort((a, b) => (KIND_ORDER[a.kind] ?? 99) - (KIND_ORDER[b.kind] ?? 99)).map((c) => <CalcCard key={c.id} calc={c} buckets={buckets} onChange={load} />)}
     </div>
   );
 }
@@ -156,9 +158,9 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
       </div>
       {msg ? <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{msg}</div> : null}
       <table className="mt-2 w-full text-xs">
-        <thead><tr className="text-left text-neutral-400"><th className="font-normal">Recipient</th><th className="font-normal">{calc.kind === 'MILESTONE' ? 'Checks' : 'Votes'}</th><th className="font-normal">Computed</th><th className="font-normal">Pay</th><th></th></tr></thead>
+        <thead><tr className="text-left text-neutral-400"><th className="font-normal">Recipient</th><th className="font-normal">{calc.kind === 'MILESTONE' ? 'Checks' : 'Votes'}</th>{calc.kind === 'DV_BONUS' ? <th className="font-normal" title="Final voting power used to weight the bonus">Power</th> : null}<th className="font-normal">Computed</th><th className="font-normal">Pay</th><th></th></tr></thead>
         <tbody>
-          {calc.entries.map((e) => <EntryRow key={e.id} e={e} onChange={onChange} />)}
+          {calc.entries.map((e) => <EntryRow key={e.id} e={e} showPower={calc.kind === 'DV_BONUS'} onChange={onChange} />)}
           {calc.entries.length === 0 ? <tr><td colSpan={4} className="py-1 text-neutral-400">No recipients.</td></tr> : null}
         </tbody>
         <tfoot><tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">Total</td><td className="pt-1 tabular-nums">{calc.entries.reduce((s, e) => s + (e.units ?? 0), 0)}</td><td></td><td className="pt-1 tabular-nums">{total.toLocaleString()} ₳</td><td></td></tr></tfoot>
@@ -167,7 +169,7 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
   );
 }
 
-function EntryRow({ e, onChange }: { e: RewardCalcView['entries'][number]; onChange: () => void }) {
+function EntryRow({ e, showPower = false, onChange }: { e: RewardCalcView['entries'][number]; showPower?: boolean; onChange: () => void }) {
   const [val, setVal] = useState(String(e.amountAda));
   useEffect(() => { setVal(String(e.amountAda)); }, [e.amountAda]);
   const save = async () => {
@@ -180,6 +182,7 @@ function EntryRow({ e, onChange }: { e: RewardCalcView['entries'][number]; onCha
     <tr className="border-t border-neutral-100 dark:border-neutral-900">
       <td className="py-1">{e.recipient.name} <span className="text-neutral-400">{e.recipient.type}</span>{!e.recipient.address ? <span className="text-amber-600"> · no reward address</span> : null}</td>
       <td className="py-1 tabular-nums text-neutral-600 dark:text-neutral-300">{e.units ?? '—'}</td>
+      {showPower ? <td className="py-1 tabular-nums text-neutral-500">{e.power != null ? e.power.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td> : null}
       <td className="py-1 tabular-nums text-neutral-500">{e.computedAda.toLocaleString()} ₳</td>
       <td className="py-1">
         {e.paid ? <span className="text-emerald-600">paid</span> : (
