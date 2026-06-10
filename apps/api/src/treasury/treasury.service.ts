@@ -518,11 +518,14 @@ export class TreasuryService {
     const bks = active
       ? await this.prisma.treasuryBucket.findMany({ where: { configId: active.id }, select: { bech32Address: true } })
       : [];
-    const hot = this.anchor.hotWalletAddress();
+    // §15 — only the multisig + its labeled buckets. The low-balance hot/anchor wallet is
+    // deliberately excluded: its on-chain-proof txs are self-transfers (noise), and its many
+    // accumulated UTxOs are what made this history query time out → fall back to Koios. Real
+    // hot-wallet moves (top-ups) still appear here from the multisig side, and the hot wallet
+    // has its own dedicated history view.
     const addrSet = new Set<string>();
     if (active?.bech32Address) addrSet.add(active.bech32Address);
     for (const b of bks) if (b.bech32Address) addrSet.add(b.bech32Address);
-    if (hot) addrSet.add(hot);
     const addresses = [...addrSet];
     if (addresses.length === 0) return { transactions: [] as TreasuryTx[] };
 

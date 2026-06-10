@@ -36,7 +36,7 @@ export function TreasuryTransactions() {
       <div>
         <h3 className="text-base font-semibold">Treasury transactions</h3>
         <p className="text-xs text-neutral-500">
-          Every on-chain transaction that touched a treasury address (multisig sub-addresses + hot wallet),
+          Every on-chain transaction that touched a treasury address (the multisig + its buckets),
           newest first. <span className="text-emerald-700 dark:text-emerald-400">Incoming</span> in green,{' '}
           <span className="text-red-700 dark:text-red-400">outgoing</span> in red.
           {isBoard ? ' Board members can add context with Edit.' : ''}
