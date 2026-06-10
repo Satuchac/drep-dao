@@ -199,7 +199,7 @@ export class TreasuryService {
         destAddress: a.destAddress,
         paidAt: a.paidAt,
         // §12 — per-recipient list for a reward payout (empty for single-output actions).
-        recipients: a.rewardEntries.map((e) => ({
+        recipients: (a.rewardEntries ?? []).map((e) => ({
           name: e.drep?.user?.displayName ?? e.expert?.displayName ?? 'recipient',
           ada: Number(e.overrideAda ?? e.amountAda) / ADA,
         })),
@@ -213,6 +213,7 @@ export class TreasuryService {
           include: {
             signatures: { select: { boardDrepId: true, drep: { select: { user: { select: { displayName: true } } } } } },
             commitments: { select: { userId: true, user: { select: { displayName: true } } } },
+            rewardEntries: { select: { amountAda: true, overrideAda: true, drep: { select: { user: { select: { displayName: true } } } }, expert: { select: { displayName: true } } } },
           },
           orderBy: { createdAt: 'desc' },
           take: 50,
