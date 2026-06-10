@@ -440,9 +440,12 @@ export class CardanoQueryService {
       try {
         const { rows } = await pool.query<{ hash: string; time: string; in_amt: string; out_amt: string }>(
           `WITH ins AS (SELECT o.tx_id, sum(o.value) AS amt FROM tx_out o WHERE o.address = ANY($1::text[]) GROUP BY o.tx_id),
-                outs AS (SELECT o.consumed_by_tx_id AS tx_id, sum(o.value) AS amt
-                           FROM tx_out o WHERE o.address = ANY($1::text[]) AND o.consumed_by_tx_id IS NOT NULL
-                          GROUP BY o.consumed_by_tx_id),
+                -- "spent" via tx_in (the spending relation is indexed with the tx, unlike
+                -- tx_out.consumed_by_tx_id which lags — so a fresh outgoing tx is correct immediately).
+                outs AS (SELECT i.tx_in_id AS tx_id, sum(o.value) AS amt
+                           FROM tx_out o JOIN tx_in i ON i.tx_out_id = o.tx_id AND i.tx_out_index = o.index
+                          WHERE o.address = ANY($1::text[])
+                          GROUP BY i.tx_in_id),
                 involved AS (SELECT tx_id FROM ins UNION SELECT tx_id FROM outs)
            SELECT encode(t.hash,'hex') AS hash, extract(epoch FROM b.time)::bigint::text AS time,
                   COALESCE(ins.amt,0)::text AS in_amt, COALESCE(outs.amt,0)::text AS out_amt
