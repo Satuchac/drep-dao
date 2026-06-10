@@ -1007,6 +1007,8 @@ export interface DvResult {
   status?: string;
   stage?: string | null;
   myChoice?: 'YES' | 'NO' | 'ABSTAIN' | null; // the logged-in DRep's own vote (null = not voted)
+  myRationale?: string | null; // the logged-in DRep's current rationale (pre-fills the box)
+  myRationaleHistory?: { choice: string; rationale: string | null; castAt: string }[]; // superseded, newest first
   votes?: VoteRationale[];
   anchorTxHash?: string | null;
   anchorHash?: string | null;

@@ -245,7 +245,12 @@ export class DvService {
       where: { proposalId, drepId: drep.id, phase: VotePhase.DEBATE_VOTE },
     });
     if (existing) {
-      await this.prisma.vote.update({ where: { id: existing.id }, data: { choice, rationale } });
+      // §8 — archive the rationale being replaced so every prior reasoning stays viewable
+      // (read-only history), then overwrite the live vote + refresh its cast time.
+      await this.prisma.dvRationale.create({
+        data: { proposalId, drepId: drep.id, choice: existing.choice, rationale: existing.rationale, castAt: existing.castAt },
+      });
+      await this.prisma.vote.update({ where: { id: existing.id }, data: { choice, rationale, castAt: new Date() } });
     } else {
       await this.prisma.vote.create({
         data: { proposalId, drepId: drep.id, phase: VotePhase.DEBATE_VOTE, choice, rationale },
@@ -271,13 +276,21 @@ export class DvService {
       select: { status: true, stage: true, approvalThresholdPct: true },
     });
     if (!snapshot) {
-      return { open: false, status: proposal?.status, stage: proposal?.stage, myChoice: null };
+      return { open: false, status: proposal?.status, stage: proposal?.stage, myChoice: null, myRationale: null, myRationaleHistory: [] };
     }
     const votes = await this.prisma.vote.findMany({
       where: { proposalId, phase: VotePhase.DEBATE_VOTE },
     });
     const choiceByDrep = new Map(votes.map((v) => [v.drepId, v.choice]));
     const myChoice = myDrep ? choiceByDrep.get(myDrep.id) ?? null : null;
+    const myRationale = myDrep ? votes.find((v) => v.drepId === myDrep.id)?.rationale ?? null : null;
+    const myRationaleHistory = myDrep
+      ? await this.prisma.dvRationale.findMany({
+          where: { proposalId, drepId: myDrep.id },
+          orderBy: { castAt: 'desc' },
+          select: { choice: true, rationale: true, castAt: true },
+        })
+      : [];
 
     // §8.2 — board members who have toggled OFF voteOnFundingProposals are
     // skipped at tally time (their snapshot entry contributes 0 to YES /
@@ -334,6 +347,8 @@ export class DvService {
       status: proposal?.status,
       stage: proposal?.stage,
       myChoice, // the caller's own vote (YES/NO/ABSTAIN) or null if not voted — drives the UI flag
+      myRationale, // the caller's current rationale (pre-fills the box on re-vote)
+      myRationaleHistory, // superseded rationales, newest first (read-only)
       votes: await this.dvVoteList(proposalId), // §8 public rationale + weight per voter
       anchorTxHash: anchor?.txHash ?? null,
       anchorHash: anchor?.hash ?? null,

@@ -659,6 +659,21 @@ model Vote {
   @@map("vote")
 }
 
+// §8 — superseded Debate & Vote rationales, kept read-only for the audit trail. The current
+// rationale lives on Vote; each time a DRep re-votes, the rationale being replaced is archived
+// here so all previous reasoning stays viewable (but not editable).
+model DvRationale {
+  id         String   @id @default(uuid()) @db.Uuid
+  proposalId String   @map("proposal_id") @db.Uuid // loose ref
+  drepId     String   @map("drep_id") @db.Uuid // loose ref
+  choice     String
+  rationale  String?
+  castAt     DateTime @map("cast_at") @db.Timestamptz(6) // when the archived rationale was originally cast
+
+  @@index([proposalId, drepId])
+  @@map("dv_rationale")
+}
+
 // §11/§12 — an Expert assigned to a milestone reviews it like a DRep. Kept in its
 // own table so the DRep-centric Vote model (and filtering/D&V tallies) stay untouched.
 model MilestoneExpertVote {

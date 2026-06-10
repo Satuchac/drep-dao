@@ -83,6 +83,12 @@ function VoteCard({
     dvApi.result(proposal.id).then(setR).catch(() => setR(null));
   }, [proposal.id]);
   useEffect(loadResult, [loadResult]);
+  // Pre-fill the box with the DRep's current rationale so a re-vote starts from what they wrote.
+  // Only fires when the saved rationale actually changes (initial load / after casting), so it
+  // never clobbers in-progress edits.
+  useEffect(() => {
+    if (r?.myRationale) setRationale(r.myRationale);
+  }, [r?.myRationale]);
 
   const act = async (fn: () => Promise<unknown>) => {
     setError(null);
@@ -168,12 +174,37 @@ function VoteCard({
             value={rationale}
             onChange={(e) => setRationale(e.target.value)}
           />
+          {/* §8 — read-only history of superseded rationales, collapsible, below the box. */}
+          {r?.myRationaleHistory && r.myRationaleHistory.length > 0 ? (
+            <details className="rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900/40">
+              <summary className="cursor-pointer select-none text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">
+                Previous rationales ({r.myRationaleHistory.length}) — view only
+              </summary>
+              <ul className="mt-1 space-y-1">
+                {r.myRationaleHistory.map((h, i) => (
+                  <li key={i} className="rounded border border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-900">
+                    <div className="mb-0.5 flex items-center gap-2 text-[10px]">
+                      <span className={`font-bold uppercase ${h.choice === 'NO' ? 'text-red-600' : h.choice === 'YES' ? 'text-emerald-600' : 'text-neutral-500'}`}>
+                        {h.choice}
+                      </span>
+                      <span className="text-neutral-400">{new Date(h.castAt).toLocaleString()}</span>
+                    </div>
+                    <div className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{h.rationale}</div>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
           <button
             disabled={busy || rationale.trim().length < 200}
             onClick={() => act(() => dvApi.vote(proposal.id, choice, rationale))}
             className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
           >
-            {rationale.trim().length < 200 ? `Cast vote (${rationale.trim().length}/200)` : 'Cast vote'}
+            {rationale.trim().length < 200
+              ? `${r?.myChoice ? 'Update vote' : 'Cast vote'} (${rationale.trim().length}/200)`
+              : r?.myChoice
+                ? 'Update vote'
+                : 'Cast vote'}
           </button>
         </div>
       ) : null}
