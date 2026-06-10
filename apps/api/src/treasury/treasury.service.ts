@@ -549,7 +549,7 @@ export class TreasuryService {
     // Board-action context, keyed by the broadcast tx hash (+ their proposals' public ids).
     const actions = await this.prisma.multisigAction.findMany({
       where: { txHash: { not: null } },
-      select: { txHash: true, kind: true, description: true, proposalTitle: true, proposalId: true, destAddress: true },
+      select: { txHash: true, kind: true, amountAda: true, description: true, proposalTitle: true, proposalId: true, destAddress: true },
     });
     const actionByHash = new Map(actions.filter((a) => a.txHash).map((a) => [a.txHash as string, a]));
     const actionPropIds = [...new Set(actions.map((a) => a.proposalId).filter(Boolean) as string[])];
@@ -566,10 +566,15 @@ export class TreasuryService {
 
     const transactions: TreasuryTx[] = txs.map((t) => {
       const net = t.inLovelace - t.outLovelace;
-      const direction: 'IN' | 'OUT' = net >= 0n ? 'IN' : 'OUT';
-      const amountAda = Number(net >= 0n ? net : -net) / ADA;
       const fee = feeByHash.get(t.hash);
       const action = actionByHash.get(t.hash);
+      // A board-initiated external payout (reward/milestone/pledge/leftover/migration) is a tx
+      // WE broadcast — always outgoing, amount = the action's. Trust that over the computed net,
+      // because db-sync's consumed-marking lags and a just-sent payout can look like incoming
+      // change. OPS is an internal top-up (multisig → hot wallet, both ours) so leave it to net.
+      const boardPayout = action && action.kind !== 'OPS';
+      const direction: 'IN' | 'OUT' = boardPayout ? 'OUT' : net >= 0n ? 'IN' : 'OUT';
+      const amountAda = boardPayout ? Number(action.amountAda) / ADA : Number(net >= 0n ? net : -net) / ADA;
       const tx: TreasuryTx = { hash: t.hash, time: t.time, direction, amountAda, label: 'outgoing transfer' };
       if (direction === 'IN') {
         if (fee) {
