@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { roundsApi, rewardsApi, treasuryApi, type RoundSummary, type RewardCalcView, type ExpertRewardRow, type RewardSourceBucket } from '@/lib/api';
+import { ConfirmDialog } from './confirm-dialog';
 
 const KIND_LABEL: Record<string, string> = {
   FILTER: 'Filtering rewards',
@@ -80,6 +81,7 @@ function Overview({ roundId }: { roundId: string }) {
 function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: RewardSourceBucket[]; onChange: () => void }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
   const total = calc.entries.reduce((s, e) => s + e.amountAda, 0);
   const allPaid = calc.entries.length > 0 && calc.entries.every((e) => e.paid);
   // §12 — default source by stage: filtering draws from the Submission-fee bucket, everything
@@ -100,7 +102,8 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
   // §15.4 — cancel a prepared (not-yet-confirmed) payout so the calc re-opens and can be
   // recomputed / re-prepared. Cancelling unlinks the entries + voids any signatures collected.
   const cancelPayout = async () => {
-    if (!calc.payout || !window.confirm('Cancel this prepared payout? It unlinks the recipients (and discards any signatures) so you can edit, recompute, and prepare it again.')) return;
+    if (!calc.payout) return;
+    setConfirmingCancel(false);
     setBusy(true); setMsg(null);
     try { await treasuryApi.cancelAction(calc.payout.actionId, 'Cancelled from Rewards to redo the payout'); onChange(); }
     catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
@@ -134,7 +137,7 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
           ) : (
             <span className="flex items-center gap-2">
               <span className="text-xs text-amber-600">⏳ payout prepared — review &amp; sign under Actions</span>
-              <button onClick={cancelPayout} disabled={busy} className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-800 dark:text-red-400">
+              <button onClick={() => setConfirmingCancel(true)} disabled={busy} className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-800 dark:text-red-400">
                 {busy ? '…' : 'Cancel'}
               </button>
             </span>
@@ -178,6 +181,16 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
         </tbody>
         <tfoot><tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">Total</td><td className="pt-1 tabular-nums">{calc.entries.reduce((s, e) => s + (e.units ?? 0), 0)}</td><td></td><td className="pt-1 tabular-nums">{total.toLocaleString()} ₳</td><td></td></tr></tfoot>
       </table>
+      <ConfirmDialog
+        open={confirmingCancel}
+        title="Cancel this prepared payout?"
+        message="It unlinks the recipients and discards any signatures already collected, so you can edit, recompute, and prepare the payout again."
+        confirmLabel="Cancel payout"
+        cancelLabel="Keep it"
+        tone="danger"
+        onCancel={() => setConfirmingCancel(false)}
+        onConfirm={cancelPayout}
+      />
     </section>
   );
 }
