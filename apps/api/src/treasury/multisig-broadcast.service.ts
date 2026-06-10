@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as CSL from '@emurgo/cardano-serialization-lib-nodejs';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnchorService } from '../cardano/anchor.service';
+import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { verifyCip30Signature } from '../auth/cip30';
 
 const LOVELACE = 1_000_000;
@@ -62,6 +63,7 @@ export class MultisigBroadcastService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly anchor: AnchorService,
+    private readonly cardano: CardanoQueryService,
   ) {
     const net = (this.config.get<string>('CARDANO_NETWORK') ?? 'Preprod').trim();
     this.networkId = net === 'Mainnet' ? 1 : 0;
@@ -187,9 +189,9 @@ export class MultisigBroadcastService {
     if (!action.destAddress && action.kind !== 'REWARD_PAYOUT') throw new ConflictException('action has no destination address');
     if (!action.amountAda) throw new ConflictException('action has no amount');
 
-    let utxos = await this.koiosPost<{ tx_hash: string; tx_index: number; value: string }[]>(
-      '/address_utxos', { _addresses: [source.bech32Address] },
-    );
+    // §15.6 — read UTxOs from db-sync (the same source the rest of the app uses), not Koios:
+    // Koios returns a stale/partial set that can omit funds, leaving the tx short on inputs.
+    let utxos = await this.cardano.addressUtxos([source.bech32Address]);
     // §15.6 — a chosen source BUCKET is its own sub-address and may be empty (the
     // board funded the primary multisig, not that bucket). Rather than dead-end,
     // fall back to the primary multisig (bare script), where the treasury's funds
@@ -198,9 +200,7 @@ export class MultisigBroadcastService {
     if (!utxos.length && action.sourceBucketId) {
       const primary = await this.resolveSource({ kind: action.kind, fromConfigId: action.fromConfigId, sourceBucketId: null });
       if (primary.bech32Address !== source.bech32Address) {
-        const primaryUtxos = await this.koiosPost<{ tx_hash: string; tx_index: number; value: string }[]>(
-          '/address_utxos', { _addresses: [primary.bech32Address] },
-        );
+        const primaryUtxos = await this.cardano.addressUtxos([primary.bech32Address]);
         if (primaryUtxos.length) {
           source = primary;
           utxos = primaryUtxos;
@@ -216,7 +216,7 @@ export class MultisigBroadcastService {
       throw new ConflictException(`source multisig has no on-chain UTxOs (${source.bech32Address})`);
     }
 
-    const pp = (await this.koiosGet<Record<string, string | number>[]>('/epoch_params'))[0];
+    const pp = await this.cardano.epochParams();
     const txb = CSL.TransactionBuilder.new(this.builderCfg(pp));
     const srcAddr = CSL.Address.from_bech32(source.bech32Address);
 
@@ -553,18 +553,4 @@ export class MultisigBroadcastService {
       .build();
   }
 
-  private async koiosPost<T>(p: string, body: unknown): Promise<T> {
-    const r = await fetch(`${this.base}${p}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    if (!r.ok) throw new Error(`koios ${p}: ${r.status}`);
-    return r.json() as Promise<T>;
-  }
-  private async koiosGet<T>(p: string): Promise<T> {
-    const r = await fetch(`${this.base}${p}`);
-    if (!r.ok) throw new Error(`koios ${p}: ${r.status}`);
-    return r.json() as Promise<T>;
-  }
 }

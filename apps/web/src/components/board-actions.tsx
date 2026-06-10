@@ -38,7 +38,9 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
               : xs;
         setActions(keep(r.actions)); setPast(keep(r.history ?? [])); setTreasury(r.treasury);
       })
-      .catch(() => { setActions([]); setPast([]); setTreasury(null); });
+      // A transient hiccup (poll timeout / 500) must NOT blank the list — keep the last-known
+      // actions so a pending payout doesn't flicker in and out. Real removals arrive via .then.
+      .catch(() => { /* keep previous state */ });
   }, [history, filter]);
   // Load on mount + poll so a freshly-prepared action (or one that failed to load
   // on a transient hiccup) appears without a manual page refresh.
