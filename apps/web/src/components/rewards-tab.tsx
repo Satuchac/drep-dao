@@ -82,6 +82,7 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [warning, setWarning] = useState<string | null>(null);
   const total = calc.entries.reduce((s, e) => s + e.amountAda, 0);
   const allPaid = calc.entries.length > 0 && calc.entries.every((e) => e.paid);
   // §12 — default source by stage: filtering draws from the Submission-fee bucket, everything
@@ -97,7 +98,11 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
   const pay = async () => {
     setBusy(true); setMsg(null);
     try { const r = await rewardsApi.preparePayout(calc.id, src || undefined); setMsg(`Queued ${r.recipients} payouts (${r.totalAda.toLocaleString()} ₳) — review & sign it under Actions.`); onChange(); }
-    catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
+    catch (e) {
+      const m = e instanceof Error ? e.message : 'failed';
+      // Insufficient-funds gets a styled warning dialog; other errors stay inline.
+      if (/insufficient funds/i.test(m)) setWarning(m); else setMsg(m);
+    } finally { setBusy(false); }
   };
   // §15.4 — cancel a prepared (not-yet-confirmed) payout so the calc re-opens and can be
   // recomputed / re-prepared. Cancelling unlinks the entries + voids any signatures collected.
@@ -190,6 +195,15 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
         tone="danger"
         onCancel={() => setConfirmingCancel(false)}
         onConfirm={cancelPayout}
+      />
+      <ConfirmDialog
+        open={!!warning}
+        title="Insufficient funds"
+        message={warning ?? ''}
+        confirmLabel="OK"
+        hideCancel
+        onCancel={() => setWarning(null)}
+        onConfirm={() => setWarning(null)}
       />
     </section>
   );

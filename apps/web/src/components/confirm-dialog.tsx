@@ -27,6 +27,7 @@ export function ConfirmDialog({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   tone = 'default',
+  hideCancel = false,
   onConfirm,
   onCancel,
 }: {
@@ -37,6 +38,8 @@ export function ConfirmDialog({
   cancelLabel?: string;
   /** 'danger' tints the confirm button red for destructive ops. */
   tone?: 'default' | 'danger';
+  /** Hide the cancel button for a single-OK acknowledgement (alert-style warning). */
+  hideCancel?: boolean;
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
 }) {
@@ -80,13 +83,15 @@ export function ConfirmDialog({
         </h3>
         <div className="mt-2 text-sm text-neutral-700 dark:text-neutral-300">{message}</div>
         <div className="mt-4 flex items-center justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          >
-            {cancelLabel}
-          </button>
+          {hideCancel ? null : (
+            <button
+              type="button"
+              onClick={onCancel}
+              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+            >
+              {cancelLabel}
+            </button>
+          )}
           <button ref={confirmBtnRef} type="button" onClick={() => { void onConfirm(); }} className={confirmCls}>
             {confirmLabel}
           </button>

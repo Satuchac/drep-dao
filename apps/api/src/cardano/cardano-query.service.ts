@@ -456,12 +456,14 @@ export class CardanoQueryService {
       try {
         const { rows } = await pool.query<{ hash: string; time: string; in_amt: string; out_amt: string }>(
           `WITH ins AS (SELECT o.tx_id, sum(o.value) AS amt FROM tx_out o WHERE o.address = ANY($1::text[]) GROUP BY o.tx_id),
-                -- "spent" via consumed_by_tx_id — fast (no join). It lags db-sync's tip slightly,
-                -- so a just-broadcast outgoing tx can briefly look like incoming change; the caller
-                -- corrects board-initiated payouts from the known MultisigAction (which can't lag).
-                outs AS (SELECT o.consumed_by_tx_id AS tx_id, sum(o.value) AS amt
-                           FROM tx_out o WHERE o.address = ANY($1::text[]) AND o.consumed_by_tx_id IS NOT NULL
-                          GROUP BY o.consumed_by_tx_id),
+                -- "spent" via tx_in (the spending relation). This db-sync has consumed_by_tx_id
+                -- DISABLED (never populated), so it can't be used to detect spends — every
+                -- outgoing tx (incl. the anchor wallet's self-transfers) would otherwise show as
+                -- incoming change. tx_in is accurate and indexed on tx_out_id.
+                outs AS (SELECT i.tx_in_id AS tx_id, sum(o.value) AS amt
+                           FROM tx_out o JOIN tx_in i ON i.tx_out_id = o.tx_id AND i.tx_out_index = o.index
+                          WHERE o.address = ANY($1::text[])
+                          GROUP BY i.tx_in_id),
                 involved AS (SELECT tx_id FROM ins UNION SELECT tx_id FROM outs)
            SELECT encode(t.hash,'hex') AS hash, extract(epoch FROM b.time)::bigint::text AS time,
                   COALESCE(ins.amt,0)::text AS in_amt, COALESCE(outs.amt,0)::text AS out_amt

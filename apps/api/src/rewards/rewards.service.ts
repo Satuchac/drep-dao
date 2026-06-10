@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { TreasuryBucketsService } from '../treasury/treasury-buckets.service';
+import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { ROUND_SETTING_DEFAULTS, RoundStatus, VotePhase, basePower, meritMultiplier, clampMerit, PLATFORM_CONFIG_DEFAULTS } from '@drep-dao/shared';
 
 const LOVELACE = 1_000_000n;
@@ -21,6 +22,7 @@ export class RewardsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly buckets: TreasuryBucketsService,
+    private readonly cardano: CardanoQueryService,
   ) {}
 
   private setting(round: Record<string, unknown>, key: keyof typeof ROUND_SETTING_DEFAULTS): number {
@@ -394,9 +396,25 @@ export class RewardsService {
     // board can override with an explicit sourceBucketId (any bucket).
     const defaultOp = calc.kind === 'FILTER' ? 'SUBMISSION_FEES' : 'REWARDS';
     const source = sourceBucketId
-      ? await this.prisma.treasuryBucket.findUnique({ where: { id: sourceBucketId }, select: { id: true } })
+      ? await this.prisma.treasuryBucket.findUnique({ where: { id: sourceBucketId }, select: { id: true, bech32Address: true } })
       : await this.buckets.defaultBucketFor(defaultOp);
     const total = lines.reduce((s, l) => s + l.amountAda, 0);
+
+    // Pre-flight funds check: don't let the board initiate a payout the source can't cover.
+    // The broadcast falls back to the primary multisig when a chosen bucket is empty, so the
+    // effective balance is the bucket's — or the primary's if the bucket holds nothing.
+    if (source?.bech32Address) {
+      let availableAda = Number((await this.cardano.addressBalance([source.bech32Address])).get(source.bech32Address) ?? 0n) / 1e6;
+      if (availableAda === 0) {
+        const primary = await this.prisma.multisigConfig.findFirst({ where: { replacedAt: null }, orderBy: { assembledAt: 'desc' }, select: { bech32Address: true } });
+        if (primary) availableAda = Number((await this.cardano.addressBalance([primary.bech32Address])).get(primary.bech32Address) ?? 0n) / 1e6;
+      }
+      if (availableAda < total + 1) {
+        throw new BadRequestException(
+          `Insufficient funds: the source address holds ${availableAda.toLocaleString()} ₳, but this payout needs ${total.toLocaleString()} ₳ (plus the network fee). Fund the treasury, then prepare the payout again.`,
+        );
+      }
+    }
 
     const action = await this.prisma.multisigAction.create({
       data: {
