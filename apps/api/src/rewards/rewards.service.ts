@@ -96,77 +96,37 @@ export class RewardsService {
   async computeDv(roundId: string) {
     const round = await this.prisma.round.findUnique({ where: { id: roundId } });
     if (!round) throw new NotFoundException('round not found');
-    const bucket = round.rewardsPoolAda;
-    const dvShare = this.setting(round, 'rewardDvSharePct') / 100;
-    const fixedShare = this.setting(round, 'rewardFixedPct') / 100;
-    const dvPool = BigInt(Math.round(Number(bucket) * dvShare));
-    const fixedPool = BigInt(Math.round(Number(dvPool) * fixedShare));
-    const bonusPool = dvPool - fixedPool;
+    // §12.5 — the D&V reward is split EQUALLY per cast vote (voting power is NOT used here):
+    // pool = the D&V share of the round's rewards pool; reward-per-vote = pool / total cast
+    // ballots; each DRep earns per-vote × the number of ballots they cast.
+    const dvPool = BigInt(Math.round(Number(round.rewardsPoolAda) * (this.setting(round, 'rewardDvSharePct') / 100)));
 
-    // cast D&V votes per drep + the snapshot (power + max-possible votes).
-    // A D&V proposal is one voting opened for (it has a VoteSnapshot), NOT one whose
-    // CURRENT stage is DEBATE_VOTE — once the round advances to FUNDING the proposals
-    // move to the FUNDING stage, so a stage:'DEBATE_VOTE' filter would miss them all
-    // and the reward would compute zero recipients.
+    // A D&V proposal is one voting opened for (it has a VoteSnapshot), NOT one whose CURRENT
+    // stage is DEBATE_VOTE — once the round advances to FUNDING the proposals move to the
+    // FUNDING stage, so a stage filter would miss them all and the reward would compute zero.
     const roundProps = await this.prisma.proposal.findMany({ where: { roundId }, select: { id: true } });
     const snapProps = await this.prisma.voteSnapshot.findMany({
       where: { proposalId: { in: roundProps.map((p) => p.id) } },
       select: { proposalId: true },
     });
     const propIds = [...new Set(snapProps.map((s) => s.proposalId))];
-    const maxVotes = propIds.length; // one ballot per proposal is the max
     const votes = await this.prisma.vote.findMany({ where: { phase: VotePhase.DEBATE_VOTE, proposalId: { in: propIds }, choice: { not: 'ABSTAIN' } }, select: { drepId: true } });
     const castByDrep = new Map<string, number>();
     for (const v of votes) if (v.drepId) castByDrep.set(v.drepId, (castByDrep.get(v.drepId) ?? 0) + 1);
     const totalCast = votes.length;
 
-    // FINAL voting power per drep — from the freshest snapshot entry for the round.
-    const power = await this.drepFinalPower(propIds);
-
     await this.clearCalc({ roundId, kind: 'DV_FIXED' });
-    await this.clearCalc({ roundId, kind: 'DV_BONUS' });
+    await this.clearCalc({ roundId, kind: 'DV_BONUS' }); // legacy power-weighted bonus — no longer used
 
-    const fixedCalc = await this.prisma.rewardCalculation.create({ data: { roundId, kind: 'DV_FIXED', poolAda: fixedPool, totalUnits: totalCast } });
+    const calc = await this.prisma.rewardCalculation.create({ data: { roundId, kind: 'DV_FIXED', poolAda: dvPool, totalUnits: totalCast } });
     if (totalCast > 0) {
-      const perVote = fixedPool / BigInt(totalCast);
+      const perVote = dvPool / BigInt(totalCast);
       for (const [drepId, n] of castByDrep) {
-        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: fixedCalc.id, drepId, amountAda: perVote * BigInt(n), units: n } });
+        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: calc.id, drepId, amountAda: perVote * BigInt(n), units: n } });
       }
     }
-
-    // §12.5 bonus: weight_i = (cast_i / maxVotes) × finalPower_i
-    const weights = new Map<string, number>();
-    let totalWeight = 0;
-    for (const [drepId, n] of castByDrep) {
-      const participation = maxVotes > 0 ? n / maxVotes : 0;
-      const w = participation * (power.get(drepId) ?? 0);
-      if (w > 0) { weights.set(drepId, w); totalWeight += w; }
-    }
-    const bonusCalc = await this.prisma.rewardCalculation.create({ data: { roundId, kind: 'DV_BONUS', poolAda: bonusPool, totalUnits: totalWeight } });
-    if (totalWeight > 0) {
-      for (const [drepId, w] of weights) {
-        const amt = BigInt(Math.round(Number(bonusPool) * (w / totalWeight)));
-        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: bonusCalc.id, drepId, amountAda: amt, units: castByDrep.get(drepId) ?? 0 } });
-      }
-    }
-    await this.addExpertFlat(fixedCalc.id, roundId, 'dvAda');
-    return { fixed: await this.calcView(fixedCalc.id), bonus: await this.calcView(bonusCalc.id) };
-  }
-
-  /** Final voting power per drep from the freshest snapshot among the proposals. */
-  private async drepFinalPower(proposalIds: string[]): Promise<Map<string, number>> {
-    const out = new Map<string, number>();
-    if (proposalIds.length === 0) return out;
-    const snaps = await this.prisma.voteSnapshot.findMany({ where: { proposalId: { in: proposalIds } }, select: { id: true } });
-    const entries = await this.prisma.voteSnapshotEntry.findMany({
-      where: { snapshotId: { in: snaps.map((s) => s.id) } },
-      select: { drepId: true, finalPower: true },
-    });
-    for (const e of entries) {
-      const fp = e.finalPower ? Number(e.finalPower) : 0;
-      out.set(e.drepId, Math.max(out.get(e.drepId) ?? 0, fp)); // dedupe across proposals → take max
-    }
-    return out;
+    await this.addExpertFlat(calc.id, roundId, 'dvAda');
+    return this.calcView(calc.id);
   }
 
   // ── §12.6 milestone (monthly) ───────────────────────────────────────────────

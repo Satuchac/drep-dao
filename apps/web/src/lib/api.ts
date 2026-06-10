@@ -1511,7 +1511,7 @@ export const rewardsApi = {
   // §12 — buckets a payout can be sourced from (default picked by stage; board may override).
   sourceBuckets: () => request<{ buckets: RewardSourceBucket[] }>('/dao/treasury/buckets'),
   computeFiltering: (roundId: string) => request<RewardCalcView>(`/admin/rewards/round/${roundId}/compute/filtering`, { method: 'POST' }),
-  computeDv: (roundId: string) => request<{ fixed: RewardCalcView; bonus: RewardCalcView }>(`/admin/rewards/round/${roundId}/compute/dv`, { method: 'POST' }),
+  computeDv: (roundId: string) => request<RewardCalcView>(`/admin/rewards/round/${roundId}/compute/dv`, { method: 'POST' }),
   computeMilestone: (roundId: string) => request<RewardCalcView>(`/admin/rewards/round/${roundId}/compute/milestone`, { method: 'POST' }),
   computeBoardMonthly: () => request<RewardCalcView>('/admin/rewards/board-monthly/compute', { method: 'POST', body: JSON.stringify({}) }),
   setOverride: (entryId: string, ada: number | null) => request<{ ok: boolean }>(`/admin/rewards/entry/${entryId}`, { method: 'PATCH', body: JSON.stringify({ ada }) }),

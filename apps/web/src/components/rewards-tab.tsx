@@ -5,7 +5,7 @@ import { roundsApi, rewardsApi, type RoundSummary, type RewardCalcView, type Exp
 
 const KIND_LABEL: Record<string, string> = {
   FILTER: 'Filtering rewards',
-  DV_FIXED: 'Debate & Vote — fixed',
+  DV_FIXED: 'Debate & Vote',
   DV_BONUS: 'Debate & Vote — bonus',
   MILESTONE: 'Milestone review',
   BOARD_MONTHLY: 'Board monthly',
@@ -95,10 +95,29 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
     try { const r = await rewardsApi.preparePayout(calc.id, src || undefined); setMsg(`Queued ${r.recipients} payouts (${r.totalAda.toLocaleString()} ₳) — review & sign it under Actions.`); onChange(); }
     catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
   };
+  // Recompute this calc in place from the latest votes (so the board doesn't have to find
+  // the compute buttons up top). Only offered before a payout is prepared.
+  const recompute = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      const rid = calc.roundId ?? '';
+      if (calc.kind === 'FILTER') await rewardsApi.computeFiltering(rid);
+      else if (calc.kind === 'DV_FIXED' || calc.kind === 'DV_BONUS') await rewardsApi.computeDv(rid);
+      else if (calc.kind === 'MILESTONE') await rewardsApi.computeMilestone(rid);
+      else if (calc.kind === 'BOARD_MONTHLY') await rewardsApi.computeBoardMonthly();
+      onChange();
+    } catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
+  };
   return (
     <section className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">{KIND_LABEL[calc.kind] ?? calc.kind} · pool {calc.poolAda.toLocaleString()} ₳</h3>
+        <div className="flex items-center gap-2">
+        {!calc.payout ? (
+          <button onClick={recompute} disabled={busy} title="Recalculate this reward from the latest votes" className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700">
+            {busy ? '…' : '↻ Recompute'}
+          </button>
+        ) : null}
         {calc.payout ? (
           calc.payout.status === 'CONFIRMED' || calc.payout.status === 'BROADCASTED' ? (
             <span className="text-xs text-emerald-600">✓ paid on-chain</span>
@@ -133,6 +152,7 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
             </button>
           </div>
         )}
+        </div>
       </div>
       {msg ? <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{msg}</div> : null}
       <table className="mt-2 w-full text-xs">
