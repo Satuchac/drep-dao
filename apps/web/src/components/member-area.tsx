@@ -192,7 +192,7 @@ function TreasuryTab() {
       <TreasuryBucketsPanel onChange={bumpRefresh} />
       <HotWalletControls onChange={bumpRefresh} />
       <SendFromTreasuryPanel onChange={bumpRefresh} />
-      <BoardActions history={showHistory} refreshKey={refreshKey} onChange={bumpRefresh} />
+      <BoardActions history={showHistory} refreshKey={refreshKey} onChange={bumpRefresh} filter="non-rewards" />
     </div>
   );
 }
@@ -206,15 +206,16 @@ function ActionsTab() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-neutral-500">
-          Board to-dos: submission-fee confirmations, pledge confirmations, stop-funding votes, and
-          budget-change settlements (top-ups to collect / refunds to return).
-          Multisig signing and hot-wallet ops live in <strong>Treasury</strong>.
+          Board to-dos: reward payouts to review &amp; sign, submission-fee confirmations, pledge
+          confirmations, stop-funding votes, and budget-change settlements. Other multisig signing
+          and hot-wallet ops live in <strong>Treasury</strong>.
         </p>
         <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
           <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
           Show history
         </label>
       </div>
+      <BoardActions history={showHistory} filter="rewards" />
       <StopFundingBoardPanel />
       <FeeConfirmations history={showHistory} />
       <PledgeConfirmations />
@@ -270,8 +271,11 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
         // §15 — multisig sign queue (boardActions) is the Treasury tab; the
         // remaining review/audit items (fees, pledges, payouts, stop-funding)
         // stay in Actions.
-        next.treasury = a.status === 'fulfilled' ? a.value.count : 0;
+        // §12 — reward payouts are signed under Actions, other multisig actions under Treasury.
+        const acts = a.status === 'fulfilled' ? a.value.actions : [];
+        next.treasury = acts.filter((x) => x.kind !== 'REWARD_PAYOUT').length;
         next.actions =
+          acts.filter((x) => x.kind === 'REWARD_PAYOUT').length +
           (f.status === 'fulfilled' ? f.value.length : 0) +
           (p.status === 'fulfilled' ? p.value.length : 0) +
           (stop.status === 'fulfilled' ? stop.value.count : 0) +

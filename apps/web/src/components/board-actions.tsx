@@ -11,7 +11,7 @@ import { ConfirmDialog } from './confirm-dialog';
  *  `refreshKey` is a parent-controlled counter — bumping it triggers an
  *  immediate refetch so newly-queued actions (top-ups, sweeps, transfers)
  *  appear without a page reload. */
-export function BoardActions({ onChange, history = false, refreshKey = 0 }: { onChange?: () => void; history?: boolean; refreshKey?: number }) {
+export function BoardActions({ onChange, history = false, refreshKey = 0, filter = 'all' }: { onChange?: () => void; history?: boolean; refreshKey?: number; filter?: 'all' | 'rewards' | 'non-rewards' }) {
   const { profile, signTx, signMessage } = useAuth();
   const { txUrl } = useExplorer();
   const [actions, setActions] = useState<BoardAction[]>([]);
@@ -30,9 +30,16 @@ export function BoardActions({ onChange, history = false, refreshKey = 0 }: { on
   const load = useCallback(() => {
     treasuryApi
       .boardActions(history)
-      .then((r) => { setActions(r.actions); setPast(r.history ?? []); setTreasury(r.treasury); })
+      .then((r) => {
+        // §12 — reward payouts are reviewed/signed under Actions; everything else under Treasury.
+        const keep = (xs: BoardAction[]) =>
+          filter === 'rewards' ? xs.filter((a) => a.kind === 'REWARD_PAYOUT')
+            : filter === 'non-rewards' ? xs.filter((a) => a.kind !== 'REWARD_PAYOUT')
+              : xs;
+        setActions(keep(r.actions)); setPast(keep(r.history ?? [])); setTreasury(r.treasury);
+      })
       .catch(() => { setActions([]); setPast([]); setTreasury(null); });
-  }, [history]);
+  }, [history, filter]);
   useEffect(load, [load]);
   // Refetch whenever the parent bumps refreshKey (e.g. SendFromTreasuryPanel
   // just queued a transfer). Without this the row only appears on F5.

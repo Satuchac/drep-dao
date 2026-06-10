@@ -80,7 +80,7 @@ function CalcCard({ calc, onChange }: { calc: RewardCalcView; onChange: () => vo
   const allPaid = calc.entries.length > 0 && calc.entries.every((e) => e.paid);
   const pay = async () => {
     setBusy(true); setMsg(null);
-    try { const r = await rewardsApi.preparePayout(calc.id); setMsg(`Queued ${r.recipients} payouts (${r.totalAda.toLocaleString()} ₳) — sign it in Treasury → Actions.`); onChange(); }
+    try { const r = await rewardsApi.preparePayout(calc.id); setMsg(`Queued ${r.recipients} payouts (${r.totalAda.toLocaleString()} ₳) — review & sign it under Actions.`); onChange(); }
     catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
   };
   return (
@@ -91,7 +91,7 @@ function CalcCard({ calc, onChange }: { calc: RewardCalcView; onChange: () => vo
           calc.payout.status === 'CONFIRMED' || calc.payout.status === 'BROADCASTED' ? (
             <span className="text-xs text-emerald-600">✓ paid on-chain</span>
           ) : (
-            <span className="text-xs text-amber-600">⏳ payout prepared — review &amp; sign in Treasury → Actions</span>
+            <span className="text-xs text-amber-600">⏳ payout prepared — review &amp; sign under Actions</span>
           )
         ) : allPaid ? (
           <span className="text-xs text-emerald-600">✓ all paid</span>
