@@ -5,7 +5,7 @@ import { roundsApi, rewardsApi, type RoundSummary, type RewardCalcView, type Exp
 
 const KIND_LABEL: Record<string, string> = {
   FILTER: 'Filtering rewards',
-  DV_FIXED: 'Debate & Vote',
+  DV_FIXED: 'Debate & Vote — fixed',
   DV_BONUS: 'Debate & Vote — bonus',
   MILESTONE: 'Milestone review',
   BOARD_MONTHLY: 'Board monthly',

@@ -96,10 +96,14 @@ export class RewardsService {
   async computeDv(roundId: string) {
     const round = await this.prisma.round.findUnique({ where: { id: roundId } });
     if (!round) throw new NotFoundException('round not found');
-    // §12.5 — the D&V reward is split EQUALLY per cast vote (voting power is NOT used here):
-    // pool = the D&V share of the round's rewards pool; reward-per-vote = pool / total cast
-    // ballots; each DRep earns per-vote × the number of ballots they cast.
-    const dvPool = BigInt(Math.round(Number(round.rewardsPoolAda) * (this.setting(round, 'rewardDvSharePct') / 100)));
+    // §12.2 — experts are carved out of the reward pool FIRST (paid directly); the rest is the
+    // DReps' pool, split into a D&V share and a milestone share, and within D&V into fixed + bonus.
+    // So the base for D&V is (pool − experts), NOT the whole pool. With 2000 ₳ / 30% experts /
+    // 60% D&V / 70% fixed this gives 588 ₳ fixed + 252 ₳ bonus (matches the round-setup chart).
+    const drepPool = Number(round.rewardsPoolAda) * (1 - this.setting(round, 'rewardExpertSharePct') / 100);
+    const dvPool = BigInt(Math.round(drepPool * (this.setting(round, 'rewardDvSharePct') / 100)));
+    const fixedPool = BigInt(Math.round(Number(dvPool) * (this.setting(round, 'rewardFixedPct') / 100)));
+    const bonusPool = dvPool - fixedPool;
 
     // A D&V proposal is one voting opened for (it has a VoteSnapshot), NOT one whose CURRENT
     // stage is DEBATE_VOTE — once the round advances to FUNDING the proposals move to the
@@ -110,23 +114,56 @@ export class RewardsService {
       select: { proposalId: true },
     });
     const propIds = [...new Set(snapProps.map((s) => s.proposalId))];
+    const maxVotes = propIds.length;
     const votes = await this.prisma.vote.findMany({ where: { phase: VotePhase.DEBATE_VOTE, proposalId: { in: propIds }, choice: { not: 'ABSTAIN' } }, select: { drepId: true } });
     const castByDrep = new Map<string, number>();
     for (const v of votes) if (v.drepId) castByDrep.set(v.drepId, (castByDrep.get(v.drepId) ?? 0) + 1);
     const totalCast = votes.length;
+    const power = await this.drepFinalPower(propIds);
 
     await this.clearCalc({ roundId, kind: 'DV_FIXED' });
-    await this.clearCalc({ roundId, kind: 'DV_BONUS' }); // legacy power-weighted bonus — no longer used
+    await this.clearCalc({ roundId, kind: 'DV_BONUS' });
 
-    const calc = await this.prisma.rewardCalculation.create({ data: { roundId, kind: 'DV_FIXED', poolAda: dvPool, totalUnits: totalCast } });
+    // FIXED: split EQUALLY per cast vote (voting power is NOT used) — reward-per-vote × ballots.
+    const fixedCalc = await this.prisma.rewardCalculation.create({ data: { roundId, kind: 'DV_FIXED', poolAda: fixedPool, totalUnits: totalCast } });
     if (totalCast > 0) {
-      const perVote = dvPool / BigInt(totalCast);
+      const perVote = fixedPool / BigInt(totalCast);
       for (const [drepId, n] of castByDrep) {
-        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: calc.id, drepId, amountAda: perVote * BigInt(n), units: n } });
+        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: fixedCalc.id, drepId, amountAda: perVote * BigInt(n), units: n } });
       }
     }
-    await this.addExpertFlat(calc.id, roundId, 'dvAda');
-    return this.calcView(calc.id);
+    // BONUS: weighted by participation (votes/maxVotes) × final voting power.
+    const weights = new Map<string, number>();
+    let totalWeight = 0;
+    for (const [drepId, n] of castByDrep) {
+      const w = (maxVotes > 0 ? n / maxVotes : 0) * (power.get(drepId) ?? 0);
+      if (w > 0) { weights.set(drepId, w); totalWeight += w; }
+    }
+    const bonusCalc = await this.prisma.rewardCalculation.create({ data: { roundId, kind: 'DV_BONUS', poolAda: bonusPool, totalUnits: totalWeight } });
+    if (totalWeight > 0) {
+      for (const [drepId, w] of weights) {
+        const amt = BigInt(Math.round(Number(bonusPool) * (w / totalWeight)));
+        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: bonusCalc.id, drepId, amountAda: amt, units: castByDrep.get(drepId) ?? 0 } });
+      }
+    }
+    await this.addExpertFlat(fixedCalc.id, roundId, 'dvAda');
+    return { fixed: await this.calcView(fixedCalc.id), bonus: await this.calcView(bonusCalc.id) };
+  }
+
+  /** Final voting power per drep from the freshest snapshot among the proposals. */
+  private async drepFinalPower(proposalIds: string[]): Promise<Map<string, number>> {
+    const out = new Map<string, number>();
+    if (proposalIds.length === 0) return out;
+    const snaps = await this.prisma.voteSnapshot.findMany({ where: { proposalId: { in: proposalIds } }, select: { id: true } });
+    const entries = await this.prisma.voteSnapshotEntry.findMany({
+      where: { snapshotId: { in: snaps.map((s) => s.id) } },
+      select: { drepId: true, finalPower: true },
+    });
+    for (const e of entries) {
+      const fp = e.finalPower ? Number(e.finalPower) : 0;
+      out.set(e.drepId, Math.max(out.get(e.drepId) ?? 0, fp)); // dedupe across proposals → take max
+    }
+    return out;
   }
 
   // ── §12.6 milestone (monthly) ───────────────────────────────────────────────
@@ -134,7 +171,10 @@ export class RewardsService {
     const round = await this.prisma.round.findUnique({ where: { id: roundId } });
     if (!round) throw new NotFoundException('round not found');
     const dvShare = this.setting(round, 'rewardDvSharePct') / 100;
-    const pool = BigInt(Math.round(Number(round.rewardsPoolAda) * (1 - dvShare)));
+    // §12.2 — milestone share of the DReps' pool (experts carved out first), NOT of the whole
+    // pool: (2000 − 30% experts) × 40% = 560 ₳ (matches the round-setup chart).
+    const drepPool = Number(round.rewardsPoolAda) * (1 - this.setting(round, 'rewardExpertSharePct') / 100);
+    const pool = BigInt(Math.round(drepPool * (1 - dvShare)));
     const reviewerCount = this.setting(round, 'milestoneReviewerCount');
 
     const milestones = await this.prisma.milestone.findMany({ where: { proposal: { roundId } }, select: { id: true } });
