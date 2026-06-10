@@ -258,7 +258,10 @@ export class DvService {
   }
 
   /** §4.4 tally against the frozen snapshot; missing-no-avoid = implicit NO. */
-  async result(proposalId: string) {
+  async result(proposalId: string, userId?: string) {
+    // The caller's own DRep vote (if logged in) so the UI can flag it. Resolved up front
+    // so the early "not open yet" return can still report it.
+    const myDrep = userId ? await this.prisma.drep.findUnique({ where: { userId }, select: { id: true } }) : null;
     const snapshot = await this.prisma.voteSnapshot.findFirst({
       where: { proposalId },
       include: { entries: true },
@@ -268,12 +271,13 @@ export class DvService {
       select: { status: true, stage: true, approvalThresholdPct: true },
     });
     if (!snapshot) {
-      return { open: false, status: proposal?.status, stage: proposal?.stage };
+      return { open: false, status: proposal?.status, stage: proposal?.stage, myChoice: null };
     }
     const votes = await this.prisma.vote.findMany({
       where: { proposalId, phase: VotePhase.DEBATE_VOTE },
     });
     const choiceByDrep = new Map(votes.map((v) => [v.drepId, v.choice]));
+    const myChoice = myDrep ? choiceByDrep.get(myDrep.id) ?? null : null;
 
     // §8.2 — board members who have toggled OFF voteOnFundingProposals are
     // skipped at tally time (their snapshot entry contributes 0 to YES /
@@ -329,6 +333,7 @@ export class DvService {
       approved: isApproved(tally),
       status: proposal?.status,
       stage: proposal?.stage,
+      myChoice, // the caller's own vote (YES/NO/ABSTAIN) or null if not voted — drives the UI flag
       votes: await this.dvVoteList(proposalId), // §8 public rationale + weight per voter
       anchorTxHash: anchor?.txHash ?? null,
       anchorHash: anchor?.hash ?? null,

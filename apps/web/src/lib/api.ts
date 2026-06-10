@@ -1006,6 +1006,7 @@ export interface DvResult {
   approved?: boolean;
   status?: string;
   stage?: string | null;
+  myChoice?: 'YES' | 'NO' | 'ABSTAIN' | null; // the logged-in DRep's own vote (null = not voted)
   votes?: VoteRationale[];
   anchorTxHash?: string | null;
   anchorHash?: string | null;

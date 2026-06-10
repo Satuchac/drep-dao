@@ -12,6 +12,14 @@ import {
 } from '@/lib/api';
 import { ProposalDetail } from './proposal-detail';
 
+// Per-DRep vote flag shown in the card's top-right corner.
+const VOTE_FLAG: Record<string, string> = {
+  YES: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+  NO: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
+  ABSTAIN: 'bg-neutral-200 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-300',
+  PENDING: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+};
+
 export function VotingPanel({ history = false }: { history?: boolean }) {
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
@@ -98,11 +106,22 @@ function VoteCard({
     );
   }
 
+  // Vote flag (DReps only): their own choice once cast, else PENDING while voting is open.
+  const flag = isDrep ? r?.myChoice ?? (r?.open ? 'PENDING' : null) : null;
+
   return (
     <li className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium">{proposal.title}</span>
         <span className="flex items-center gap-3">
+          {flag ? (
+            <span
+              className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${VOTE_FLAG[flag]}`}
+              title={flag === 'PENDING' ? "You haven't voted yet" : `You voted ${flag}`}
+            >
+              {flag}
+            </span>
+          ) : null}
           <span className="text-xs text-neutral-500">{proposal.requestedAmountAda.toLocaleString()} ₳</span>
           <button onClick={() => setOpen(true)} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">
             View full proposal →

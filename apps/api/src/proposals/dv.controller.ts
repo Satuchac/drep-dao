@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { DvService } from './dv.service';
 import { DvVoteDto } from './dto';
@@ -8,9 +9,12 @@ import { DvVoteDto } from './dto';
 export class DvController {
   constructor(private readonly dv: DvService) {}
 
+  // Optional auth: the tally is public, but when a DRep is logged in we also return
+  // their own vote (myChoice) so the UI can flag YES / NO / ABSTAIN / pending.
+  @UseGuards(OptionalJwtAuthGuard)
   @Get('proposals/:id/dv-result')
-  result(@Param('id', ParseUUIDPipe) id: string) {
-    return this.dv.result(id);
+  result(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() ctx?: AuthContext) {
+    return this.dv.result(id, ctx?.userId);
   }
 
   @UseGuards(JwtAuthGuard)
