@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { roundsApi, rewardsApi, type RoundSummary, type RewardCalcView, type ExpertRewardRow } from '@/lib/api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { roundsApi, rewardsApi, type RoundSummary, type RewardCalcView, type ExpertRewardRow, type RewardSourceBucket } from '@/lib/api';
 
 const KIND_LABEL: Record<string, string> = {
   FILTER: 'Filtering rewards',
@@ -50,9 +50,11 @@ export function RewardsTab() {
 
 function Overview({ roundId }: { roundId: string }) {
   const [calcs, setCalcs] = useState<RewardCalcView[] | null>(null);
+  const [buckets, setBuckets] = useState<RewardSourceBucket[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const load = useCallback(() => { rewardsApi.overview(roundId).then(setCalcs).catch(() => setCalcs([])); }, [roundId]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { rewardsApi.sourceBuckets().then((r) => setBuckets(r.buckets)).catch(() => setBuckets([])); }, []);
 
   const run = async (fn: () => Promise<unknown>) => {
     setMsg(null);
@@ -68,19 +70,29 @@ function Overview({ roundId }: { roundId: string }) {
       </div>
       {msg ? <div className="text-xs text-red-600">{msg}</div> : null}
       {calcs && calcs.length === 0 ? <p className="text-sm text-neutral-500">Nothing computed yet — use the buttons above.</p> : null}
-      {calcs?.map((c) => <CalcCard key={c.id} calc={c} onChange={load} />)}
+      {calcs?.map((c) => <CalcCard key={c.id} calc={c} buckets={buckets} onChange={load} />)}
     </div>
   );
 }
 
-function CalcCard({ calc, onChange }: { calc: RewardCalcView; onChange: () => void }) {
+function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: RewardSourceBucket[]; onChange: () => void }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const total = calc.entries.reduce((s, e) => s + e.amountAda, 0);
   const allPaid = calc.entries.length > 0 && calc.entries.every((e) => e.paid);
+  // §12 — default source by stage: filtering draws from the Submission-fee bucket, everything
+  // else from Rewards (fall back to the primary). The board can override before preparing.
+  const defaultBucketId = useMemo(() => {
+    const pick = calc.kind === 'FILTER'
+      ? (b: RewardSourceBucket) => b.isDefaultSubmissionFees
+      : (b: RewardSourceBucket) => b.isDefaultRewards;
+    return (buckets.find(pick) ?? buckets.find((b) => b.isPrimary) ?? buckets[0])?.id ?? '';
+  }, [buckets, calc.kind]);
+  const [src, setSrc] = useState('');
+  useEffect(() => { setSrc(defaultBucketId); }, [defaultBucketId]);
   const pay = async () => {
     setBusy(true); setMsg(null);
-    try { const r = await rewardsApi.preparePayout(calc.id); setMsg(`Queued ${r.recipients} payouts (${r.totalAda.toLocaleString()} ₳) — review & sign it under Actions.`); onChange(); }
+    try { const r = await rewardsApi.preparePayout(calc.id, src || undefined); setMsg(`Queued ${r.recipients} payouts (${r.totalAda.toLocaleString()} ₳) — review & sign it under Actions.`); onChange(); }
     catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
   };
   return (
@@ -98,9 +110,28 @@ function CalcCard({ calc, onChange }: { calc: RewardCalcView; onChange: () => vo
         ) : !calc.payable ? (
           <span className="text-xs text-neutral-400">payable once the stage ends</span>
         ) : (
-          <button onClick={pay} disabled={busy} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300">
-            {busy ? 'Preparing…' : 'Prepare bulk payout'}
-          </button>
+          <div className="flex items-center gap-2">
+            {buckets.length > 0 ? (
+              <label className="flex items-center gap-1 text-xs text-neutral-500">
+                from
+                <select
+                  value={src}
+                  onChange={(e) => setSrc(e.target.value)}
+                  title="Source address the payout spends from"
+                  className="max-w-[14rem] rounded border border-neutral-300 bg-white px-1.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                >
+                  {buckets.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.label} · {b.balanceAda.toLocaleString()} ₳
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <button onClick={pay} disabled={busy} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300">
+              {busy ? 'Preparing…' : 'Prepare bulk payout'}
+            </button>
+          </div>
         )}
       </div>
       {msg ? <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{msg}</div> : null}

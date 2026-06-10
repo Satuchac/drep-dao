@@ -1497,8 +1497,19 @@ export interface ExpertRewardRow {
   milestoneAda: number;
   milestoneLikeDrep: boolean;
 }
+export interface RewardSourceBucket {
+  id: string;
+  label: string;
+  bech32Address: string;
+  isPrimary: boolean;
+  isDefaultRewards: boolean;
+  isDefaultSubmissionFees: boolean;
+  balanceAda: number;
+}
 export const rewardsApi = {
   overview: (roundId: string) => request<RewardCalcView[]>(`/admin/rewards/round/${roundId}`),
+  // §12 — buckets a payout can be sourced from (default picked by stage; board may override).
+  sourceBuckets: () => request<{ buckets: RewardSourceBucket[] }>('/dao/treasury/buckets'),
   computeFiltering: (roundId: string) => request<RewardCalcView>(`/admin/rewards/round/${roundId}/compute/filtering`, { method: 'POST' }),
   computeDv: (roundId: string) => request<{ fixed: RewardCalcView; bonus: RewardCalcView }>(`/admin/rewards/round/${roundId}/compute/dv`, { method: 'POST' }),
   computeMilestone: (roundId: string) => request<RewardCalcView>(`/admin/rewards/round/${roundId}/compute/milestone`, { method: 'POST' }),

@@ -103,9 +103,17 @@ export class RewardsService {
     const fixedPool = BigInt(Math.round(Number(dvPool) * fixedShare));
     const bonusPool = dvPool - fixedPool;
 
-    // cast D&V votes per drep + the snapshot (power + max-possible votes)
-    const proposals = await this.prisma.proposal.findMany({ where: { roundId, stage: 'DEBATE_VOTE' }, select: { id: true } });
-    const propIds = proposals.map((p) => p.id);
+    // cast D&V votes per drep + the snapshot (power + max-possible votes).
+    // A D&V proposal is one voting opened for (it has a VoteSnapshot), NOT one whose
+    // CURRENT stage is DEBATE_VOTE — once the round advances to FUNDING the proposals
+    // move to the FUNDING stage, so a stage:'DEBATE_VOTE' filter would miss them all
+    // and the reward would compute zero recipients.
+    const roundProps = await this.prisma.proposal.findMany({ where: { roundId }, select: { id: true } });
+    const snapProps = await this.prisma.voteSnapshot.findMany({
+      where: { proposalId: { in: roundProps.map((p) => p.id) } },
+      select: { proposalId: true },
+    });
+    const propIds = [...new Set(snapProps.map((s) => s.proposalId))];
     const maxVotes = propIds.length; // one ballot per proposal is the max
     const votes = await this.prisma.vote.findMany({ where: { phase: VotePhase.DEBATE_VOTE, proposalId: { in: propIds }, choice: { not: 'ABSTAIN' } }, select: { drepId: true } });
     const castByDrep = new Map<string, number>();
@@ -373,9 +381,13 @@ export class RewardsService {
     if (missing.length) throw new BadRequestException(`${missing.length} recipient(s) have no reward payment address set`);
     if (lines.length === 0) throw new BadRequestException('nothing to pay (all entries are paid or zero)');
 
+    // §12 — default source bucket by stage: filtering rewards come out of the bucket where
+    // submission fees were collected (Submission fee), everything else out of Rewards. The
+    // board can override with an explicit sourceBucketId (any bucket).
+    const defaultOp = calc.kind === 'FILTER' ? 'SUBMISSION_FEES' : 'REWARDS';
     const source = sourceBucketId
       ? await this.prisma.treasuryBucket.findUnique({ where: { id: sourceBucketId }, select: { id: true } })
-      : await this.buckets.defaultBucketFor('REWARDS');
+      : await this.buckets.defaultBucketFor(defaultOp);
     const total = lines.reduce((s, l) => s + l.amountAda, 0);
 
     const action = await this.prisma.multisigAction.create({
