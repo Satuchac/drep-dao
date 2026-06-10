@@ -40,7 +40,13 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
       })
       .catch(() => { setActions([]); setPast([]); setTreasury(null); });
   }, [history, filter]);
-  useEffect(load, [load]);
+  // Load on mount + poll so a freshly-prepared action (or one that failed to load
+  // on a transient hiccup) appears without a manual page refresh.
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 20_000);
+    return () => clearInterval(id);
+  }, [load]);
   // Refetch whenever the parent bumps refreshKey (e.g. SendFromTreasuryPanel
   // just queued a transfer). Without this the row only appears on F5.
   useEffect(() => { if (refreshKey > 0) load(); }, [refreshKey, load]);

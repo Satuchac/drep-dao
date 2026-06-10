@@ -127,11 +127,16 @@ export class TreasuryService {
   async boardActionsFor(userId: string, includeHistory = false) {
     const board = await this.boardDrep(userId);
     if (!board) return { count: 0, actions: [], history: [], treasury: null };
-    await this.maybePrepareTopUp(); // platform prepares a top-up if the hot wallet is low
+    // These two do on-chain queries; a transient failure must NOT blank the actions
+    // list (the board still needs to see/sign pending actions). Both are best-effort.
+    try { await this.maybePrepareTopUp(); } catch { /* platform top-up is non-critical */ }
 
     const treasuryAddress = await this.resolveTreasuryAddress();
-    const balMap = treasuryAddress ? await this.cardano.addressBalance([treasuryAddress]) : new Map<string, bigint>();
-    const treasuryBalanceAda = treasuryAddress ? Number(balMap.get(treasuryAddress) ?? 0n) / ADA : 0;
+    let treasuryBalanceAda = 0;
+    try {
+      const balMap = treasuryAddress ? await this.cardano.addressBalance([treasuryAddress]) : new Map<string, bigint>();
+      treasuryBalanceAda = treasuryAddress ? Number(balMap.get(treasuryAddress) ?? 0n) / ADA : 0;
+    } catch { /* balance only feeds the insufficient-funds warning */ }
 
     // §15 — 3-of-5 threshold (APPROVAL_THRESHOLD); totalKeys comes from the
     // active multisig so the UI can render "3-of-5" rather than just "3".
