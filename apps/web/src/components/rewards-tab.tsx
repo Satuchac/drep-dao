@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { roundsApi, rewardsApi, type RoundSummary, type RewardCalcView, type ExpertRewardRow, type RewardSourceBucket } from '@/lib/api';
+import { roundsApi, rewardsApi, treasuryApi, type RoundSummary, type RewardCalcView, type ExpertRewardRow, type RewardSourceBucket } from '@/lib/api';
 
 const KIND_LABEL: Record<string, string> = {
   FILTER: 'Filtering rewards',
@@ -97,6 +97,14 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
     try { const r = await rewardsApi.preparePayout(calc.id, src || undefined); setMsg(`Queued ${r.recipients} payouts (${r.totalAda.toLocaleString()} ₳) — review & sign it under Actions.`); onChange(); }
     catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
   };
+  // §15.4 — cancel a prepared (not-yet-confirmed) payout so the calc re-opens and can be
+  // recomputed / re-prepared. Cancelling unlinks the entries + voids any signatures collected.
+  const cancelPayout = async () => {
+    if (!calc.payout || !window.confirm('Cancel this prepared payout? It unlinks the recipients (and discards any signatures) so you can edit, recompute, and prepare it again.')) return;
+    setBusy(true); setMsg(null);
+    try { await treasuryApi.cancelAction(calc.payout.actionId, 'Cancelled from Rewards to redo the payout'); onChange(); }
+    catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
+  };
   // Recompute this calc in place from the latest votes (so the board doesn't have to find
   // the compute buttons up top). Only offered before a payout is prepared.
   const recompute = async () => {
@@ -124,7 +132,12 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
           calc.payout.status === 'CONFIRMED' || calc.payout.status === 'BROADCASTED' ? (
             <span className="text-xs text-emerald-600">✓ paid on-chain</span>
           ) : (
-            <span className="text-xs text-amber-600">⏳ payout prepared — review &amp; sign under Actions</span>
+            <span className="flex items-center gap-2">
+              <span className="text-xs text-amber-600">⏳ payout prepared — review &amp; sign under Actions</span>
+              <button onClick={cancelPayout} disabled={busy} className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-800 dark:text-red-400">
+                {busy ? '…' : 'Cancel'}
+              </button>
+            </span>
           )
         ) : allPaid ? (
           <span className="text-xs text-emerald-600">✓ all paid</span>
