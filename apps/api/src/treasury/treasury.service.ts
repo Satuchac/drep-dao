@@ -127,9 +127,9 @@ export class TreasuryService {
   async boardActionsFor(userId: string, includeHistory = false) {
     const board = await this.boardDrep(userId);
     if (!board) return { count: 0, actions: [], history: [], treasury: null };
-    // These two do on-chain queries; a transient failure must NOT blank the actions
-    // list (the board still needs to see/sign pending actions). Both are best-effort.
-    try { await this.maybePrepareTopUp(); } catch { /* platform top-up is non-critical */ }
+    // The hot-wallet top-up check hits remote db-sync; run it fire-and-forget so it never
+    // delays the actions list (a top-up it prepares simply shows up on the next poll).
+    void this.maybePrepareTopUp().catch(() => { /* platform top-up is non-critical */ });
 
     const treasuryAddress = await this.resolveTreasuryAddress();
     let treasuryBalanceAda = 0;

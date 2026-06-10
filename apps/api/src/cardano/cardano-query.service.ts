@@ -40,6 +40,10 @@ export class CardanoQueryService {
   // of the Transactions tab are instant (on-chain history changes slowly).
   private readonly addrTxCache = new Map<string, { value: AddressTx[]; expiresAt: number }>();
   private readonly ADDR_TX_TTL_MS = 30 * 1000;
+  // Short balance cache so the Actions/Treasury polls (and concurrent badge + list fetches)
+  // don't each pay a fresh remote db-sync round-trip; balances change slowly.
+  private readonly addrBalCache = new Map<string, { value: Map<string, bigint>; expiresAt: number }>();
+  private readonly ADDR_BAL_TTL_MS = 12 * 1000;
 
   // On-chain data source — two options, chosen by CARDANO_ONCHAIN_SOURCE:
   //   'koios'  (default) → the public Koios tier
@@ -323,10 +327,16 @@ export class CardanoQueryService {
   /** Sum of unspent tx_out at each address, straight from db-sync. */
   private async addressBalanceViaDbSync(pool: Pool, addresses: string[]): Promise<Map<string, bigint>> {
     const out = new Map<string, bigint>(addresses.map((a) => [a, 0n]));
+    // "unspent" = no tx_in consumes the output. This db-sync has consumed_by_tx_id tracking
+    // DISABLED (never populated), so `consumed_by_tx_id IS NULL` would count every output ever
+    // created — including long-spent ones — and grossly overstate the balance. tx_in is the
+    // reliable spent marker (matches Koios / the real ledger UTxO set).
     const { rows } = await pool.query<{ address: string; bal: string }>(
-      `SELECT address, COALESCE(sum(value),0)::text AS bal
-         FROM tx_out WHERE address = ANY($1::text[]) AND consumed_by_tx_id IS NULL
-        GROUP BY address`,
+      `SELECT o.address, COALESCE(sum(o.value),0)::text AS bal
+         FROM tx_out o
+        WHERE o.address = ANY($1::text[])
+          AND NOT EXISTS (SELECT 1 FROM tx_in i WHERE i.tx_out_id = o.tx_id AND i.tx_out_index = o.index)
+        GROUP BY o.address`,
       [addresses],
     );
     for (const r of rows) if (out.has(r.address)) out.set(r.address, BigInt(r.bal ?? '0'));
@@ -337,10 +347,16 @@ export class CardanoQueryService {
   async addressBalance(addresses: string[]): Promise<Map<string, bigint>> {
     const out = new Map<string, bigint>(addresses.map((a) => [a, 0n]));
     if (addresses.length === 0) return out;
+    const key = [...addresses].sort().join(',');
+    const cached = this.addrBalCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) return new Map(cached.value);
     const pool = this.dbsync();
     if (pool) {
-      try { return await this.addressBalanceViaDbSync(pool, addresses); }
-      catch (e) { this.logger.warn(`db-sync address balance failed, falling back to Koios: ${e instanceof Error ? e.message : e}`); }
+      try {
+        const r = await this.addressBalanceViaDbSync(pool, addresses);
+        this.addrBalCache.set(key, { value: new Map(r), expiresAt: Date.now() + this.ADDR_BAL_TTL_MS });
+        return r;
+      } catch (e) { this.logger.warn(`db-sync address balance failed, falling back to Koios: ${e instanceof Error ? e.message : e}`); }
     }
     try {
       const res = await fetch(`${this.base}/address_info`, {
@@ -525,10 +541,15 @@ export class CardanoQueryService {
     const pool = this.dbsync();
     if (pool) {
       try {
+        // "unspent" = no tx_in consumes this output. tx_in is written the instant the spending
+        // tx is indexed, so this never returns an already-spent UTxO — unlike
+        // consumed_by_tx_id, which db-sync populates with a lag and would yield inputs the
+        // ledger rejects at submit (BadInputsUTxO).
         const { rows } = await pool.query<{ tx_hash: string; tx_index: number; value: string }>(
           `SELECT encode(t.hash,'hex') AS tx_hash, o.index AS tx_index, o.value::text AS value
              FROM tx_out o JOIN tx t ON t.id = o.tx_id
-            WHERE o.address = ANY($1::text[]) AND o.consumed_by_tx_id IS NULL`,
+            WHERE o.address = ANY($1::text[])
+              AND NOT EXISTS (SELECT 1 FROM tx_in i WHERE i.tx_out_id = o.tx_id AND i.tx_out_index = o.index)`,
           [addresses],
         );
         return rows.map((r) => ({ tx_hash: r.tx_hash, tx_index: Number(r.tx_index), value: r.value }));
