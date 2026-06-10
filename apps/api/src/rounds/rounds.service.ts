@@ -12,6 +12,7 @@ import { DRepStatus, ProposalStatus, RoundStatus, ROUND_SETTING_DEFAULTS } from 
 import { PrismaService } from '../prisma/prisma.service';
 import { DvService } from '../proposals/dv.service';
 import { MeritService } from '../merit/merit.service';
+import { MeritSweepService } from '../merit/merit-sweep.service';
 import { CreateRoundDto, UpdateRoundDto, CategoryInput, ScheduleInput, ConfirmStageDto, RoundSettingsInput } from './dto';
 
 const LOVELACE = 1_000_000;
@@ -70,6 +71,7 @@ export class RoundsService {
     @Optional() @Inject(forwardRef(() => DvService))
     private readonly dv?: DvService,
     @Optional() private readonly merit?: MeritService,
+    @Optional() private readonly meritSweep?: MeritSweepService,
   ) {}
 
   /** §6 — board creates a round in PREPARATION with categories, schedule, eligibility. */
@@ -556,6 +558,17 @@ export class RoundsService {
     // moment the tally crystallizes.
     if (target === RoundStatus.FUNDING && round.status === RoundStatus.VOTE && this.dv) {
       await this.dv.finalizeRound(id);
+    }
+    // §13.3 — settle merit immediately on every stage switch (missed-vote / missed-review
+    // penalties + payout rewards) so a manual advance applies them now rather than waiting
+    // for the daily sweep. Idempotent via the ledger; best-effort so a hiccup never blocks
+    // the transition (the scheduled sweep will catch anything missed).
+    if (this.meritSweep) {
+      try {
+        await this.meritSweep.run();
+      } catch {
+        /* swept again on the next scheduled tick */
+      }
     }
     return this.get(id);
   }

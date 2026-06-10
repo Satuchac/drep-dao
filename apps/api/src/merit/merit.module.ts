@@ -12,6 +12,6 @@ import { MeritController } from './merit.controller';
   imports: [AuthModule],
   controllers: [MeritController],
   providers: [MeritService, MeritSweepService, BoardGuard],
-  exports: [MeritService],
+  exports: [MeritService, MeritSweepService],
 })
 export class MeritModule {}
