@@ -564,10 +564,19 @@ export class TreasuryService {
       PLEDGE_RETURN: 'pledge return', LEFTOVER_RETURN: 'leftover return', MIGRATION: 'treasury migration',
     };
 
-    const transactions: TreasuryTx[] = txs.map((t) => {
+    const transactions: TreasuryTx[] = txs.map((t): TreasuryTx | null => {
       const net = t.inLovelace - t.outLovelace;
       const fee = feeByHash.get(t.hash);
       const action = actionByHash.get(t.hash);
+      // Hide internal self-transfers (the anchor wallet's on-chain-proof txs, change-only moves):
+      // the treasury spent and got it all back bar the network fee, so it's not a treasury event
+      // and would otherwise show as a stray "anonymous income"/dust row. One real event = one row
+      // (a payout is its single red tx; a deposit its single green tx). Board-recorded actions and
+      // submission-fee deposits are always kept.
+      const movedOut = t.outLovelace - t.inLovelace;
+      if (!action && !fee && t.inLovelace > 0n && t.outLovelace > 0n && movedOut >= 0n && movedOut < 2_000_000n) {
+        return null;
+      }
       // A board-initiated external payout (reward/milestone/pledge/leftover/migration) is a tx
       // WE broadcast — always outgoing, amount = the action's. Trust that over the computed net,
       // because db-sync's consumed-marking lags and a just-sent payout can look like incoming
@@ -592,7 +601,7 @@ export class TreasuryService {
         tx.destAddress = action.destAddress ?? undefined;
       }
       return tx;
-    });
+    }).filter((t): t is TreasuryTx => t !== null);
 
     // Merge any board-provided context (overrides the auto label + adds an attributed note).
     const hashes = transactions.map((t) => t.hash);
