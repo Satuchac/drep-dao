@@ -2,10 +2,21 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { ConfigService } from '@nestjs/config';
 import * as CSL from '@emurgo/cardano-serialization-lib-nodejs';
 import { PrismaService } from '../prisma/prisma.service';
+import { AnchorService } from '../cardano/anchor.service';
 import { verifyCip30Signature } from '../auth/cip30';
 
 const LOVELACE = 1_000_000;
 const SIGNING_THRESHOLD = 3; // §15 — 3-of-5 board signatures required to broadcast
+
+// §12 — reward-calculation kind → human-readable payout stage for the on-chain proof.
+const STAGE_LABEL: Record<string, string> = {
+  FILTER: 'Filtering',
+  DV_FIXED: 'Debate & Vote',
+  DV_BONUS: 'Debate & Vote (bonus)',
+  MILESTONE: 'Milestone review',
+  EXPERT: 'Expert rewards',
+  BOARD_MONTHLY: 'Board compensation',
+};
 
 /**
  * §15 — real native-script multisig broadcast — 3-of-5, 2-phase.
@@ -50,6 +61,7 @@ export class MultisigBroadcastService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly anchor: AnchorService,
   ) {
     const net = (this.config.get<string>('CARDANO_NETWORK') ?? 'Preprod').trim();
     this.networkId = net === 'Mainnet' ? 1 : 0;
@@ -416,13 +428,39 @@ export class MultisigBroadcastService {
     if (action.kind === 'REWARD_PAYOUT') {
       const entries = await this.prisma.rewardEntry.findMany({
         where: { payoutActionId: actionId, paidAt: null },
-        include: { drep: { select: { user: { select: { rewardPaymentAddress: true } } } }, expert: { select: { user: { select: { rewardPaymentAddress: true } } } } },
+        include: {
+          drep: { select: { drepIdOnchain: true, user: { select: { rewardPaymentAddress: true } } } },
+          expert: { select: { displayName: true, user: { select: { rewardPaymentAddress: true } } } },
+          rewardCalculation: { select: { kind: true, roundId: true, periodKey: true, round: { select: { name: true, number: true } } } },
+        },
       });
       for (const e of entries) {
         await this.prisma.rewardEntry.update({
           where: { id: e.id },
           data: { paidAt: new Date(), paidInTx: txHash, paidToAddress: e.drep?.user.rewardPaymentAddress ?? e.expert?.user.rewardPaymentAddress ?? null },
         });
+      }
+      // §12 — anchor an on-chain proof of the payout: stage, tx hash, every recipient (DRep id /
+      // expert name) + lovelace, and the board signers. Best-effort; never block the payout.
+      try {
+        const calc = entries[0]?.rewardCalculation;
+        const sigs = await this.prisma.multisigSignature.findMany({
+          where: { actionId },
+          include: { drep: { select: { drepIdOnchain: true } } },
+        });
+        await this.anchor.anchorPayout({
+          stage: calc ? STAGE_LABEL[calc.kind] ?? calc.kind : 'Reward',
+          round: calc?.round?.name ?? (calc?.round?.number != null ? `Round #${calc.round.number}` : calc?.periodKey ?? null),
+          roundId: calc?.roundId ?? null,
+          payoutTxHash: txHash,
+          recipients: entries.map((e) => ({
+            to: e.drep?.drepIdOnchain ?? e.expert?.displayName ?? 'recipient',
+            lovelace: Number(e.overrideAda ?? e.amountAda),
+          })),
+          signers: sigs.map((s) => s.drep.drepIdOnchain),
+        });
+      } catch (e) {
+        this.logger.warn(`reward payout anchor skipped: ${e instanceof Error ? e.message : e}`);
       }
     }
     this.logger.warn(`multisig action ${actionId} broadcast: ${txHash}`);

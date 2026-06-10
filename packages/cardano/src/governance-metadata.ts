@@ -33,6 +33,7 @@ export const GovSubject = {
   INTERNAL: 'internal',
   SUBMISSION: 'submission', // a funding proposal accepted into the round (fee paid / not required)
   STOP_FUNDING: 'stop_funding', // §11 — board decision to terminate a funded proposal
+  REWARD_PAYOUT: 'reward_payout', // §12 — a reward batch paid out (recipients + signers + tx hash)
 } as const;
 export type GovSubject = (typeof GovSubject)[keyof typeof GovSubject];
 
@@ -86,6 +87,7 @@ export const SUBJECT_TITLE: Record<GovSubject, string> = {
   internal: 'Internal proposal',
   submission: 'Funding proposal accepted',
   stop_funding: 'Stop funding of a project',
+  reward_payout: 'Reward payout to members',
 };
 export const STYLE_LABEL: Record<VotingStyle, string> = {
   '1P1V': '1 member, 1 vote',
@@ -218,6 +220,49 @@ export function buildSubmissionMetadata(p: {
       ...(p.feeTxHash ? { txHash: p.feeTxHash } : {}),
     },
     decidedAt: p.decidedAt ?? new Date().toISOString(),
+    ...(p.proofHash ? { proofHash: p.proofHash } : {}),
+  };
+  return { [GOVERNANCE_METADATA_LABEL]: meta };
+}
+
+/**
+ * §12 — the self-describing on-chain anchor written when a reward batch is **paid**: which
+ * stage it rewards, the payout tx hash, every recipient (DRep id, or name for an expert) with
+ * the lovelace they received, and the board members who signed the multisig payout. Amounts are
+ * lovelace (integers — metadata forbids floats). `proofHash` commits to the off-chain preimage.
+ */
+export interface AnchorPayoutMetadata {
+  title: string;
+  subject: GovSubject; // 'reward_payout'
+  stage: string; // human-readable: "Filtering", "Debate & Vote", "Milestone review", …
+  round?: string; // round name / period the rewards are for
+  payoutTx: string; // the on-chain payout tx hash (the multisig tx that moved the funds)
+  totalLovelace: number;
+  recipients: { to: string; lovelace: number }[]; // recipient DRep id (or expert name) + amount
+  signers: string[]; // board DRep ids that signed the payout multisig
+  paidAt: string;
+  proofHash?: string;
+}
+
+export function buildPayoutMetadata(p: {
+  stage: string;
+  round?: string | null;
+  payoutTx: string;
+  recipients: { to: string; lovelace: number }[];
+  signers: string[];
+  proofHash?: string;
+}): Record<string, AnchorPayoutMetadata> {
+  const recipients = p.recipients.map((r) => ({ to: r.to, lovelace: Math.round(r.lovelace) }));
+  const meta: AnchorPayoutMetadata = {
+    title: SUBJECT_TITLE[GovSubject.REWARD_PAYOUT],
+    subject: GovSubject.REWARD_PAYOUT,
+    stage: p.stage,
+    ...(p.round ? { round: p.round } : {}),
+    payoutTx: p.payoutTx,
+    totalLovelace: recipients.reduce((s, r) => s + r.lovelace, 0),
+    recipients,
+    signers: p.signers,
+    paidAt: new Date().toISOString(),
     ...(p.proofHash ? { proofHash: p.proofHash } : {}),
   };
   return { [GOVERNANCE_METADATA_LABEL]: meta };

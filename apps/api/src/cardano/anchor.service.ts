@@ -9,8 +9,10 @@ import {
   VotingStyle,
   buildResultMetadata,
   buildSubmissionMetadata,
+  buildPayoutMetadata,
   type AnchorResultMetadata,
   type AnchorSubmissionMetadata,
+  type AnchorPayoutMetadata,
   type GovVoteEvent,
 } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
@@ -342,6 +344,62 @@ export class AnchorService implements OnModuleInit {
   }
 
   /**
+   * §12 — anchor a **reward payout** on-chain: the stage it rewards, the payout tx hash, every
+   * recipient (DRep id, or name for an expert) with the lovelace paid, and the board members who
+   * signed the multisig. Records an Anchor row (kind 'reward_payout'). Degrades gracefully
+   * (txHash null) when no anchor hot wallet is configured. Used for every payout stage —
+   * filtering, debate & vote, milestone review, expert, board — via the multisig confirm hook.
+   */
+  async anchorPayout(params: {
+    stage: string; // human-readable stage label
+    round?: string | null; // round name / period the rewards are for
+    roundId?: string | null;
+    payoutTxHash: string; // the on-chain tx that moved the funds
+    recipients: { to: string; lovelace: number }[]; // DRep id (or expert name) + amount
+    signers: string[]; // board DRep ids that signed
+  }): Promise<AnchorResult> {
+    const recipients = params.recipients.map((r) => ({ to: r.to, lovelace: Math.round(r.lovelace) }));
+    const preimage = {
+      subject: GovSubject.REWARD_PAYOUT,
+      stage: params.stage,
+      ...(params.round ? { round: params.round } : {}),
+      payoutTx: params.payoutTxHash,
+      totalLovelace: recipients.reduce((s, r) => s + r.lovelace, 0),
+      recipients,
+      signers: params.signers,
+      paidAt: new Date().toISOString(),
+    };
+    const hash = sha256hex(JSON.stringify(preimage));
+    const metadata = buildPayoutMetadata({
+      stage: params.stage,
+      round: params.round ?? null,
+      payoutTx: params.payoutTxHash,
+      recipients,
+      signers: params.signers,
+      proofHash: hash,
+    })[GOVERNANCE_METADATA_LABEL];
+
+    let txHash: string | null = null;
+    try {
+      txHash = await this.submitMetadataTx(metadata);
+    } catch (e) {
+      this.logger.warn(`payout anchor submit skipped/failed: ${e instanceof Error ? e.message : e}`);
+    }
+    await this.prisma.anchor.create({
+      data: {
+        kind: GovSubject.REWARD_PAYOUT,
+        roundId: params.roundId ?? null,
+        hash,
+        preimage: preimage as unknown as object,
+        metadataLabel: GOVERNANCE_METADATA_LABEL,
+        txHash,
+        submittedAt: txHash ? new Date() : null,
+      },
+    });
+    return { hash, txHash, submitted: !!txHash };
+  }
+
+  /**
    * §18 (board) — force-submit an anchor that was recorded but never reached the chain
    * (e.g. the hot wallet was unconfigured/offline when the decision was made). Rebuilds
    * the self-describing metadata from the stored preimage (same `proofHash`) and submits
@@ -425,7 +483,7 @@ export class AnchorService implements OnModuleInit {
   }
 
   /** Rebuild the on-chain metadata for an anchor from its stored preimage. */
-  private metadataFromAnchor(a: { kind: string; hash: string; preimage: unknown }): AnchorResultMetadata | AnchorSubmissionMetadata {
+  private metadataFromAnchor(a: { kind: string; hash: string; preimage: unknown }): AnchorResultMetadata | AnchorSubmissionMetadata | AnchorPayoutMetadata {
     const p = (a.preimage ?? {}) as {
       subject?: GovSubject;
       style?: VotingStyle;
@@ -437,7 +495,7 @@ export class AnchorService implements OnModuleInit {
       result?: { outcome?: string; yes?: number; no?: number; threshold?: number; totalPower?: number };
       // submission-anchor preimage fields
       proposalId?: string;
-      round?: number | null;
+      round?: number | string | null; // submission: round number; payout: round name
       submitter?: string;
       submitterType?: 'DRep' | 'Wallet';
       outcome?: 'accepted' | 'rejected';
@@ -445,11 +503,26 @@ export class AnchorService implements OnModuleInit {
       decidedAt?: string;
       acceptedAt?: string; // older anchors used this name
       fee?: { required?: boolean; paid?: boolean; ada?: number; txHash?: string | null };
+      // payout-anchor preimage fields (§12)
+      stage?: string;
+      payoutTx?: string;
+      recipients?: { to: string; lovelace: number }[];
+      signers?: string[];
     };
+    if ((p.subject ?? a.kind) === GovSubject.REWARD_PAYOUT) {
+      return buildPayoutMetadata({
+        stage: p.stage ?? '',
+        round: typeof p.round === 'string' ? p.round : null,
+        payoutTx: p.payoutTx ?? '',
+        recipients: p.recipients ?? [],
+        signers: p.signers ?? [],
+        proofHash: a.hash,
+      })[GOVERNANCE_METADATA_LABEL];
+    }
     if ((p.subject ?? a.kind) === GovSubject.SUBMISSION) {
       return buildSubmissionMetadata({
         proposalId: p.proposalId ?? '',
-        round: p.round ?? null,
+        round: typeof p.round === 'number' ? p.round : null,
         submitter: p.submitter ?? '',
         submitterType: p.submitterType ?? 'Wallet',
         feeRequired: p.fee?.required ?? false,
@@ -513,7 +586,7 @@ export class AnchorService implements OnModuleInit {
   }
 
   /** Build + sign + submit a single tx carrying `event` as metadata, from the anchor wallet. */
-  private async submitMetadataTx(event: AnchorResultMetadata | AnchorSubmissionMetadata): Promise<string> {
+  private async submitMetadataTx(event: AnchorResultMetadata | AnchorSubmissionMetadata | AnchorPayoutMetadata): Promise<string> {
     if (!this.mnemonic) throw new Error('ANCHOR_MNEMONIC not configured (anchor recorded, not submitted)');
     const { prv, addr } = this.anchorKeys(this.mnemonic);
     const pp = await this.cardano.epochParams();
@@ -530,7 +603,7 @@ export class AnchorService implements OnModuleInit {
    * hash, and the change output (so a batch can chain txs without re-querying Koios).
    */
   private buildMetadataTx(
-    event: AnchorResultMetadata | AnchorSubmissionMetadata,
+    event: AnchorResultMetadata | AnchorSubmissionMetadata | AnchorPayoutMetadata,
     utxos: Utxo[],
     pp: Record<string, string | number>,
     prv: CSL.PrivateKey,

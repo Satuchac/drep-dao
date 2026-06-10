@@ -211,11 +211,24 @@ export class DrepService {
         outcome?: 'accepted' | 'rejected';
         reason?: string | null;
         fee?: { required?: boolean; paid?: boolean; ada?: number; txHash?: string | null };
+        // payout-anchor preimage (§12)
+        stage?: string;
+        round?: string;
+        totalLovelace?: number;
+        recipients?: { to: string; lovelace: number }[];
+        signers?: string[];
       };
       // Self-describing title/detail for every kind (admission, filtering, dv, milestone, …).
       const subject = (p.subject ?? a.kind) as keyof typeof SUBJECT_TITLE;
       const title = SUBJECT_TITLE[subject] ?? 'On-chain record';
       const ref = p.ref ?? p.applicant;
+      // A reward-payout anchor records who was paid how much + the board signers, not a tally.
+      if (subject === 'reward_payout') {
+        const ada = (p.totalLovelace ?? 0) / 1_000_000;
+        const n = p.recipients?.length ?? 0;
+        const detail = `${ada.toLocaleString()} ₳ to ${n} ${n === 1 ? 'member' : 'members'}${p.stage ? ` · ${p.stage}` : ''}${p.round ? ` · ${p.round}` : ''} · signed by ${p.signers?.length ?? 0}`;
+        return { id: a.id, title, detail, kind: a.kind, label: a.metadataLabel, hash: a.hash, txHash: a.txHash, createdAt: a.createdAt };
+      }
       // A submission anchor records acceptance facts, not a vote tally.
       if (subject === 'submission') {
         const rejected = p.outcome === 'rejected';
