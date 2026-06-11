@@ -43,12 +43,6 @@ export class TreasuryService {
     private readonly buckets: TreasuryBucketsService,
   ) {}
 
-  private num(key: string, fallback: number): number {
-    const v = this.config.get<string>(key);
-    const n = v ? Number(v) : NaN;
-    return Number.isFinite(n) ? n : fallback;
-  }
-
   /**
    * §15 — treasury overview: the 3-of-5 multisig balance + budget buckets
    * (rewards, operations, per-round) with allocated / spent / remaining, plus
@@ -78,35 +72,47 @@ export class TreasuryService {
     const bal = await this.cardano.addressBalance(addrs);
     const ada = (a: string | null) => (a ? Number(bal.get(a) ?? 0n) / ADA : 0);
 
-    // Spend so far (from data we have): rewards paid out; ops spend via multisig.
-    const rewardsPaid = await this.prisma.rewardEntry.aggregate({
+    // §15 — categories are by PURPOSE, not by the address funds left from.
+    // Rewards = every paid reward (DReps + experts: filtering / D&V / milestone / board), wherever sourced.
+    const rewardsPaid = await this.prisma.rewardEntry.aggregate({ _sum: { amountAda: true }, where: { paidAt: { not: null } } });
+    const rewardsSpent = Number(rewardsPaid._sum.amountAda ?? 0n) / ADA;
+    // Operations = every other confirmed outgoing action (top-ups, transfers, returns) — not a
+    // reward, not project funding, not an internal treasury migration. Again, regardless of source.
+    const opsAgg = await this.prisma.multisigAction.aggregate({
       _sum: { amountAda: true },
-      where: { paidAt: { not: null } },
+      where: { status: 'CONFIRMED', amountAda: { not: null }, kind: { notIn: ['REWARD_PAYOUT', 'PROJECT_FUNDING', 'MIGRATION'] } },
     });
-    const opsSpent = await this.prisma.multisigAction.aggregate({
-      _sum: { amountAda: true },
-      where: { kind: 'OPS', status: 'CONFIRMED' },
-    });
-    const rounds = await this.prisma.round.findMany({ orderBy: { number: 'asc' } });
+    const opsSpent = Number(opsAgg._sum.amountAda ?? 0n) / ADA;
 
-    const bucket = (key: string, name: string, allocatedAda: number, spentAda: number, address: string | null) => ({
-      key,
-      name,
-      allocatedAda,
-      spentAda,
-      remainingAda: Math.max(0, allocatedAda - spentAda),
-      address,
+    // Project funding per round = confirmed PROJECT_FUNDING (milestone payouts) for that round's proposals.
+    const rounds = await this.prisma.round.findMany({ orderBy: { number: 'asc' } });
+    const fundingActions = await this.prisma.multisigAction.findMany({
+      where: { kind: 'PROJECT_FUNDING', status: 'CONFIRMED', amountAda: { not: null }, proposalId: { not: null } },
+      select: { amountAda: true, proposalId: true },
+    });
+    const props = fundingActions.length
+      ? await this.prisma.proposal.findMany({ where: { id: { in: [...new Set(fundingActions.map((a) => a.proposalId as string))] } }, select: { id: true, roundId: true } })
+      : [];
+    const roundByProp = new Map(props.map((p) => [p.id, p.roundId]));
+    const spentByRound = new Map<string, number>();
+    for (const a of fundingActions) {
+      const rid = a.proposalId ? roundByProp.get(a.proposalId) : null;
+      if (rid) spentByRound.set(rid, (spentByRound.get(rid) ?? 0) + Number(a.amountAda ?? 0n) / ADA);
+    }
+    const totalFundingMax = rounds.reduce((s, r) => s + Number(r.budgetAda) / ADA, 0);
+    const totalFundingSpent = rounds.reduce((s, r) => s + (spentByRound.get(r.id) ?? 0), 0);
+
+    // hasMax=false → an open-ended spend line (no cap / no "left"); true → a bar against a budget.
+    const bucket = (key: string, name: string, hasMax: boolean, allocatedAda: number, spentAda: number, address: string | null) => ({
+      key, name, hasMax, allocatedAda, spentAda, remainingAda: Math.max(0, allocatedAda - spentAda), address,
     });
 
     const buckets = [
-      // Budget caps default to 0 ₳ — they only show real numbers when the
-      // operator sets REWARDS_BUDGET_ADA / OPERATIONS_BUDGET_ADA explicitly.
-      // The previous 600M default was nonsensical right after a reset
-      // ("allocated 1.2B ₳" when the treasury actually held 19K).
-      bucket('rewards', 'Rewards', this.num('REWARDS_BUDGET_ADA', 0), Number(rewardsPaid._sum.amountAda ?? 0n) / ADA, this.config.get<string>('REWARDS_ADDRESS') || treasury),
-      bucket('operations', 'Operations', this.num('OPERATIONS_BUDGET_ADA', 0), Number(opsSpent._sum.amountAda ?? 0n) / ADA, this.config.get<string>('OPERATIONS_ADDRESS') || treasury),
+      bucket('rewards', 'Rewards', false, 0, rewardsSpent, null),
+      bucket('operations', 'Operations', false, 0, opsSpent, null),
+      bucket('total-funding', 'Total funding (all rounds)', true, totalFundingMax, totalFundingSpent, null),
       ...rounds.map((r) =>
-        bucket(`round-${r.number}`, `Round #${r.number}${r.name ? ` — ${r.name}` : ''}`, Number(r.budgetAda) / ADA, 0, r.multisigAddress || treasury),
+        bucket(`round-${r.number}`, `Round #${r.number}${r.name ? ` — ${r.name}` : ''}`, true, Number(r.budgetAda) / ADA, spentByRound.get(r.id) ?? 0, r.multisigAddress || treasury),
       ),
     ];
 

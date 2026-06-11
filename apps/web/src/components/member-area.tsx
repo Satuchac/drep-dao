@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type EntryEligibility } from '@/lib/api';
+import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type EntryEligibility, type BoardAction } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -273,9 +273,12 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
         // stay in Actions.
         // §12 — reward payouts are signed under Actions, other multisig actions under Treasury.
         const acts = a.status === 'fulfilled' ? a.value.actions : [];
-        next.treasury = acts.filter((x) => x.kind !== 'REWARD_PAYOUT').length;
+        // Only badge an action the current board member still has to act on — once they've
+        // authorized (phase 1) or signed (phase 2), it's waiting on others, not their to-do.
+        const needsMe = (x: BoardAction) => (x.phase === 'AUTHORIZE' ? !x.mineCommitted : !x.mineApproved);
+        next.treasury = acts.filter((x) => x.kind !== 'REWARD_PAYOUT' && needsMe(x)).length;
         next.actions =
-          acts.filter((x) => x.kind === 'REWARD_PAYOUT').length +
+          acts.filter((x) => x.kind === 'REWARD_PAYOUT' && needsMe(x)).length +
           (f.status === 'fulfilled' ? f.value.length : 0) +
           (p.status === 'fulfilled' ? p.value.length : 0) +
           (stop.status === 'fulfilled' ? stop.value.count : 0) +

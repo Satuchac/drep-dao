@@ -113,11 +113,15 @@ export function TreasuryOverview() {
                   <div className="flex items-baseline justify-between">
                     <span className="font-medium">{b.name}</span>
                     <span className="text-xs text-neutral-500 tabular-nums">
-                      spent {ada(b.spentAda)} / {ada(b.allocatedAda)} ₳ · {ada(b.remainingAda)} left
+                      {b.hasMax
+                        ? <>spent {ada(b.spentAda)} / {ada(b.allocatedAda)} ₳ · {ada(b.remainingAda)} left</>
+                        : <>spent {ada(b.spentAda)} ₳</>}
                     </span>
                   </div>
                   <div className="mt-1 h-3 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-                    <div className={`h-full ${color}`} style={{ width: `${Math.max(pct, b.spentAda > 0 ? 2 : 0)}%` }} />
+                    {/* Open-ended categories (rewards/operations) have no cap → a full coloured line;
+                        budgeted ones (total funding / rounds) fill proportionally to spend. */}
+                    <div className={`h-full ${color}`} style={{ width: b.hasMax ? `${Math.max(pct, b.spentAda > 0 ? 2 : 0)}%` : (b.spentAda > 0 ? '100%' : '0%') }} />
                   </div>
                 </div>
               );
