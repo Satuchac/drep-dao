@@ -812,6 +812,8 @@ export interface ProposalSummary {
   rejectionReasons?: ProposalRejectionReason[] | null;
   /** §11 — FUNDING proposals: whether milestone reviewers have been assigned. */
   milestoneReviewers?: 'assigned' | 'not_assigned' | null;
+  /** §11 — names of the assigned milestone reviewers (when assigned). */
+  milestoneReviewerNames?: string[];
 }
 export interface ProposalDetail extends ProposalSummary {
   categoryId: string;

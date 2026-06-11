@@ -1125,12 +1125,25 @@ export class ProposalsService {
       select: { milestoneId: true, choice: true },
     });
     // §11 — proposals that already have milestone reviewers assigned (drives the round-overview
-    // "milestone reviewers assigned / not assigned" flag).
+    // "milestone reviewers assigned / not assigned" flag + the reviewer names). The same jury is
+    // mirrored across every milestone of a proposal, so dedupe the reviewer names per proposal.
     const msAssign = await this.prisma.milestoneAssignment.findMany({
       where: { milestone: { proposalId: { in: ids } }, releasedAt: null },
-      select: { milestone: { select: { proposalId: true } } },
+      select: {
+        milestone: { select: { proposalId: true } },
+        reviewerDrep: { select: { drepIdOnchain: true, user: { select: { displayName: true } } } },
+        reviewerExpert: { select: { displayName: true } },
+      },
     });
-    const msReviewerProposalIds = new Set(msAssign.map((a) => a.milestone.proposalId));
+    const msReviewerNamesByProposal = new Map<string, Set<string>>();
+    for (const a of msAssign) {
+      const name = a.reviewerDrep?.user?.displayName ?? a.reviewerDrep?.drepIdOnchain?.slice(0, 12) ?? a.reviewerExpert?.displayName ?? null;
+      if (!name) continue;
+      const pid = a.milestone.proposalId;
+      if (!msReviewerNamesByProposal.has(pid)) msReviewerNamesByProposal.set(pid, new Set());
+      msReviewerNamesByProposal.get(pid)!.add(name);
+    }
+    const msReviewerProposalIds = new Set(msReviewerNamesByProposal.keys());
     const activeStops = await this.prisma.stopFundingProposal.findMany({
       where: { proposalId: { in: ids }, status: 'ACTIVE' },
       include: { votes: { select: { choice: true } } },
@@ -1321,13 +1334,19 @@ export class ProposalsService {
         };
       }
 
-      // §11 — milestone-reviewer flag for FUNDING proposals that have milestones.
+      // §11 — milestone-reviewer flag (+ names) for FUNDING proposals that have milestones.
       let milestoneReviewers: 'assigned' | 'not_assigned' | null = null;
+      let milestoneReviewerNames: string[] = [];
       if (status === ProposalStatus.APPROVED && stage === ProposalStage.FUNDING && (msByProposal.get(p.id) ?? []).length > 0) {
-        milestoneReviewers = msReviewerProposalIds.has(p.id) ? 'assigned' : 'not_assigned';
+        if (msReviewerProposalIds.has(p.id)) {
+          milestoneReviewers = 'assigned';
+          milestoneReviewerNames = [...(msReviewerNamesByProposal.get(p.id) ?? [])];
+        } else {
+          milestoneReviewers = 'not_assigned';
+        }
       }
 
-      return { ...base, progress, rejectionReasons, milestoneReviewers };
+      return { ...base, progress, rejectionReasons, milestoneReviewers, milestoneReviewerNames };
     });
   }
 

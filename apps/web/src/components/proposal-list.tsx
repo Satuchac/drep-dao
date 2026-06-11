@@ -61,7 +61,9 @@ export function ProposalList({ roundId }: { roundId: string }) {
                 {p.milestoneReviewers === 'not_assigned' ? (
                   <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">milestone reviewers not assigned</span>
                 ) : p.milestoneReviewers === 'assigned' ? (
-                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">milestone reviewers assigned</span>
+                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                    Milestone reviewers:{p.milestoneReviewerNames && p.milestoneReviewerNames.length > 0 ? ` ${p.milestoneReviewerNames.join(', ')}` : ' assigned'}
+                  </span>
                 ) : null}
               </div>
             </div>
