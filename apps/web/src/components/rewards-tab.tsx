@@ -194,12 +194,12 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
       </div>
       {msg ? <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{msg}</div> : null}
       <table className="mt-2 w-full text-xs">
-        <thead><tr className="text-left text-neutral-400"><th className="font-normal">Recipient</th><th className="font-normal">{calc.kind === 'MILESTONE' ? 'Checks' : 'Votes'}</th>{calc.kind === 'DV_BONUS' ? <th className="font-normal" title="Final voting power used to weight the bonus">Power</th> : null}<th className="font-normal">Computed</th><th className="font-normal">Pay</th><th></th></tr></thead>
+        <thead><tr className="text-left text-neutral-400"><th className="font-normal">Recipient</th>{calc.kind !== 'BOARD_MONTHLY' ? <th className="font-normal">{calc.kind === 'MILESTONE' ? 'Checks' : 'Votes'}</th> : null}{calc.kind === 'DV_BONUS' ? <th className="font-normal" title="Final voting power used to weight the bonus">Power</th> : null}<th className="font-normal">Computed</th><th className="font-normal">Pay</th><th></th></tr></thead>
         <tbody>
-          {calc.entries.map((e) => <EntryRow key={e.id} e={e} showPower={calc.kind === 'DV_BONUS'} onChange={onChange} />)}
+          {calc.entries.map((e) => <EntryRow key={e.id} e={e} showUnits={calc.kind !== 'BOARD_MONTHLY'} showPower={calc.kind === 'DV_BONUS'} onChange={onChange} />)}
           {calc.entries.length === 0 ? <tr><td colSpan={4} className="py-1 text-neutral-400">No recipients.</td></tr> : null}
         </tbody>
-        <tfoot><tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">Total</td><td className="pt-1 tabular-nums">{calc.entries.reduce((s, e) => s + (e.units ?? 0), 0)}</td><td></td><td className="pt-1 tabular-nums">{total.toLocaleString()} ₳</td><td></td></tr></tfoot>
+        <tfoot><tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">Total</td>{calc.kind !== 'BOARD_MONTHLY' ? <td className="pt-1 tabular-nums">{calc.entries.reduce((s, e) => s + (e.units ?? 0), 0)}</td> : null}<td></td><td className="pt-1 tabular-nums">{total.toLocaleString()} ₳</td><td></td></tr></tfoot>
       </table>
       <ConfirmDialog
         open={confirmingCancel}
@@ -224,7 +224,7 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
   );
 }
 
-function EntryRow({ e, showPower = false, onChange }: { e: RewardCalcView['entries'][number]; showPower?: boolean; onChange: () => void }) {
+function EntryRow({ e, showUnits = true, showPower = false, onChange }: { e: RewardCalcView['entries'][number]; showUnits?: boolean; showPower?: boolean; onChange: () => void }) {
   const [val, setVal] = useState(String(e.amountAda));
   useEffect(() => { setVal(String(e.amountAda)); }, [e.amountAda]);
   const save = async () => {
@@ -236,7 +236,7 @@ function EntryRow({ e, showPower = false, onChange }: { e: RewardCalcView['entri
   return (
     <tr className="border-t border-neutral-100 dark:border-neutral-900">
       <td className="py-1">{e.recipient.name} <span className="text-neutral-400">{e.recipient.type}</span></td>
-      <td className="py-1 tabular-nums text-neutral-600 dark:text-neutral-300">{e.units ?? '—'}</td>
+      {showUnits ? <td className="py-1 tabular-nums text-neutral-600 dark:text-neutral-300">{e.units ?? '—'}</td> : null}
       {showPower ? <td className="py-1 tabular-nums text-neutral-500">{e.power != null ? e.power.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td> : null}
       <td className="py-1 tabular-nums text-neutral-500">{e.computedAda.toLocaleString()} ₳</td>
       <td className="py-1">
