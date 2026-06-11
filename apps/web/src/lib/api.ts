@@ -174,7 +174,6 @@ export interface WalletStatus {
 export interface TreasuryBucket {
   key: string;
   name: string;
-  hasMax: boolean; // false → open-ended spend line (rewards/operations); true → bar against a budget
   allocatedAda: number;
   spentAda: number;
   remainingAda: number;

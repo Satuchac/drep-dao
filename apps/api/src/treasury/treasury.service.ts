@@ -68,9 +68,13 @@ export class TreasuryService {
   async overview() {
     const treasury = await this.resolveTreasuryAddress();
     const hot = this.anchor.hotWalletAddress();
-    const addrs = [treasury, hot].filter((a): a is string => !!a);
-    const bal = await this.cardano.addressBalance(addrs);
+    const active = await this.prisma.multisigConfig.findFirst({ where: { replacedAt: null }, orderBy: { assembledAt: 'desc' } });
+    const bks = active ? await this.prisma.treasuryBucket.findMany({ where: { configId: active.id }, select: { bech32Address: true } }) : [];
+    const allAddrs = [...new Set([treasury, hot, ...bks.map((b) => b.bech32Address)].filter((a): a is string => !!a))];
+    const bal = await this.cardano.addressBalance(allAddrs);
     const ada = (a: string | null) => (a ? Number(bal.get(a) ?? 0n) / ADA : 0);
+    // Total ADA the DAO controls across every address — the pool the categories partition.
+    const totalAda = allAddrs.reduce((s, a) => s + ada(a), 0);
 
     // §15 — categories are by PURPOSE, not by the address funds left from.
     // Rewards = every paid reward (DReps + experts: filtering / D&V / milestone / board), wherever sourced.
@@ -99,20 +103,24 @@ export class TreasuryService {
       const rid = a.proposalId ? roundByProp.get(a.proposalId) : null;
       if (rid) spentByRound.set(rid, (spentByRound.get(rid) ?? 0) + Number(a.amountAda ?? 0n) / ADA);
     }
-    const totalFundingMax = rounds.reduce((s, r) => s + Number(r.budgetAda) / ADA, 0);
+    // §12.2 — maximums come from the round setups: funding = Σ round budgets, rewards = Σ round
+    // reward pools (DRep + bonus + expert). Operations gets the REST of the treasury, so newly
+    // received ADA lands in operations until a round earmarks it. The three partition totalAda.
+    const fundingMax = rounds.reduce((s, r) => s + Number(r.budgetAda) / ADA, 0);
+    const rewardsMax = rounds.reduce((s, r) => s + Number(r.rewardsPoolAda) / ADA, 0);
+    const opsMax = Math.max(0, totalAda - fundingMax - rewardsMax);
     const totalFundingSpent = rounds.reduce((s, r) => s + (spentByRound.get(r.id) ?? 0), 0);
 
-    // hasMax=false → an open-ended spend line (no cap / no "left"); true → a bar against a budget.
-    const bucket = (key: string, name: string, hasMax: boolean, allocatedAda: number, spentAda: number, address: string | null) => ({
-      key, name, hasMax, allocatedAda, spentAda, remainingAda: Math.max(0, allocatedAda - spentAda), address,
+    const bucket = (key: string, name: string, allocatedAda: number, spentAda: number, address: string | null) => ({
+      key, name, allocatedAda, spentAda, remainingAda: Math.max(0, allocatedAda - spentAda), address,
     });
 
     const buckets = [
-      bucket('rewards', 'Rewards', false, 0, rewardsSpent, null),
-      bucket('operations', 'Operations', false, 0, opsSpent, null),
-      bucket('total-funding', 'Total funding (all rounds)', true, totalFundingMax, totalFundingSpent, null),
+      bucket('rewards', 'Rewards', rewardsMax, rewardsSpent, null),
+      bucket('operations', 'Operations', opsMax, opsSpent, null),
+      bucket('total-funding', 'Total funding (all rounds)', fundingMax, totalFundingSpent, null),
       ...rounds.map((r) =>
-        bucket(`round-${r.number}`, `Round #${r.number}${r.name ? ` — ${r.name}` : ''}`, true, Number(r.budgetAda) / ADA, spentByRound.get(r.id) ?? 0, r.multisigAddress || treasury),
+        bucket(`round-${r.number}`, `Round #${r.number}${r.name ? ` — ${r.name}` : ''}`, Number(r.budgetAda) / ADA, spentByRound.get(r.id) ?? 0, r.multisigAddress || treasury),
       ),
     ];
 
@@ -120,8 +128,10 @@ export class TreasuryService {
       treasury: { address: treasury, balanceAda: ada(treasury), configured: !!treasury },
       hotWallet: { address: hot, balanceAda: ada(hot), minAda: HOT_WALLET_MIN_ADA },
       buckets,
-      totalAllocatedAda: buckets.reduce((s, b) => s + b.allocatedAda, 0),
-      totalSpentAda: buckets.reduce((s, b) => s + b.spentAda, 0),
+      // Treasury total = all ADA the DAO controls (not a sum of the bars, which would double-count
+      // the per-round breakdown of funding). Total spent = the three top categories' spend.
+      totalAllocatedAda: totalAda,
+      totalSpentAda: rewardsSpent + opsSpent + totalFundingSpent,
     };
   }
 

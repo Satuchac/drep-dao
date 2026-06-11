@@ -113,15 +113,11 @@ export function TreasuryOverview() {
                   <div className="flex items-baseline justify-between">
                     <span className="font-medium">{b.name}</span>
                     <span className="text-xs text-neutral-500 tabular-nums">
-                      {b.hasMax
-                        ? <>spent {ada(b.spentAda)} / {ada(b.allocatedAda)} ₳ · {ada(b.remainingAda)} left</>
-                        : <>spent {ada(b.spentAda)} ₳</>}
+                      spent {ada(b.spentAda)} / {ada(b.allocatedAda)} ₳ · {ada(b.remainingAda)} left
                     </span>
                   </div>
                   <div className="mt-1 h-3 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
-                    {/* Open-ended categories (rewards/operations) have no cap → a full coloured line;
-                        budgeted ones (total funding / rounds) fill proportionally to spend. */}
-                    <div className={`h-full ${color}`} style={{ width: b.hasMax ? `${Math.max(pct, b.spentAda > 0 ? 2 : 0)}%` : (b.spentAda > 0 ? '100%' : '0%') }} />
+                    <div className={`h-full ${color}`} style={{ width: `${Math.max(pct, b.spentAda > 0 ? 2 : 0)}%` }} />
                   </div>
                 </div>
               );
@@ -130,7 +126,7 @@ export function TreasuryOverview() {
 
           <div className="rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800">
             <div className="flex justify-between">
-              <span className="text-neutral-500">Total allocated</span>
+              <span className="text-neutral-500">Treasury total</span>
               <span className="font-medium tabular-nums">{ada(data.totalAllocatedAda)} ₳</span>
             </div>
             <div className="flex justify-between">
