@@ -243,13 +243,16 @@ export class RewardsService {
   }
 
   // ── §13 board monthly comp = yearly / 12 / active seats ──────────────────────
-  async computeBoardMonthly(periodKey?: string) {
+  async computeBoardMonthly(periodKey?: string, months = 12) {
     const now = new Date();
     const key = periodKey ?? `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
     const yearly = await this.boardYearlyAda();
     const boardDrepIds = await this.boardDrepIds();
     await this.clearCalc({ roundId: null, kind: 'BOARD_MONTHLY', periodKey: key });
-    const perMember = boardDrepIds.length > 0 ? yearly / 12n / BigInt(boardDrepIds.length) : 0n;
+    // §13 — the budget is split across the number of months being computed: per member each
+    // month = budget ÷ months ÷ seats. Fewer months → a larger amount per month.
+    const divisor = BigInt(Math.max(1, Math.floor(months)));
+    const perMember = boardDrepIds.length > 0 ? yearly / divisor / BigInt(boardDrepIds.length) : 0n;
     const calc = await this.prisma.rewardCalculation.create({ data: { roundId: null, kind: 'BOARD_MONTHLY', poolAda: perMember * BigInt(boardDrepIds.length), totalUnits: boardDrepIds.length, periodKey: key } });
     if (perMember > 0n) {
       for (const drepId of boardDrepIds) {
@@ -287,7 +290,7 @@ export class RewardsService {
         select: { id: true },
       });
       if (paid) continue;
-      await this.computeBoardMonthly(key);
+      await this.computeBoardMonthly(key, n);
     }
     return this.listBoardMonths();
   }

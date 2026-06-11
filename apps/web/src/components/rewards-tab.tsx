@@ -313,7 +313,7 @@ function Setup() {
       <div className="max-w-lg space-y-3">
         <div>
           <label className="text-sm font-medium">Yearly board reward (₳)</label>
-          <p className="text-xs text-neutral-500">Total paid to the whole board per year. Monthly per-member = this ÷ 12 ÷ board seats.</p>
+          <p className="text-xs text-neutral-500">Total board reward budget, split across the months you compute below (12 = a full year). Per member each month = budget ÷ months ÷ board seats.</p>
           <div className="mt-1 flex items-center gap-2">
             <input value={yearly} onChange={(e) => { setYearly(e.target.value); setSaved(false); }} className="w-40 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" />
             <button onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-sm text-white hover:bg-emerald-700">Save new reward budget</button>
