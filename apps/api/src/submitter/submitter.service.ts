@@ -23,13 +23,16 @@ export class SubmitterService {
     const country = (dto.country ?? '').trim();
     if (!displayName) throw new BadRequestException('display name is required');
     if (!country) throw new BadRequestException('country is required');
-    if (this.wordCount(description) < MIN_DESCRIPTION_WORDS) {
-      throw new BadRequestException(`description must be at least ${MIN_DESCRIPTION_WORDS} words`);
-    }
+    if (!description) throw new BadRequestException('description is required');
     const socialLinks = (dto.socialLinks ?? []).map((s) => s.trim()).filter(Boolean);
     const githubUrl = dto.githubUrl?.trim() || null;
     const logoDataUrl = dto.logoDataUrl?.trim() || null;
     const existing = await this.prisma.submitterApplication.findUnique({ where: { userId } });
+    // The 100-word minimum is for applications the board still has to review. An already-approved
+    // member can refine their profile without re-meeting it (e.g. grandfathered placeholder text).
+    if (existing?.status !== 'APPROVED' && this.wordCount(description) < MIN_DESCRIPTION_WORDS) {
+      throw new BadRequestException(`description must be at least ${MIN_DESCRIPTION_WORDS} words`);
+    }
     // Approved members can edit their profile without losing the role; everyone else (new or
     // previously rejected) goes back to PENDING for board review.
     const status = existing?.status === 'APPROVED' ? 'APPROVED' : 'PENDING';

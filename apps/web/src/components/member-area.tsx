@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardProposalsApi, boardSubmittersApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, messagesApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type EntryEligibility, type BoardAction } from '@/lib/api';
+import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardProposalsApi, boardSubmittersApi, submitterApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, messagesApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type MySubmitter, type EntryEligibility, type BoardAction } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -49,6 +49,14 @@ export function MemberArea() {
     expertApi.mine().then(setMyExpert).catch(() => setMyExpert(null));
   }, []);
   useEffect(loadExpert, [loadExpert]);
+  // §2.1 — the user's submitter application (any status), so the Get-started card hides once they
+  // have one and their profile editor shows instead.
+  const [mySubmitter, setMySubmitter] = useState<MySubmitter | null>(null);
+  const loadSubmitter = useCallback(() => {
+    submitterApi.mine().then(setMySubmitter).catch(() => setMySubmitter(null));
+  }, []);
+  useEffect(loadSubmitter, [loadSubmitter]);
+  const onSubmitterChange = useCallback(() => { loadSubmitter(); void refresh(); }, [loadSubmitter, refresh]);
 
   const isBoard = !!profile?.roles.includes('BOARD');
   const canVote = !!profile && (profile.roles.includes('DREP') || profile.roles.includes('DAO_MEMBER') || profile.roles.includes('BOARD'));
@@ -58,6 +66,7 @@ export function MemberArea() {
 
   const isMember = profile.roles.includes('DAO_MEMBER');
   const isSubmitter = profile.roles.includes('SUBMITTER'); // §2.1 — approved submitter
+  const hasSubmitterApp = !!mySubmitter; // applied (any status) → show the profile editor, hide the card
   const isDrep = profile.roles.includes('DREP');
   const isRegisteredDRep = profile.onchainDrep.registered;
   const daoStatus = profile.daoMembership?.status ?? null;
@@ -93,11 +102,12 @@ export function MemberArea() {
         ) : expertPending || expertApproved ? (
           <section className={card}><ExpertApplyForm onChange={loadExpert} /></section>
         ) : showApply ? (
-          <section className={card}><ApplyOptions registeredDRep={isRegisteredDRep} onExpertChange={loadExpert} onSubmitterChange={refresh} /></section>
+          <section className={card}><ApplyOptions registeredDRep={isRegisteredDRep} onExpertChange={loadExpert} onSubmitterChange={onSubmitterChange} showSubmitterCard={!hasSubmitterApp} /></section>
         ) : null}
-        {/* §2.1 — anyone who isn't in the Get-started chooser (members, board, experts) applies
-            for / manages the submitter role here, so any account type can submit proposals. */}
-        {!showApply ? <section className={card}><SubmitterApplyForm onChange={refresh} /></section> : null}
+        {/* §2.1 — submitter profile editor (with change history). Shows for members/board/experts,
+            and for anyone (incl. viewers) who already has a submitter application — so the
+            "Become a submitter" card disappears and their profile takes its place. */}
+        {hasSubmitterApp || !showApply ? <section className={card}><SubmitterApplyForm onChange={onSubmitterChange} /></section> : null}
         {/* §15.4 — DReps + board members register a payment address here so
             they can receive rewards. Amber-nags when empty. */}
         {isMember ? <RewardAddressPanel /> : null}
@@ -423,7 +433,7 @@ function EmptyHint({ text }: { text: string }) {
 }
 
 /** §14 — both participation routes; pick one (until accepted). */
-function ApplyOptions({ registeredDRep, onExpertChange, onSubmitterChange }: { registeredDRep: boolean; onExpertChange: () => void; onSubmitterChange: () => void }) {
+function ApplyOptions({ registeredDRep, onExpertChange, onSubmitterChange, showSubmitterCard }: { registeredDRep: boolean; onExpertChange: () => void; onSubmitterChange: () => void; showSubmitterCard: boolean }) {
   const [mode, setMode] = useState<'choose' | 'dao' | 'expert' | 'submitter'>('choose');
 
   if (mode === 'dao') {
@@ -463,10 +473,12 @@ function ApplyOptions({ registeredDRep, onExpertChange, onSubmitterChange }: { r
           <div className="font-medium">Apply as an Expert</div>
           <div className="text-xs text-neutral-500">For ADA holders with subject-matter knowledge. Board approves; you provide your expertise.</div>
         </button>
-        <button onClick={() => setMode('submitter')} className="rounded-lg border border-neutral-200 p-3 text-left hover:border-emerald-400 dark:border-neutral-700">
-          <div className="font-medium">Become a submitter</div>
-          <div className="text-xs text-neutral-500">To submit proposals. Fill in a short profile; a board member approves it, then you can submit.</div>
-        </button>
+        {showSubmitterCard ? (
+          <button onClick={() => setMode('submitter')} className="rounded-lg border border-neutral-200 p-3 text-left hover:border-emerald-400 dark:border-neutral-700">
+            <div className="font-medium">Become a submitter</div>
+            <div className="text-xs text-neutral-500">To submit proposals. Fill in a short profile; a board member approves it, then you can submit.</div>
+          </button>
+        ) : null}
       </div>
     </div>
   );

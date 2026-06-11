@@ -41,12 +41,15 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   };
 
   const words = wordCount(desc);
-  const canSubmit = !!name.trim() && !!country && words >= MIN_WORDS;
+  // §2.1 — the 100-word minimum gates a NEW application the board reviews; an already-approved
+  // member can update their profile with any non-empty description.
+  const needsFullDesc = mine?.status !== 'APPROVED';
+  const canSubmit = !!name.trim() && !!country && !!desc.trim() && (!needsFullDesc || words >= MIN_WORDS);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    if (!canSubmit) { setError('Fill the required fields — the description needs at least 100 words.'); return; }
+    if (!canSubmit) { setError(needsFullDesc ? 'Fill the required fields — the description needs at least 100 words.' : 'Fill the required fields.'); return; }
     setBusy(true);
     try {
       await submitterApi.apply({
@@ -68,7 +71,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   return (
     <div className="space-y-3">
       <div>
-        <h3 className="text-base font-semibold">Become a submitter</h3>
+        <h3 className="text-base font-semibold">{mine ? 'Submitter profile' : 'Become a submitter'}</h3>
         {approved ? (
           <p className="text-sm text-emerald-600">You are an approved submitter ✅ — submit proposals under <strong>My proposals</strong>. You can still update your profile below.</p>
         ) : mine?.status === 'PENDING' ? (
@@ -91,7 +94,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         </label>
 
         <label className="block">
-          <span className="text-sm font-medium">Description <span className="text-red-500">*</span> <span className="text-xs font-normal text-neutral-500">(min 100 words — {words}/100)</span></span>
+          <span className="text-sm font-medium">Description <span className="text-red-500">*</span> <span className="text-xs font-normal text-neutral-500">{needsFullDesc ? `(min 100 words — ${words}/100)` : `(${words} words)`}</span></span>
           <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={5} maxLength={20000} className={`mt-1 ${inputCls}`} placeholder="Who you are, what you build, your track record…" />
         </label>
 
@@ -134,7 +137,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         </div>
 
         {error ? <div className="text-xs text-red-600">{error}</div> : null}
-        {!canSubmit ? <div className="text-xs text-amber-600">{!name.trim() ? 'Display name is required. ' : ''}{!country ? 'Country is required. ' : ''}{words < MIN_WORDS ? `Description needs at least ${MIN_WORDS} words (${words}/${MIN_WORDS}).` : ''}</div> : null}
+        {!canSubmit ? <div className="text-xs text-amber-600">{!name.trim() ? 'Display name is required. ' : ''}{!country ? 'Country is required. ' : ''}{!desc.trim() ? 'Description is required. ' : needsFullDesc && words < MIN_WORDS ? `Description needs at least ${MIN_WORDS} words (${words}/${MIN_WORDS}).` : ''}</div> : null}
         <button type="submit" disabled={busy} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
           {busy ? 'Submitting…' : mine && mine.status !== 'REJECTED' ? 'Update application' : mine?.status === 'REJECTED' ? 'Re-apply' : 'Apply'}
         </button>
