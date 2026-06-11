@@ -1258,6 +1258,21 @@ export interface FeeHistoryPage {
   offset: number;
   rows: FeeHistoryRow[];
 }
+export interface PendingRevenueSharing {
+  id: string;
+  publicId: string | null;
+  title: string;
+  roundNumber: number | null;
+  categoryName: string | null;
+  submitter: string | null;
+  revenueSharingMd: string | null;
+  hintAddress: string | null;
+}
+export const boardRevenueApi = {
+  // §3.4 — funded proposals awaiting the board's revenue-sharing verification (gates milestone POAs).
+  pending: () => request<PendingRevenueSharing[]>('/admin/proposals/pending-revenue-sharing'),
+  verify: (id: string) => request<unknown>(`/admin/proposals/${id}/verify-revenue-sharing`, { method: 'POST', body: JSON.stringify({}) }),
+};
 export const boardFeeApi = {
   pending: () => request<PendingFee[]>('/admin/proposals/pending-fee'),
   // §16 — paginated history of decided fee reviews (approved + fee-rejected).

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type EntryEligibility, type BoardAction } from '@/lib/api';
+import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type EntryEligibility, type BoardAction } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -21,6 +21,7 @@ import { StopFundingBoardPanel } from './stop-funding-board-panel';
 import { RoundStageControls } from './round-stage-controls';
 import { InternalProposals } from './internal-proposals';
 import { FeeConfirmations } from './fee-confirmations';
+import { RevenueSharingConfirmations } from './revenue-sharing-confirmations';
 import { PledgeConfirmations } from './pledge-confirmations';
 import { BoardPayments } from './board-payments';
 import { PreferencesPanel } from './preferences-panel';
@@ -207,8 +208,8 @@ function ActionsTab() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-neutral-500">
           Board to-dos: reward payouts to review &amp; sign, submission-fee confirmations, pledge
-          confirmations, stop-funding votes, and budget-change settlements. Other multisig signing
-          and hot-wallet ops live in <strong>Treasury</strong>.
+          confirmations, revenue-sharing verification, stop-funding votes, and budget-change
+          settlements. Other multisig signing and hot-wallet ops live in <strong>Treasury</strong>.
         </p>
         <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
           <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
@@ -216,6 +217,7 @@ function ActionsTab() {
         </label>
       </div>
       <BoardActions history={showHistory} filter="rewards" />
+      <RevenueSharingConfirmations />
       <StopFundingBoardPanel />
       <FeeConfirmations history={showHistory} />
       <PledgeConfirmations />
@@ -258,7 +260,7 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
     const poll = async () => {
       const next = { treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0 };
       if (isBoard) {
-        const [a, f, p, dapps, eapps, rem, stop, pl] = await Promise.allSettled([
+        const [a, f, p, dapps, eapps, rem, stop, pl, rev] = await Promise.allSettled([
           treasuryApi.boardActions(),
           boardFeeApi.pending(),
           boardPaymentsApi.pending(),
@@ -267,6 +269,7 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
           removalApi.list(),
           milestonesApi.pendingStopFunding(), // §11 — stop-funding awaiting THIS board member's 1p1v vote
           boardPledgeApi.pending(), // §3 — pledge payments to confirm
+          boardRevenueApi.pending(), // §3.4 — revenue-sharing to verify (gates milestone POAs)
         ]);
         // §15 — multisig sign queue (boardActions) is the Treasury tab; the
         // remaining review/audit items (fees, pledges, payouts, stop-funding)
@@ -282,7 +285,8 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
           (f.status === 'fulfilled' ? f.value.length : 0) +
           (p.status === 'fulfilled' ? p.value.length : 0) +
           (stop.status === 'fulfilled' ? stop.value.count : 0) +
-          (pl.status === 'fulfilled' ? pl.value.length : 0);
+          (pl.status === 'fulfilled' ? pl.value.length : 0) +
+          (rev.status === 'fulfilled' ? rev.value.length : 0);
         next.applications =
           (dapps.status === 'fulfilled' ? dapps.value.filter((x) => !x.myVote).length : 0) +
           (eapps.status === 'fulfilled' ? eapps.value.length : 0) +
