@@ -295,6 +295,21 @@ export class RewardsService {
     return this.listBoardMonths();
   }
 
+  /** §13 — reset board pay (e.g. after a mid-year board change): drop unpaid/unprepared months so
+   *  a fresh amount + month count can be computed for the CURRENT board. Paid months stay (history). */
+  async resetBoardMonths() {
+    const calcs = await this.prisma.rewardCalculation.findMany({
+      where: { kind: 'BOARD_MONTHLY' },
+      include: { entries: { select: { paidAt: true, payoutActionId: true } } },
+    });
+    for (const c of calcs) {
+      if (c.entries.some((e) => e.paidAt || e.payoutActionId)) continue; // keep paid / prepared
+      await this.prisma.rewardEntry.deleteMany({ where: { rewardCalculationId: c.id } });
+      await this.prisma.rewardCalculation.delete({ where: { id: c.id } });
+    }
+    return this.listBoardMonths();
+  }
+
   /** All board-monthly calcs (every period), oldest month first. */
   async listBoardMonths() {
     const calcs = await this.prisma.rewardCalculation.findMany({ where: { kind: 'BOARD_MONTHLY' }, orderBy: { periodKey: 'asc' }, select: { id: true } });
@@ -349,6 +364,9 @@ export class RewardsService {
       poolAda: Number(calc.poolAda) / 1e6,
       payable: this.isPayable(calc.kind, status),
       payout: action ? { actionId: action.id, status: action.status, txHash: action.txHash, paidAt: action.paidAt } : null,
+      // §12 — recipients still owed + ready to pay: unpaid, not linked to any payout, and have a
+      // reward address. Drives "Prepare bulk payout" even after an earlier partial batch went out.
+      pending: calc.entries.filter((e) => !e.paidAt && !e.payoutActionId && Number(e.overrideAda ?? e.amountAda) > 0 && (e.drep?.user.rewardPaymentAddress || e.expert?.user.rewardPaymentAddress)).length,
       computedAt: calc.computedAt,
       entries: calc.entries.map((e) => ({
         id: e.id,
@@ -456,9 +474,11 @@ export class RewardsService {
     const lines = calc.entries
       .map((e) => ({ entryId: e.id, address: e.drep?.user.rewardPaymentAddress ?? e.expert?.user.rewardPaymentAddress ?? null, amountAda: Number(e.overrideAda ?? e.amountAda) / 1e6 }))
       .filter((l) => l.amountAda > 0);
-    const missing = lines.filter((l) => !l.address);
-    if (missing.length) throw new BadRequestException(`${missing.length} recipient(s) have no reward payment address set`);
+    // §12 — pay only recipients who have set a reward address. The rest stay UNPAID + UNLINKED
+    // (their ADA is kept in the treasury); they can be paid in a later batch once they add one.
+    const payable = lines.filter((l) => l.address);
     if (lines.length === 0) throw new BadRequestException('nothing to pay (all entries are paid or zero)');
+    if (payable.length === 0) throw new BadRequestException('no recipient has a reward payment address set yet — ask them to add one in their profile.');
 
     // §12 — default source bucket by stage: filtering rewards come out of the bucket where
     // submission fees were collected (Submission fee), everything else out of Rewards. The
@@ -467,7 +487,7 @@ export class RewardsService {
     const source = sourceBucketId
       ? await this.prisma.treasuryBucket.findUnique({ where: { id: sourceBucketId }, select: { id: true, bech32Address: true, label: true } })
       : await this.buckets.defaultBucketFor(defaultOp);
-    const total = lines.reduce((s, l) => s + l.amountAda, 0);
+    const total = payable.reduce((s, l) => s + l.amountAda, 0);
 
     // Pre-flight funds check on the SELECTED source — so picking an empty address (e.g. the
     // Rewards bucket with 0 ₳) warns up front instead of silently sourcing elsewhere. The board
@@ -487,11 +507,11 @@ export class RewardsService {
         kind: 'REWARD_PAYOUT',
         status: 'PENDING_SIGS',
         amountAda: toLovelace(total),
-        description: `Reward payout · ${calc.kind} · ${lines.length} recipients`,
+        description: `Reward payout · ${calc.kind} · ${payable.length} recipients`,
         sourceBucketId: source?.id ?? null,
       },
     });
-    await this.prisma.rewardEntry.updateMany({ where: { id: { in: lines.map((l) => l.entryId) } }, data: { payoutActionId: action.id } });
-    return { actionId: action.id, recipients: lines.length, totalAda: total };
+    await this.prisma.rewardEntry.updateMany({ where: { id: { in: payable.map((l) => l.entryId) } }, data: { payoutActionId: action.id } });
+    return { actionId: action.id, recipients: payable.length, totalAda: total, skipped: lines.length - payable.length };
   }
 }

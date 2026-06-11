@@ -60,6 +60,11 @@ export class RewardsController {
     return this.rewards.listBoardMonths();
   }
 
+  @Post('board-monthly/reset')
+  resetBoardMonths() {
+    return this.rewards.resetBoardMonths();
+  }
+
   @Patch('entry/:id')
   setOverride(@Param('id') id: string, @Body() dto: OverrideDto) {
     return this.rewards.setOverride(id, dto.ada ?? null);

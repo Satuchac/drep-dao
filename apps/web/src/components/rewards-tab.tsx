@@ -103,7 +103,7 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
   useEffect(() => { setSrc(defaultBucketId); }, [defaultBucketId]);
   const pay = async () => {
     setBusy(true); setMsg(null);
-    try { const r = await rewardsApi.preparePayout(calc.id, src || undefined); setMsg(`Queued ${r.recipients} payouts (${r.totalAda.toLocaleString()} ₳) — review & sign it under Actions.`); onChange(); }
+    try { const r = await rewardsApi.preparePayout(calc.id, src || undefined); setMsg(`Queued ${r.recipients} payout${r.recipients === 1 ? '' : 's'} (${r.totalAda.toLocaleString()} ₳) — review & sign under Actions.${r.skipped > 0 ? ` ${r.skipped} skipped — no payment address set; pay them later once they add one.` : ''}`); onChange(); }
     catch (e) {
       const m = e instanceof Error ? e.message : 'failed';
       // Insufficient-funds gets a styled warning dialog; other errors stay inline.
@@ -147,22 +147,11 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
             {busy ? '…' : '↻ Recompute'}
           </button>
         ) : null}
-        {calc.payout ? (
-          calc.payout.status === 'CONFIRMED' || calc.payout.status === 'BROADCASTED' ? (
-            <span className="text-xs text-emerald-600">✓ paid{calc.payout.paidAt ? ` on ${new Date(calc.payout.paidAt).toLocaleDateString()}` : ' on-chain'}</span>
-          ) : (
-            <span className="flex items-center gap-2">
-              <span className="text-xs text-amber-600">⏳ payout prepared — review &amp; sign under Actions</span>
-              <button onClick={() => setConfirmingCancel(true)} disabled={busy} className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-800 dark:text-red-400">
-                {busy ? '…' : 'Cancel'}
-              </button>
-            </span>
-          )
-        ) : allPaid ? (
-          <span className="text-xs text-emerald-600">✓ all paid</span>
-        ) : !calc.payable ? (
+        {!calc.payable ? (
           <span className="text-xs text-neutral-400">payable once the stage ends</span>
-        ) : (
+        ) : calc.pending > 0 ? (
+          // Recipients with a reward address are still owed → offer the payout (covers the first
+          // batch AND paying anyone who only added their address after an earlier partial batch).
           <div className="flex items-center gap-2">
             {buckets.length > 0 ? (
               <label className="flex items-center gap-1 text-xs text-neutral-500">
@@ -185,6 +174,21 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
               {busy ? 'Preparing…' : 'Prepare bulk payout'}
             </button>
           </div>
+        ) : calc.payout ? (
+          calc.payout.status === 'CONFIRMED' || calc.payout.status === 'BROADCASTED' ? (
+            <span className="text-xs text-emerald-600">✓ paid{calc.payout.paidAt ? ` on ${new Date(calc.payout.paidAt).toLocaleDateString()}` : ' on-chain'}</span>
+          ) : (
+            <span className="flex items-center gap-2">
+              <span className="text-xs text-amber-600">⏳ payout prepared — review &amp; sign under Actions</span>
+              <button onClick={() => setConfirmingCancel(true)} disabled={busy} className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-800 dark:text-red-400">
+                {busy ? '…' : 'Cancel'}
+              </button>
+            </span>
+          )
+        ) : allPaid ? (
+          <span className="text-xs text-emerald-600">✓ all paid</span>
+        ) : (
+          <span className="text-xs text-amber-600">waiting on reward addresses</span>
         )}
         </div>
       </div>
@@ -231,15 +235,19 @@ function EntryRow({ e, showPower = false, onChange }: { e: RewardCalcView['entri
   };
   return (
     <tr className="border-t border-neutral-100 dark:border-neutral-900">
-      <td className="py-1">{e.recipient.name} <span className="text-neutral-400">{e.recipient.type}</span>{!e.recipient.address ? <span className="text-amber-600"> · no reward address</span> : null}</td>
+      <td className="py-1">{e.recipient.name} <span className="text-neutral-400">{e.recipient.type}</span></td>
       <td className="py-1 tabular-nums text-neutral-600 dark:text-neutral-300">{e.units ?? '—'}</td>
       {showPower ? <td className="py-1 tabular-nums text-neutral-500">{e.power != null ? e.power.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</td> : null}
       <td className="py-1 tabular-nums text-neutral-500">{e.computedAda.toLocaleString()} ₳</td>
       <td className="py-1">
-        {e.paid ? <span className="text-emerald-600">paid</span> : (
+        {e.paid ? (
+          <span className="text-emerald-600">paid</span>
+        ) : !e.recipient.address ? (
+          <span className="text-red-600">not paid — payment address not set</span>
+        ) : (
           <input value={val} onChange={(ev) => setVal(ev.target.value)} onBlur={save} className={inputCls} />
         )}
-        {e.overridden && !e.paid ? <span className="ml-1 text-[10px] text-amber-600">edited</span> : null}
+        {e.overridden && !e.paid && e.recipient.address ? <span className="ml-1 text-[10px] text-amber-600">edited</span> : null}
       </td>
       <td></td>
     </tr>
@@ -293,20 +301,30 @@ function Setup() {
     rewardsApi.sourceBuckets().then((r) => setBuckets(r.buckets)).catch(() => setBuckets([]));
     loadList();
   }, [loadList]);
+  const [confirmingReset, setConfirmingReset] = useState(false);
   const save = async () => { setSaved(false); setMsg(null); try { await rewardsApi.setBoardYearly(Number(yearly) || 0); setSaved(true); } catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } };
   const compute = async () => {
     setBusy(true); setMsg(null);
     try { const r = await rewardsApi.computeBoardMonths(Number(months) || 12); setList(r); setMsg(`Computed ${r.length} month${r.length === 1 ? '' : 's'} of board pay.`); }
     catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
   };
+  const reset = async () => {
+    setConfirmingReset(false); setBusy(true); setMsg(null);
+    try { const r = await rewardsApi.resetBoardMonths(); setList(r); setMsg('Reset — unpaid months cleared. Set the amount + months for the current board and compute again.'); }
+    catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
+  };
 
-  // §13 — monthly cadence: after a payout, the next month opens 30 days later (soft — can send sooner).
   const items = list ?? [];
+  const seqd = items.map((c, i) => ({ c, seq: i + 1 })); // global numbering across paid + unpaid
+  const isPaid = (c: RewardCalcView) => !!c.payout && (c.payout.status === 'CONFIRMED' || c.payout.status === 'BROADCASTED');
+  const active = seqd.filter(({ c }) => !isPaid(c));
+  const history = seqd.filter(({ c }) => isPaid(c));
+  // §13 — monthly cadence: after a payout, the next month opens 30 days later (soft — can send sooner).
   const paidTimes = items.filter((c) => c.payout?.paidAt).map((c) => new Date(c.payout!.paidAt!).getTime());
   const lastPaidAt = paidTimes.length ? Math.max(...paidTimes) : null;
   const nextPayableAt = lastPaidAt != null ? lastPaidAt + 30 * DAY_MS : null;
-  const nextUnpaidIdx = items.findIndex((c) => !c.payout);
   const daysLeft = nextPayableAt != null ? Math.ceil((nextPayableAt - Date.now()) / DAY_MS) : 0;
+  const missingAddr = active.some(({ c }) => c.entries.some((e) => !e.recipient.address && !e.paid));
 
   return (
     <div className="space-y-4">
@@ -323,9 +341,10 @@ function Setup() {
         <div>
           <label className="text-sm font-medium">Months to compute</label>
           <p className="text-xs text-neutral-500">Generates a board-pay calc per month (current month first), each payable separately.</p>
-          <div className="mt-1 flex items-center gap-2">
+          <div className="mt-1 flex flex-wrap items-center gap-2">
             <input value={months} onChange={(e) => setMonths(e.target.value)} className="w-20 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" />
             <button onClick={compute} disabled={busy} className="rounded border border-neutral-300 px-2.5 py-1 text-sm hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700">{busy ? 'Computing…' : 'Compute board pay'}</button>
+            <button onClick={() => setConfirmingReset(true)} disabled={busy} className="rounded border border-red-300 px-2.5 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400" title="Clear unpaid months and start over for the current board">Reset for new board</button>
           </div>
         </div>
         {msg ? <div className="text-xs text-neutral-600 dark:text-neutral-400">{msg}</div> : null}
@@ -333,10 +352,16 @@ function Setup() {
 
       <p className="text-xs text-neutral-400">One payout per month, sourced from Rewards (or another address you pick). After a payout, the next month opens 30 days later — you can still send it sooner if needed.</p>
 
+      {missingAddr ? (
+        <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+          ⚠ Some board members haven&apos;t set a reward payment address in their profile. They&apos;ll be skipped when you pay (their ADA stays in the treasury) and can be paid later once they add one.
+        </div>
+      ) : null}
+
       <div className="space-y-3">
-        {items.map((c, i) => (
+        {active.map(({ c, seq }, idx) => (
           <div key={c.id} className="space-y-1">
-            {i === nextUnpaidIdx && nextPayableAt != null ? (
+            {idx === 0 && nextPayableAt != null ? (
               daysLeft <= 0 ? (
                 <div className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
                   ✓ 30 days have passed since the last board payout — this month is ready to send.
@@ -347,11 +372,30 @@ function Setup() {
                 </div>
               )
             ) : null}
-            <CalcCard calc={c} buckets={buckets} onChange={loadList} seq={i + 1} />
+            <CalcCard calc={c} buckets={buckets} onChange={loadList} seq={seq} />
           </div>
         ))}
         {items.length === 0 ? <p className="text-sm text-neutral-500">No board pay computed yet — set the yearly amount, then Compute board pay.</p> : null}
+        {items.length > 0 && active.length === 0 ? <p className="text-sm text-neutral-500">All computed months have been paid — see history below.</p> : null}
       </div>
+
+      {history.length > 0 ? (
+        <div className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+          <div className="text-sm font-medium text-neutral-500">Paid history ({history.length})</div>
+          {history.map(({ c, seq }) => <CalcCard key={c.id} calc={c} buckets={buckets} onChange={loadList} seq={seq} />)}
+        </div>
+      ) : null}
+
+      <ConfirmDialog
+        open={confirmingReset}
+        title="Reset board pay?"
+        message="Clears all unpaid (and not-yet-signed) board-pay months so you can set a new amount and month count for the current board. Already-paid months are kept in history."
+        confirmLabel="Reset"
+        cancelLabel="Keep"
+        tone="danger"
+        onCancel={() => setConfirmingReset(false)}
+        onConfirm={reset}
+      />
     </div>
   );
 }

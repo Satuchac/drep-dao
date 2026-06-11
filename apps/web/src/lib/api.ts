@@ -1487,6 +1487,7 @@ export interface RewardCalcView {
   periodKey: string | null;
   poolAda: number;
   payable: boolean;
+  pending: number; // recipients owed + ready to pay (unpaid, unlinked, with a reward address)
   payout: { actionId: string; status: string; txHash: string | null; paidAt: string | null } | null;
   computedAt: string;
   entries: RewardEntryView[];
@@ -1518,8 +1519,9 @@ export const rewardsApi = {
   computeBoardMonthly: () => request<RewardCalcView>('/admin/rewards/board-monthly/compute', { method: 'POST', body: JSON.stringify({}) }),
   computeBoardMonths: (months: number) => request<RewardCalcView[]>('/admin/rewards/board-monthly/months', { method: 'POST', body: JSON.stringify({ months }) }),
   boardMonths: () => request<RewardCalcView[]>('/admin/rewards/board-monthly'),
+  resetBoardMonths: () => request<RewardCalcView[]>('/admin/rewards/board-monthly/reset', { method: 'POST', body: JSON.stringify({}) }),
   setOverride: (entryId: string, ada: number | null) => request<{ ok: boolean }>(`/admin/rewards/entry/${entryId}`, { method: 'PATCH', body: JSON.stringify({ ada }) }),
-  preparePayout: (calcId: string, sourceBucketId?: string) => request<{ actionId: string; recipients: number; totalAda: number }>(`/admin/rewards/calc/${calcId}/prepare-payout`, { method: 'POST', body: JSON.stringify({ sourceBucketId }) }),
+  preparePayout: (calcId: string, sourceBucketId?: string) => request<{ actionId: string; recipients: number; totalAda: number; skipped: number }>(`/admin/rewards/calc/${calcId}/prepare-payout`, { method: 'POST', body: JSON.stringify({ sourceBucketId }) }),
   listExpertRewards: (roundId: string) => request<ExpertRewardRow[]>(`/admin/rewards/round/${roundId}/experts`),
   setExpertReward: (roundId: string, expertId: string, dto: Partial<Omit<ExpertRewardRow, 'expertId' | 'name'>>) =>
     request<{ ok: boolean }>(`/admin/rewards/round/${roundId}/expert/${expertId}`, { method: 'PUT', body: JSON.stringify(dto) }),
