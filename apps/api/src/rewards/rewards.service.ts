@@ -264,14 +264,29 @@ export class RewardsService {
   async computeBoardMonths(months: number) {
     const n = Math.max(1, Math.min(60, Math.floor(months || 12)));
     const now = new Date();
+    const keys: string[] = [];
     for (let i = 0; i < n; i++) {
       const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1));
-      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      keys.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`);
+    }
+    // Drop months OUTSIDE the requested window that aren't paid/prepared — so asking for 3 leaves
+    // 3, not the 12 from a previous run. Paid or prepared months are kept (immutable).
+    const extras = await this.prisma.rewardCalculation.findMany({
+      where: { kind: 'BOARD_MONTHLY', periodKey: { notIn: keys } },
+      include: { entries: { select: { paidAt: true, payoutActionId: true } } },
+    });
+    for (const c of extras) {
+      if (c.entries.some((e) => e.paidAt || e.payoutActionId)) continue;
+      await this.prisma.rewardEntry.deleteMany({ where: { rewardCalculationId: c.id } });
+      await this.prisma.rewardCalculation.delete({ where: { id: c.id } });
+    }
+    // (Re)compute each month in the window, skipping any already paid.
+    for (const key of keys) {
       const paid = await this.prisma.rewardCalculation.findFirst({
         where: { kind: 'BOARD_MONTHLY', periodKey: key, entries: { some: { paidAt: { not: null } } } },
         select: { id: true },
       });
-      if (paid) continue; // already paid → immutable
+      if (paid) continue;
       await this.computeBoardMonthly(key);
     }
     return this.listBoardMonths();

@@ -84,7 +84,7 @@ function Overview({ roundId }: { roundId: string }) {
   );
 }
 
-function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: RewardSourceBucket[]; onChange: () => void }) {
+function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buckets: RewardSourceBucket[]; onChange: () => void; seq?: number }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
@@ -138,7 +138,7 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">
           {calc.periodKey
-            ? `Board pay · ${monthLabel(calc.periodKey)}`
+            ? `${seq != null ? `${seq}. ` : ''}Board pay · ${monthLabel(calc.periodKey)}`
             : `${KIND_LABEL[calc.kind] ?? calc.kind} · pool ${calc.poolAda.toLocaleString()} ₳`}
         </h3>
         <div className="flex items-center gap-2">
@@ -286,13 +286,14 @@ function Setup() {
   const [buckets, setBuckets] = useState<RewardSourceBucket[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
   const loadList = useCallback(() => { rewardsApi.boardMonths().then(setList).catch(() => setList([])); }, []);
   useEffect(() => {
     rewardsApi.getBoardYearly().then((r) => setYearly(String(r.yearlyAda))).catch(() => undefined);
     rewardsApi.sourceBuckets().then((r) => setBuckets(r.buckets)).catch(() => setBuckets([]));
     loadList();
   }, [loadList]);
-  const save = async () => { setMsg(null); try { await rewardsApi.setBoardYearly(Number(yearly) || 0); setMsg('Saved.'); } catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } };
+  const save = async () => { setSaved(false); setMsg(null); try { await rewardsApi.setBoardYearly(Number(yearly) || 0); setSaved(true); } catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } };
   const compute = async () => {
     setBusy(true); setMsg(null);
     try { const r = await rewardsApi.computeBoardMonths(Number(months) || 12); setList(r); setMsg(`Computed ${r.length} month${r.length === 1 ? '' : 's'} of board pay.`); }
@@ -313,9 +314,10 @@ function Setup() {
         <div>
           <label className="text-sm font-medium">Yearly board reward (₳)</label>
           <p className="text-xs text-neutral-500">Total paid to the whole board per year. Monthly per-member = this ÷ 12 ÷ board seats.</p>
-          <div className="mt-1 flex gap-2">
-            <input value={yearly} onChange={(e) => setYearly(e.target.value)} className="w-40 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" />
-            <button onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-sm text-white hover:bg-emerald-700">Save</button>
+          <div className="mt-1 flex items-center gap-2">
+            <input value={yearly} onChange={(e) => { setYearly(e.target.value); setSaved(false); }} className="w-40 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" />
+            <button onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-sm text-white hover:bg-emerald-700">Save new reward budget</button>
+            {saved ? <span className="text-xs font-medium text-emerald-600">Saved ✓</span> : null}
           </div>
         </div>
         <div>
@@ -345,7 +347,7 @@ function Setup() {
                 </div>
               )
             ) : null}
-            <CalcCard calc={c} buckets={buckets} onChange={loadList} />
+            <CalcCard calc={c} buckets={buckets} onChange={loadList} seq={i + 1} />
           </div>
         ))}
         {items.length === 0 ? <p className="text-sm text-neutral-500">No board pay computed yet — set the yearly amount, then Compute board pay.</p> : null}
