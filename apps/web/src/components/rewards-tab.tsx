@@ -341,7 +341,9 @@ function Setup() {
 
   const items = list ?? [];
   const seqd = items.map((c, i) => ({ c, seq: i + 1 })); // global numbering across paid + unpaid
-  const isPaid = (c: RewardCalcView) => !!c.payout && (c.payout.status === 'CONFIRMED' || c.payout.status === 'BROADCASTED');
+  // History = fully done (paid on-chain AND nobody still owed). A month with a pending recipient
+  // (e.g. paid 4, 1 added their address later) stays in the active list so it can be topped up.
+  const isPaid = (c: RewardCalcView) => !!c.payout && (c.payout.status === 'CONFIRMED' || c.payout.status === 'BROADCASTED') && c.pending === 0;
   const active = seqd.filter(({ c }) => !isPaid(c));
   const history = seqd.filter(({ c }) => isPaid(c));
   // §13 — monthly cadence: after a payout, the next month opens 30 days later (soft — can send sooner).
@@ -349,6 +351,9 @@ function Setup() {
   const lastPaidAt = paidTimes.length ? Math.max(...paidTimes) : null;
   const nextPayableAt = lastPaidAt != null ? lastPaidAt + 30 * DAY_MS : null;
   const daysLeft = nextPayableAt != null ? Math.ceil((nextPayableAt - Date.now()) / DAY_MS) : 0;
+  // The cadence reminder belongs on the first month that hasn't been paid at all — not on a
+  // partially-paid month (which just needs a same-month top-up via Prepare bulk payout).
+  const firstFreshIdx = active.findIndex(({ c }) => !c.payout);
   const missingAddr = active.some(({ c }) => c.entries.some((e) => !e.recipient.address && !e.paid));
 
   return (
@@ -386,7 +391,7 @@ function Setup() {
       <div className="space-y-3">
         {active.map(({ c, seq }, idx) => (
           <div key={c.id} className="space-y-1">
-            {idx === 0 && nextPayableAt != null ? (
+            {idx === firstFreshIdx && nextPayableAt != null ? (
               daysLeft <= 0 ? (
                 <div className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
                   ✓ 30 days have passed since the last board payout — this month is ready to send.
