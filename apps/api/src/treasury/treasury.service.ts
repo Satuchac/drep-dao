@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { boardActionMessage } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
@@ -34,7 +34,14 @@ const HOT_WALLET_TOPUP_ADA = 500;
 const HOT_WALLET_TOPUP_MAX_ADA = 1000;
 
 @Injectable()
-export class TreasuryService {
+export class TreasuryService implements OnModuleInit {
+  onModuleInit() {
+    if (process.env.ROUNDS_SCHEDULER_DISABLED === '1') return; // skip in tests / CLI
+    // Pre-warm the on-chain transactions cache a few seconds after boot so the first
+    // Treasury → Transactions load is instant (the cold db-sync history query is slow).
+    setTimeout(() => { void this.treasuryTransactions().catch(() => undefined); }, 8000).unref?.();
+  }
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,

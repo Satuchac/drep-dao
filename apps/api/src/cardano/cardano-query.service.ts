@@ -39,6 +39,7 @@ export class CardanoQueryService {
   // Treasury tx history is a heavier scan; cache per address-set so repeat opens
   // of the Transactions tab are instant (on-chain history changes slowly).
   private readonly addrTxCache = new Map<string, { value: AddressTx[]; expiresAt: number }>();
+  private readonly addrTxRefreshing = new Set<string>(); // keys with a background refresh in flight
   private readonly ADDR_TX_TTL_MS = 30 * 1000;
   // Short balance cache so the Actions/Treasury polls (and concurrent badge + list fetches)
   // don't each pay a fresh remote db-sync round-trip; balances change slowly.
@@ -443,7 +444,20 @@ export class CardanoQueryService {
     if (addresses.length === 0) return [];
     const key = [...addresses].sort().join(',') + ':' + limit;
     const cached = this.addrTxCache.get(key);
-    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    if (cached) {
+      // Stale-while-revalidate: serve the cached value immediately and refresh in the background
+      // if it's stale. The remote db-sync query can be slow; never block the request on it (that
+      // surfaced as "Cannot reach the API" once the request passed the frontend's 10s timeout).
+      if (cached.expiresAt <= Date.now() && !this.addrTxRefreshing.has(key)) {
+        this.addrTxRefreshing.add(key);
+        void this.fetchAddressTransactions(addresses, limit)
+          .then((v) => this.addrTxCache.set(key, { value: v, expiresAt: Date.now() + this.ADDR_TX_TTL_MS }))
+          .catch(() => { /* keep serving the last good value */ })
+          .finally(() => this.addrTxRefreshing.delete(key));
+      }
+      return cached.value;
+    }
+    // Cold (nothing cached yet, e.g. just after a restart): fetch once, then it's always warm.
     const result = await this.fetchAddressTransactions(addresses, limit);
     this.addrTxCache.set(key, { value: result, expiresAt: Date.now() + this.ADDR_TX_TTL_MS });
     return result;
