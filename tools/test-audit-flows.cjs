@@ -204,24 +204,23 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     const shifted = Math.round((filt.startsAt.getTime() - (now + 86_400_000)) / 86_400_000);
     ok('§6 extending the current stage auto-shifts later stages by the same delta', shifted === 2, `shifted ${shifted}d`);
   } finally {
-    // cleanup (FK-ordered)
+    // cleanup (FK-ordered) — covers BOTH throwaway rounds (quick-poll votes/winner reference proposals).
     const pids = cleanupProposalIds;
-    await db.quickPollVote.deleteMany({ where: { quickPoll: { roundId: { in: [round.id] } } } }).catch(() => undefined);
-    await db.quickPoll.deleteMany({ where: { OR: [{ roundId: round.id }, { category: { name: 'C2' } }] } }).catch(() => undefined);
-    await db.vote.deleteMany({ where: { proposalId: { in: pids } } });
-    await db.voteSnapshotEntry.deleteMany({ where: { snapshot: { proposalId: { in: pids } } } });
-    await db.voteSnapshot.deleteMany({ where: { proposalId: { in: pids } } });
-    await db.milestone.deleteMany({ where: { proposalId: { in: pids } } });
+    const rids = (await db.round.findMany({ where: { name: { in: ['__audit_flows__', '__audit_flows_2__'] } }, select: { id: true } })).map((r) => r.id);
+    await db.quickPollVote.deleteMany({ where: { quickPoll: { roundId: { in: rids } } } }).catch(() => undefined);
+    await db.quickPoll.deleteMany({ where: { roundId: { in: rids } } }).catch(() => undefined);
+    await db.vote.deleteMany({ where: { proposalId: { in: pids } } }).catch(() => undefined);
+    await db.voteSnapshotEntry.deleteMany({ where: { snapshot: { proposalId: { in: pids } } } }).catch(() => undefined);
+    await db.voteSnapshot.deleteMany({ where: { proposalId: { in: pids } } }).catch(() => undefined);
+    await db.milestone.deleteMany({ where: { proposalId: { in: pids } } }).catch(() => undefined);
     await db.anchor.deleteMany({ where: { proposalId: { in: pids } } }).catch(() => undefined);
-    await db.proposal.deleteMany({ where: { id: { in: pids } } });
-    await db.roundSchedule.deleteMany({ where: { roundId: round.id } });
-    await db.roundCategory.deleteMany({ where: { roundId: { in: [round.id] } } });
-    const r2 = await db.round.findFirst({ where: { name: '__audit_flows_2__' } });
-    if (r2) { await db.roundCategory.deleteMany({ where: { roundId: r2.id } }); await db.round.delete({ where: { id: r2.id } }); }
-    await db.round.delete({ where: { id: round.id } }).catch(() => undefined);
-    await db.notification.deleteMany({ where: { userId: user.id } });
-    await db.drep.deleteMany({ where: { id: { in: [d1.id, d2.id] } } });
-    await db.appUser.deleteMany({ where: { id: { in: [user.id, d1.userId, d2.userId] } } });
+    await db.proposal.deleteMany({ where: { id: { in: pids } } }).catch(() => undefined);
+    await db.roundSchedule.deleteMany({ where: { roundId: { in: rids } } }).catch(() => undefined);
+    await db.roundCategory.deleteMany({ where: { roundId: { in: rids } } }).catch(() => undefined);
+    await db.round.deleteMany({ where: { id: { in: rids } } }).catch(() => undefined);
+    await db.notification.deleteMany({ where: { userId: user.id } }).catch(() => undefined);
+    await db.drep.deleteMany({ where: { id: { in: [d1.id, d2.id] } } }).catch(() => undefined);
+    await db.appUser.deleteMany({ where: { id: { in: [user.id, d1.userId, d2.userId] } } }).catch(() => undefined);
   }
 
   console.log(fail ? `\n${fail} failure(s)` : '\nall good');

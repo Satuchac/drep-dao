@@ -32,13 +32,14 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
 
 (async () => {
 
-  // §2.1 — proposal creation now requires an APPROVED submitter role; grant it to the test user.
-  const __approveSubmitter = async (userId) => db.submitterApplication.upsert({
+  // §2.1 — proposal creation now requires an APPROVED submitter role; grant it to every test user.
+  const { prisma: __sdb } = require(root + '/packages/db/dist/index.js');
+  const __approveSubmitter = async (userId) => __sdb.submitterApplication.upsert({
     where: { userId },
     update: { status: 'APPROVED' },
     create: { userId, status: 'APPROVED', displayName: 'Test Submitter', description: 'test', socialLinks: [], country: 'Testland' },
   });
-  for (const au of await db.appUser.findMany({ select: { id: true } })) await __approveSubmitter(au.id);
+  for (const au of await __sdb.appUser.findMany({ select: { id: true } })) await __approveSubmitter(au.id);
   const prisma = new PrismaService(config);
   const cardano = new CardanoQueryService(config);
   const anchor = new AnchorService(config, prisma, cardano);
@@ -105,7 +106,7 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     // Approve the fee → ACTIVE + a structured public id + an on-chain acceptance anchor (fee paid + tx).
     const approved = await proposals.reviewFee(good.id, { decision: 'APPROVE', feedback: 'looks good' });
     ok('approve → ACTIVE + structured publicId', approved.status === 'ACTIVE' && /^R\d+-P\d+$/.test(approved.publicId || ''), `${approved.status}/${approved.publicId}`);
-    const feeAnchor = await db.anchor.findFirst({ where: { proposalId: good.id, kind: 'submission' } });
+    const feeAnchor = await db.anchor.findFirst({ where: { proposalId: good.id, kind: 'submission' }, orderBy: { createdAt: 'desc' } });
     ok('acceptance anchored with proposalId+submitter+fee tx', !!feeAnchor && feeAnchor.preimage?.proposalId === approved.publicId && feeAnchor.preimage?.fee?.paid === true && feeAnchor.preimage?.fee?.txHash === 'txFIXED' && !!feeAnchor.preimage?.submitter, JSON.stringify(feeAnchor?.preimage));
 
     // EditSection (ACTIVE/Filtering): all descriptive fields stay editable + persist; amount stays locked.
@@ -114,17 +115,22 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     await throws('amount still locked while ACTIVE', () => proposals.updateDraft(u.id, good.id, { requestedAmountAda: 70000 }), /locked after submission/);
 
     // §12 budget change on an ACTIVE proposal (OSS 1%, current fee 500 for 50,000 ₳).
-    const increased = await proposals.requestBudgetChange(u.id, good.id, { requestedAmountAda: 80000, milestones: [{ description: 'm', amountAda: 80000 }] });
-    ok('budget increase applies + stays ACTIVE', increased.status === 'ACTIVE' && increased.requestedAmountAda === 80000, `${increased.status}/${increased.requestedAmountAda}`);
+    const incReq = await proposals.requestBudgetChange(u.id, good.id, { requestedAmountAda: 80000, milestones: [{ description: 'm', amountAda: 80000 }] });
+    ok('budget increase creates a PENDING board request (§12)', incReq.status === 'PENDING', incReq.status);
+    await proposals.approveBudgetChange(u.id, incReq.id);
+    const increased = await proposals.get(good.id, u.id);
+    ok('approved budget increase applies + stays ACTIVE', increased.status === 'ACTIVE' && increased.requestedAmountAda === 80000, `${increased.status}/${increased.requestedAmountAda}`);
     let pays = await proposals.listPayments();
     const topup = pays.find((x) => x.proposalId === good.id && x.kind === 'TOPUP');
     ok('increase → TOPUP owed = fee delta (800−500)', !!topup && topup.amountAda === 300, JSON.stringify(topup));
-    ok('settlement carries old→new fee + payout address', !!topup && topup.prevFeeAda === 500 && topup.newFeeAda === 800 && topup.payoutAddress === 'addr_test1_PAYOUT', JSON.stringify({ prev: topup?.prevFeeAda, next: topup?.newFeeAda, addr: topup?.payoutAddress }));
+    ok('settlement carries old→new fee + payout address', !!topup && topup.prevFeeAda === 500 && topup.newFeeAda === 800 && topup.payoutAddress === 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', JSON.stringify({ prev: topup?.prevFeeAda, next: topup?.newFeeAda, addr: topup?.payoutAddress }));
     await proposals.settlePayment(u.id, topup.id, 'txTOPUP');
     pays = await proposals.listPayments();
     ok('settled top-up leaves the pending list', !pays.find((x) => x.id === topup.id));
-    const decreased = await proposals.requestBudgetChange(u.id, good.id, { requestedAmountAda: 30000, milestones: [{ description: 'm', amountAda: 30000 }] });
-    ok('budget decrease applies', decreased.requestedAmountAda === 30000, String(decreased.requestedAmountAda));
+    const decReq = await proposals.requestBudgetChange(u.id, good.id, { requestedAmountAda: 30000, milestones: [{ description: 'm', amountAda: 30000 }] });
+    await proposals.approveBudgetChange(u.id, decReq.id);
+    const decreased = await proposals.get(good.id, u.id);
+    ok('approved budget decrease applies', decreased.requestedAmountAda === 30000, String(decreased.requestedAmountAda));
     const refund = (await proposals.listPayments()).find((x) => x.proposalId === good.id && x.kind === 'REFUND');
     ok('decrease → REFUND owed = fee delta (800−300)', !!refund && refund.amountAda === 500, JSON.stringify(refund));
 
@@ -145,6 +151,7 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     for (const rid of roundIds) {
       const props = await db.proposal.findMany({ where: { roundId: rid }, select: { id: true } });
       await db.feeAdjustment.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
+      await db.budgetChangeRequest.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
       await db.proposalVersion.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
       await db.anchor.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });
       await db.milestone.deleteMany({ where: { proposalId: { in: props.map((p) => p.id) } } });

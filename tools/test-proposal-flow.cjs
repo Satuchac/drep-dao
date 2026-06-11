@@ -37,14 +37,16 @@ let fail = 0;
 const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${d}` : ''}`); if (!c) fail++; };
 
 (async () => {
+  const __asJury = (ids) => ids.map((id) => ({ kind: 'DRep', id }));
 
-  // §2.1 — proposal creation now requires an APPROVED submitter role; grant it to the test user.
-  const __approveSubmitter = async (userId) => db.submitterApplication.upsert({
+  // §2.1 — proposal creation now requires an APPROVED submitter role; grant it to every test user.
+  const { prisma: __sdb } = require(root + '/packages/db/dist/index.js');
+  const __approveSubmitter = async (userId) => __sdb.submitterApplication.upsert({
     where: { userId },
     update: { status: 'APPROVED' },
     create: { userId, status: 'APPROVED', displayName: 'Test Submitter', description: 'test', socialLinks: [], country: 'Testland' },
   });
-  for (const au of await db.appUser.findMany({ select: { id: true } })) await __approveSubmitter(au.id);
+  for (const au of await __sdb.appUser.findMany({ select: { id: true } })) await __approveSubmitter(au.id);
   const prisma = new PrismaService(config);
   const cardano = new CardanoQueryService(config);
   const users = new UsersService(prisma, cardano);
@@ -229,7 +231,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   // service helper). Pick the first three eligible board DReps (excludes the submitter,
   // who is Carol — not a DRep — so any 3 of 5 board are valid).
   const milestoneJury = boardDreps.slice(0, 3).map((d) => d.id);
-  await milestones.assignReviewers(draft.id, milestoneJury, boardDreps[0].user.id);
+  await milestones.assignReviewers(draft.id, __asJury(milestoneJury), boardDreps[0].user.id);
   for (const m of await milestones.forProposal(draft.id)) {
     await milestones.submitPoa(carol.id, m.id, `Delivered milestone ${m.idx + 1}`);
     const massign = await prisma.milestoneAssignment.findMany({ where: { milestoneId: m.id, releasedAt: null } });

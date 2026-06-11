@@ -37,13 +37,14 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
 
 (async () => {
 
-  // §2.1 — proposal creation now requires an APPROVED submitter role; grant it to the test user.
-  const __approveSubmitter = async (userId) => db.submitterApplication.upsert({
+  // §2.1 — proposal creation now requires an APPROVED submitter role; grant it to every test user.
+  const { prisma: __sdb } = require(root + '/packages/db/dist/index.js');
+  const __approveSubmitter = async (userId) => __sdb.submitterApplication.upsert({
     where: { userId },
     update: { status: 'APPROVED' },
     create: { userId, status: 'APPROVED', displayName: 'Test Submitter', description: 'test', socialLinks: [], country: 'Testland' },
   });
-  for (const au of await db.appUser.findMany({ select: { id: true } })) await __approveSubmitter(au.id);
+  for (const au of await __sdb.appUser.findMany({ select: { id: true } })) await __approveSubmitter(au.id);
   const prisma = new PrismaService(config);
   const cardano = new CardanoQueryService(config);
   const users = new UsersService(prisma, cardano);
@@ -135,9 +136,10 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const tasksDuringSubmission = await Promise.all(boardDreps.map((d) => filtering.votingTasksCount(d.user.id)));
   ok('no DRep gets a vote-notification during SUBMISSION', tasksDuringSubmission.every((t) => t.filtering === 0));
 
-  // myAssignments should also hide the row during SUBMISSION (panel self-hides).
+  // §3 — pre-assignments are VISIBLE during SUBMISSION with a QUEUED badge (voting still
+  // closed; votingTasksCount above stays 0, so no notification fires).
   const myAssignDuringSub = await filtering.myAssignments(aReviewerUid);
-  ok('myAssignments hides during SUBMISSION (panel collapses)', myAssignDuringSub.length === 0);
+  ok('myAssignments shows the pre-assignment as QUEUED during SUBMISSION', myAssignDuringSub.length >= 1 && myAssignDuringSub.every((a) => a.queued === true), JSON.stringify(myAssignDuringSub.map((a) => a.queued)));
 
   console.log('\n=== Round moves to FILTERING: unpaid stragglers auto-rejected, vote opens ===');
   // §5.1 — at most one round in FILTERING/DV across the platform. Temporarily stash

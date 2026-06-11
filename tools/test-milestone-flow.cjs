@@ -39,14 +39,16 @@ let fail = 0;
 const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${d}` : ''}`); if (!c) fail++; };
 
 (async () => {
+  const __asJury = (ids) => ids.map((id) => ({ kind: 'DRep', id }));
 
-  // §2.1 — proposal creation now requires an APPROVED submitter role; grant it to the test user.
-  const __approveSubmitter = async (userId) => db.submitterApplication.upsert({
+  // §2.1 — proposal creation now requires an APPROVED submitter role; grant it to every test user.
+  const { prisma: __sdb } = require(root + '/packages/db/dist/index.js');
+  const __approveSubmitter = async (userId) => __sdb.submitterApplication.upsert({
     where: { userId },
     update: { status: 'APPROVED' },
     create: { userId, status: 'APPROVED', displayName: 'Test Submitter', description: 'test', socialLinks: [], country: 'Testland' },
   });
-  for (const au of await db.appUser.findMany({ select: { id: true } })) await __approveSubmitter(au.id);
+  for (const au of await __sdb.appUser.findMany({ select: { id: true } })) await __approveSubmitter(au.id);
   const prisma = new PrismaService(config);
   const cardano = new CardanoQueryService(config);
   const users = new UsersService(prisma, cardano);
@@ -153,33 +155,34 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
 
   // Round override is null → use platform default (3). Try wrong counts.
   let threwTooFew = false;
-  try { await milestones.assignReviewers(draft.id, [cands[0].drepId, cands[1].drepId], boardDreps[0].user.id); } catch { threwTooFew = true; }
+  try { await milestones.assignReviewers(draft.id, __asJury([cands[0].drepId, cands[1].drepId]), boardDreps[0].user.id); } catch { threwTooFew = true; }
   ok('rejects fewer than the required count', threwTooFew);
 
   let threwTooMany = false;
-  try { await milestones.assignReviewers(draft.id, [cands[0].drepId, cands[1].drepId, cands[2].drepId, cands[3].drepId], boardDreps[0].user.id); } catch { threwTooMany = true; }
+  try { await milestones.assignReviewers(draft.id, __asJury([cands[0].drepId, cands[1].drepId, cands[2].drepId, cands[3].drepId]), boardDreps[0].user.id); } catch { threwTooMany = true; }
   ok('rejects more than the required count', threwTooMany);
 
   let threwDup = false;
-  try { await milestones.assignReviewers(draft.id, [cands[0].drepId, cands[0].drepId, cands[1].drepId], boardDreps[0].user.id); } catch { threwDup = true; }
+  try { await milestones.assignReviewers(draft.id, __asJury([cands[0].drepId, cands[0].drepId, cands[1].drepId]), boardDreps[0].user.id); } catch { threwDup = true; }
   ok('rejects duplicate DReps in the selection', threwDup);
 
   // Pick three reviewers: at least one non-board DRep when available so we can later
   // test the REVIEWER role on stop-funding (board members resolve to role=BOARD first).
-  const nonBoardCands = cands.filter((c) => nonBoardDreps.some((d) => d.id === c.drepId));
-  const boardCands = cands.filter((c) => !nonBoardCands.some((n) => n.drepId === c.drepId));
+  const drepCands = cands.filter((c) => c.kind !== 'Expert');
+  const nonBoardCands = drepCands.filter((c) => nonBoardDreps.some((d) => d.id === c.drepId));
+  const boardCands = drepCands.filter((c) => !nonBoardCands.some((n) => n.drepId === c.drepId));
   const jury = [...nonBoardCands.slice(0, 1), ...boardCands.slice(0, 3 - Math.min(1, nonBoardCands.length))].slice(0, 3).map((c) => c.drepId);
-  const after = await milestones.assignReviewers(draft.id, jury, boardDreps[0].user.id);
+  const after = await milestones.assignReviewers(draft.id, __asJury(jury), boardDreps[0].user.id);
   ok('reviewers assigned to every milestone', after.every((m) => m.reviewers.length === 3));
 
   // Re-allocate without release → blocked.
   let threwReassign = false;
-  try { await milestones.assignReviewers(draft.id, jury, boardDreps[0].user.id); } catch { threwReassign = true; }
+  try { await milestones.assignReviewers(draft.id, __asJury(jury), boardDreps[0].user.id); } catch { threwReassign = true; }
   ok('reassign blocked without release', threwReassign);
 
   // Release + reassign works (no POA submitted yet).
   await milestones.releaseReviewers(draft.id);
-  await milestones.assignReviewers(draft.id, jury, boardDreps[0].user.id);
+  await milestones.assignReviewers(draft.id, __asJury(jury), boardDreps[0].user.id);
   ok('release + reassign succeeds (no POA yet)', true);
 
   console.log('\n=== §11.2 POA gating: immutable once submitted, resubmit only after REJECTED ===');
@@ -219,7 +222,8 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const m1ok = await milestones.result(m1.id);
   ok('M1 APPROVED', m1ok.status === 'APPROVED', m1ok.status);
   const payAction = await prisma.multisigAction.findFirst({
-    where: { kind: 'PROJECT_FUNDING', description: { contains: 'milestone #1 payout' } },
+    // Structural link (the action carries milestoneId since §11/§15) — no fragile text match.
+    where: { kind: 'PROJECT_FUNDING', milestoneId: m1.id },
     orderBy: { createdAt: 'desc' },
   });
   ok('PROJECT_FUNDING multisig action prepared for the board', !!payAction && payAction.status === 'PENDING_SIGS');

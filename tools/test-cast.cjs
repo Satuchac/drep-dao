@@ -47,8 +47,8 @@ const CAST = [
   { key: 'heidi', label: 'Heidi', expect: ['DREP'], not: ['BOARD'] },
   { key: 'ivan', label: 'Ivan', expect: ['DREP'], not: ['BOARD'] },
   { key: 'judy', label: 'Judy', expect: ['DREP'], not: ['BOARD'] },
-  { key: 'board', label: 'Bob', expect: ['VIEWER', 'SUBMITTER'], not: ['DREP', 'BOARD'] },
-  { key: 'holder', label: 'Carol', expect: ['VIEWER', 'SUBMITTER'], not: ['DREP', 'BOARD'] },
+  { key: 'board', label: 'Bob', expect: ['VIEWER'], not: ['DREP', 'BOARD', 'SUBMITTER'] }, // §2.1 — SUBMITTER is earned via an approved application, not default
+  { key: 'holder', label: 'Carol', expect: ['VIEWER'], not: ['DREP', 'BOARD', 'SUBMITTER'] },
 ];
 
 let failures = 0;
