@@ -95,6 +95,11 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
   const heldEntries = calc.entries.filter((e) => !e.recipient.address && !e.paid);
   const heldBack = heldEntries.reduce((s, e) => s + e.amountAda, 0);
   const allPaid = calc.entries.length > 0 && calc.entries.every((e) => e.paid);
+  // Once any payout has gone out, split the footer into what was SENT vs what STAYS in the
+  // treasury (the unpaid remainder, payable in a follow-up), and lock the unpaid rows.
+  const anyPaid = calc.entries.some((e) => e.paid);
+  const sentSum = calc.entries.filter((e) => e.paid).reduce((s, e) => s + e.amountAda, 0);
+  const unpaidSum = calc.entries.filter((e) => !e.paid).reduce((s, e) => s + e.amountAda, 0);
   // §12 — default source by stage: filtering draws from the Submission-fee bucket, everything
   // else from Rewards (fall back to the primary). The board can override before preparing.
   const defaultBucketId = useMemo(() => {
@@ -200,12 +205,21 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
       <table className="mt-2 w-full text-xs">
         <thead><tr className="text-left text-neutral-400"><th className="font-normal">Recipient</th>{calc.kind !== 'BOARD_MONTHLY' ? <th className="font-normal">{calc.kind === 'MILESTONE' ? 'Checks' : 'Votes'}</th> : null}{calc.kind === 'DV_BONUS' ? <th className="font-normal" title="Final voting power used to weight the bonus">Power</th> : null}<th className="font-normal">Computed</th><th className="font-normal">Pay</th><th></th></tr></thead>
         <tbody>
-          {calc.entries.map((e) => <EntryRow key={e.id} e={e} showUnits={calc.kind !== 'BOARD_MONTHLY'} showPower={calc.kind === 'DV_BONUS'} onChange={onChange} />)}
+          {calc.entries.map((e) => <EntryRow key={e.id} e={e} showUnits={calc.kind !== 'BOARD_MONTHLY'} showPower={calc.kind === 'DV_BONUS'} locked={anyPaid} onChange={onChange} />)}
           {calc.entries.length === 0 ? <tr><td colSpan={4} className="py-1 text-neutral-400">No recipients.</td></tr> : null}
         </tbody>
-        <tfoot><tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">Total</td>{calc.kind !== 'BOARD_MONTHLY' ? <td className="pt-1 tabular-nums">{calc.entries.reduce((s, e) => s + (e.units ?? 0), 0)}</td> : null}<td></td><td className="pt-1 tabular-nums">{total.toLocaleString()} ₳</td><td></td></tr></tfoot>
+        <tfoot>
+          {anyPaid ? (
+            <>
+              <tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">Sent</td>{calc.kind !== 'BOARD_MONTHLY' ? <td></td> : null}<td></td><td className="pt-1 tabular-nums text-emerald-700 dark:text-emerald-400">{sentSum.toLocaleString()} ₳</td><td></td></tr>
+              {unpaidSum > 0 ? <tr><td className="pt-0.5 text-amber-600">Stays in treasury (next payment)</td>{calc.kind !== 'BOARD_MONTHLY' ? <td></td> : null}<td></td><td className="pt-0.5 tabular-nums text-amber-600">{unpaidSum.toLocaleString()} ₳</td><td></td></tr> : null}
+            </>
+          ) : (
+            <tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">Total</td>{calc.kind !== 'BOARD_MONTHLY' ? <td className="pt-1 tabular-nums">{calc.entries.reduce((s, e) => s + (e.units ?? 0), 0)}</td> : null}<td></td><td className="pt-1 tabular-nums">{total.toLocaleString()} ₳</td><td></td></tr>
+          )}
+        </tfoot>
       </table>
-      {heldBack > 0 ? (
+      {!anyPaid && heldBack > 0 ? (
         <p className="mt-1 text-xs text-amber-600">
           ⚠ {heldBack.toLocaleString()} ₳ will not be sent — {heldEntries.length} member{heldEntries.length === 1 ? '' : 's'} without a payment address. It stays in the treasury until they set one.
         </p>
@@ -233,7 +247,7 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
   );
 }
 
-function EntryRow({ e, showUnits = true, showPower = false, onChange }: { e: RewardCalcView['entries'][number]; showUnits?: boolean; showPower?: boolean; onChange: () => void }) {
+function EntryRow({ e, showUnits = true, showPower = false, locked = false, onChange }: { e: RewardCalcView['entries'][number]; showUnits?: boolean; showPower?: boolean; locked?: boolean; onChange: () => void }) {
   const [val, setVal] = useState(String(e.amountAda));
   useEffect(() => { setVal(String(e.amountAda)); }, [e.amountAda]);
   const save = async () => {
@@ -253,10 +267,12 @@ function EntryRow({ e, showUnits = true, showPower = false, onChange }: { e: Rew
           <span className="text-emerald-600">paid</span>
         ) : !e.recipient.address ? (
           <span className="text-red-600">not paid — payment address not set</span>
+        ) : locked ? (
+          <span className="text-red-600">not paid</span>
         ) : (
           <input value={val} onChange={(ev) => setVal(ev.target.value)} onBlur={save} className={inputCls} />
         )}
-        {e.overridden && !e.paid && e.recipient.address ? <span className="ml-1 text-[10px] text-amber-600">edited</span> : null}
+        {e.overridden && !e.paid && e.recipient.address && !locked ? <span className="ml-1 text-[10px] text-amber-600">edited</span> : null}
       </td>
       <td></td>
     </tr>
