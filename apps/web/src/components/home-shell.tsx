@@ -16,6 +16,7 @@ import { InternalProposals } from './internal-proposals';
 import { ProposalDetail } from './proposal-detail';
 import { JoinDaoButton } from './join-dao-button';
 import { NotificationBadge } from './notification-badge';
+import { NotificationBell } from './notification-bell';
 import { WalletStatusBanner } from './wallet-status-banner';
 import { useMyAreaTodoCount } from '@/lib/use-my-area-todo';
 import { HealthBadge } from '@/app/health-badge';
@@ -157,7 +158,11 @@ export function HomeShell() {
         <div className="space-y-2 rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
           <ConnectWallet />
           {/* Jump straight to My area → the tab that has work (Actions, then Applications, then Voting). */}
-          <NotificationBadge isBoard={isBoard} onNavigate={(tab) => setParams({ view: 'me', tab, round: null, proposal: null, ip: null })} />
+          <div className="flex items-center gap-2">
+            <NotificationBadge isBoard={isBoard} onNavigate={(tab) => setParams({ view: 'me', tab, round: null, proposal: null, ip: null })} />
+            {/* §20.3 — the jobs feed (payments seen, grace expiry, overdue stages, reminders). */}
+            <NotificationBell />
+          </div>
           <button
             onClick={() => setView('me')}
             className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"

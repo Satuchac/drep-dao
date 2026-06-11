@@ -708,6 +708,7 @@ export class ProposalsService {
           pledgeAmountAda: toAda(p.pledgeAmountAda),
           pledgeReturnMethod: p.pledgeReturnMethod ?? null,
           pledgeTxHash: p.pledgeTxHash,
+          pledgeGraceEndsAt: p.pledgeGraceEndsAt,
           pledgeAddress,
           verification: {
             found: verification.found,
@@ -1353,6 +1354,21 @@ export class ProposalsService {
 
       return { ...base, progress, rejectionReasons, milestoneReviewers, milestoneReviewerNames };
     });
+  }
+
+  /** §16.4 — board extends the pledge grace window (re-arms the expiry alert). */
+  async extendPledgeGrace(id: string, days: number) {
+    const p = await this.prisma.proposal.findUnique({ where: { id }, select: { pledgeGraceEndsAt: true, pledgeAmountAda: true } });
+    if (!p) throw new NotFoundException('proposal not found');
+    if (!p.pledgeAmountAda || p.pledgeAmountAda <= 0n) throw new ConflictException('this proposal has no pledge');
+    const d = Math.floor(days);
+    if (!(d >= 1 && d <= 365)) throw new BadRequestException('extension must be between 1 and 365 days');
+    const base = p.pledgeGraceEndsAt && p.pledgeGraceEndsAt.getTime() > Date.now() ? p.pledgeGraceEndsAt.getTime() : Date.now();
+    await this.prisma.proposal.update({
+      where: { id },
+      data: { pledgeGraceEndsAt: new Date(base + d * 86_400_000), pledgeGraceNotifiedAt: null },
+    });
+    return this.get(id);
   }
 
   /**

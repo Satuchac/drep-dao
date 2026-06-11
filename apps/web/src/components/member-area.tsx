@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardProposalsApi, boardSubmittersApi, submitterApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, messagesApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type MySubmitter, type EntryEligibility, type BoardAction } from '@/lib/api';
+import { roundsApi, expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardProposalsApi, boardSubmittersApi, submitterApi, boardApi, boardExpertsApi, removalApi, filteringApi, quickPollApi, internalProposalsApi, messagesApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type MySubmitter, type EntryEligibility, type BoardAction } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -38,6 +38,7 @@ import { SendFromTreasuryPanel } from './send-from-treasury-panel';
 import { TreasuryBucketsPanel } from './treasury-buckets-panel';
 import { LeaveDao } from './leave-dao';
 import { BackButton } from './round-ui';
+import { QuickPollsPanel } from './quick-polls-panel';
 
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
 
@@ -196,6 +197,8 @@ function VotingReviewsTab() {
       </div>
       <FilteringPanel history={showHistory} />
       <VotingPanel history={showHistory} />
+      {/* §9.2 — tie-break quick polls of the active round (self-hides when none). */}
+      <ActiveRoundQuickPolls />
       <MilestoneReviewsPanel history={showHistory} />
       <EmptyHint text={showHistory ? 'No votes — past or present.' : 'Nothing is awaiting your vote right now.'} />
     </div>
@@ -232,6 +235,16 @@ function TreasuryTab() {
       <BoardActions history={showHistory} refreshKey={refreshKey} onChange={bumpRefresh} filter="non-rewards" />
     </div>
   );
+}
+
+/** §9.2 — quick polls of the active round, surfaced inside Voting & reviews. */
+function ActiveRoundQuickPolls() {
+  const [roundId, setRoundId] = useState<string | null>(null);
+  useEffect(() => {
+    roundsApi.active().then((r) => setRoundId(r?.id ?? null)).catch(() => setRoundId(null));
+  }, []);
+  if (!roundId) return null;
+  return <QuickPollsPanel roundId={roundId} />;
 }
 
 /** Board "Actions" tab: review/audit to-dos that aren't treasury moves —
@@ -362,6 +375,8 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
       }
       if (canVote) {
         try { next.voting = (await filteringApi.votingTasks()).total; } catch { /* leave 0 */ }
+        // §9.2 — quick polls awaiting this DRep's tie-break vote.
+        try { next.voting += (await quickPollApi.myPending()).count; } catch { /* leave 0 */ }
         try { next.internal = (await internalProposalsApi.pendingCount()).count; } catch { /* 0 */ }
         // §15.4 — reward earners need a reward payment address; nag on the Profile
         // tab until one is set. Submitters/viewers don't earn rewards → no nag.

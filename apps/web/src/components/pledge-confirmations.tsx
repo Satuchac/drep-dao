@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { boardPledgeApi, messagesApi, type PendingPledge } from '@/lib/api';
+import { boardDeadlinesApi, boardPledgeApi, messagesApi, type PendingPledge } from '@/lib/api';
 import { ProposalMessageInfo } from './proposal-messages';
 import { useExplorer } from '@/lib/explorer';
 import { useUrlNav } from '@/lib/use-url-nav';
@@ -93,6 +93,22 @@ function PendingPledgeRow({ p, onReviewed, onOpen }: { p: PendingPledge; onRevie
       <div className="mt-1 text-xs text-neutral-500">
         pledge {p.pledgeAmountAda.toLocaleString()} ₳
         {p.pledgeReturnMethod ? ' · open the proposal to read the return-method plan' : ''}
+        {/* §16.4 — grace window countdown + one-click extension. */}
+        {p.pledgeGraceEndsAt ? (
+          <span className={new Date(p.pledgeGraceEndsAt) < new Date() ? 'ml-2 font-medium text-red-600' : 'ml-2'}>
+            · grace until {new Date(p.pledgeGraceEndsAt).toLocaleDateString()}
+            {new Date(p.pledgeGraceEndsAt) < new Date() ? ' (expired — extend or reject)' : ''}
+          </span>
+        ) : null}
+        {p.pledgeGraceEndsAt ? (
+          <button
+            onClick={() => void boardDeadlinesApi.extendPledgeGrace(p.id, 14).then(onReviewed)}
+            className="ml-2 rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] hover:bg-neutral-100 dark:border-neutral-700"
+            title="Extend the pledge grace window by 14 days (§16.4)"
+          >
+            +14 days grace
+          </button>
+        ) : null}
       </div>
       <div className="mt-1"><ProposalMessageInfo proposalId={p.id} /></div>
 

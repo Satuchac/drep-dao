@@ -14,6 +14,7 @@ import {
   type RoundSummary,
 } from '@/lib/api';
 import { ProposalList } from './proposal-list';
+import { QuickPollsPanel } from './quick-polls-panel';
 import { BackButton, ProposalCounts, StatusBadge } from './round-ui';
 
 // §8 — D&V is split into DEBATE (DReps comment + revise) → VOTE (ballots).
@@ -137,7 +138,13 @@ export function RoundsSection() {
           ))}
         </div>
 
-        {roundTab === 'setup' ? <RoundSettingsView roundId={open.id} /> : <ProposalList roundId={open.id} />}
+        {roundTab === 'setup' ? <RoundSettingsView roundId={open.id} /> : (
+          <div className="space-y-4">
+            {/* §9.2 — tie-break polls at the budget cliff (self-hides when none). */}
+            <QuickPollsPanel roundId={open.id} />
+            <ProposalList roundId={open.id} />
+          </div>
+        )}
       </section>
     );
   }

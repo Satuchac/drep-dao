@@ -89,6 +89,12 @@ export class AdminProposalsController {
     return this.proposals.listPendingReviewerAssignment();
   }
 
+  // §16.4 — board extends the pledge grace window (resets the expiry alert).
+  @Post(':id/extend-pledge-grace')
+  extendPledgeGrace(@Param('id', ParseUUIDPipe) id: string, @Body() body: { days: number }) {
+    return this.proposals.extendPledgeGrace(id, Number(body?.days));
+  }
+
   // §3 — proposals in FUNDING awaiting pledge confirmation (the team pasted a tx,
   // the platform verifies it on-chain; the board approves or rejects).
   @Get('pending-pledge')

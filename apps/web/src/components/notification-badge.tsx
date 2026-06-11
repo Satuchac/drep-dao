@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, filteringApi, internalProposalsApi, milestonesApi, proposalsApi, removalApi, treasuryApi } from '@/lib/api';
+import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, filteringApi, quickPollApi, internalProposalsApi, milestonesApi, proposalsApi, removalApi, treasuryApi } from '@/lib/api';
 
 /**
  * §15.3 — notifications in the login rectangle. A red circle with the total number of to-dos
@@ -41,6 +41,8 @@ export function NotificationBadge({ isBoard, onNavigate }: { isBoard: boolean; o
           (rem.status === 'fulfilled' ? rem.value.filter((x) => !x.myVote).length : 0);
       }
       try { next.voting = (await filteringApi.votingTasks()).total; } catch { /* leave 0 */ }
+        // §9.2 — quick polls awaiting this DRep's tie-break vote.
+        try { next.voting += (await quickPollApi.myPending()).count; } catch { /* leave 0 */ }
       try { next.internal = (await internalProposalsApi.pendingCount()).count; } catch { /* 0 */ }
       // §11.2 — submitter's "my proposals" to-dos: any of the user's proposals
       // currently sitting on a REJECTED milestone needing a fresh POA. The

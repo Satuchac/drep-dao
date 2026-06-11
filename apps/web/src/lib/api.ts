@@ -1213,6 +1213,13 @@ export interface MilestoneView {
   acceptanceCriteria: string | null;
   amountAda: number;
   status: string;
+  /** §11.4/§11.5 — payout + deadline tracking. */
+  paidAt: string | null;
+  paidInTx: string | null;
+  deadlineAt: string | null;
+  autoExtendedCount: number;
+  boardExtensionDays: number | null;
+  boardExtendedAt: string | null;
   reviewers: MilestoneReviewer[];
   latestPoa: { contentMd: string | null; submittedAt: string; attempt: number } | null;
   /** Earlier (superseded) POA attempts — every one was rejected (or it would
@@ -1385,6 +1392,7 @@ export interface PendingPledge {
   pledgeAmountAda: number;
   pledgeReturnMethod: string | null;
   pledgeTxHash: string | null;
+  pledgeGraceEndsAt: string | null;
   pledgeAddress: string;
   verification: { found: boolean; paid: boolean; paidAda: number };
 }
@@ -1649,4 +1657,49 @@ export const meritApi = {
     request<AvoidPeriod>('/me/avoid-period', { method: 'POST', body: JSON.stringify({ startsAt, endsAt, reason }) }),
   removeAvoid: (id: string) => request<{ ok: boolean }>(`/me/avoid-period/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   runSweep: () => request<{ ok: boolean }>('/admin/merit/sweep', { method: 'POST' }),
+};
+
+// §20.3 — in-app notification feed (written by the §27 background jobs).
+export interface AppNotification {
+  id: string;
+  kind: string;
+  payload: { refId?: string; title?: string; body?: string; proposalId?: string; roundId?: string } & Record<string, unknown>;
+  readAt: string | null;
+  createdAt: string;
+}
+export const notificationsApi = {
+  list: () => request<AppNotification[]>('/me/notifications'),
+  unreadCount: () => request<{ count: number }>('/me/notifications/unread-count'),
+  markRead: (id: string) => request<{ ok: boolean }>(`/me/notifications/${id}/read`, { method: 'POST' }),
+  markAllRead: () => request<{ ok: boolean }>('/me/notifications/read-all', { method: 'POST' }),
+};
+
+// §9.2 — quick polls (tie-break at the budget cliff).
+export interface QuickPollView {
+  id: string;
+  categoryName: string | null;
+  status: 'PENDING_BOARD' | 'ACTIVE' | 'RESOLVED' | 'FAILED';
+  startsAt: string | null;
+  endsAt: string | null;
+  extensions: number;
+  winnerId: string | null;
+  eligibleCount: number;
+  votedCount: number;
+  myChoice: string | null;
+  iAmEligible: boolean;
+  candidates: { id: string; title: string; publicId: string | null; requestedAmountAda: number; power: number }[];
+}
+export const quickPollApi = {
+  forRound: (roundId: string) => request<QuickPollView[]>(`/rounds/${roundId}/quick-polls`),
+  launch: (id: string) => request<QuickPollView>(`/admin/quick-polls/${id}/launch`, { method: 'POST' }),
+  vote: (id: string, choice: string) => request<QuickPollView>(`/quick-polls/${id}/vote`, { method: 'POST', body: JSON.stringify({ choice }) }),
+  myPending: () => request<{ count: number }>('/me/pending-quick-polls'),
+};
+
+// §11.5 — board one-time milestone deadline extension; §16.4 — pledge grace extension.
+export const boardDeadlinesApi = {
+  extendMilestone: (proposalId: string, milestoneId: string, days: number) =>
+    request<MilestoneView[]>(`/admin/proposals/${proposalId}/milestones/${milestoneId}/extend`, { method: 'POST', body: JSON.stringify({ days }) }),
+  extendPledgeGrace: (proposalId: string, days: number) =>
+    request<ProposalDetail>(`/admin/proposals/${proposalId}/extend-pledge-grace`, { method: 'POST', body: JSON.stringify({ days }) }),
 };

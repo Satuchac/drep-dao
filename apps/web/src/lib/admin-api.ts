@@ -131,6 +131,14 @@ export const adminApi = {
       }>('/admins/accept-invite', { method: 'POST', body: JSON.stringify({ token, password }) }),
     remove: (id: string) => request<{ ok: boolean }>(`/admins/${id}/remove`, { method: 'POST' }),
     disable: (id: string) => request<{ ok: boolean }>(`/admins/${id}/disable`, { method: 'POST' }),
+    // §18.8 — one-time password-reset token for another admin (1h TTL, shown once).
+    passwordReset: (id: string) =>
+      request<{ token: string; expiresAt: string; username: string }>(`/admins/${id}/password-reset`, { method: 'POST' }),
+    resetPassword: (token: string, password: string) =>
+      request<{ ok: boolean }>('/admins/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
+    // §18.6 — switch the entire roster; old admins auto-disable when the last invite is accepted.
+    switchAll: (admins: { username: string; email: string }[]) =>
+      request<{ rotationId: string; invites: { username: string; token: string; expiresAt: string }[] }>('/admins/switch-all', { method: 'POST', body: JSON.stringify({ admins }) }),
   },
   genesis: {
     state: () => request<GenesisState>('/genesis'),

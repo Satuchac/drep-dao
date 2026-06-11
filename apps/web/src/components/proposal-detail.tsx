@@ -37,6 +37,7 @@ import { CopyButton } from './copy-button';
 import { ConfirmDialog } from './confirm-dialog';
 import { RevenueSharingBlock } from './proposal-submit';
 import { ProposalMessagesPanel } from './proposal-messages';
+import { boardDeadlinesApi } from '@/lib/api';
 
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
 // Subtle blue tint on platform-managed governance sections (Filtering jury, D&V,
@@ -2292,7 +2293,7 @@ function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: st
           {showApproved ? (
             <ul className="space-y-2 px-2 pb-2">
               {approved.map((m) => (
-                <MilestoneRow key={m.id} m={m} isMine={isMine} canPoa={false} locked onChange={() => { load(); onChange(); }} />
+                <MilestoneRow key={m.id} m={m} isMine={isMine} canPoa={false} locked isBoard={isBoard} proposalId={id} onChange={() => { load(); onChange(); }} />
               ))}
             </ul>
           ) : null}
@@ -2307,7 +2308,7 @@ function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: st
             Active milestone — #{active.idx + 1} of {ms.length}
           </div>
           <ul className="space-y-2">
-            <MilestoneRow m={active} isMine={isMine} canPoa={inFunding} onChange={() => { load(); onChange(); }} />
+            <MilestoneRow m={active} isMine={isMine} canPoa={inFunding} isBoard={isBoard} proposalId={id} onChange={() => { load(); onChange(); }} />
           </ul>
         </div>
       ) : null}
@@ -2328,7 +2329,7 @@ function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: st
           {showUpcoming ? (
             <ul className="space-y-2 px-2 pb-2">
               {upcoming.map((m) => (
-                <MilestoneRow key={m.id} m={m} isMine={isMine} canPoa={false} locked onChange={() => { load(); onChange(); }} />
+                <MilestoneRow key={m.id} m={m} isMine={isMine} canPoa={false} locked isBoard={isBoard} proposalId={id} onChange={() => { load(); onChange(); }} />
               ))}
             </ul>
           ) : null}
@@ -2688,12 +2689,15 @@ function StopFundingRow({ s, isBoard, onChange }: { s: StopFundingView; isBoard:
   );
 }
 
-function MilestoneRow({ m, isMine, canPoa, locked = false, onChange }: { m: MilestoneView; isMine: boolean; canPoa: boolean; locked?: boolean; onChange: () => void }) {
+function MilestoneRow({ m, isMine, canPoa, locked = false, isBoard = false, proposalId, onChange }: { m: MilestoneView; isMine: boolean; canPoa: boolean; locked?: boolean; isBoard?: boolean; proposalId?: string; onChange: () => void }) {
   const [poa, setPoa] = useState('');
   const [rationale, setRationale] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPast, setShowPast] = useState(false);
+  // §11.5 — inline board "extend deadline" mini-form (no native prompt — house rule).
+  const [extOpen, setExtOpen] = useState(false);
+  const [extDays, setExtDays] = useState('30');
   const run = async (fn: () => Promise<unknown>) => {
     setError(null); setBusy(true);
     try { await fn(); onChange(); } catch (e) { setError(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
@@ -2725,6 +2729,33 @@ function MilestoneRow({ m, isMine, canPoa, locked = false, onChange }: { m: Mile
       {m.reviewers.length > 0 ? (
         <div className="mt-0.5 text-[11px] text-neutral-500">
           Reviewers: {m.reviewers.map((r) => r.displayName ?? r.drepIdOnchain?.slice(0, 14) + '…').join(', ')}
+        </div>
+      ) : null}
+      {/* §11.5 — POA deadline + extension state; the board may grant ONE extra extension. */}
+      {m.deadlineAt || m.paidAt ? (
+        <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
+          {m.deadlineAt ? (
+            <span className={new Date(m.deadlineAt) < new Date() && m.status !== 'APPROVED' ? 'text-red-600' : ''}>
+              POA deadline {new Date(m.deadlineAt).toLocaleDateString()}
+              {m.autoExtendedCount > 0 ? ` · auto-extended ${m.autoExtendedCount}×` : ''}
+              {m.boardExtendedAt ? ` · board +${m.boardExtensionDays}d` : ''}
+            </span>
+          ) : null}
+          {m.paidAt ? <span className="text-emerald-600">✓ paid {new Date(m.paidAt).toLocaleDateString()}</span> : null}
+          {isBoard && proposalId && m.status !== 'APPROVED' && !m.boardExtendedAt ? (
+            extOpen ? (
+              <span className="flex items-center gap-1">
+                <input value={extDays} onChange={(e) => setExtDays(e.target.value)} className="w-14 rounded border border-neutral-300 px-1 py-0.5 dark:border-neutral-700 dark:bg-neutral-900" />
+                <span>days</span>
+                <button onClick={() => { const d = Number(extDays); if (d > 0) void run(() => boardDeadlinesApi.extendMilestone(proposalId, m.id, d)).then(() => setExtOpen(false)); }} disabled={busy} className="rounded bg-emerald-600 px-1.5 py-0.5 text-white disabled:opacity-40">OK</button>
+                <button onClick={() => setExtOpen(false)} className="rounded border border-neutral-300 px-1.5 py-0.5 dark:border-neutral-700">✕</button>
+              </span>
+            ) : (
+              <button onClick={() => setExtOpen(true)} disabled={busy} title="One-time board extension (§11.5)" className="rounded border border-neutral-300 px-1.5 py-0.5 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700">
+                Extend deadline
+              </button>
+            )
+          ) : null}
         </div>
       ) : null}
       {/* §11 — "What was promised": description + acceptance criteria pulled
