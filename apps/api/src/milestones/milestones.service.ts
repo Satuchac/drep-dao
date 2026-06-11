@@ -89,6 +89,7 @@ export class MilestonesService {
         displayName: e.drep.user?.displayName ?? null,
         subcategoryIds: e.drep.subcategoryIds,
         expertiseMatch: propSubs.size > 0 && e.drep.subcategoryIds.some((s) => propSubs.has(s)),
+        matchedSubcategoryIds: e.drep.subcategoryIds.filter((s) => propSubs.has(s)),
         loadInRound: load.get(e.drep.id) ?? 0,
       }));
 
@@ -108,6 +109,7 @@ export class MilestonesService {
       displayName: ex.displayName,
       subcategoryIds: ex.subcategoryIds,
       expertiseMatch: propSubs.size > 0 && ex.subcategoryIds.some((s) => propSubs.has(s)),
+      matchedSubcategoryIds: ex.subcategoryIds.filter((s) => propSubs.has(s)),
       loadInRound: eLoad.get(ex.id) ?? 0,
     }));
 

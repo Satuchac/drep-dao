@@ -913,6 +913,7 @@ export interface FilterCandidate {
   drepIdOnchain: string;
   displayName: string | null;
   subcategoryIds: string[];
+  matchedSubcategoryIds: string[];
   expertiseMatch: boolean;
   loadInRound: number;
   alreadyAssigned: boolean;
@@ -1380,6 +1381,7 @@ export interface MilestoneCandidate {
   drepIdOnchain: string | null;
   displayName: string | null;
   subcategoryIds: string[];
+  matchedSubcategoryIds: string[];
   expertiseMatch: boolean;
   loadInRound: number;
 }

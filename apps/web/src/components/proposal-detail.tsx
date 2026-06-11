@@ -1009,8 +1009,13 @@ function ChangeReviewerPicker({ proposalId, oldDrepId, onDone }: { proposalId: s
             <li key={c.drepId} className="flex items-center justify-between gap-2 rounded border border-neutral-200 px-2 py-1 dark:border-neutral-800">
               <span className="flex items-center gap-1.5">
                 <span className="font-medium">{c.displayName ?? `${c.drepIdOnchain.slice(0, 16)}…`}</span>
-                {c.expertiseMatch ? (
-                  <span title="Subcategory overlap with the proposal" className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">⭐ expertise</span>
+                {c.matchedSubcategoryIds.length > 0 ? (
+                  <span className="flex flex-wrap items-center gap-1" title="Subcategories shared with the proposal">
+                    <span className="text-amber-600">⭐</span>
+                    {c.matchedSubcategoryIds.map((sid) => (
+                      <span key={sid} className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{SUBCAT_LABEL[sid] ?? sid}</span>
+                    ))}
+                  </span>
                 ) : (
                   <span title="No expertise overlap — would be a random pick" className="rounded bg-neutral-200 px-1 py-0.5 text-[10px] text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">random pick</span>
                 )}
@@ -2395,7 +2400,14 @@ function ReviewerAllocationPanel({ id, target, onChange }: { id: string; target:
                 <input type="checkbox" checked={sel} onChange={() => toggle(c.id)} />
                 <span className="font-medium">{c.displayName ?? (c.drepIdOnchain?.slice(0, 18) ?? c.id.slice(0, 8)) + '…'}</span>
                 {c.kind === 'Expert' ? <span className="rounded bg-violet-100 px-1 text-[10px] text-violet-700 dark:bg-violet-950 dark:text-violet-300">Expert</span> : null}
-                {c.expertiseMatch ? <span title="Subcategory overlap with the proposal" className="text-amber-600">⭐ expertise</span> : null}
+                {c.matchedSubcategoryIds.length > 0 ? (
+                  <span className="flex flex-wrap items-center gap-1" title="Subcategories shared with the proposal">
+                    <span className="text-amber-600">⭐</span>
+                    {c.matchedSubcategoryIds.map((sid) => (
+                      <span key={sid} className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700 dark:bg-amber-950 dark:text-amber-300">{SUBCAT_LABEL[sid] ?? sid}</span>
+                    ))}
+                  </span>
+                ) : null}
               </label>
               <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] tabular-nums text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">load {c.loadInRound}</span>
             </li>
