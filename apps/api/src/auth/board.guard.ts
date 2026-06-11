@@ -5,7 +5,7 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import { BoardService } from './board.service';
 import type { AuthContext } from './current-user.decorator';
 
 /**
@@ -14,23 +14,14 @@ import type { AuthContext } from './current-user.decorator';
  */
 @Injectable()
 export class BoardGuard implements CanActivate {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly board: BoardService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<{ user?: AuthContext }>();
     const userId = req.user?.userId;
     if (!userId) throw new UnauthorizedException('not authenticated');
 
-    const user = await this.prisma.appUser.findUnique({
-      where: { id: userId },
-      select: { drepKeyHash: true },
-    });
-    if (!user?.drepKeyHash) throw new ForbiddenException('board members only');
-
-    const seat = await this.prisma.boardSeat.findFirst({
-      where: { removedAt: null, drepKeyHash: user.drepKeyHash },
-    });
-    if (!seat) throw new ForbiddenException('board members only');
+    if (!(await this.board.isBoardMember(userId))) throw new ForbiddenException('board members only');
     return true;
   }
 }

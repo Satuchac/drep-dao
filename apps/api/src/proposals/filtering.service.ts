@@ -1,4 +1,3 @@
-import { randomInt } from 'node:crypto';
 import {
   BadRequestException,
   ConflictException,
@@ -19,6 +18,7 @@ import {
 import { GovSubject, VotingStyle } from '@drep-dao/cardano';
 import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
+import { rankReviewerCandidates } from './candidate-ranking';
 import { AnchorService } from '../cardano/anchor.service';
 import { MeritService } from '../merit/merit.service';
 
@@ -81,14 +81,13 @@ export class FilteringService {
     // prefer the least-drawn so far (equal participation), breaking ties randomly.
     const propSubs = new Set(proposal.subcategoryIds ?? []);
     const expertiseMatch = (subs: string[]) => propSubs.size > 0 && subs.some((s) => propSubs.has(s));
-    const ranked = cands
-      .map((e) => ({
+    const ranked = rankReviewerCandidates(
+      cands.map((e) => ({
         drepId: e.drepId,
-        tier: expertiseMatch(e.drep.subcategoryIds) ? 0 : 1, // 0 = expertise match first
-        drawn: drawnCount.get(e.drepId) ?? 0,
-        rnd: randomInt(1_000_000),
-      }))
-      .sort((a, b) => a.tier - b.tier || a.drawn - b.drawn || a.rnd - b.rnd);
+        expertiseMatch: expertiseMatch(e.drep.subcategoryIds),
+        loadInRound: drawnCount.get(e.drepId) ?? 0,
+      })),
+    );
     // §6 — per-round override of the reviewer count, else the platform default.
     const count = Math.min(proposal.round?.filterReviewerCount ?? ROUND_SETTING_DEFAULTS.filterReviewerCount, ranked.length);
     const chosen = ranked.slice(0, count).map((r) => r.drepId);

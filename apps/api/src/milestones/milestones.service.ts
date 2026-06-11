@@ -1,8 +1,8 @@
-import { randomInt } from 'crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ROUND_SETTING_DEFAULTS, ProposalStage, ProposalStatus, RoundStatus, VoteChoice, VotePhase } from '@drep-dao/shared';
 import { GovSubject, VotingStyle } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
+import { rankReviewerCandidates } from '../proposals/candidate-ranking';
 import { AnchorService } from '../cardano/anchor.service';
 import { TreasuryBucketsService } from '../treasury/treasury-buckets.service';
 import { MeritService } from '../merit/merit.service';
@@ -196,13 +196,7 @@ export class MilestonesService {
     });
     const want = proposal?.round?.milestoneReviewerCount ?? ROUND_SETTING_DEFAULTS.milestoneReviewerCount;
     const cands = await this.candidates(proposalId);
-    const picked = [...cands]
-      .sort((a, b) =>
-        Number(b.expertiseMatch) - Number(a.expertiseMatch) ||
-        a.loadInRound - b.loadInRound ||
-        randomInt(1_000_000) - randomInt(1_000_000),
-      )
-      .slice(0, want);
+    const picked = rankReviewerCandidates(cands).slice(0, want);
     if (picked.length < want) {
       throw new ConflictException(`not enough eligible reviewers in this round — need ${want}, found ${picked.length}`);
     }

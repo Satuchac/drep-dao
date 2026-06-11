@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { SUBCAT_LABEL } from '@/lib/ui';
+import { card } from '@/lib/ui';
 import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
@@ -39,12 +41,12 @@ import { RevenueSharingBlock } from './proposal-submit';
 import { ProposalMessagesPanel } from './proposal-messages';
 import { boardDeadlinesApi } from '@/lib/api';
 
-const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
+
 // Subtle blue tint on platform-managed governance sections (Filtering jury, D&V,
 // Pledge, Milestones) so the reader can tell at a glance these blocks are
 // platform information / actions, not content the team wrote.
 const platformCard = 'rounded-lg border border-blue-200 bg-blue-50/40 p-4 dark:border-blue-900 dark:bg-blue-950/20';
-const SUBCAT_LABEL: Record<string, string> = Object.fromEntries(DEFAULT_SUBCATEGORIES.map((s) => [s.id, s.label]));
+
 const choiceCls: Record<string, string> = {
   YES: 'text-emerald-600',
   NO: 'text-red-600',

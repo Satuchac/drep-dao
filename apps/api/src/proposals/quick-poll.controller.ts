@@ -3,6 +3,7 @@ import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { QuickPollService } from './quick-poll.service';
+import { QuickPollVoteDto } from '../messages/dto';
 
 @Controller()
 @UseGuards(JwtAuthGuard)
@@ -24,8 +25,8 @@ export class QuickPollController {
 
   // Eligible DRep casts/changes their tie-break vote.
   @Post('quick-polls/:id/vote')
-  vote(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() body: { choice: string }) {
-    return this.polls.vote(ctx.userId, id, body?.choice);
+  vote(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: QuickPollVoteDto) {
+    return this.polls.vote(ctx.userId, id, dto.choice);
   }
 
   // Polls awaiting MY vote (badge).

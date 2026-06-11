@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { ROUND_SETTING_DEFAULTS, ROUND_SETTING_META } from '@drep-dao/shared';
+import { ROUND_SETTING_DEFAULTS, ROUND_SETTING_META, computeRewardPoolsAda } from '@drep-dao/shared';
 import {
   boardRoundsApi,
   roundsApi,
@@ -651,15 +651,15 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
 
 /** §12.2 — live visual of how the reward pool splits across the three sliders. */
 function RewardBar({ pool, expertPct, dvShare, fixed }: { pool: number; expertPct: number; dvShare: number; fixed: number }) {
-  // Experts are carved out first; the rest is the DReps' pool → D&V slice + Milestone
-  // slice, and within D&V → fixed + bonus. Each `pct` is a share of the WHOLE pool.
-  const drep = 100 - expertPct;
+  // Single source of truth: the same computeRewardPoolsAda the backend's §12 computation
+  // uses (experts carved out first → D&V fixed/bonus → milestone).
+  const pools = computeRewardPoolsAda(pool, expertPct, dvShare, fixed);
   const segs = [
-    { label: 'Experts', pct: expertPct, cls: 'bg-purple-500' },
-    { label: 'D&V fixed', pct: (drep * dvShare * fixed) / 10000, cls: 'bg-emerald-500' },
-    { label: 'D&V bonus', pct: (drep * dvShare * (100 - fixed)) / 10000, cls: 'bg-amber-400' },
-    { label: 'Milestone review', pct: (drep * (100 - dvShare)) / 100, cls: 'bg-sky-500' },
-  ];
+    { label: 'Experts', ada: pools.expertAda, cls: 'bg-purple-500' },
+    { label: 'D&V fixed', ada: pools.dvFixedAda, cls: 'bg-emerald-500' },
+    { label: 'D&V bonus', ada: pools.dvBonusAda, cls: 'bg-amber-400' },
+    { label: 'Milestone review', ada: pools.milestoneAda, cls: 'bg-sky-500' },
+  ].map((s) => ({ ...s, pct: pool > 0 ? (s.ada / pool) * 100 : 0 }));
   const ada = (pct: number) => Math.round((pool * pct) / 100);
   return (
     <div>

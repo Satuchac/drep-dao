@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { BoardService } from '../auth/board.service';
 
 /**
  * §3.5 — board ↔ submitter messaging per proposal. The board opens a thread to ask the team to do
@@ -9,14 +10,13 @@ import { PrismaService } from '../prisma/prisma.service';
  */
 @Injectable()
 export class ProposalMessagesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly board: BoardService,
+  ) {}
 
-  /** Same rule as BoardGuard: the user's DRep key hash holds an active board seat. */
-  private async isBoard(userId: string): Promise<boolean> {
-    const u = await this.prisma.appUser.findUnique({ where: { id: userId }, select: { drepKeyHash: true } });
-    if (!u?.drepKeyHash) return false;
-    const seat = await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: u.drepKeyHash } });
-    return !!seat;
+  private isBoard(userId: string): Promise<boolean> {
+    return this.board.isBoardMember(userId);
   }
 
   async startThread(boardUserId: string, proposalId: string, body: string) {

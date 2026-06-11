@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { card } from '@/lib/ui';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { roundsApi, expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardProposalsApi, boardSubmittersApi, submitterApi, boardApi, boardExpertsApi, removalApi, filteringApi, quickPollApi, internalProposalsApi, messagesApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type MySubmitter, type EntryEligibility, type BoardAction } from '@/lib/api';
@@ -40,7 +41,7 @@ import { LeaveDao } from './leave-dao';
 import { BackButton } from './round-ui';
 import { QuickPollsPanel } from './quick-polls-panel';
 
-const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
+
 
 export function MemberArea() {
   const { profile, loading, refresh } = useAuth();

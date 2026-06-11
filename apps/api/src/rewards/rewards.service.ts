@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { PrismaService } from '../prisma/prisma.service';
 import { TreasuryBucketsService } from '../treasury/treasury-buckets.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
-import { ROUND_SETTING_DEFAULTS, RoundStatus, VotePhase, basePower, meritMultiplier, clampMerit, PLATFORM_CONFIG_DEFAULTS } from '@drep-dao/shared';
+import { ROUND_SETTING_DEFAULTS, RoundStatus, VotePhase, basePower, meritMultiplier, clampMerit, PLATFORM_CONFIG_DEFAULTS, computeRewardPools } from '@drep-dao/shared';
 
 const LOVELACE = 1_000_000n;
 const toLovelace = (ada: number) => BigInt(Math.round(ada * 1_000_000));
@@ -111,10 +111,14 @@ export class RewardsService {
     // DReps' pool, split into a D&V share and a milestone share, and within D&V into fixed + bonus.
     // So the base for D&V is (pool − experts), NOT the whole pool. With 2000 ₳ / 30% experts /
     // 60% D&V / 70% fixed this gives 588 ₳ fixed + 252 ₳ bonus (matches the round-setup chart).
-    const drepPool = Number(round.rewardsPoolAda) * (1 - this.setting(round, 'rewardExpertSharePct') / 100);
-    const dvPool = BigInt(Math.round(drepPool * (this.setting(round, 'rewardDvSharePct') / 100)));
-    const fixedPool = BigInt(Math.round(Number(dvPool) * (this.setting(round, 'rewardFixedPct') / 100)));
-    const bonusPool = dvPool - fixedPool;
+    const pools = computeRewardPools(
+      round.rewardsPoolAda,
+      this.setting(round, 'rewardExpertSharePct'),
+      this.setting(round, 'rewardDvSharePct'),
+      this.setting(round, 'rewardFixedPct'),
+    );
+    const fixedPool = pools.dvFixedPool;
+    const bonusPool = pools.dvBonusPool;
 
     // A D&V proposal is one voting opened for (it has a VoteSnapshot), NOT one whose CURRENT
     // stage is DEBATE_VOTE — once the round advances to FUNDING the proposals move to the
@@ -199,11 +203,9 @@ export class RewardsService {
   async computeMilestone(roundId: string) {
     const round = await this.prisma.round.findUnique({ where: { id: roundId } });
     if (!round) throw new NotFoundException('round not found');
-    const dvShare = this.setting(round, 'rewardDvSharePct') / 100;
     // §12.2 — milestone share of the DReps' pool (experts carved out first), NOT of the whole
     // pool: (2000 − 30% experts) × 40% = 560 ₳ (matches the round-setup chart).
-    const drepPool = Number(round.rewardsPoolAda) * (1 - this.setting(round, 'rewardExpertSharePct') / 100);
-    const pool = BigInt(Math.round(drepPool * (1 - dvShare)));
+    const pool = computeRewardPools(round.rewardsPoolAda, this.setting(round, 'rewardExpertSharePct'), this.setting(round, 'rewardDvSharePct'), this.setting(round, 'rewardFixedPct')).milestonePool;
     const reviewerCount = this.setting(round, 'milestoneReviewerCount');
 
     const milestones = await this.prisma.milestone.findMany({ where: { proposal: { roundId } }, select: { id: true } });

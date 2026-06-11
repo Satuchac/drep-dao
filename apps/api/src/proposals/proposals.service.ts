@@ -26,6 +26,14 @@ const LOVELACE = 1_000_000;
 const toLovelace = (ada: number): bigint => BigInt(Math.round(ada * LOVELACE));
 const toAda = (l: bigint | null): number => (l == null ? 0 : Number(l) / LOVELACE);
 
+/** Display label for a proposal's submitter: name → DRep id → stake address (§2). */
+function submitterDisplay(
+  user?: { displayName: string | null; stakeAddress?: string | null } | null,
+  drep?: { drepIdOnchain: string } | null,
+): string | null {
+  return user?.displayName ?? drep?.drepIdOnchain ?? user?.stakeAddress ?? null;
+}
+
 /** Group an iterable into a Map<key, items[]> for cheap per-id lookup. */
 function group<T, K>(items: T[], key: (t: T) => K): Map<K, T[]> {
   const out = new Map<K, T[]>();
@@ -1421,7 +1429,7 @@ export class ProposalsService {
         title: p.title,
         kind: 'FILTERING' as const,
         roundNumber: p.round?.number ?? null,
-        submitter: p.submitterUser?.displayName ?? p.submitterDrep?.drepIdOnchain ?? p.submitterUser?.stakeAddress ?? null,
+        submitter: submitterDisplay(p.submitterUser, p.submitterDrep),
         targetCount: p.round?.filterReviewerCount ?? ROUND_SETTING_DEFAULTS.filterReviewerCount,
       })),
       ...milestone.map((p) => ({
@@ -1430,7 +1438,7 @@ export class ProposalsService {
         title: p.title,
         kind: 'MILESTONE' as const,
         roundNumber: p.round?.number ?? null,
-        submitter: p.submitterUser?.displayName ?? p.submitterDrep?.drepIdOnchain ?? p.submitterUser?.stakeAddress ?? null,
+        submitter: submitterDisplay(p.submitterUser, p.submitterDrep),
         targetCount: p.round?.milestoneReviewerCount ?? ROUND_SETTING_DEFAULTS.milestoneReviewerCount,
       })),
     ];
@@ -1684,7 +1692,7 @@ export class ProposalsService {
       requestedAmountAda: toAda(p.requestedAmountAda),
       submissionFeeTxHash: p.submissionFeeTxHash ?? null,
       // Who submitted it — display name, else the DRep id, else (ADA-holder only) the stake id.
-      submitter: p.submitterUser?.displayName ?? p.submitterDrep?.drepIdOnchain ?? p.submitterUser?.stakeAddress ?? null,
+      submitter: submitterDisplay(p.submitterUser, p.submitterDrep),
       createdAt: p.createdAt,
     };
   }

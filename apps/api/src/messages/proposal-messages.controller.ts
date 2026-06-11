@@ -3,6 +3,7 @@ import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { ProposalMessagesService } from './proposal-messages.service';
+import { MessageBodyDto } from './dto';
 
 @Controller()
 @UseGuards(JwtAuthGuard)
@@ -12,8 +13,8 @@ export class ProposalMessagesController {
   // Board opens a new message thread on a proposal.
   @Post('proposals/:proposalId/messages')
   @UseGuards(BoardGuard)
-  start(@CurrentUser() ctx: AuthContext, @Param('proposalId', ParseUUIDPipe) proposalId: string, @Body() body: { body: string }) {
-    return this.svc.startThread(ctx.userId, proposalId, body?.body);
+  start(@CurrentUser() ctx: AuthContext, @Param('proposalId', ParseUUIDPipe) proposalId: string, @Body() dto: MessageBodyDto) {
+    return this.svc.startThread(ctx.userId, proposalId, dto.body);
   }
 
   // All threads on a proposal (board + submitter only).
@@ -24,8 +25,8 @@ export class ProposalMessagesController {
 
   // Reply within a thread (board OR the submitter).
   @Post('messages/:threadId/reply')
-  reply(@CurrentUser() ctx: AuthContext, @Param('threadId', ParseUUIDPipe) threadId: string, @Body() body: { body: string }) {
-    return this.svc.addEntry(ctx.userId, threadId, body?.body);
+  reply(@CurrentUser() ctx: AuthContext, @Param('threadId', ParseUUIDPipe) threadId: string, @Body() dto: MessageBodyDto) {
+    return this.svc.addEntry(ctx.userId, threadId, dto.body);
   }
 
   // Board marks a thread DONE → history.

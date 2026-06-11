@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { card } from '@/lib/ui';
 import {
   internalProposalsApi,
   daoApi,
@@ -17,7 +18,7 @@ import { useUrlNav } from '@/lib/use-url-nav';
 import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput, DateField, RationaleText } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
 
-const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
+
 const field = 'w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900';
 
 const TYPE_LABEL: Record<string, string> = {

@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
+import { SUBCAT_LABEL } from '@/lib/ui';
 import { daoApi, type DaoMember, type DaoExpert } from '@/lib/api';
 import { fmtDate } from './round-ui';
 
-const SUBCAT_LABEL: Record<string, string> = Object.fromEntries(DEFAULT_SUBCATEGORIES.map((s) => [s.id, s.label]));
+
 
 // Sortable columns of the member table; `num` distinguishes numeric vs text/date sort.
 type SortKey = 'displayName' | 'since' | 'votingPowerAda' | 'delegators' | 'basePower' | 'merit' | 'meritMultiplier' | 'adjustedPower';
