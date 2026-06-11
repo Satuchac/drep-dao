@@ -83,6 +83,12 @@ export class AdminProposalsController {
     return this.proposals.verifyRevenueSharing(ctx.userId, id);
   }
 
+  // §11 — proposals awaiting reviewer assignment (filtering draw + milestone reviewers).
+  @Get('pending-reviewer-assignment')
+  pendingReviewerAssignment() {
+    return this.proposals.listPendingReviewerAssignment();
+  }
+
   // §3 — proposals in FUNDING awaiting pledge confirmation (the team pasted a tx,
   // the platform verifies it on-chain; the board approves or rejects).
   @Get('pending-pledge')

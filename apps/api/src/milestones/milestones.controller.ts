@@ -141,6 +141,13 @@ export class MilestonesController {
     );
   }
 
+  /** §11 — one-click random reviewer draw (mirrors filtering's draw-reviewers). */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Post('admin/proposals/:id/draw-milestone-reviewers')
+  draw(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.milestones.drawMilestoneReviewers(id, ctx.userId);
+  }
+
   /** Release the currently-assigned reviewers (only if no POA submitted yet). */
   @UseGuards(JwtAuthGuard, BoardGuard)
   @Post('admin/proposals/:id/release-milestone-reviewers')

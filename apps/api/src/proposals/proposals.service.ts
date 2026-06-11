@@ -1124,6 +1124,13 @@ export class ProposalsService {
       where: { milestoneId: { in: ms.map((m) => m.id) }, phase: 'MILESTONE' },
       select: { milestoneId: true, choice: true },
     });
+    // §11 — proposals that already have milestone reviewers assigned (drives the round-overview
+    // "milestone reviewers assigned / not assigned" flag).
+    const msAssign = await this.prisma.milestoneAssignment.findMany({
+      where: { milestone: { proposalId: { in: ids } }, releasedAt: null },
+      select: { milestone: { select: { proposalId: true } } },
+    });
+    const msReviewerProposalIds = new Set(msAssign.map((a) => a.milestone.proposalId));
     const activeStops = await this.prisma.stopFundingProposal.findMany({
       where: { proposalId: { in: ids }, status: 'ACTIVE' },
       include: { votes: { select: { choice: true } } },
@@ -1314,8 +1321,77 @@ export class ProposalsService {
         };
       }
 
-      return { ...base, progress, rejectionReasons };
+      // §11 — milestone-reviewer flag for FUNDING proposals that have milestones.
+      let milestoneReviewers: 'assigned' | 'not_assigned' | null = null;
+      if (status === ProposalStatus.APPROVED && stage === ProposalStage.FUNDING && (msByProposal.get(p.id) ?? []).length > 0) {
+        milestoneReviewers = msReviewerProposalIds.has(p.id) ? 'assigned' : 'not_assigned';
+      }
+
+      return { ...base, progress, rejectionReasons, milestoneReviewers };
     });
+  }
+
+  /**
+   * §11 — board to-do: proposals awaiting reviewer assignment, both stages:
+   *  - FILTERING: ACTIVE + FILTERING stage with no reviewers drawn yet (board draws a jury).
+   *  - MILESTONE: APPROVED + FUNDING (round FUNDING) with milestones but no reviewers assigned.
+   */
+  async listPendingReviewerAssignment() {
+    const filtering = await this.prisma.proposal.findMany({
+      where: {
+        status: ProposalStatus.ACTIVE,
+        stage: ProposalStage.FILTERING,
+        filterAssignments: { none: { releasedAt: null } },
+      },
+      orderBy: { submittedAt: 'asc' },
+      select: {
+        id: true, publicId: true, title: true,
+        submitterUser: { select: { displayName: true } },
+        round: { select: { number: true, filterReviewerCount: true } },
+      },
+    });
+    const fundingProps = await this.prisma.proposal.findMany({
+      where: {
+        status: ProposalStatus.APPROVED,
+        stage: ProposalStage.FUNDING,
+        round: { status: RoundStatus.FUNDING },
+        milestones: { some: {} },
+      },
+      orderBy: { submittedAt: 'asc' },
+      select: {
+        id: true, publicId: true, title: true,
+        submitterUser: { select: { displayName: true } },
+        round: { select: { number: true, milestoneReviewerCount: true } },
+      },
+    });
+    const assignedSet = new Set(
+      (await this.prisma.milestoneAssignment.findMany({
+        where: { milestone: { proposalId: { in: fundingProps.map((p) => p.id) } }, releasedAt: null },
+        select: { milestone: { select: { proposalId: true } } },
+      })).map((a) => a.milestone.proposalId),
+    );
+    const milestone = fundingProps.filter((p) => !assignedSet.has(p.id));
+
+    return [
+      ...filtering.map((p) => ({
+        proposalId: p.id,
+        publicId: p.publicId,
+        title: p.title,
+        kind: 'FILTERING' as const,
+        roundNumber: p.round?.number ?? null,
+        submitter: p.submitterUser?.displayName ?? null,
+        targetCount: p.round?.filterReviewerCount ?? ROUND_SETTING_DEFAULTS.filterReviewerCount,
+      })),
+      ...milestone.map((p) => ({
+        proposalId: p.id,
+        publicId: p.publicId,
+        title: p.title,
+        kind: 'MILESTONE' as const,
+        roundNumber: p.round?.number ?? null,
+        submitter: p.submitterUser?.displayName ?? null,
+        targetCount: p.round?.milestoneReviewerCount ?? ROUND_SETTING_DEFAULTS.milestoneReviewerCount,
+      })),
+    ];
   }
 
   /**

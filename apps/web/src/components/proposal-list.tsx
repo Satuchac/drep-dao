@@ -57,6 +57,12 @@ export function ProposalList({ roundId }: { roundId: string }) {
                 {p.stage ? <span>Stage: <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.stage}</span></span> : null}
                 <span className="flex items-center gap-1">Status: <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} /></span>
                 {p.progress ? <ProgressChip p={p.progress} /> : null}
+                {/* §11 — milestone reviewer assignment flag for FUNDING proposals. */}
+                {p.milestoneReviewers === 'not_assigned' ? (
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">milestone reviewers not assigned</span>
+                ) : p.milestoneReviewers === 'assigned' ? (
+                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">milestone reviewers assigned</span>
+                ) : null}
               </div>
             </div>
             <div className="mt-1 text-xs text-neutral-500">

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, messagesApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type EntryEligibility, type BoardAction } from '@/lib/api';
+import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardProposalsApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, messagesApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type EntryEligibility, type BoardAction } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -22,6 +22,7 @@ import { RoundStageControls } from './round-stage-controls';
 import { InternalProposals } from './internal-proposals';
 import { FeeConfirmations } from './fee-confirmations';
 import { RevenueSharingConfirmations } from './revenue-sharing-confirmations';
+import { ReviewerAssignments } from './reviewer-assignments';
 import { BoardAllMessages, BoardMessages, SubmitterMessages } from './proposal-messages';
 import { PledgeConfirmations } from './pledge-confirmations';
 import { BoardPayments } from './board-payments';
@@ -239,6 +240,7 @@ function ActionsTab() {
         </div>
       </div>
       <BoardActions history={showHistory} filter="rewards" />
+      <ReviewerAssignments />
       <BoardMessages />
       <RevenueSharingConfirmations />
       <StopFundingBoardPanel />
@@ -290,7 +292,7 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
         next.messages = mineMsgs.filter((t) => t.status === 'OPEN' && t.lastFromBoard).length;
       } catch { /* leave at 0 */ }
       if (isBoard) {
-        const [a, f, p, dapps, eapps, rem, stop, pl, rev, msg] = await Promise.allSettled([
+        const [a, f, p, dapps, eapps, rem, stop, pl, rev, msg, rvw] = await Promise.allSettled([
           treasuryApi.boardActions(),
           boardFeeApi.pending(),
           boardPaymentsApi.pending(),
@@ -301,6 +303,7 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
           boardPledgeApi.pending(), // §3 — pledge payments to confirm
           boardRevenueApi.pending(), // §3.4 — revenue-sharing to verify (gates milestone POAs)
           messagesApi.boardPending(), // §3.5 — submitter replies awaiting the board
+          boardProposalsApi.pendingReviewerAssignment(), // §11 — proposals needing a review jury
         ]);
         // §15 — multisig sign queue (boardActions) is the Treasury tab; the
         // remaining review/audit items (fees, pledges, payouts, stop-funding)
@@ -318,7 +321,8 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
           (stop.status === 'fulfilled' ? stop.value.count : 0) +
           (pl.status === 'fulfilled' ? pl.value.length : 0) +
           (rev.status === 'fulfilled' ? rev.value.length : 0) +
-          (msg.status === 'fulfilled' ? msg.value.length : 0);
+          (msg.status === 'fulfilled' ? msg.value.length : 0) +
+          (rvw.status === 'fulfilled' ? rvw.value.length : 0);
         next.applications =
           (dapps.status === 'fulfilled' ? dapps.value.filter((x) => !x.myVote).length : 0) +
           (eapps.status === 'fulfilled' ? eapps.value.length : 0) +

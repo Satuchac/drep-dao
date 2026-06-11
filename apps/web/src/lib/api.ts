@@ -810,6 +810,8 @@ export interface ProposalSummary {
   progress?: ProposalProgress | null;
   /** §7/§8/§16 — DRep / board rationales that decided a REJECTED proposal. */
   rejectionReasons?: ProposalRejectionReason[] | null;
+  /** §11 — FUNDING proposals: whether milestone reviewers have been assigned. */
+  milestoneReviewers?: 'assigned' | 'not_assigned' | null;
 }
 export interface ProposalDetail extends ProposalSummary {
   categoryId: string;
@@ -945,12 +947,25 @@ export const filteringApi = {
     }),
 };
 
+// §11 — board to-do: proposals awaiting reviewer assignment (filtering + milestone).
+export interface PendingReviewerAssignment {
+  proposalId: string;
+  publicId: string | null;
+  title: string;
+  kind: 'FILTERING' | 'MILESTONE';
+  roundNumber: number | null;
+  submitter: string | null;
+  targetCount: number;
+}
+
 // Board: confirm fee / draw reviewers / open D&V voting / finalize.
 export const boardProposalsApi = {
   reviewFee: (id: string, decision: 'APPROVE' | 'REJECT', feedback?: string) =>
     request<ProposalDetail>(`/admin/proposals/${id}/review-fee`, { method: 'POST', body: JSON.stringify({ decision, feedback }) }),
   drawReviewers: (id: string) =>
     request<FilterResult>(`/admin/proposals/${id}/draw-reviewers`, { method: 'POST' }),
+  pendingReviewerAssignment: () =>
+    request<PendingReviewerAssignment[]>('/admin/proposals/pending-reviewer-assignment'),
   // §7.1 — list candidate DReps for the board's "Change reviewer" picker.
   // `all=true` also includes admitted DReps outside this round's eligibility
   // list (each carries `inRound: false`); picking them auto-adds them to the
@@ -1372,6 +1387,9 @@ export const boardMilestoneApi = {
   /** Ranked candidate reviewers (DReps + experts) with expertise + per-round load. */
   candidates: (proposalId: string) =>
     request<MilestoneCandidate[]>(`/admin/proposals/${proposalId}/milestone-candidates`),
+  /** §11 — one-click random reviewer draw (mirrors filtering's drawReviewers). */
+  draw: (proposalId: string) =>
+    request<MilestoneView[]>(`/admin/proposals/${proposalId}/draw-milestone-reviewers`, { method: 'POST' }),
   /** Board selects exactly `milestoneReviewerCount` reviewers (DReps and/or experts). */
   assign: (proposalId: string, drepIds: string[], expertIds: string[] = []) =>
     request<MilestoneView[]>(`/admin/proposals/${proposalId}/assign-milestone-reviewers`, {

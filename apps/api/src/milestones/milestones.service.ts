@@ -1,3 +1,4 @@
+import { randomInt } from 'crypto';
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ROUND_SETTING_DEFAULTS, ProposalStage, ProposalStatus, RoundStatus, VoteChoice, VotePhase } from '@drep-dao/shared';
 import { GovSubject, VotingStyle } from '@drep-dao/cardano';
@@ -179,6 +180,31 @@ export class MilestonesService {
     });
     void boardUserId; // recorded via the AdminAudit log middleware on the controller
     return this.forProposal(proposalId);
+  }
+
+  /**
+   * §11 — one-click random reviewer draw for milestones (mirrors filtering.drawReviewers):
+   * expertise match first, then least-loaded in the round, random tiebreak. Picks exactly
+   * `milestoneReviewerCount` from the ranked candidates and assigns them.
+   */
+  async drawMilestoneReviewers(proposalId: string, boardUserId: string) {
+    const proposal = await this.prisma.proposal.findUnique({
+      where: { id: proposalId },
+      select: { round: { select: { milestoneReviewerCount: true } } },
+    });
+    const want = proposal?.round?.milestoneReviewerCount ?? ROUND_SETTING_DEFAULTS.milestoneReviewerCount;
+    const cands = await this.candidates(proposalId);
+    const picked = [...cands]
+      .sort((a, b) =>
+        Number(b.expertiseMatch) - Number(a.expertiseMatch) ||
+        a.loadInRound - b.loadInRound ||
+        randomInt(1_000_000) - randomInt(1_000_000),
+      )
+      .slice(0, want);
+    if (picked.length < want) {
+      throw new ConflictException(`not enough eligible reviewers in this round — need ${want}, found ${picked.length}`);
+    }
+    return this.assignReviewers(proposalId, picked.map((c) => ({ kind: c.kind, id: c.id })), boardUserId);
   }
 
   /**
