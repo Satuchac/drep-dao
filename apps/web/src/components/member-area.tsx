@@ -360,6 +360,10 @@ function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.
   const fromUrl = get('tab');
   const active = tabs.some((t) => t.key === fromUrl) ? fromUrl : tabs[0]?.key;
   const current = tabs.find((t) => t.key === active) ?? tabs[0];
+  // Re-clicking the active tab should reset its view (e.g. close an opened proposal in
+  // "My proposals", whose detail lives in component-local state). Bumping this remounts the
+  // active tab's node so it lands back on its top-level list.
+  const [resetNonce, setResetNonce] = useState(0);
   return (
     <div className="space-y-4">
       <RemovalBanner />
@@ -369,7 +373,7 @@ function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.
             key={t.key}
             // Clear per-tab sub-navigation (e.g. an opened internal proposal `ip`) so clicking
             // a tab always reliably lands on its top-level list, not a stale detail view.
-            onClick={() => setParams({ tab: t.key, ip: null })}
+            onClick={() => { if (t.key === active) setResetNonce((n) => n + 1); setParams({ tab: t.key, ip: null, proposal: null }); }}
             className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm ${
               active === t.key
                 ? 'bg-emerald-600 font-medium text-white'
@@ -386,7 +390,7 @@ function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.
           </button>
         ))}
       </div>
-      <div>{current?.node}</div>
+      <div key={`${active}-${resetNonce}`}>{current?.node}</div>
     </div>
   );
 }

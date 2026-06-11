@@ -1047,7 +1047,7 @@ export class ProposalsService {
       orderBy: { createdAt: 'asc' },
       include: {
         category: { select: { name: true } },
-        submitterUser: { select: { displayName: true } },
+        submitterUser: { select: { displayName: true, stakeAddress: true } },
         submitterDrep: { select: { drepIdOnchain: true } },
         round: { select: { status: true, filterReviewerCount: true, filterApprovalVotes: true, milestoneApprovalVotes: true } },
       },
@@ -1365,7 +1365,8 @@ export class ProposalsService {
       orderBy: { submittedAt: 'asc' },
       select: {
         id: true, publicId: true, title: true,
-        submitterUser: { select: { displayName: true } },
+        submitterUser: { select: { displayName: true, stakeAddress: true } },
+        submitterDrep: { select: { drepIdOnchain: true } },
         round: { select: { number: true, filterReviewerCount: true } },
       },
     });
@@ -1379,7 +1380,8 @@ export class ProposalsService {
       orderBy: { submittedAt: 'asc' },
       select: {
         id: true, publicId: true, title: true,
-        submitterUser: { select: { displayName: true } },
+        submitterUser: { select: { displayName: true, stakeAddress: true } },
+        submitterDrep: { select: { drepIdOnchain: true } },
         round: { select: { number: true, milestoneReviewerCount: true } },
       },
     });
@@ -1398,7 +1400,7 @@ export class ProposalsService {
         title: p.title,
         kind: 'FILTERING' as const,
         roundNumber: p.round?.number ?? null,
-        submitter: p.submitterUser?.displayName ?? null,
+        submitter: p.submitterUser?.displayName ?? p.submitterDrep?.drepIdOnchain ?? p.submitterUser?.stakeAddress ?? null,
         targetCount: p.round?.filterReviewerCount ?? ROUND_SETTING_DEFAULTS.filterReviewerCount,
       })),
       ...milestone.map((p) => ({
@@ -1407,7 +1409,7 @@ export class ProposalsService {
         title: p.title,
         kind: 'MILESTONE' as const,
         roundNumber: p.round?.number ?? null,
-        submitter: p.submitterUser?.displayName ?? null,
+        submitter: p.submitterUser?.displayName ?? p.submitterDrep?.drepIdOnchain ?? p.submitterUser?.stakeAddress ?? null,
         targetCount: p.round?.milestoneReviewerCount ?? ROUND_SETTING_DEFAULTS.milestoneReviewerCount,
       })),
     ];
@@ -1644,7 +1646,7 @@ export class ProposalsService {
     submissionFeeTxHash?: string | null;
     createdAt: Date;
     category?: { name: string } | null;
-    submitterUser?: { displayName: string | null } | null;
+    submitterUser?: { displayName: string | null; stakeAddress?: string | null } | null;
     submitterDrep?: { drepIdOnchain: string } | null;
   }) {
     return {
@@ -1660,8 +1662,8 @@ export class ProposalsService {
       isCommercial: p.isCommercial,
       requestedAmountAda: toAda(p.requestedAmountAda),
       submissionFeeTxHash: p.submissionFeeTxHash ?? null,
-      // Who submitted it — display name, falling back to the DRep id (shown next to the title).
-      submitter: p.submitterUser?.displayName ?? p.submitterDrep?.drepIdOnchain ?? null,
+      // Who submitted it — display name, else the DRep id, else (ADA-holder only) the stake id.
+      submitter: p.submitterUser?.displayName ?? p.submitterDrep?.drepIdOnchain ?? p.submitterUser?.stakeAddress ?? null,
       createdAt: p.createdAt,
     };
   }
