@@ -63,7 +63,7 @@ export function RevenueSharingConfirmations({ onChange }: { onChange?: () => voi
         confirmLabel="Verify"
         cancelLabel="Cancel"
         onCancel={() => setConfirmId(null)}
-        onConfirm={() => confirmId && verify(confirmId)}
+        onConfirm={() => { if (confirmId) void verify(confirmId); }}
       />
     </section>
   );
