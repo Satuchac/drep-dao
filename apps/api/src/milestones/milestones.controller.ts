@@ -148,6 +148,17 @@ export class MilestonesController {
     return this.milestones.drawMilestoneReviewers(id, ctx.userId);
   }
 
+  /** §11.5 — board grants the one-time extra deadline extension for a milestone. */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Post('admin/proposals/:id/milestones/:milestoneId/extend')
+  extend(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('milestoneId', ParseUUIDPipe) milestoneId: string,
+    @Body() body: { days: number },
+  ) {
+    return this.milestones.grantBoardExtension(id, milestoneId, Number(body?.days));
+  }
+
   /** Release the currently-assigned reviewers (only if no POA submitted yet). */
   @UseGuards(JwtAuthGuard, BoardGuard)
   @Post('admin/proposals/:id/release-milestone-reviewers')

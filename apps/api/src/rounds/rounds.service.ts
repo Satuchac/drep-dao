@@ -407,9 +407,9 @@ export class RoundsService {
 
   /**
    * §6 — shorten or extend the **current** stage. The start is frozen (the stage
-   * already entered), so only `endsAt` is updatable. The new end must be in the
-   * future and not push past the planned next stage's start (we'd need to shift
-   * that too, which the board does separately via confirmStage).
+   * already entered), so only `endsAt` is updatable. Auto-shift rule: extending a
+   * period shifts every SUBSEQUENT schedule row by the same delta, so the board edits
+   * one date and the whole plan cascades (no manual pushing stage by stage).
    */
   async updateCurrentStageWindow(id: string, dto: { endsAt: string }, _userId: string) {
     void _userId;
@@ -424,19 +424,24 @@ export class RoundsService {
     if (Number.isNaN(newEnd.getTime())) throw new BadRequestException('invalid end date');
     if (newEnd <= new Date()) throw new BadRequestException('the new end must be in the future');
     if (newEnd <= row.startsAt) throw new BadRequestException('the new end must be after the stage start');
-    // P7 — keep schedule ordered. If the next stage is already confirmed and its
-    // start is earlier than the new current-end, ask the board to push it first.
-    const nextStatus = this.nextStatusOf(round.status);
-    const nextKey = nextStatus ? STAGE_KEY_FOR_STATUS[nextStatus] : undefined;
-    const nextRow = nextKey ? round.schedule.find((s) => s.stageKey === nextKey) : undefined;
-    if (nextRow && newEnd > nextRow.startsAt) {
-      throw new BadRequestException(
-        `the new end (${newEnd.toISOString()}) would overlap the planned ${nextKey} start — push that stage first`,
-      );
-    }
-    await this.prisma.roundSchedule.update({
-      where: { roundId_stageKey: { roundId: id, stageKey: key } },
-      data: { endsAt: newEnd },
+
+    const delta = newEnd.getTime() - row.endsAt.getTime();
+    await this.prisma.$transaction(async (tx) => {
+      await tx.roundSchedule.update({
+        where: { roundId_stageKey: { roundId: id, stageKey: key } },
+        data: { endsAt: newEnd, prolongedFrom: delta > 0 ? row.endsAt : undefined },
+      });
+      // §6 auto-shift — every later stage moves by the same delta (only when extending;
+      // shortening leaves the later plan in place, the board may pull stages in manually).
+      if (delta > 0) {
+        const later = round.schedule.filter((s) => s.stageKey !== key && s.startsAt.getTime() >= row.endsAt.getTime());
+        for (const s of later) {
+          await tx.roundSchedule.update({
+            where: { roundId_stageKey: { roundId: id, stageKey: s.stageKey } },
+            data: { startsAt: new Date(s.startsAt.getTime() + delta), endsAt: new Date(s.endsAt.getTime() + delta) },
+          });
+        }
+      }
     });
     return this.get(id);
   }
@@ -604,6 +609,30 @@ export class RoundsService {
   private nextStatusOf(status: string): string | null {
     const i = STATUS_SEQUENCE.indexOf(status);
     return i >= 0 && i < STATUS_SEQUENCE.length - 1 ? STATUS_SEQUENCE[i + 1] : null;
+  }
+
+  /**
+   * §27 voting-deadline-check — rounds whose CURRENT stage window has ended but which won't
+   * auto-advance (next stage not confirmed/auto-start). The jobs scheduler alerts the board.
+   */
+  async listOverdueStages(now = new Date()): Promise<{ roundId: string; name: string; status: string; endsAt: Date }[]> {
+    const rounds = await this.prisma.round.findMany({
+      where: { status: { in: [RoundStatus.SUBMISSION, RoundStatus.FILTERING, RoundStatus.DEBATE, RoundStatus.VOTE, RoundStatus.DV] } },
+      include: { schedule: true },
+    });
+    const out: { roundId: string; name: string; status: string; endsAt: Date }[] = [];
+    for (const round of rounds) {
+      const cur = round.status === RoundStatus.DV ? RoundStatus.VOTE : round.status;
+      const keys = SCHEDULE_KEY_FOR_STATUS[cur] ?? [];
+      const row = round.schedule.find((s) => keys.includes(s.stageKey));
+      if (!row || row.endsAt.getTime() > now.getTime()) continue;
+      const nextStatus = this.nextStatusOf(cur);
+      const nextKeys = nextStatus ? SCHEDULE_KEY_FOR_STATUS[nextStatus] ?? [] : [];
+      const nextRow = round.schedule.find((s) => nextKeys.includes(s.stageKey));
+      const willAutoAdvance = !!nextRow?.autoStart && !!nextRow?.confirmedAt && nextRow.startsAt.getTime() <= now.getTime();
+      if (!willAutoAdvance) out.push({ roundId: round.id, name: round.name ?? `Round #${round.number}`, status: round.status, endsAt: row.endsAt });
+    }
+    return out;
   }
 
   private computeNextStage(

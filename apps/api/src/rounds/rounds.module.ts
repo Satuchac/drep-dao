@@ -13,5 +13,6 @@ import { AdminRoundsController } from './admin-rounds.controller';
   imports: [AuthModule, forwardRef(() => ProposalsModule)],
   controllers: [RoundsController, AdminRoundsController],
   providers: [RoundsService, RoundsSchedulerService, BoardGuard],
+  exports: [RoundsService],
 })
 export class RoundsModule {}

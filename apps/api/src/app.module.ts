@@ -21,6 +21,8 @@ import { CardanoModule } from './cardano/cardano.module';
 import { RewardsModule } from './rewards/rewards.module';
 import { ProposalMessagesModule } from './messages/proposal-messages.module';
 import { SubmitterModule } from './submitter/submitter.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { JobsModule } from './jobs/jobs.module';
 
 @Module({
   imports: [
@@ -48,6 +50,8 @@ import { SubmitterModule } from './submitter/submitter.module';
     RewardsModule,
     ProposalMessagesModule,
     SubmitterModule,
+    NotificationsModule,
+    JobsModule,
     InternalProposalsModule,
     PreferencesModule,
   ],

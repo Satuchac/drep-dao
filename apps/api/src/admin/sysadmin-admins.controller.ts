@@ -55,4 +55,30 @@ export class SysadminAdminsController {
     await this.audit.log({ adminId: admin.adminId, action: 'ADMIN_DISABLED', target: id });
     return { ok: true };
   }
+
+  /** §18.8 — generate a one-time password-reset token for another admin (1h TTL, shown once). */
+  @UseGuards(AdminGuard)
+  @Post(':id/password-reset')
+  async passwordReset(@CurrentAdmin() admin: AdminIdentity, @Param('id', ParseUUIDPipe) id: string) {
+    const r = await this.auth.createPasswordReset(admin.adminId, id);
+    await this.audit.log({ adminId: admin.adminId, action: 'ADMIN_PASSWORD_RESET_ISSUED', target: r.username });
+    return r;
+  }
+
+  // No guard — the target admin uses the one-time token.
+  @Post('reset-password')
+  async resetPassword(@Body() dto: { token: string; password: string }, @Req() req: Request) {
+    const r = await this.auth.resetPassword(dto.token, dto.password);
+    await this.audit.log({ adminId: null, action: 'ADMIN_PASSWORD_RESET_USED', ip: req.ip });
+    return r;
+  }
+
+  /** §18.6 — switch ALL admins: invite the new roster; old roster auto-disabled when the last invite is accepted. */
+  @UseGuards(AdminGuard)
+  @Post('switch-all')
+  async switchAll(@CurrentAdmin() admin: AdminIdentity, @Body() dto: { admins: { username: string; email: string }[] }) {
+    const r = await this.auth.switchAllAdmins(admin.adminId, dto.admins ?? []);
+    await this.audit.log({ adminId: admin.adminId, action: 'ADMIN_SWITCH_ALL_STARTED', target: (dto.admins ?? []).map((a) => a.username).join(', ') });
+    return r;
+  }
 }

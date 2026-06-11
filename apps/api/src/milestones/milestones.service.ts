@@ -328,6 +328,13 @@ export class MilestonesService {
           acceptanceCriteria: m.acceptanceCriteria,
           amountAda: Number(m.amountAda) / LOVELACE,
           status: m.status,
+          // §11.4/§11.5 — payment + deadline tracking.
+          paidAt: m.paidAt,
+          paidInTx: m.paidInTx,
+          deadlineAt: m.deadlineAt,
+          autoExtendedCount: m.autoExtendedCount,
+          boardExtensionDays: m.boardExtensionDays,
+          boardExtendedAt: m.boardExtendedAt,
           reviewers: m.assignments.map((a) => ({
             // Internal drepId is needed by the board UI to identify which
             // assigned reviewer to swap when calling replaceReviewer.
@@ -553,9 +560,18 @@ export class MilestonesService {
     else if (reviewerCount > 0 && reviewerCount - no < threshold) outcome = 'REJECTED';
     if (!outcome) return;
 
+    // §11.5 — a rejection auto-extends the POA deadline (milestoneAutoExtensionDays) so the
+    // team has a window to resubmit. Counted, so the history shows how often it slipped.
+    let autoExtend: { deadlineAt: Date; autoExtendedCount: { increment: number } } | undefined;
+    if (outcome === 'REJECTED' && m.deadlineAt) {
+      const round = await this.prisma.round.findUnique({ where: { id: m.proposal.roundId ?? '' }, select: { milestoneAutoExtensionDays: true } });
+      const days = round?.milestoneAutoExtensionDays ?? ROUND_SETTING_DEFAULTS.milestoneAutoExtensionDays;
+      const base = m.deadlineAt.getTime() > Date.now() ? m.deadlineAt.getTime() : Date.now();
+      autoExtend = { deadlineAt: new Date(base + days * 86_400_000), autoExtendedCount: { increment: 1 } };
+    }
     await this.prisma.milestone.update({
       where: { id: milestoneId },
-      data: { status: outcome, closedAt: outcome === 'APPROVED' ? new Date() : null },
+      data: { status: outcome, closedAt: outcome === 'APPROVED' ? new Date() : null, ...(autoExtend ?? {}) },
     });
 
     try {
@@ -587,6 +603,30 @@ export class MilestonesService {
         await this.prisma.proposal.update({ where: { id: m.proposal.id }, data: { status: ProposalStatus.COMPLETE } });
       }
     }
+  }
+
+  /**
+   * §11.5 — board grants ONE extra deadline extension per milestone (≤ the per-round max,
+   * default 90 days). Separate from the automatic on-rejection extension.
+   */
+  async grantBoardExtension(proposalId: string, milestoneId: string, days: number) {
+    const m = await this.prisma.milestone.findUnique({
+      where: { id: milestoneId },
+      select: { id: true, proposalId: true, deadlineAt: true, boardExtendedAt: true, status: true, proposal: { select: { roundId: true } } },
+    });
+    if (!m || m.proposalId !== proposalId) throw new NotFoundException('milestone not found');
+    if (m.status === 'APPROVED') throw new ConflictException('milestone is already approved');
+    if (m.boardExtendedAt) throw new ConflictException('the board extension has already been used for this milestone (one-time)');
+    const round = await this.prisma.round.findUnique({ where: { id: m.proposal.roundId ?? '' }, select: { milestoneBoardExtraExtensionDays: true } });
+    const max = round?.milestoneBoardExtraExtensionDays ?? ROUND_SETTING_DEFAULTS.milestoneBoardExtraExtensionDays;
+    const d = Math.floor(days);
+    if (!(d >= 1 && d <= max)) throw new BadRequestException(`extension must be between 1 and ${max} days`);
+    const base = m.deadlineAt && m.deadlineAt.getTime() > Date.now() ? m.deadlineAt.getTime() : Date.now();
+    await this.prisma.milestone.update({
+      where: { id: milestoneId },
+      data: { deadlineAt: new Date(base + d * 86_400_000), boardExtensionDays: d, boardExtendedAt: new Date() },
+    });
+    return this.forProposal(proposalId);
   }
 
   /**

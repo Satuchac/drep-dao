@@ -49,10 +49,13 @@ export class AdminAuthService {
     email: string;
     password: string;
     createdById?: string | null;
+    // §18.6 — a switch-all rotation temporarily exceeds the cap (old roster still active
+    // until the last new admin accepts), so rotation acceptances skip the cap check.
+    allowOverCap?: boolean;
   }): Promise<{ adminId: string; totpUri: string; totpBase32: string; recoveryCodes: string[] }> {
     const activeCount = await this.prisma.adminUser.count({ where: { status: AdminStatus.ACTIVE } });
     const isFirst = activeCount === 0;
-    if (!isFirst && activeCount >= MAX_ADMINS) {
+    if (!isFirst && !params.allowOverCap && activeCount >= MAX_ADMINS) {
       throw new ConflictException(`admin cap reached (${MAX_ADMINS}); remove one first`);
     }
 
@@ -110,11 +113,15 @@ export class AdminAuthService {
       email: invite.email,
       password,
       createdById: invite.createdById,
+      allowOverCap: !!invite.rotationId,
     });
     await this.prisma.adminInvitation.update({
       where: { id: invite.id },
       data: { consumedAt: new Date() },
     });
+    // §18.6 — if this invitation belongs to a switch-all rotation and it was the last one,
+    // disable every admin outside the new roster.
+    await this.maybeCompleteRotation(invite.rotationId);
     const totpQrDataUrl = await QRCode.toDataURL(created.totpUri);
     return { ...created, totpQrDataUrl };
   }
@@ -143,6 +150,75 @@ export class AdminAuthService {
     }
     await this.prisma.adminUser.update({ where: { id: targetId }, data: { status: AdminStatus.DISABLED } });
     await this.revokeAllSessions(targetId);
+  }
+
+  /**
+   * §18.8 — admin-triggered password reset. Another admin generates a one-time token
+   * (1-hour TTL, shown once — handed to the target out of band; the platform has no SMTP).
+   */
+  async createPasswordReset(createdById: string, targetId: string) {
+    const target = await this.prisma.adminUser.findUnique({ where: { id: targetId } });
+    if (!target || target.status === AdminStatus.REMOVED) throw new NotFoundException('admin not found');
+    const token = randomBytes(24).toString('hex');
+    await this.prisma.adminPasswordReset.create({
+      data: { adminId: targetId, tokenHash: this.sha256(token), createdById, expiresAt: new Date(Date.now() + 3600_000) },
+    });
+    return { token, expiresAt: new Date(Date.now() + 3600_000), username: target.username };
+  }
+
+  /** §18.8 — consume the reset token: set a new password, revoke sessions. No auth (target). */
+  async resetPassword(token: string, newPassword: string) {
+    if ((newPassword ?? '').length < 12) throw new BadRequestException('password must be at least 12 characters');
+    const row = await this.prisma.adminPasswordReset.findFirst({
+      where: { tokenHash: this.sha256(token), usedAt: null, expiresAt: { gt: new Date() } },
+    });
+    if (!row) throw new UnauthorizedException('invalid or expired reset token');
+    const passwordHash = await hashSecret(newPassword);
+    await this.prisma.adminUser.update({ where: { id: row.adminId }, data: { passwordHash } });
+    await this.prisma.adminPasswordReset.update({ where: { id: row.id }, data: { usedAt: new Date() } });
+    await this.revokeAllSessions(row.adminId);
+    return { ok: true };
+  }
+
+  /**
+   * §18.6 — "switch all admins": one action invites the NEW roster; when the LAST rotation
+   * invitation is accepted, every admin outside the rotation is disabled (single audit event).
+   */
+  async switchAllAdmins(createdById: string, admins: { username: string; email: string }[]) {
+    if (!admins?.length || admins.length > MAX_ADMINS) {
+      throw new BadRequestException(`provide 1–${MAX_ADMINS} new admins`);
+    }
+    const rotation = await this.prisma.adminRotation.create({ data: { createdById } });
+    const invites: { username: string; token: string; expiresAt: Date }[] = [];
+    for (const a of admins) {
+      const token = randomBytes(24).toString('hex');
+      const expiresAt = new Date(Date.now() + 24 * 3600 * 1000);
+      await this.prisma.adminInvitation.create({
+        data: { username: a.username, email: a.email, tokenHash: this.sha256(token), createdById, expiresAt, rotationId: rotation.id },
+      });
+      invites.push({ username: a.username, token, expiresAt });
+    }
+    return { rotationId: rotation.id, invites };
+  }
+
+  /** Called after every invitation acceptance — completes a rotation when its last invite lands. */
+  private async maybeCompleteRotation(rotationId: string | null) {
+    if (!rotationId) return;
+    const open = await this.prisma.adminInvitation.count({ where: { rotationId, consumedAt: null } });
+    if (open > 0) return;
+    const rotation = await this.prisma.adminRotation.findUnique({ where: { id: rotationId } });
+    if (!rotation || rotation.completedAt) return;
+    // The new roster = admins created by this rotation's invitations (matched by username).
+    const newUsernames = (await this.prisma.adminInvitation.findMany({ where: { rotationId }, select: { username: true } })).map((i) => i.username);
+    const outgoing = await this.prisma.adminUser.findMany({
+      where: { status: AdminStatus.ACTIVE, username: { notIn: newUsernames } },
+      select: { id: true },
+    });
+    for (const o of outgoing) {
+      await this.prisma.adminUser.update({ where: { id: o.id }, data: { status: AdminStatus.DISABLED } });
+      await this.revokeAllSessions(o.id);
+    }
+    await this.prisma.adminRotation.update({ where: { id: rotationId }, data: { completedAt: new Date() } });
   }
 
   private async revokeAllSessions(adminId: string): Promise<void> {
