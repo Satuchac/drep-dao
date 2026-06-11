@@ -50,6 +50,16 @@ export class RewardsController {
     return this.rewards.computeBoardMonthly(body?.periodKey);
   }
 
+  @Post('board-monthly/months')
+  computeBoardMonths(@Body() body: { months?: number }) {
+    return this.rewards.computeBoardMonths(body?.months ?? 12);
+  }
+
+  @Get('board-monthly')
+  boardMonths() {
+    return this.rewards.listBoardMonths();
+  }
+
   @Patch('entry/:id')
   setOverride(@Param('id') id: string, @Body() dto: OverrideDto) {
     return this.rewards.setOverride(id, dto.ada ?? null);

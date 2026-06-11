@@ -13,6 +13,12 @@ const KIND_LABEL: Record<string, string> = {
 };
 // Order the reward cards by stage: filtering → D&V fixed → D&V bonus → milestone → experts/board.
 const KIND_ORDER: Record<string, number> = { FILTER: 0, DV_FIXED: 1, DV_BONUS: 2, MILESTONE: 3, EXPERT: 4, BOARD_MONTHLY: 5 };
+// "2026-06" → "June 2026"
+const monthLabel = (key: string) => {
+  const [y, m] = key.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleString(undefined, { month: 'long', year: 'numeric', timeZone: 'UTC' });
+};
+const DAY_MS = 86_400_000;
 const inputCls = 'w-24 rounded border border-neutral-300 px-1.5 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900';
 
 export function RewardsTab() {
@@ -130,16 +136,20 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
   return (
     <section className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold">{KIND_LABEL[calc.kind] ?? calc.kind} · pool {calc.poolAda.toLocaleString()} ₳</h3>
+        <h3 className="text-sm font-semibold">
+          {calc.periodKey
+            ? `Board pay · ${monthLabel(calc.periodKey)}`
+            : `${KIND_LABEL[calc.kind] ?? calc.kind} · pool ${calc.poolAda.toLocaleString()} ₳`}
+        </h3>
         <div className="flex items-center gap-2">
-        {!calc.payout ? (
+        {!calc.payout && calc.kind !== 'BOARD_MONTHLY' ? (
           <button onClick={recompute} disabled={busy} title="Recalculate this reward from the latest votes" className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700">
             {busy ? '…' : '↻ Recompute'}
           </button>
         ) : null}
         {calc.payout ? (
           calc.payout.status === 'CONFIRMED' || calc.payout.status === 'BROADCASTED' ? (
-            <span className="text-xs text-emerald-600">✓ paid on-chain</span>
+            <span className="text-xs text-emerald-600">✓ paid{calc.payout.paidAt ? ` on ${new Date(calc.payout.paidAt).toLocaleDateString()}` : ' on-chain'}</span>
           ) : (
             <span className="flex items-center gap-2">
               <span className="text-xs text-amber-600">⏳ payout prepared — review &amp; sign under Actions</span>
@@ -271,23 +281,75 @@ function ExpertRow({ roundId, row, onChange }: { roundId: string; row: ExpertRew
 
 function Setup() {
   const [yearly, setYearly] = useState('');
+  const [months, setMonths] = useState('12');
+  const [list, setList] = useState<RewardCalcView[] | null>(null);
+  const [buckets, setBuckets] = useState<RewardSourceBucket[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
-  useEffect(() => { rewardsApi.getBoardYearly().then((r) => setYearly(String(r.yearlyAda))).catch(() => undefined); }, []);
+  const [busy, setBusy] = useState(false);
+  const loadList = useCallback(() => { rewardsApi.boardMonths().then(setList).catch(() => setList([])); }, []);
+  useEffect(() => {
+    rewardsApi.getBoardYearly().then((r) => setYearly(String(r.yearlyAda))).catch(() => undefined);
+    rewardsApi.sourceBuckets().then((r) => setBuckets(r.buckets)).catch(() => setBuckets([]));
+    loadList();
+  }, [loadList]);
   const save = async () => { setMsg(null); try { await rewardsApi.setBoardYearly(Number(yearly) || 0); setMsg('Saved.'); } catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } };
-  const compute = async () => { setMsg(null); try { const c = await rewardsApi.computeBoardMonthly(); setMsg(`Computed board pay for ${c.entries.length} members (${c.poolAda.toLocaleString()} ₳ this month).`); } catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } };
+  const compute = async () => {
+    setBusy(true); setMsg(null);
+    try { const r = await rewardsApi.computeBoardMonths(Number(months) || 12); setList(r); setMsg(`Computed ${r.length} month${r.length === 1 ? '' : 's'} of board pay.`); }
+    catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
+  };
+
+  // §13 — monthly cadence: after a payout, the next month opens 30 days later (soft — can send sooner).
+  const items = list ?? [];
+  const paidTimes = items.filter((c) => c.payout?.paidAt).map((c) => new Date(c.payout!.paidAt!).getTime());
+  const lastPaidAt = paidTimes.length ? Math.max(...paidTimes) : null;
+  const nextPayableAt = lastPaidAt != null ? lastPaidAt + 30 * DAY_MS : null;
+  const nextUnpaidIdx = items.findIndex((c) => !c.payout);
+  const daysLeft = nextPayableAt != null ? Math.ceil((nextPayableAt - Date.now()) / DAY_MS) : 0;
+
   return (
-    <div className="max-w-md space-y-3">
-      <div>
-        <label className="text-sm font-medium">Yearly board reward (₳)</label>
-        <p className="text-xs text-neutral-500">Total paid to the whole board per year. Monthly per-member = this ÷ 12 ÷ board seats.</p>
-        <div className="mt-1 flex gap-2">
-          <input value={yearly} onChange={(e) => setYearly(e.target.value)} className="w-40 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" />
-          <button onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-sm text-white hover:bg-emerald-700">Save</button>
+    <div className="space-y-4">
+      <div className="max-w-lg space-y-3">
+        <div>
+          <label className="text-sm font-medium">Yearly board reward (₳)</label>
+          <p className="text-xs text-neutral-500">Total paid to the whole board per year. Monthly per-member = this ÷ 12 ÷ board seats.</p>
+          <div className="mt-1 flex gap-2">
+            <input value={yearly} onChange={(e) => setYearly(e.target.value)} className="w-40 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" />
+            <button onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-sm text-white hover:bg-emerald-700">Save</button>
+          </div>
         </div>
+        <div>
+          <label className="text-sm font-medium">Months to compute</label>
+          <p className="text-xs text-neutral-500">Generates a board-pay calc per month (current month first), each payable separately.</p>
+          <div className="mt-1 flex items-center gap-2">
+            <input value={months} onChange={(e) => setMonths(e.target.value)} className="w-20 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" />
+            <button onClick={compute} disabled={busy} className="rounded border border-neutral-300 px-2.5 py-1 text-sm hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700">{busy ? 'Computing…' : 'Compute board pay'}</button>
+          </div>
+        </div>
+        {msg ? <div className="text-xs text-neutral-600 dark:text-neutral-400">{msg}</div> : null}
       </div>
-      <button onClick={compute} className="rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">Compute this month&apos;s board pay</button>
-      {msg ? <div className="text-xs text-neutral-600 dark:text-neutral-400">{msg}</div> : null}
-      <p className="text-xs text-neutral-400">Board pay appears in Overview (no round selected → board monthly) — pay it out with the same bulk-payout flow.</p>
+
+      <p className="text-xs text-neutral-400">One payout per month, sourced from Rewards (or another address you pick). After a payout, the next month opens 30 days later — you can still send it sooner if needed.</p>
+
+      <div className="space-y-3">
+        {items.map((c, i) => (
+          <div key={c.id} className="space-y-1">
+            {i === nextUnpaidIdx && nextPayableAt != null ? (
+              daysLeft <= 0 ? (
+                <div className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+                  ✓ 30 days have passed since the last board payout — this month is ready to send.
+                </div>
+              ) : (
+                <div className="rounded border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/40">
+                  ⏳ Next board payout opens in {daysLeft} day{daysLeft === 1 ? '' : 's'} — you can send it now if needed.
+                </div>
+              )
+            ) : null}
+            <CalcCard calc={c} buckets={buckets} onChange={loadList} />
+          </div>
+        ))}
+        {items.length === 0 ? <p className="text-sm text-neutral-500">No board pay computed yet — set the yearly amount, then Compute board pay.</p> : null}
+      </div>
     </div>
   );
 }

@@ -259,6 +259,30 @@ export class RewardsService {
     return this.calcView(calc.id);
   }
 
+  /** §13 — compute board pay for the next `months` calendar months (current month first).
+   *  Already-paid months are immutable and left as-is. Returns every board-monthly calc. */
+  async computeBoardMonths(months: number) {
+    const n = Math.max(1, Math.min(60, Math.floor(months || 12)));
+    const now = new Date();
+    for (let i = 0; i < n; i++) {
+      const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + i, 1));
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+      const paid = await this.prisma.rewardCalculation.findFirst({
+        where: { kind: 'BOARD_MONTHLY', periodKey: key, entries: { some: { paidAt: { not: null } } } },
+        select: { id: true },
+      });
+      if (paid) continue; // already paid → immutable
+      await this.computeBoardMonthly(key);
+    }
+    return this.listBoardMonths();
+  }
+
+  /** All board-monthly calcs (every period), oldest month first. */
+  async listBoardMonths() {
+    const calcs = await this.prisma.rewardCalculation.findMany({ where: { kind: 'BOARD_MONTHLY' }, orderBy: { periodKey: 'asc' }, select: { id: true } });
+    return Promise.all(calcs.map((c) => this.calcView(c.id)));
+  }
+
   private async boardYearlyAda(): Promise<bigint> {
     const row = await this.prisma.platformConfig.findUnique({ where: { key: 'BOARD_YEARLY_REWARD_ADA' } });
     const ada = typeof row?.value === 'number' ? row.value : PLATFORM_CONFIG_DEFAULTS.BOARD_YEARLY_REWARD_ADA;
@@ -291,7 +315,7 @@ export class RewardsService {
       : null;
     // A pending/sent REWARD_PAYOUT action for this calc (if one was already prepared).
     const linkedId = calc.entries.find((e) => e.payoutActionId)?.payoutActionId ?? null;
-    const action = linkedId ? await this.prisma.multisigAction.findUnique({ where: { id: linkedId }, select: { id: true, status: true, txHash: true } }) : null;
+    const action = linkedId ? await this.prisma.multisigAction.findUnique({ where: { id: linkedId }, select: { id: true, status: true, txHash: true, paidAt: true } }) : null;
     // §12.5 — for the D&V bonus, surface the final voting power that drove the weighting so
     // the per-recipient differences are explainable in the UI.
     let powerByDrep: Map<string, number> | null = null;
@@ -306,7 +330,7 @@ export class RewardsService {
       periodKey: calc.periodKey,
       poolAda: Number(calc.poolAda) / 1e6,
       payable: this.isPayable(calc.kind, status),
-      payout: action ? { actionId: action.id, status: action.status, txHash: action.txHash } : null,
+      payout: action ? { actionId: action.id, status: action.status, txHash: action.txHash, paidAt: action.paidAt } : null,
       computedAt: calc.computedAt,
       entries: calc.entries.map((e) => ({
         id: e.id,
