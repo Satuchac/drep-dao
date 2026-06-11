@@ -34,6 +34,8 @@ export const GovSubject = {
   SUBMISSION: 'submission', // a funding proposal accepted into the round (fee paid / not required)
   STOP_FUNDING: 'stop_funding', // §11 — board decision to terminate a funded proposal
   REWARD_PAYOUT: 'reward_payout', // §12 — a reward batch paid out (recipients + signers + tx hash)
+  DAILY_VOTES: 'daily_votes', // §24.1 — daily digest: hash of yesterday's vote rows
+  DAILY_MERIT: 'daily_merit', // §24.1 — daily digest: hash of yesterday's merit deltas
 } as const;
 export type GovSubject = (typeof GovSubject)[keyof typeof GovSubject];
 
@@ -88,6 +90,8 @@ export const SUBJECT_TITLE: Record<GovSubject, string> = {
   submission: 'Funding proposal accepted',
   stop_funding: 'Stop funding of a project',
   reward_payout: 'Reward payout to members',
+  daily_votes: 'Daily vote-tally digest',
+  daily_merit: 'Daily merit-ledger digest',
 };
 export const STYLE_LABEL: Record<VotingStyle, string> = {
   '1P1V': '1 member, 1 vote',

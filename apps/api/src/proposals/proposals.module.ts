@@ -8,11 +8,13 @@ import { ProposalsController } from './proposals.controller';
 import { AdminProposalsController } from './admin-proposals.controller';
 import { FilteringController } from './filtering.controller';
 import { DvController } from './dv.controller';
+import { QuickPollService } from './quick-poll.service';
+import { QuickPollController } from './quick-poll.controller';
 
 @Module({
   imports: [AuthModule],
-  controllers: [ProposalsController, AdminProposalsController, FilteringController, DvController],
-  providers: [ProposalsService, FilteringService, DvService, BoardGuard],
-  exports: [ProposalsService, DvService],
+  controllers: [ProposalsController, AdminProposalsController, FilteringController, DvController, QuickPollController],
+  providers: [ProposalsService, FilteringService, DvService, QuickPollService, BoardGuard],
+  exports: [ProposalsService, DvService, QuickPollService],
 })
 export class ProposalsModule {}

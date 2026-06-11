@@ -6,6 +6,7 @@ import * as CSL from '@emurgo/cardano-serialization-lib-nodejs';
 import {
   GOVERNANCE_METADATA_LABEL,
   GovSubject,
+  SUBJECT_TITLE,
   VotingStyle,
   buildResultMetadata,
   buildSubmissionMetadata,
@@ -400,6 +401,51 @@ export class AnchorService implements OnModuleInit {
   }
 
   /**
+   * §24.1 — daily digest anchor: hash of yesterday's vote rows / merit deltas. The preimage
+   * keeps the full row digest so anyone can recompute the hash from the API data.
+   */
+  async anchorDigest(params: {
+    kind: typeof GovSubject.DAILY_VOTES | typeof GovSubject.DAILY_MERIT;
+    day: string; // YYYY-MM-DD (UTC)
+    rows: unknown[]; // serialized rows for that day (already stable-ordered)
+  }): Promise<AnchorResult> {
+    const preimage = {
+      subject: params.kind,
+      day: params.day,
+      count: params.rows.length,
+      rowsHash: sha256hex(JSON.stringify(params.rows)),
+      anchoredAt: new Date().toISOString(),
+    };
+    const hash = sha256hex(JSON.stringify(preimage));
+    const metadata = {
+      v: 1,
+      title: SUBJECT_TITLE[params.kind],
+      subject: params.kind,
+      day: params.day,
+      count: params.rows.length,
+      rows_hash: preimage.rowsHash,
+      proof_hash: hash,
+    };
+    let txHash: string | null = null;
+    try {
+      txHash = await this.submitMetadataTx(metadata as Record<string, unknown>);
+    } catch (e) {
+      this.logger.warn(`daily digest anchor submit skipped/failed: ${e instanceof Error ? e.message : e}`);
+    }
+    await this.prisma.anchor.create({
+      data: {
+        kind: params.kind,
+        hash,
+        preimage: preimage as unknown as object,
+        metadataLabel: GOVERNANCE_METADATA_LABEL,
+        txHash,
+        submittedAt: txHash ? new Date() : null,
+      },
+    });
+    return { hash, txHash, submitted: !!txHash };
+  }
+
+  /**
    * §18 (board) — force-submit an anchor that was recorded but never reached the chain
    * (e.g. the hot wallet was unconfigured/offline when the decision was made). Rebuilds
    * the self-describing metadata from the stored preimage (same `proofHash`) and submits
@@ -586,7 +632,7 @@ export class AnchorService implements OnModuleInit {
   }
 
   /** Build + sign + submit a single tx carrying `event` as metadata, from the anchor wallet. */
-  private async submitMetadataTx(event: AnchorResultMetadata | AnchorSubmissionMetadata | AnchorPayoutMetadata): Promise<string> {
+  private async submitMetadataTx(event: AnchorResultMetadata | AnchorSubmissionMetadata | AnchorPayoutMetadata | Record<string, unknown>): Promise<string> {
     if (!this.mnemonic) throw new Error('ANCHOR_MNEMONIC not configured (anchor recorded, not submitted)');
     const { prv, addr } = this.anchorKeys(this.mnemonic);
     const pp = await this.cardano.epochParams();
@@ -603,7 +649,7 @@ export class AnchorService implements OnModuleInit {
    * hash, and the change output (so a batch can chain txs without re-querying Koios).
    */
   private buildMetadataTx(
-    event: AnchorResultMetadata | AnchorSubmissionMetadata | AnchorPayoutMetadata,
+    event: AnchorResultMetadata | AnchorSubmissionMetadata | AnchorPayoutMetadata | Record<string, unknown>,
     utxos: Utxo[],
     pp: Record<string, string | number>,
     prv: CSL.PrivateKey,

@@ -125,21 +125,100 @@ export class DvService {
    * refuses mid-VOTE doesn't apply here because we're called AFTER the round
    * left VOTE (round.status === FUNDING when this runs).
    */
+  /**
+   * §9.1 — auto-ranking per category: passing proposals are sorted by yes-power (then score %,
+   * then submission time) and walked down the category budget. Fits → APPROVED; passes but
+   * doesn't fit → REJECTED (budget-cut). §9.2 — identical scores at the budget cliff trigger a
+   * Quick Poll (candidates stay ACTIVE until the poll resolves).
+   */
   async finalizeRound(roundId: string) {
     const proposals = await this.prisma.proposal.findMany({
       where: { roundId, stage: ProposalStage.DEBATE_VOTE, status: ProposalStatus.ACTIVE },
-      select: { id: true },
+      select: { id: true, categoryId: true, requestedAmountAda: true, submittedAt: true, createdAt: true },
     });
+    type Ranked = { id: string; amount: bigint; submittedAt: Date; yesPower: number; pct: number };
+    const byCategory = new Map<string, Ranked[]>();
     for (const p of proposals) {
       try {
-        await this.finalize(p.id);
-      } catch (e) {
-        // Skip any that can't be finalized (e.g. no snapshot — shouldn't happen
-        // after openVotingForRound but defensive). The board sees the proposal
-        // still ACTIVE+DEBATE_VOTE and can manually finalize it.
-        void e;
+        const r = await this.result(p.id);
+        if (!('open' in r) || !r.open) continue; // no snapshot — board finalizes manually
+        if (!r.approved) {
+          await this.finalize(p.id); // failed the threshold → REJECTED as before
+          continue;
+        }
+        const denom = Math.max(0, (r.totalPower ?? 0) - (r.abstainPower ?? 0));
+        const key = p.categoryId ?? '';
+        if (!byCategory.has(key)) byCategory.set(key, []);
+        byCategory.get(key)!.push({
+          id: p.id,
+          amount: p.requestedAmountAda ?? 0n,
+          submittedAt: p.submittedAt ?? p.createdAt,
+          yesPower: r.yesPower ?? 0,
+          pct: denom > 0 ? (r.yesPower ?? 0) / denom : 0,
+        });
+      } catch {
+        // Leave un-finalizable proposals ACTIVE for manual board action.
       }
     }
+
+    const EPS = 1e-9;
+    for (const [categoryId, list] of byCategory) {
+      const cat = categoryId
+        ? await this.prisma.roundCategory.findUnique({ where: { id: categoryId }, select: { allocatedAda: true } })
+        : null;
+      let remaining = cat ? cat.allocatedAda : null; // both allocatedAda + requestedAmountAda are lovelace
+      list.sort((a, b) => b.yesPower - a.yesPower || b.pct - a.pct || a.submittedAt.getTime() - b.submittedAt.getTime());
+
+      let i = 0;
+      let cliff = false; // once the budget is exhausted, everything below is budget-cut
+      while (i < list.length) {
+        // Group proposals with identical scores — they rank equally, so the budget can't
+        // legitimately prefer one over another.
+        const group = [list[i]];
+        while (i + group.length < list.length &&
+               Math.abs(list[i + group.length].yesPower - list[i].yesPower) < EPS &&
+               Math.abs(list[i + group.length].pct - list[i].pct) < EPS) {
+          group.push(list[i + group.length]);
+        }
+        const groupCost = group.reduce((s, g) => s + g.amount, 0n);
+
+        if (!cliff && (remaining === null || groupCost <= remaining)) {
+          for (const g of group) await this.safeFinalize(g.id, { forcedOutcome: 'APPROVED' });
+          if (remaining !== null) remaining -= groupCost;
+        } else if (!cliff && group.length > 1 && remaining !== null && group.some((g) => g.amount <= remaining!)) {
+          // §9.2 — tie at the budget cliff: equal scores, budget fits only some.
+          await this.createQuickPoll(roundId, categoryId, group.map((g) => g.id));
+          cliff = true;
+        } else {
+          for (const g of group) await this.safeFinalize(g.id, { forcedOutcome: 'REJECTED', note: 'budget-cut' });
+          cliff = true;
+        }
+        i += group.length;
+      }
+    }
+  }
+
+  private async safeFinalize(proposalId: string, opts: { forcedOutcome?: 'APPROVED' | 'REJECTED'; note?: string }) {
+    try { await this.finalize(proposalId, opts); } catch { /* board finalizes manually */ }
+  }
+
+  /** §9.2 — auto-trigger: poll awaits the board's one-click confirm before voting opens. */
+  private async createQuickPoll(roundId: string, categoryId: string, candidateIds: string[]) {
+    const existing = await this.prisma.quickPoll.findFirst({
+      where: { roundId, categoryId, status: { in: ['PENDING_BOARD', 'ACTIVE'] } },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+    // Voters frozen now: everyone in any candidate's D&V snapshot (same eligibility as D&V).
+    const snaps = await this.prisma.voteSnapshot.findMany({
+      where: { proposalId: { in: candidateIds } },
+      include: { entries: { select: { drepId: true } } },
+    });
+    const eligible = [...new Set(snaps.flatMap((s) => s.entries.map((e) => e.drepId)))];
+    const poll = await this.prisma.quickPoll.create({
+      data: { roundId, categoryId, candidates: candidateIds, status: 'PENDING_BOARD', eligibleDrepIds: eligible },
+    });
+    return poll.id;
   }
 
   /** §8.2 — a board member opts in to vote on this funding proposal (adds them to the snapshot if open). */
@@ -166,6 +245,19 @@ export class DvService {
       }
     }
     return this.result(proposalId);
+  }
+
+  /** §9.2 — live balanced voting power (basePower × merit multiplier) for quick polls. */
+  async liveBalancedPower(drepIds: string[]): Promise<Map<string, number>> {
+    const dreps = await this.prisma.drep.findMany({ where: { id: { in: drepIds } }, select: { id: true, drepIdOnchain: true } });
+    const stake = await this.realVotingPower(dreps.map((d) => d.drepIdOnchain));
+    const max = await this.meritMax();
+    const out = new Map<string, number>();
+    for (const d of dreps) {
+      const merit = await this.currentMerit(d.id, max);
+      out.set(d.id, basePower(stake.get(d.drepIdOnchain) ?? 0n) * meritMultiplier(merit, max));
+    }
+    return out;
   }
 
   /** Real on-chain CIP-1694 voting power (lovelace) per DRep id; falls back to a nominal stake if 0. */
@@ -367,7 +459,7 @@ export class DvService {
    * round to FUNDING (or the VOTE window expires) and finalize is auto-triggered
    * from the round-transition flow then.
    */
-  async finalize(proposalId: string) {
+  async finalize(proposalId: string, opts: { forcedOutcome?: 'APPROVED' | 'REJECTED'; note?: string } = {}) {
     const proposal = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
       include: { round: { select: { status: true } } },
@@ -380,11 +472,26 @@ export class DvService {
     }
     const r = await this.result(proposalId);
     if (!('open' in r) || !r.open) throw new BadRequestException('voting has not opened');
-    const status = r.approved ? ProposalStatus.APPROVED : ProposalStatus.REJECTED;
+    // §9.1/§9.2 — finalizeRound (auto-ranking) and quick-poll resolution can force the outcome:
+    // a proposal can pass the threshold yet be REJECTED (budget-cut), or win a tie-break.
+    const status = (opts.forcedOutcome as ProposalStatus | undefined) ?? (r.approved ? ProposalStatus.APPROVED : ProposalStatus.REJECTED);
     const stage = status === ProposalStatus.APPROVED ? ProposalStage.FUNDING : null;
+    // §16.4 — an approved proposal with a promised-but-unconfirmed pledge starts its grace
+    // window now; the daily pledge-grace job alerts the board when it expires unpaid.
+    let pledgeGraceEndsAt: Date | undefined;
+    if (status === ProposalStatus.APPROVED) {
+      const p = await this.prisma.proposal.findUnique({
+        where: { id: proposalId },
+        select: { pledgeAmountAda: true, pledgeConfirmedAt: true, round: { select: { pledgeGraceDays: true } } },
+      });
+      if (p?.pledgeAmountAda && p.pledgeAmountAda > 0n && !p.pledgeConfirmedAt) {
+        const days = p.round?.pledgeGraceDays ?? ROUND_SETTING_DEFAULTS.pledgeGraceDays;
+        pledgeGraceEndsAt = new Date(Date.now() + days * 86_400_000);
+      }
+    }
     await this.prisma.proposal.update({
       where: { id: proposalId },
-      data: { status, stage, resultFinalizedAt: new Date() },
+      data: { status, stage, resultFinalizedAt: new Date(), ...(pledgeGraceEndsAt ? { pledgeGraceEndsAt } : {}) },
     });
 
     // §9.3 — the publish action anchors the final tally on-chain.
@@ -414,7 +521,7 @@ export class DvService {
         kind: 'dv',
         subject: GovSubject.DV,
         style: VotingStyle.BALANCED,
-        ref: `${proposal?.title ?? 'proposal'} · ${proposal?.round?.name ?? `Round #${proposal?.round?.number ?? '?'}`}`,
+        ref: `${proposal?.title ?? 'proposal'} · ${proposal?.round?.name ?? `Round #${proposal?.round?.number ?? '?'}`}${opts.note ? ` · ${opts.note}` : ''}`,
         proposalId,
         publicId: proposal?.publicId ?? null,
         roundId: proposal?.round?.id ?? proposal?.roundId ?? null,
