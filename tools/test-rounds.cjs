@@ -32,6 +32,14 @@ const throws = async (l, fn, re) => {
 };
 
 (async () => {
+
+  // §2.1 — proposal creation now requires an APPROVED submitter role; grant it to the test user.
+  const __approveSubmitter = async (userId) => db.submitterApplication.upsert({
+    where: { userId },
+    update: { status: 'APPROVED' },
+    create: { userId, status: 'APPROVED', displayName: 'Test Submitter', description: 'test', socialLinks: [], country: 'Testland' },
+  });
+  for (const au of await db.appUser.findMany({ select: { id: true } })) await __approveSubmitter(au.id);
   const prisma = new PrismaService(config);
   const users = new UsersService(prisma, new CardanoQueryService(config));
   const rounds = new RoundsService(prisma, config);

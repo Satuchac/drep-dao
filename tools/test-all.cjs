@@ -46,6 +46,8 @@ const SUITES = [
   ['test-round-counts', '§9 round overview per-status counts incl. DRAFT/PENDING, update as status changes (self-cleaning)'],
   ['test-internal', '§10 internal proposals: submit/threshold/poll/extend/scope/private + on-chain anchor (self-cleaning)'],
   ['test-internal-election', '§14 board-member election: validation, voting → approval, install authorization, manual + auto install (self-cleaning, restores board)'],
+  ['test-shared-math', 'Shared single-source math: money, §12 reward pools (588/252/560), reviewer ranking, §4.2 power'],
+  ['test-audit-flows', 'Audit batch: §9.1 budget ranking, §9.2 quick polls, §11.5 extensions, §16.4 pledge grace, §2.1 submitter gating, §20.3 notifications, §6 auto-shift'],
 ];
 
 const failed = [];
