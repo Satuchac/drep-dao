@@ -31,7 +31,7 @@ export function RewardsTab() {
       </div>
       <div className="flex items-center gap-3">
         <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
-          {([['overview', 'Overview'], ['experts', 'Expert rewards'], ['setup', 'Setup']] as const).map(([k, l]) => (
+          {([['overview', 'Overview'], ['experts', 'Expert rewards'], ['setup', 'Board rewards']] as const).map(([k, l]) => (
             <button key={k} onClick={() => setSub(k)} className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${sub === k ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent text-neutral-500'}`}>{l}</button>
           ))}
         </div>
