@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { boardPledgeApi, type PendingPledge } from '@/lib/api';
+import { boardPledgeApi, messagesApi, type PendingPledge } from '@/lib/api';
 import { useExplorer } from '@/lib/explorer';
 import { useUrlNav } from '@/lib/use-url-nav';
 
@@ -47,6 +47,18 @@ function PendingPledgeRow({ p, onReviewed, onOpen }: { p: PendingPledge; onRevie
   const [feedback, setFeedback] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // §3.5 — invite the submitter to act (e.g. send the pledge to the Treasury) before confirming.
+  const [composing, setComposing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [sent, setSent] = useState(false);
+
+  const sendMessage = async () => {
+    const body = draft.trim();
+    if (!body) return;
+    setBusy(true);
+    try { await messagesApi.start(p.id, body); setDraft(''); setComposing(false); setSent(true); }
+    catch (e) { setError(e instanceof Error ? e.message : 'message failed'); } finally { setBusy(false); }
+  };
 
   const review = async (decision: 'APPROVE' | 'REJECT') => {
     setError(null);
@@ -127,7 +139,24 @@ function PendingPledgeRow({ p, onReviewed, onOpen }: { p: PendingPledge; onRevie
         >
           Reject
         </button>
+        <button
+          disabled={busy}
+          onClick={() => { setComposing((v) => !v); setDraft(''); }}
+          className="rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700"
+        >
+          Send message
+        </button>
       </div>
+      {composing ? (
+        <div className="mt-2 space-y-1">
+          <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} placeholder="Ask the submitter to do something — e.g. send the pledge to the Treasury…" className="w-full rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900" />
+          <div className="flex gap-2">
+            <button onClick={sendMessage} disabled={busy || !draft.trim()} className="rounded bg-emerald-600 px-3 py-1 text-xs text-white hover:bg-emerald-700 disabled:opacity-50">Send</button>
+            <button onClick={() => { setComposing(false); setDraft(''); }} className="rounded border border-neutral-300 px-3 py-1 text-xs dark:border-neutral-700">Cancel</button>
+          </div>
+        </div>
+      ) : null}
+      {sent ? <div className="mt-1 text-xs text-emerald-600">✓ Message sent — the submitter will see it under Messages and can respond.</div> : null}
     </li>
   );
 }
