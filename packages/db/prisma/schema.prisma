@@ -35,6 +35,7 @@ model AppUser {
 
   drep                   Drep?
   experts                Expert[]
+  submitterApplication   SubmitterApplication?
   proposalsSubmitted     Proposal[]               @relation("ProposalSubmitter")
   proposalVersionsEdited ProposalVersion[]
   comments               Comment[]
@@ -51,6 +52,28 @@ model AppUser {
   treasuryBucketsCreated TreasuryBucket[]
 
   @@map("app_user")
+}
+
+// §2.1 — to submit proposals a user must hold an approved "submitter" role. They apply with a
+// profile form; a board member approves or rejects (with a reason). Any account type (viewer, DAO
+// member, board) needs this before submitting.
+model SubmitterApplication {
+  id              String    @id @default(uuid()) @db.Uuid
+  userId          String    @unique @map("user_id") @db.Uuid
+  status          String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  displayName     String    @map("display_name")
+  description     String
+  githubUrl       String?   @map("github_url")
+  socialLinks     String[]  @map("social_links")
+  logoDataUrl     String?   @map("logo_data_url") // base64 data URL
+  country         String
+  rejectionReason String?   @map("rejection_reason")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  reviewedAt      DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  user            AppUser   @relation(fields: [userId], references: [id])
+
+  @@map("submitter_application")
 }
 
 model Drep {

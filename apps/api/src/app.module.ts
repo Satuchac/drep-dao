@@ -20,6 +20,7 @@ import { InternalProposalsModule } from './internal-proposals/internal-proposals
 import { CardanoModule } from './cardano/cardano.module';
 import { RewardsModule } from './rewards/rewards.module';
 import { ProposalMessagesModule } from './messages/proposal-messages.module';
+import { SubmitterModule } from './submitter/submitter.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { ProposalMessagesModule } from './messages/proposal-messages.module';
     MilestonesModule,
     RewardsModule,
     ProposalMessagesModule,
+    SubmitterModule,
     InternalProposalsModule,
     PreferencesModule,
   ],

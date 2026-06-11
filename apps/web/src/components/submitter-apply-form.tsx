@@ -1,0 +1,143 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { submitterApi, type MySubmitter } from '@/lib/api';
+import { COUNTRIES } from '@/lib/countries';
+
+const MIN_WORDS = 100;
+const MAX_LOGO_BYTES = 256 * 1024;
+const wordCount = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
+const inputCls = 'w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
+
+/** §2.1 — apply for the submitter role. The board approves/rejects; only then can you submit. */
+export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
+  const [mine, setMine] = useState<MySubmitter | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [name, setName] = useState('');
+  const [desc, setDesc] = useState('');
+  const [github, setGithub] = useState('');
+  const [socials, setSocials] = useState<string[]>([]);
+  const [logo, setLogo] = useState('');
+  const [country, setCountry] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = () =>
+    submitterApi.mine().then((m) => {
+      setMine(m); setLoaded(true);
+      if (m) {
+        setName(m.displayName); setDesc(m.description); setGithub(m.githubUrl ?? '');
+        setSocials(m.socialLinks ?? []); setLogo(m.logoDataUrl ?? ''); setCountry(m.country);
+      }
+    }).catch(() => setLoaded(true));
+  useEffect(() => { load(); }, []);
+
+  const onFile = (file: File) => {
+    if (file.size > MAX_LOGO_BYTES) { setError(`Image is ${(file.size / 1024).toFixed(0)} KB — keep it under 256 KB.`); return; }
+    const reader = new FileReader();
+    reader.onerror = () => setError('Could not read the image.');
+    reader.onload = () => { if (typeof reader.result === 'string') { setLogo(reader.result); setError(null); } };
+    reader.readAsDataURL(file);
+  };
+
+  const words = wordCount(desc);
+  const canSubmit = !!name.trim() && !!country && words >= MIN_WORDS;
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!canSubmit) { setError('Fill the required fields — the description needs at least 100 words.'); return; }
+    setBusy(true);
+    try {
+      await submitterApi.apply({
+        displayName: name.trim(),
+        description: desc.trim(),
+        githubUrl: github.trim() || undefined,
+        socialLinks: socials.map((s) => s.trim()).filter(Boolean),
+        logoDataUrl: logo || undefined,
+        country,
+      });
+      await load();
+      onChange?.();
+    } catch (e2) { setError(e2 instanceof Error ? e2.message : 'failed'); } finally { setBusy(false); }
+  };
+
+  if (!loaded) return null;
+  const approved = mine?.status === 'APPROVED';
+
+  return (
+    <div className="space-y-3">
+      <div>
+        <h3 className="text-base font-semibold">Become a submitter</h3>
+        {approved ? (
+          <p className="text-sm text-emerald-600">You are an approved submitter ✅ — submit proposals under <strong>My proposals</strong>. You can still update your profile below.</p>
+        ) : mine?.status === 'PENDING' ? (
+          <p className="text-sm text-amber-600">Your application is under board review. You can update it below.</p>
+        ) : mine?.status === 'REJECTED' ? (
+          <div className="rounded border border-red-200 bg-red-50 p-2 text-sm dark:border-red-900 dark:bg-red-950/30">
+            <div className="font-medium text-red-800 dark:text-red-200">Application rejected</div>
+            {mine.rejectionReason ? <div className="mt-1 whitespace-pre-wrap text-red-700 dark:text-red-300">{mine.rejectionReason}</div> : null}
+            <div className="mt-1 text-xs text-red-600 dark:text-red-400">Edit the form below and re-apply.</div>
+          </div>
+        ) : (
+          <p className="text-sm text-neutral-500">Apply for the submitter role. Once a board member approves, you can submit proposals.</p>
+        )}
+      </div>
+
+      <form onSubmit={submit} className="space-y-3">
+        <label className="block">
+          <span className="text-sm font-medium">Display name <span className="text-red-500">*</span></span>
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} className={`mt-1 ${inputCls}`} placeholder="Your name or project name" />
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-medium">Description <span className="text-red-500">*</span> <span className="text-xs font-normal text-neutral-500">(min 100 words — {words}/100)</span></span>
+          <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={5} maxLength={20000} className={`mt-1 ${inputCls}`} placeholder="Who you are, what you build, your track record…" />
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-medium">Country <span className="text-red-500">*</span></span>
+          <select value={country} onChange={(e) => setCountry(e.target.value)} className={`mt-1 ${inputCls}`}>
+            <option value="">— select a country —</option>
+            {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-medium">GitHub <span className="text-xs font-normal text-neutral-500">(optional)</span></span>
+          <input value={github} onChange={(e) => setGithub(e.target.value)} maxLength={500} className={`mt-1 ${inputCls}`} placeholder="https://github.com/…" />
+        </label>
+
+        <div>
+          <span className="text-sm font-medium">Social links <span className="text-xs font-normal text-neutral-500">(optional)</span></span>
+          <div className="mt-1 space-y-1">
+            {socials.map((s, i) => (
+              <div key={i} className="flex gap-2">
+                <input value={s} onChange={(e) => setSocials((arr) => arr.map((v, idx) => (idx === i ? e.target.value : v)))} maxLength={500} className={inputCls} placeholder="https://…" />
+                <button type="button" onClick={() => setSocials((arr) => arr.filter((_, idx) => idx !== i))} className="rounded border border-neutral-300 px-2 text-sm dark:border-neutral-700">✕</button>
+              </div>
+            ))}
+            {/* Show "add" once there's a first link (or to add the first). After the first, more can be added. */}
+            <button type="button" onClick={() => setSocials((arr) => [...arr, ''])} className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">
+              + Add {socials.length === 0 ? 'a social link' : 'another link'}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <span className="text-sm font-medium">Photo / project logo <span className="text-xs font-normal text-neutral-500">(optional, ≤256 KB)</span></span>
+          <div className="mt-1 flex items-center gap-3">
+            {logo ? <img src={logo} alt="logo" className="h-12 w-12 rounded object-cover" /> : null}
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ''; }} className="text-xs" />
+            {logo ? <button type="button" onClick={() => setLogo('')} className="rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700">Remove</button> : null}
+          </div>
+        </div>
+
+        {error ? <div className="text-xs text-red-600">{error}</div> : null}
+        <button type="submit" disabled={busy || !canSubmit} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+          {busy ? 'Submitting…' : mine && mine.status !== 'REJECTED' ? 'Update application' : mine?.status === 'REJECTED' ? 'Re-apply' : 'Apply'}
+        </button>
+      </form>
+    </div>
+  );
+}

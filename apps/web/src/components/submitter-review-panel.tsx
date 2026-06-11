@@ -1,0 +1,71 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { boardSubmittersApi, type SubmitterApplication } from '@/lib/api';
+
+/** §2.1 — board to-do: approve/reject submitter applications. Reject requires a reason (shown to the applicant). */
+export function SubmitterReviewPanel({ onChange, history = false }: { onChange?: () => void; history?: boolean }) {
+  const [apps, setApps] = useState<SubmitterApplication[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [rejectId, setRejectId] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const load = useCallback(() => { boardSubmittersApi.applications(history).then(setApps).catch(() => setApps([])); }, [history]);
+  useEffect(() => { load(); }, [load]);
+
+  const list = history ? apps : apps.filter((a) => a.status === 'PENDING');
+  if (list.length === 0) return null;
+
+  const approve = async (id: string) => {
+    setBusy(id);
+    try { await boardSubmittersApi.approve(id); load(); onChange?.(); }
+    catch { /* */ } finally { setBusy(null); }
+  };
+  const doReject = async () => {
+    if (!rejectId || !reason.trim()) return;
+    setBusy(rejectId);
+    try { await boardSubmittersApi.reject(rejectId, reason.trim()); setRejectId(null); setReason(''); load(); onChange?.(); }
+    catch { /* */ } finally { setBusy(null); }
+  };
+
+  return (
+    <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+      <h3 className="text-base font-semibold">Submitter applications ({list.length})</h3>
+      <p className="text-xs text-neutral-500">§2.1 — approve to let them submit proposals, or reject with a reason (the applicant sees it and can re-apply).</p>
+      <ul className="space-y-2">
+        {list.map((a) => (
+          <li key={a.id} className="rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="flex items-center gap-2">
+                {a.logoDataUrl ? <img src={a.logoDataUrl} alt="" className="h-8 w-8 rounded object-cover" /> : null}
+                <span className="font-medium">{a.displayName}</span>
+                <span className="text-xs text-neutral-500">{a.country}</span>
+                {a.status === 'APPROVED' ? <span className="rounded bg-emerald-100 px-1 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">✓ APPROVED</span>
+                  : a.status === 'REJECTED' ? <span className="rounded bg-red-100 px-1 text-[10px] text-red-700 dark:bg-red-950 dark:text-red-300">REJECTED</span> : null}
+              </span>
+              {a.status === 'PENDING' ? (
+                <span className="flex gap-2">
+                  <button onClick={() => approve(a.id)} disabled={busy === a.id} className="rounded border border-emerald-500 px-2 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300">Approve</button>
+                  <button onClick={() => { setRejectId(rejectId === a.id ? null : a.id); setReason(''); }} disabled={busy === a.id} className="rounded border border-red-500 px-2 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-40 dark:text-red-300">Reject</button>
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-1 break-all font-mono text-[11px] text-neutral-400">{a.stakeAddress}</div>
+            <div className="mt-1 whitespace-pre-wrap text-xs text-neutral-600 dark:text-neutral-300">{a.description}</div>
+            {a.githubUrl ? <div className="mt-1 text-xs"><a href={a.githubUrl} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{a.githubUrl}</a></div> : null}
+            {a.socialLinks.length ? <div className="mt-1 flex flex-wrap gap-2 text-xs">{a.socialLinks.map((l, i) => <a key={i} href={l} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{l}</a>)}</div> : null}
+            {a.status === 'REJECTED' && a.rejectionReason ? <div className="mt-1 text-xs text-red-600">Reason: {a.rejectionReason}</div> : null}
+            {rejectId === a.id ? (
+              <div className="mt-2 space-y-1">
+                <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} placeholder="Reason (shown to the applicant)…" className="w-full rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900" />
+                <div className="flex gap-2">
+                  <button onClick={doReject} disabled={busy === a.id || !reason.trim()} className="rounded bg-red-600 px-3 py-1 text-xs text-white hover:bg-red-700 disabled:opacity-50">Confirm reject</button>
+                  <button onClick={() => { setRejectId(null); setReason(''); }} className="rounded border border-neutral-300 px-3 py-1 text-xs dark:border-neutral-700">Cancel</button>
+                </div>
+              </div>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

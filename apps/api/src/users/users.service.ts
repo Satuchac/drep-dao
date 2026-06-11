@@ -126,7 +126,7 @@ export class UsersService {
   async getProfile(userId: string): Promise<UserProfile | null> {
     const user = await this.prisma.appUser.findUnique({
       where: { id: userId },
-      include: { drep: { include: { boardMemberships: true } }, experts: true },
+      include: { drep: { include: { boardMemberships: true } }, experts: true, submitterApplication: { select: { status: true } } },
     });
     if (!user) return null;
 
@@ -162,13 +162,17 @@ export class UsersService {
     // registration lapses they fall back to ADA holder (board seats are exempt).
     const isDaoMember = isBoard || (drep?.status === DRepStatus.ADMITTED && isRegisteredDRep);
 
-    const roles: Role[] = [Role.VIEWER, Role.SUBMITTER];
+    const roles: Role[] = [Role.VIEWER];
     if (isRegisteredDRep || isBoard) roles.push(Role.DREP);
     if (isDaoMember) roles.push(Role.DAO_MEMBER);
     if (isBoard) roles.push(Role.BOARD);
     // §2 Expert — a non-DRep approved by the board for milestone review.
     if (user.experts.some((e) => e.approvedByBoard)) {
       roles.push(Role.EXPERT);
+    }
+    // §2.1 Submitter — granted only once the board approves the submitter application.
+    if (user.submitterApplication?.status === 'APPROVED') {
+      roles.push(Role.SUBMITTER);
     }
 
     return {

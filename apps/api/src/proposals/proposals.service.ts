@@ -50,6 +50,11 @@ export class ProposalsService {
   ) {}
 
   async createDraft(userId: string, dto: CreateProposalDto) {
+    // §2.1 — only an approved submitter may create a proposal (any account type must apply first).
+    const submitter = await this.prisma.submitterApplication.findUnique({ where: { userId }, select: { status: true } });
+    if (submitter?.status !== 'APPROVED') {
+      throw new ForbiddenException('you must be an approved submitter to submit proposals — apply for the submitter role first');
+    }
     // §3/§19 — proposals can only be submitted while the round's submission
     // window is open (a board member moves the round into the SUBMISSION stage).
     const round = await this.prisma.round.findUnique({ where: { id: dto.roundId } });

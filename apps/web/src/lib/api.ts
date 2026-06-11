@@ -601,6 +601,42 @@ export const boardExpertsApi = {
   reject: (id: string) => request<{ ok: boolean }>(`/admin/experts/${id}/reject`, { method: 'POST' }),
 };
 
+// §2.1 — submitter role: apply with a profile form; the board approves/rejects (with a reason).
+export interface SubmitterApplicationInput {
+  displayName: string;
+  description: string;
+  githubUrl?: string;
+  socialLinks?: string[];
+  logoDataUrl?: string;
+  country: string;
+}
+export interface MySubmitter {
+  id: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  displayName: string;
+  description: string;
+  githubUrl: string | null;
+  socialLinks: string[];
+  logoDataUrl: string | null;
+  country: string;
+  rejectionReason: string | null;
+}
+export interface SubmitterApplication extends MySubmitter {
+  stakeAddress: string;
+}
+export const submitterApi = {
+  mine: () => request<MySubmitter | null>('/me/submitter'),
+  apply: (input: SubmitterApplicationInput) =>
+    request<MySubmitter>('/me/submitter-application', { method: 'POST', body: JSON.stringify(input) }),
+};
+export const boardSubmittersApi = {
+  applications: (history = false) =>
+    request<SubmitterApplication[]>(`/admin/submitters/applications${history ? '?history=1' : ''}`),
+  approve: (id: string) => request<{ ok: boolean }>(`/admin/submitters/${id}/approve`, { method: 'POST' }),
+  reject: (id: string, reason: string) =>
+    request<{ ok: boolean }>(`/admin/submitters/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+};
+
 export interface RoundCategoryInput {
   id?: string; // present when editing an existing category (update in place)
   name: string;

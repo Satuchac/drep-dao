@@ -14,13 +14,15 @@ export function ConnectWallet() {
   if (profile) {
     // §2 — show a single status. A registered on-chain DRep who hasn't joined the DAO is a
     // "Registered DRep" (eligible to request membership), distinct from a plain ADA-holder Viewer.
-    const status = profile.roles.includes('BOARD')
+    const base = profile.roles.includes('BOARD')
       ? 'Board member'
       : profile.roles.includes('DAO_MEMBER')
         ? 'DAO member'
         : profile.onchainDrep.registered
           ? 'Registered DRep'
           : 'Viewer';
+    // §2.1 — an approved submitter shows "<base> | submitter".
+    const status = profile.roles.includes('SUBMITTER') ? `${base} | submitter` : base;
     return (
       <div className="space-y-1.5 text-sm">
         {/* §2 — name on top, role/status beneath. */}

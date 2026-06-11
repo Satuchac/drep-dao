@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardProposalsApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, messagesApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type EntryEligibility, type BoardAction } from '@/lib/api';
+import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardProposalsApi, boardSubmittersApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, messagesApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type EntryEligibility, type BoardAction } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
 import { BoardReviewPanel } from './board-review-panel';
 import { ExpertReviewPanel } from './expert-review-panel';
 import { ExpertApplyForm } from './expert-apply-form';
+import { SubmitterApplyForm } from './submitter-apply-form';
+import { SubmitterReviewPanel } from './submitter-review-panel';
 import { RemovalPanel } from './removal-panel';
 import { RemovalBanner } from './removal-banner';
 import { ProposalSubmit } from './proposal-submit';
@@ -40,7 +42,8 @@ import { BackButton } from './round-ui';
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
 
 export function MemberArea() {
-  const { profile, loading } = useAuth();
+  const { profile, loading, refresh } = useAuth();
+  const { setParams } = useUrlNav();
   const [myExpert, setMyExpert] = useState<MyExpert | null>(null);
   const loadExpert = useCallback(() => {
     expertApi.mine().then(setMyExpert).catch(() => setMyExpert(null));
@@ -54,6 +57,7 @@ export function MemberArea() {
   if (loading || !profile) return null;
 
   const isMember = profile.roles.includes('DAO_MEMBER');
+  const isSubmitter = profile.roles.includes('SUBMITTER'); // §2.1 — approved submitter
   const isDrep = profile.roles.includes('DREP');
   const isRegisteredDRep = profile.onchainDrep.registered;
   const daoStatus = profile.daoMembership?.status ?? null;
@@ -89,8 +93,11 @@ export function MemberArea() {
         ) : expertPending || expertApproved ? (
           <section className={card}><ExpertApplyForm onChange={loadExpert} /></section>
         ) : showApply ? (
-          <section className={card}><ApplyOptions registeredDRep={isRegisteredDRep} onExpertChange={loadExpert} /></section>
+          <section className={card}><ApplyOptions registeredDRep={isRegisteredDRep} onExpertChange={loadExpert} onSubmitterChange={refresh} /></section>
         ) : null}
+        {/* §2.1 — anyone who isn't in the Get-started chooser (members, board, experts) applies
+            for / manages the submitter role here, so any account type can submit proposals. */}
+        {!showApply ? <section className={card}><SubmitterApplyForm onChange={refresh} /></section> : null}
         {/* §15.4 — DReps + board members register a payment address here so
             they can receive rewards. Amber-nags when empty. */}
         {isMember ? <RewardAddressPanel /> : null}
@@ -125,7 +132,19 @@ export function MemberArea() {
     badge: todo.mine,
     node: (
       <div className="space-y-4">
-        <ProposalSubmit />
+        {isSubmitter ? (
+          <ProposalSubmit />
+        ) : (
+          // §2.1 — submitting requires the approved submitter role.
+          <section className={card}>
+            <h3 className="text-base font-semibold">My proposals</h3>
+            <p className="mt-1 text-sm text-neutral-500">
+              If you want to submit a proposal, apply for a <strong>submitter</strong> role on the{' '}
+              <button onClick={() => setParams({ view: 'me', tab: 'profile' })} className="text-emerald-700 underline dark:text-emerald-400">Profile</button> tab.
+              Once a board member approves it, you can submit here.
+            </p>
+          </section>
+        )}
       </div>
     ),
   });
@@ -267,6 +286,7 @@ function ApplicationsTab() {
       </div>
       <section className={card}><BoardReviewPanel history={showHistory} /></section>
       <section className={card}><ExpertReviewPanel history={showHistory} /></section>
+      <SubmitterReviewPanel history={showHistory} />
       <section className={card}><RemovalPanel history={showHistory} /></section>
     </div>
   );
@@ -292,7 +312,7 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
         next.messages = mineMsgs.filter((t) => t.status === 'OPEN' && t.lastFromBoard).length;
       } catch { /* leave at 0 */ }
       if (isBoard) {
-        const [a, f, p, dapps, eapps, rem, stop, pl, rev, msg, rvw] = await Promise.allSettled([
+        const [a, f, p, dapps, eapps, rem, stop, pl, rev, msg, rvw, subs] = await Promise.allSettled([
           treasuryApi.boardActions(),
           boardFeeApi.pending(),
           boardPaymentsApi.pending(),
@@ -304,6 +324,7 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
           boardRevenueApi.pending(), // §3.4 — revenue-sharing to verify (gates milestone POAs)
           messagesApi.boardPending(), // §3.5 — submitter replies awaiting the board
           boardProposalsApi.pendingReviewerAssignment(), // §11 — proposals needing a review jury
+          boardSubmittersApi.applications(), // §2.1 — submitter applications to review
         ]);
         // §15 — multisig sign queue (boardActions) is the Treasury tab; the
         // remaining review/audit items (fees, pledges, payouts, stop-funding)
@@ -326,7 +347,8 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
         next.applications =
           (dapps.status === 'fulfilled' ? dapps.value.filter((x) => !x.myVote).length : 0) +
           (eapps.status === 'fulfilled' ? eapps.value.length : 0) +
-          (rem.status === 'fulfilled' ? rem.value.filter((x) => !x.myVote).length : 0);
+          (rem.status === 'fulfilled' ? rem.value.filter((x) => !x.myVote).length : 0) +
+          (subs.status === 'fulfilled' ? subs.value.length : 0);
       }
       if (canVote) {
         try { next.voting = (await filteringApi.votingTasks()).total; } catch { /* leave 0 */ }
@@ -401,8 +423,8 @@ function EmptyHint({ text }: { text: string }) {
 }
 
 /** §14 — both participation routes; pick one (until accepted). */
-function ApplyOptions({ registeredDRep, onExpertChange }: { registeredDRep: boolean; onExpertChange: () => void }) {
-  const [mode, setMode] = useState<'choose' | 'dao' | 'expert'>('choose');
+function ApplyOptions({ registeredDRep, onExpertChange, onSubmitterChange }: { registeredDRep: boolean; onExpertChange: () => void; onSubmitterChange: () => void }) {
+  const [mode, setMode] = useState<'choose' | 'dao' | 'expert' | 'submitter'>('choose');
 
   if (mode === 'dao') {
     return (
@@ -420,6 +442,14 @@ function ApplyOptions({ registeredDRep, onExpertChange }: { registeredDRep: bool
       </div>
     );
   }
+  if (mode === 'submitter') {
+    return (
+      <div className="space-y-2">
+        <BackButton onBack={() => setMode('choose')} />
+        <SubmitterApplyForm onChange={onSubmitterChange} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -432,6 +462,10 @@ function ApplyOptions({ registeredDRep, onExpertChange }: { registeredDRep: bool
         <button onClick={() => setMode('expert')} className="rounded-lg border border-neutral-200 p-3 text-left hover:border-emerald-400 dark:border-neutral-700">
           <div className="font-medium">Apply as an Expert</div>
           <div className="text-xs text-neutral-500">For ADA holders with subject-matter knowledge. Board approves; you provide your expertise.</div>
+        </button>
+        <button onClick={() => setMode('submitter')} className="rounded-lg border border-neutral-200 p-3 text-left hover:border-emerald-400 dark:border-neutral-700">
+          <div className="font-medium">Become a submitter</div>
+          <div className="text-xs text-neutral-500">To submit proposals. Fill in a short profile; a board member approves it, then you can submit.</div>
         </button>
       </div>
     </div>
