@@ -27,26 +27,56 @@ export class SubmitterService {
       throw new BadRequestException(`description must be at least ${MIN_DESCRIPTION_WORDS} words`);
     }
     const socialLinks = (dto.socialLinks ?? []).map((s) => s.trim()).filter(Boolean);
-    const existing = await this.prisma.submitterApplication.findUnique({ where: { userId }, select: { status: true } });
+    const githubUrl = dto.githubUrl?.trim() || null;
+    const logoDataUrl = dto.logoDataUrl?.trim() || null;
+    const existing = await this.prisma.submitterApplication.findUnique({ where: { userId } });
     // Approved members can edit their profile without losing the role; everyone else (new or
     // previously rejected) goes back to PENDING for board review.
     const status = existing?.status === 'APPROVED' ? 'APPROVED' : 'PENDING';
-    const data = {
-      status,
-      displayName,
-      description,
-      githubUrl: dto.githubUrl?.trim() || null,
-      socialLinks,
-      logoDataUrl: dto.logoDataUrl?.trim() || null,
-      country,
-      rejectionReason: null,
-    };
+    // Preserve the change history: snapshot the previous APPROVED profile before overwriting it.
+    const changed = !!existing && (
+      existing.displayName !== displayName ||
+      existing.description !== description ||
+      (existing.githubUrl ?? null) !== githubUrl ||
+      JSON.stringify(existing.socialLinks) !== JSON.stringify(socialLinks) ||
+      (existing.logoDataUrl ?? null) !== logoDataUrl ||
+      existing.country !== country
+    );
+    if (existing && existing.status === 'APPROVED' && changed) {
+      await this.prisma.submitterApplicationHistory.create({
+        data: {
+          userId,
+          displayName: existing.displayName,
+          description: existing.description,
+          githubUrl: existing.githubUrl,
+          socialLinks: existing.socialLinks,
+          logoDataUrl: existing.logoDataUrl,
+          country: existing.country,
+        },
+      });
+    }
+    const data = { status, displayName, description, githubUrl, socialLinks, logoDataUrl, country, rejectionReason: null };
     await this.prisma.submitterApplication.upsert({
       where: { userId },
       update: data,
       create: { userId, ...data },
     });
+    // Keep the user's display name in sync so it shows in the login section + on proposals.
+    await this.prisma.appUser.update({ where: { id: userId }, data: { displayName } });
     return this.mine(userId);
+  }
+
+  private async historyFor(userId: string) {
+    const rows = await this.prisma.submitterApplicationHistory.findMany({ where: { userId }, orderBy: { snapshotAt: 'desc' } });
+    return rows.map((h) => ({
+      displayName: h.displayName,
+      description: h.description,
+      githubUrl: h.githubUrl,
+      socialLinks: h.socialLinks,
+      logoDataUrl: h.logoDataUrl,
+      country: h.country,
+      snapshotAt: h.snapshotAt,
+    }));
   }
 
   async mine(userId: string) {
@@ -62,6 +92,7 @@ export class SubmitterService {
       logoDataUrl: a.logoDataUrl,
       country: a.country,
       rejectionReason: a.rejectionReason,
+      history: await this.historyFor(userId),
     };
   }
 
@@ -70,13 +101,25 @@ export class SubmitterService {
     return a?.status === 'APPROVED';
   }
 
-  /** Board to-do: applications awaiting review (or all, with history). */
-  async listApplications(history = false) {
+  /** Board to-do: applications awaiting review (or all, with showAll). Each carries its change history. */
+  async listApplications(showAll = false) {
     const rows = await this.prisma.submitterApplication.findMany({
-      where: history ? {} : { status: 'PENDING' },
+      where: showAll ? {} : { status: 'PENDING' },
       orderBy: { createdAt: 'asc' },
-      include: { user: { select: { stakeAddress: true, displayName: true } } },
+      include: { user: { select: { stakeAddress: true } } },
     });
+    const hist = await this.prisma.submitterApplicationHistory.findMany({
+      where: { userId: { in: rows.map((r) => r.userId) } },
+      orderBy: { snapshotAt: 'desc' },
+    });
+    const histByUser = new Map<string, ReturnType<typeof mapHist>[]>();
+    function mapHist(h: (typeof hist)[number]) {
+      return { displayName: h.displayName, description: h.description, githubUrl: h.githubUrl, socialLinks: h.socialLinks, logoDataUrl: h.logoDataUrl, country: h.country, snapshotAt: h.snapshotAt };
+    }
+    for (const h of hist) {
+      if (!histByUser.has(h.userId)) histByUser.set(h.userId, []);
+      histByUser.get(h.userId)!.push(mapHist(h));
+    }
     return rows.map((a) => ({
       id: a.id,
       status: a.status as 'PENDING' | 'APPROVED' | 'REJECTED',
@@ -88,6 +131,7 @@ export class SubmitterService {
       country: a.country,
       rejectionReason: a.rejectionReason,
       stakeAddress: a.user.stakeAddress,
+      history: histByUser.get(a.userId) ?? [],
     }));
   }
 

@@ -54,6 +54,20 @@ export function SubmitterReviewPanel({ onChange, history = false }: { onChange?:
             {a.githubUrl ? <div className="mt-1 text-xs"><a href={a.githubUrl} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{a.githubUrl}</a></div> : null}
             {a.socialLinks.length ? <div className="mt-1 flex flex-wrap gap-2 text-xs">{a.socialLinks.map((l, i) => <a key={i} href={l} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{l}</a>)}</div> : null}
             {a.status === 'REJECTED' && a.rejectionReason ? <div className="mt-1 text-xs text-red-600">Reason: {a.rejectionReason}</div> : null}
+            {a.history.length > 0 ? (
+              <details className="mt-1 text-xs">
+                <summary className="cursor-pointer text-neutral-500">Change history ({a.history.length})</summary>
+                <ul className="mt-1 space-y-1">
+                  {a.history.map((h, i) => (
+                    <li key={i} className="rounded border border-neutral-200 p-1.5 dark:border-neutral-800">
+                      <div className="text-neutral-400">Replaced {new Date(h.snapshotAt).toLocaleString()}</div>
+                      <div><span className="font-medium">{h.displayName}</span> · {h.country}</div>
+                      <div className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{h.description}</div>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            ) : null}
             {rejectId === a.id ? (
               <div className="mt-2 space-y-1">
                 <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={2} placeholder="Reason (shown to the applicant)…" className="w-full rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900" />

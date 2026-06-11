@@ -134,10 +134,26 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         </div>
 
         {error ? <div className="text-xs text-red-600">{error}</div> : null}
-        <button type="submit" disabled={busy || !canSubmit} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+        {!canSubmit ? <div className="text-xs text-amber-600">{!name.trim() ? 'Display name is required. ' : ''}{!country ? 'Country is required. ' : ''}{words < MIN_WORDS ? `Description needs at least ${MIN_WORDS} words (${words}/${MIN_WORDS}).` : ''}</div> : null}
+        <button type="submit" disabled={busy} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
           {busy ? 'Submitting…' : mine && mine.status !== 'REJECTED' ? 'Update application' : mine?.status === 'REJECTED' ? 'Re-apply' : 'Apply'}
         </button>
       </form>
+
+      {mine && mine.history.length > 0 ? (
+        <details className="rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">
+          <summary className="cursor-pointer text-neutral-500">Change history ({mine.history.length})</summary>
+          <ul className="mt-2 space-y-2">
+            {mine.history.map((h, i) => (
+              <li key={i} className="rounded border border-neutral-200 p-2 text-xs dark:border-neutral-800">
+                <div className="text-neutral-400">Replaced {new Date(h.snapshotAt).toLocaleString()}</div>
+                <div className="mt-1"><span className="font-medium">{h.displayName}</span> · {h.country}</div>
+                <div className="mt-1 whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{h.description}</div>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </div>
   );
 }

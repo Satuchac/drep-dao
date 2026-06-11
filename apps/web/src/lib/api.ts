@@ -610,6 +610,15 @@ export interface SubmitterApplicationInput {
   logoDataUrl?: string;
   country: string;
 }
+export interface SubmitterHistoryItem {
+  displayName: string;
+  description: string;
+  githubUrl: string | null;
+  socialLinks: string[];
+  logoDataUrl: string | null;
+  country: string;
+  snapshotAt: string;
+}
 export interface MySubmitter {
   id: string;
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
@@ -620,6 +629,7 @@ export interface MySubmitter {
   logoDataUrl: string | null;
   country: string;
   rejectionReason: string | null;
+  history: SubmitterHistoryItem[];
 }
 export interface SubmitterApplication extends MySubmitter {
   stakeAddress: string;

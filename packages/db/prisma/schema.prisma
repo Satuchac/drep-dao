@@ -76,6 +76,23 @@ model SubmitterApplication {
   @@map("submitter_application")
 }
 
+// §2.1 — snapshot of a submitter profile each time an APPROVED one is edited, so the change
+// history is preserved (visible to the submitter + the board). Loose ref to the user.
+model SubmitterApplicationHistory {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  displayName String   @map("display_name")
+  description String
+  githubUrl   String?  @map("github_url")
+  socialLinks String[] @map("social_links")
+  logoDataUrl String?  @map("logo_data_url")
+  country     String
+  snapshotAt  DateTime @default(now()) @map("snapshot_at") @db.Timestamptz(6) // when this version was replaced
+
+  @@index([userId])
+  @@map("submitter_application_history")
+}
+
 model Drep {
   id                 String    @id @default(uuid()) @db.Uuid
   userId             String    @unique @map("user_id") @db.Uuid
