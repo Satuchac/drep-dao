@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { boardRevenueApi, messagesApi, type PendingRevenueSharing } from '@/lib/api';
 import { ConfirmDialog } from './confirm-dialog';
+import { ProposalMessageInfo } from './proposal-messages';
 
 /**
  * §3.4 — board to-do: funded proposals that declared commercial/revenue-sharing terms must have
@@ -68,6 +69,7 @@ export function RevenueSharingConfirmations({ onChange }: { onChange?: () => voi
             <div className="text-xs text-neutral-500">
               by {p.submitter ?? '—'}{p.categoryName ? ` · ${p.categoryName}` : ''}{p.roundNumber != null ? ` · Round #${p.roundNumber}` : ''}
             </div>
+            <div className="mt-1"><ProposalMessageInfo proposalId={p.id} /></div>
             {composeId === p.id ? (
               <div className="mt-2 space-y-1">
                 <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} placeholder="Ask the submitter to do something — e.g. send the promised tokens to the Treasury…" className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" />

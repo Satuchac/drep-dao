@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { boardPledgeApi, messagesApi, type PendingPledge } from '@/lib/api';
+import { ProposalMessageInfo } from './proposal-messages';
 import { useExplorer } from '@/lib/explorer';
 import { useUrlNav } from '@/lib/use-url-nav';
 
@@ -93,6 +94,7 @@ function PendingPledgeRow({ p, onReviewed, onOpen }: { p: PendingPledge; onRevie
         pledge {p.pledgeAmountAda.toLocaleString()} ₳
         {p.pledgeReturnMethod ? ' · open the proposal to read the return-method plan' : ''}
       </div>
+      <div className="mt-1"><ProposalMessageInfo proposalId={p.id} /></div>
 
       <div className="mt-2 text-xs">
         <div className="font-medium text-neutral-600 dark:text-neutral-400">Pledge tx:</div>

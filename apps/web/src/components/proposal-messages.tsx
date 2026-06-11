@@ -149,6 +149,27 @@ export function SubmitterMessages() {
   );
 }
 
+/** Per-proposal message tally + expandable history, shown next to a "Send message" button so the
+ *  board can check existing communication before opening a new thread. */
+export function ProposalMessageInfo({ proposalId, canBoard = true }: { proposalId: string; canBoard?: boolean }) {
+  const [threads, setThreads] = useState<MessageThread[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const load = useCallback(() => { messagesApi.forProposal(proposalId).then(setThreads).catch(() => setThreads([])); }, [proposalId]);
+  useEffect(() => { load(); }, [load]);
+  const items = threads ?? [];
+  if (items.length === 0) return <span className="text-xs text-neutral-400">no messages yet</span>;
+  const active = items.filter((t) => t.status === 'OPEN').length;
+  const done = items.filter((t) => t.status === 'DONE').length;
+  return (
+    <div className="text-xs">
+      <button onClick={() => setOpen((v) => !v)} className="text-neutral-500 hover:underline">
+        Messages: <span className={`font-medium ${active > 0 ? 'text-amber-600' : 'text-neutral-700 dark:text-neutral-300'}`}>{active}</span> active · <span className="font-medium text-neutral-700 dark:text-neutral-300">{done}</span> done {open ? '▴ hide' : '▾ view'}
+      </button>
+      {open ? <div className="mt-2 space-y-2">{items.map((t) => <MessageThreadCard key={t.id} thread={t} canBoard={canBoard} onChange={load} />)}</div> : null}
+    </div>
+  );
+}
+
 /** Board "all messages" screen — every thread (active first, then done history). */
 export function BoardAllMessages({ onBack }: { onBack: () => void }) {
   const [threads, setThreads] = useState<MessageThread[] | null>(null);

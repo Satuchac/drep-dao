@@ -229,7 +229,6 @@ function ActionsTab() {
           settlements. Other multisig signing and hot-wallet ops live in <strong>Treasury</strong>.
         </p>
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs text-neutral-500">Messages: <span className="font-medium text-neutral-700 dark:text-neutral-300">{msgs.active}</span> active · <span className="font-medium text-neutral-700 dark:text-neutral-300">{msgs.done}</span> done</span>
           {msgs.done > 0 ? (
             <button onClick={() => setViewMessages(true)} className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">Go to messages</button>
           ) : null}
