@@ -86,6 +86,15 @@ export class ProposalMessagesService {
     return Promise.all(ids.map((id) => this.threadView(id, '')));
   }
 
+  /** Board view of every thread (active first, then done) — for the "all messages" screen. */
+  async boardAll() {
+    const threads = await this.prisma.proposalMessageThread.findMany({
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }],
+      select: { id: true },
+    });
+    return Promise.all(threads.map((t) => this.threadView(t.id, '')));
+  }
+
   private async threadView(threadId: string, viewerId: string) {
     const t = await this.prisma.proposalMessageThread.findUnique({
       where: { id: threadId },

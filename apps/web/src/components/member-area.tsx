@@ -22,7 +22,7 @@ import { RoundStageControls } from './round-stage-controls';
 import { InternalProposals } from './internal-proposals';
 import { FeeConfirmations } from './fee-confirmations';
 import { RevenueSharingConfirmations } from './revenue-sharing-confirmations';
-import { BoardMessages, SubmitterMessages } from './proposal-messages';
+import { BoardAllMessages, BoardMessages, SubmitterMessages } from './proposal-messages';
 import { PledgeConfirmations } from './pledge-confirmations';
 import { BoardPayments } from './board-payments';
 import { PreferencesPanel } from './preferences-panel';
@@ -209,6 +209,17 @@ function TreasuryTab() {
  *  budget-change settlements. */
 function ActionsTab() {
   const [showHistory, setShowHistory] = useState(false);
+  const [viewMessages, setViewMessages] = useState(false);
+  // §3.5 — board-wide message tallies for the header info + the "go to messages" history link.
+  const [msgs, setMsgs] = useState<{ active: number; done: number }>({ active: 0, done: 0 });
+  useEffect(() => {
+    messagesApi.boardAll()
+      .then((ts) => setMsgs({ active: ts.filter((t) => t.status === 'OPEN').length, done: ts.filter((t) => t.status === 'DONE').length }))
+      .catch(() => setMsgs({ active: 0, done: 0 }));
+  }, []);
+
+  if (viewMessages) return <BoardAllMessages onBack={() => setViewMessages(false)} />;
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -217,10 +228,16 @@ function ActionsTab() {
           confirmations, revenue-sharing verification, stop-funding votes, and budget-change
           settlements. Other multisig signing and hot-wallet ops live in <strong>Treasury</strong>.
         </p>
-        <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
-          <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
-          Show history
-        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs text-neutral-500">Messages: <span className="font-medium text-neutral-700 dark:text-neutral-300">{msgs.active}</span> active · <span className="font-medium text-neutral-700 dark:text-neutral-300">{msgs.done}</span> done</span>
+          {msgs.done > 0 ? (
+            <button onClick={() => setViewMessages(true)} className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">Go to messages</button>
+          ) : null}
+          <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
+            <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
+            Show history
+          </label>
+        </div>
       </div>
       <BoardActions history={showHistory} filter="rewards" />
       <BoardMessages />

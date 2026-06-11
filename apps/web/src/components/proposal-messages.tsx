@@ -149,6 +149,35 @@ export function SubmitterMessages() {
   );
 }
 
+/** Board "all messages" screen — every thread (active first, then done history). */
+export function BoardAllMessages({ onBack }: { onBack: () => void }) {
+  const [threads, setThreads] = useState<MessageThread[] | null>(null);
+  const load = useCallback(() => { messagesApi.boardAll().then(setThreads).catch(() => setThreads([])); }, []);
+  useEffect(() => { load(); }, [load]);
+  const items = threads ?? [];
+  const open = items.filter((t) => t.status === 'OPEN');
+  const done = items.filter((t) => t.status === 'DONE');
+  return (
+    <div className="space-y-4">
+      <button onClick={onBack} className="text-sm text-emerald-700 hover:underline dark:text-emerald-400">← back to actions</button>
+      <div>
+        <h2 className="text-lg font-semibold">All messages</h2>
+        <p className="text-sm text-neutral-500">Every board ↔ submitter thread across all proposals — {open.length} active, {done.length} done.</p>
+      </div>
+      <div className="space-y-3">
+        <div className="text-sm font-medium text-neutral-500">Active ({open.length})</div>
+        {open.length === 0 ? <p className="text-sm text-neutral-500">No active messages.</p> : open.map((t) => <MessageThreadCard key={t.id} thread={t} canBoard showProposal onChange={load} />)}
+      </div>
+      {done.length ? (
+        <div className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+          <div className="text-sm font-medium text-neutral-500">Done ({done.length})</div>
+          {done.map((t) => <MessageThreadCard key={t.id} thread={t} canBoard showProposal onChange={load} />)}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /** Board Actions to-do — threads where the submitter replied last (awaiting the board). */
 export function BoardMessages({ onChange }: { onChange?: () => void }) {
   const [threads, setThreads] = useState<MessageThread[]>([]);

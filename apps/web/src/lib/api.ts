@@ -1284,6 +1284,7 @@ export const messagesApi = {
   reply: (threadId: string, body: string) => request<MessageThread>(`/messages/${threadId}/reply`, { method: 'POST', body: JSON.stringify({ body }) }),
   markDone: (threadId: string) => request<MessageThread>(`/messages/${threadId}/done`, { method: 'POST', body: JSON.stringify({}) }),
   boardPending: () => request<MessageThread[]>('/messages/board-pending'),
+  boardAll: () => request<MessageThread[]>('/messages/board-all'),
   mine: () => request<MessageThread[]>('/my/messages'),
 };
 

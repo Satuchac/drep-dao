@@ -42,6 +42,13 @@ export class ProposalMessagesController {
     return this.svc.boardPending();
   }
 
+  // Board: every thread (active + done) for the all-messages screen.
+  @Get('messages/board-all')
+  @UseGuards(BoardGuard)
+  boardAll() {
+    return this.svc.boardAll();
+  }
+
   // Submitter's My-Area Messages.
   @Get('my/messages')
   mine(@CurrentUser() ctx: AuthContext) {
