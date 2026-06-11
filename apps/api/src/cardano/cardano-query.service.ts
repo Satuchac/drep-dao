@@ -46,6 +46,19 @@ export class CardanoQueryService {
   private readonly addrBalCache = new Map<string, { value: Map<string, bigint>; expiresAt: number }>();
   private readonly ADDR_BAL_TTL_MS = 12 * 1000;
 
+  // Expired entries were only checked on read, never deleted — a long-running process
+  // accumulated every key it ever cached (memory leak). Sweep all caches periodically.
+  private readonly cacheSweeper = (() => {
+    const t = setInterval(() => {
+      const now = Date.now();
+      for (const m of [this.vpCache, this.drepStatusCache, this.addrTxCache, this.addrBalCache] as Map<string, { expiresAt: number }>[]) {
+        for (const [k, v] of m) if (v.expiresAt <= now) m.delete(k);
+      }
+    }, 10 * 60 * 1000);
+    t.unref?.();
+    return t;
+  })();
+
   // On-chain data source — two options, chosen by CARDANO_ONCHAIN_SOURCE:
   //   'koios'  (default) → the public Koios tier
   //   'dbsync'           → our own cardano-db-sync Postgres (no rate limit), set
@@ -432,6 +445,40 @@ export class CardanoQueryService {
     } catch (e) {
       this.logger.warn(`tx_info verify: ${e instanceof Error ? e.message : e}`);
       return unavail;
+    }
+  }
+
+  /**
+   * §16.3 — the address that funded `txHash` (its first input). Used as the destination for
+   * pledge returns: the pledge goes back where it came from. Null if the tx isn't visible.
+   */
+  async txSenderAddress(txHash: string): Promise<string | null> {
+    if (!/^[0-9a-fA-F]{64}$/.test(txHash ?? '')) return null;
+    const pool = this.dbsync();
+    if (pool) {
+      try {
+        const { rows } = await pool.query<{ address: string }>(
+          `SELECT o.address FROM tx t
+             JOIN tx_in i ON i.tx_in_id = t.id
+             JOIN tx_out o ON o.tx_id = i.tx_out_id AND o.index = i.tx_out_index
+            WHERE t.hash = decode($1,'hex') LIMIT 1`,
+          [txHash],
+        );
+        if (rows[0]?.address) return rows[0].address;
+      } catch (e) { this.logger.warn(`db-sync tx sender failed, falling back to Koios: ${e instanceof Error ? e.message : e}`); }
+    }
+    try {
+      const res = await fetch(`${this.base}/tx_utxos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ _tx_hashes: [txHash] }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) return null;
+      const rows = (await res.json()) as { inputs?: { payment_addr?: { bech32?: string } }[] }[];
+      return rows[0]?.inputs?.[0]?.payment_addr?.bech32 ?? null;
+    } catch {
+      return null;
     }
   }
 

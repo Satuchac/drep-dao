@@ -400,6 +400,14 @@ model Proposal {
   // board's note (required on reject, optional on approve).
   pledgeConfirmedAt   DateTime? @map("pledge_confirmed_at") @db.Timestamptz(6)
   pledgeFeedback      String?   @map("pledge_feedback")
+  // §16.4 — pledge grace window (set on D&V approval; board may extend). The daily
+  // pledge-grace job alerts the board once when it expires unpaid.
+  pledgeGraceEndsAt     DateTime? @map("pledge_grace_ends_at") @db.Timestamptz(6)
+  pledgeGraceNotifiedAt DateTime? @map("pledge_grace_notified_at") @db.Timestamptz(6)
+  // §27 tx-poller — when the platform first SAW the fee / pledge paid on-chain (dedupes the
+  // board notification; board confirmation stays manual per §16.2).
+  feeSeenOnchainAt    DateTime? @map("fee_seen_onchain_at") @db.Timestamptz(6)
+  pledgeSeenOnchainAt DateTime? @map("pledge_seen_onchain_at") @db.Timestamptz(6)
   teamInfo            Json?    @map("team_info")
   costBreakdownMd     String?  @map("cost_breakdown_md")
   revenueSharing      Json?    @map("revenue_sharing")
@@ -412,6 +420,8 @@ model Proposal {
   votersScope   String?   @map("voters_scope")
   actors        Json?
   deliveryDate  DateTime? @map("delivery_date") @db.Timestamptz(6)
+  // §10.4 — delivery-date reminder sent (once) by the daily job for approved INSTRUCTIVE proposals.
+  deliveryRemindedAt DateTime? @map("delivery_reminded_at") @db.Timestamptz(6)
   pollOptions   Json?     @map("poll_options")
   thresholdKind String?   @map("threshold_kind")
   // §10 — PUBLIC by default; PRIVATE makes an internal proposal visible + votable to board only.
@@ -548,6 +558,14 @@ model Milestone {
   deadlineAt         DateTime? @map("deadline_at") @db.Timestamptz(6)
   status             String // NOT_STARTED, POA_SUBMITTED, IN_REVIEW, APPROVED, REJECTED
   closedAt           DateTime? @map("closed_at") @db.Timestamptz(6)
+  // §11.4 — stamped when the PROJECT_FUNDING multisig tx confirms on-chain (not at approval).
+  paidAt             DateTime? @map("paid_at") @db.Timestamptz(6)
+  paidInTx           String?   @map("paid_in_tx")
+  // §11.5 — POA-period extensions: each rejection auto-extends the deadline
+  // (milestoneAutoExtensionDays); the board may add ONE extra extension (≤ max).
+  autoExtendedCount  Int       @default(0) @map("auto_extended_count")
+  boardExtensionDays Int?      @map("board_extension_days")
+  boardExtendedAt    DateTime? @map("board_extended_at") @db.Timestamptz(6)
 
   proposal    Proposal              @relation(fields: [proposalId], references: [id])
   poas        MilestonePoa[]
@@ -796,6 +814,8 @@ model QuickPoll {
   extensions Int       @default(0)
   status     String // PENDING_BOARD, ACTIVE, RESOLVED, FAILED
   winnerId   String?   @map("winner_id") @db.Uuid
+  // §9.2 — voters frozen at launch (same eligibility as D&V); drives the 51% participation check.
+  eligibleDrepIds String[] @map("eligible_drep_ids") @db.Uuid
 
   round    Round           @relation(fields: [roundId], references: [id])
   category RoundCategory   @relation(fields: [categoryId], references: [id])
@@ -809,6 +829,7 @@ model QuickPollVote {
   quickPollId String   @map("quick_poll_id") @db.Uuid
   drepId      String   @map("drep_id") @db.Uuid
   choice      String   @db.Uuid // proposal id chosen
+  power       Float    @default(0) // §9.2 balanced voting power at cast time
   castAt      DateTime @default(now()) @map("cast_at") @db.Timestamptz(6)
 
   quickPoll      QuickPoll @relation(fields: [quickPollId], references: [id])
@@ -1216,8 +1237,50 @@ model AdminInvitation {
   consumedAt  DateTime? @map("consumed_at") @db.Timestamptz(6)
 
   createdBy AdminUser? @relation(fields: [createdById], references: [id])
+  // §18.6 — set when this invitation is part of a "switch all admins" rotation.
+  rotationId String? @map("rotation_id") @db.Uuid
 
   @@map("admin_invitation")
+}
+
+// §18.8 — admin-triggered password reset: a one-time token (hashed) the target admin uses to set
+// a new password. 1-hour TTL per design.
+model AdminPasswordReset {
+  id          String    @id @default(uuid()) @db.Uuid
+  adminId     String    @map("admin_id") @db.Uuid
+  tokenHash   String    @map("token_hash")
+  createdById String?   @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  expiresAt   DateTime  @map("expires_at") @db.Timestamptz(6)
+  usedAt      DateTime? @map("used_at") @db.Timestamptz(6)
+
+  @@index([adminId])
+  @@map("admin_password_reset")
+}
+
+// §18.6 — "switch all admins": one rotation creates invitations for the NEW roster; when the last
+// one is accepted, every admin outside the rotation is disabled (single audit entry).
+model AdminRotation {
+  id          String    @id @default(uuid()) @db.Uuid
+  createdById String?   @map("created_by") @db.Uuid
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  @@map("admin_rotation")
+}
+
+// §15.4 — daily treasury reconciliation snapshot: total multisig balance vs the delta explained
+// by confirmed actions; mismatches alert the board.
+model TreasuryDailySnapshot {
+  id                String   @id @default(uuid()) @db.Uuid
+  day               String   @unique // YYYY-MM-DD (UTC)
+  totalLovelace     BigInt   @map("total_lovelace")
+  prevLovelace      BigInt?  @map("prev_lovelace")
+  explainedLovelace BigInt   @default(0) @map("explained_lovelace") // net of confirmed actions that day
+  mismatch          Boolean  @default(false)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("treasury_daily_snapshot")
 }
 
 model AdminAuditLog {

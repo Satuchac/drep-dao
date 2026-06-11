@@ -202,6 +202,10 @@ export class DvService {
 
   /** §8.2 — eligible DRep casts/changes a balanced D&V vote (rationale mandatory). */
   async vote(userId: string, proposalId: string, choice: string, rationale: string) {
+    // §8.2 — rationale is mandatory for a YES/NO ballot (enforced server-side, not just in the UI).
+    if ((choice === 'YES' || choice === 'NO') && !(rationale ?? '').trim()) {
+      throw new BadRequestException('a rationale is required for a YES/NO vote');
+    }
     const proposal = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
       include: { round: { select: { status: true } } },
@@ -390,6 +394,21 @@ export class DvService {
         include: { round: { select: { number: true, id: true, name: true } } },
       });
       const voteList = await this.dvVoteList(proposalId);
+      // §4.4 — missing voters count as implicit NO in the tally; record them explicitly in the
+      // anchored audit trail so "who voted NO" is answerable from the proof, not by absence.
+      const snapshot = await this.prisma.voteSnapshot.findFirst({ where: { proposalId }, include: { entries: { include: { drep: { select: { drepIdOnchain: true, user: { select: { displayName: true } } } } } } } });
+      const votedDreps = new Set(voteList.map((v) => v.drep));
+      for (const e of snapshot?.entries ?? []) {
+        if (!votedDreps.has(e.drep.drepIdOnchain)) {
+          voteList.push({
+            drep: e.drep.drepIdOnchain,
+            displayName: e.drep.user?.displayName ?? null,
+            choice: 'IMPLICIT_NO',
+            weight: round2(Number(e.finalPower ?? 0)),
+            rationale: null,
+          });
+        }
+      }
       const noPower = Math.max(0, (r.totalPower ?? 0) - (r.yesPower ?? 0) - (r.abstainPower ?? 0));
       await this.anchor.anchorResult({
         kind: 'dv',

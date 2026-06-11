@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AnchorService } from '../cardano/anchor.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { verifyCip30Signature } from '../auth/cip30';
+import { PledgeReturnService } from './pledge-return.service';
 
 const LOVELACE = 1_000_000;
 const SIGNING_THRESHOLD = 3; // §15 — 3-of-5 board signatures required to broadcast
@@ -64,6 +65,7 @@ export class MultisigBroadcastService {
     private readonly config: ConfigService,
     private readonly anchor: AnchorService,
     private readonly cardano: CardanoQueryService,
+    private readonly pledgeReturn: PledgeReturnService,
   ) {
     const net = (this.config.get<string>('CARDANO_NETWORK') ?? 'Preprod').trim();
     this.networkId = net === 'Mainnet' ? 1 : 0;
@@ -461,6 +463,21 @@ export class MultisigBroadcastService {
         });
       } catch (e) {
         this.logger.warn(`reward payout anchor skipped: ${e instanceof Error ? e.message : e}`);
+      }
+    }
+    // §11.4 — a confirmed PROJECT_FUNDING payout stamps the milestone PAID (the schema always
+    // promised this), then §16.3 checks whether a pledge-return share is due.
+    if (action.kind === 'PROJECT_FUNDING' && action.milestoneId) {
+      await this.prisma.milestone.update({
+        where: { id: action.milestoneId },
+        data: { paidAt: new Date(), paidInTx: txHash },
+      });
+      if (action.proposalId && this.pledgeReturn) {
+        try {
+          await this.pledgeReturn.maybePrepareReturn(action.proposalId, action.milestoneId);
+        } catch (e) {
+          this.logger.warn(`pledge-return check failed: ${e instanceof Error ? e.message : e}`);
+        }
       }
     }
     this.logger.warn(`multisig action ${actionId} broadcast: ${txHash}`);

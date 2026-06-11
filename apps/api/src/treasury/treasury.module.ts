@@ -8,12 +8,13 @@ import { BoardMultisigService } from './board-multisig.service';
 import { BoardMultisigController } from './board-multisig.controller';
 import { MultisigBroadcastService } from './multisig-broadcast.service';
 import { TreasuryBucketsService } from './treasury-buckets.service';
+import { PledgeReturnService } from './pledge-return.service';
 import { TreasuryBucketsController } from './treasury-buckets.controller';
 
 @Module({
   imports: [AuthModule, CardanoModule],
   controllers: [TreasuryController, BoardMultisigController, TreasuryBucketsController],
-  providers: [TreasuryService, BoardMultisigService, MultisigBroadcastService, TreasuryBucketsService, BoardGuard],
-  exports: [BoardMultisigService, TreasuryBucketsService],
+  providers: [TreasuryService, BoardMultisigService, MultisigBroadcastService, TreasuryBucketsService, PledgeReturnService, BoardGuard],
+  exports: [BoardMultisigService, TreasuryBucketsService, PledgeReturnService],
 })
 export class TreasuryModule {}

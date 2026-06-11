@@ -615,20 +615,26 @@ export class MilestonesService {
     // by the board (or the primary if none is). Lets the board separate
     // funds: one bucket for milestone payouts, another for rewards, etc.
     const sourceBucket = await this.buckets.defaultBucketFor('FUNDING');
-    await this.prisma.multisigAction.create({
-      data: {
-        kind: 'PROJECT_FUNDING',
-        status: 'PENDING_SIGS',
-        amountAda: BigInt(Math.round(amountAda * LOVELACE)),
-        description: `${label} — milestone APPROVED, ready to disburse ${amountAda.toLocaleString()} ₳`,
-        proposalId,
-        milestoneId,
-        milestoneIdx: idx,
-        proposalTitle: title,
-        destAddress: payoutAddress,
-        sourceBucketId: sourceBucket?.id ?? null,
-      },
-    });
+    try {
+      await this.prisma.multisigAction.create({
+        data: {
+          kind: 'PROJECT_FUNDING',
+          status: 'PENDING_SIGS',
+          amountAda: BigInt(Math.round(amountAda * LOVELACE)),
+          description: `${label} — milestone APPROVED, ready to disburse ${amountAda.toLocaleString()} ₳`,
+          proposalId,
+          milestoneId,
+          milestoneIdx: idx,
+          proposalTitle: title,
+          destAddress: payoutAddress,
+          sourceBucketId: sourceBucket?.id ?? null,
+        },
+      });
+    } catch (e) {
+      // Double-payout guard: a partial unique index allows only ONE live PROJECT_FUNDING action
+      // per milestone — a concurrent prepare losing the race is fine (idempotent).
+      if ((e as { code?: string })?.code !== 'P2002') throw e;
+    }
   }
 
   // ===========================================================================
