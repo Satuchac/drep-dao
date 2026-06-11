@@ -415,6 +415,7 @@ model Proposal {
   votes          Vote[]
   comments       Comment[]
   privateThreads PrivateThread[]
+  messageThreads ProposalMessageThread[]
   quickPollsWon  QuickPoll[]        @relation("QuickPollWinner")
   quickPollVotesFor QuickPollVote[] @relation("QuickPollChoice")
   feeAdjustments FeeAdjustment[]
@@ -672,6 +673,36 @@ model DvRationale {
 
   @@index([proposalId, drepId])
   @@map("dv_rationale")
+}
+
+// §3.5 — board ↔ submitter messaging per proposal. A thread is one conversation (the board
+// asks the team to do something — send tokens to the Treasury, fix a pledge, etc.); entries are
+// the back-and-forth. All board members + the proposal's submitter can see it. Marked DONE → history.
+model ProposalMessageThread {
+  id          String    @id @default(uuid()) @db.Uuid
+  proposalId  String    @map("proposal_id") @db.Uuid
+  status      String    @default("OPEN") // OPEN | DONE
+  createdById String    @map("created_by_id") @db.Uuid // loose ref to AppUser (the board member who opened it)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  doneAt      DateTime? @map("done_at") @db.Timestamptz(6)
+  proposal    Proposal  @relation(fields: [proposalId], references: [id])
+  entries     ProposalMessageEntry[]
+
+  @@index([proposalId])
+  @@map("proposal_message_thread")
+}
+
+model ProposalMessageEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  threadId  String   @map("thread_id") @db.Uuid
+  authorId  String   @map("author_id") @db.Uuid // loose ref to AppUser
+  fromBoard Boolean  @map("from_board") // true = a board member, false = the submitter
+  body      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  thread    ProposalMessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+  @@map("proposal_message_entry")
 }
 
 // §11/§12 — an Expert assigned to a milestone reviews it like a DRep. Kept in its

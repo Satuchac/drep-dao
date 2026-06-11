@@ -19,6 +19,7 @@ import { MilestonesModule } from './milestones/milestones.module';
 import { InternalProposalsModule } from './internal-proposals/internal-proposals.module';
 import { CardanoModule } from './cardano/cardano.module';
 import { RewardsModule } from './rewards/rewards.module';
+import { ProposalMessagesModule } from './messages/proposal-messages.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { RewardsModule } from './rewards/rewards.module';
     CommentsModule,
     MilestonesModule,
     RewardsModule,
+    ProposalMessagesModule,
     InternalProposalsModule,
     PreferencesModule,
   ],

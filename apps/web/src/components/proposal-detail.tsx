@@ -36,6 +36,7 @@ import { Markdown, MarkdownEditor } from './markdown';
 import { CopyButton } from './copy-button';
 import { ConfirmDialog } from './confirm-dialog';
 import { RevenueSharingBlock } from './proposal-submit';
+import { ProposalMessagesPanel } from './proposal-messages';
 
 const card = 'rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900';
 // Subtle blue tint on platform-managed governance sections (Filtering jury, D&V,
@@ -130,6 +131,15 @@ export function ProposalDetail({
             <> · category ask {p.categoryAsk.minAda != null ? `${p.categoryAsk.minAda.toLocaleString()}` : '0'}–{p.categoryAsk.maxAda != null ? `${p.categoryAsk.maxAda.toLocaleString()}` : '∞'} ₳</>
           ) : null}
         </div>
+        {/* §3.5 — board can message the submitter at any stage (jumps to the thread list below). */}
+        {isBoard ? (
+          <button
+            onClick={() => document.getElementById('proposal-messages')?.scrollIntoView({ behavior: 'smooth' })}
+            className="mt-2 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
+          >
+            Send message to the submitter
+          </button>
+        ) : null}
         {/* Why a proposal was rejected — shown to everyone (submitter + reviewers), not buried. */}
         {p.status === 'REJECTED' ? <RejectionBanner proposal={p} /> : null}
         {/* §12 — a pending budget-change request is visible to everyone (so DReps
@@ -240,6 +250,8 @@ export function ProposalDetail({
             profile.roles.some((r) => ['BOARD', 'DREP', 'DAO_MEMBER', 'EXPERT_APPROVED'].includes(r)))
         }
       />
+      {/* §3.5 — board ↔ submitter message history (board + submitter only). */}
+      {isBoard || mine ? <ProposalMessagesPanel proposalId={id} canBoard={isBoard} /> : null}
     </div>
   );
 }

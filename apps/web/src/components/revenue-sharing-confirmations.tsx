@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { boardRevenueApi, type PendingRevenueSharing } from '@/lib/api';
+import { boardRevenueApi, messagesApi, type PendingRevenueSharing } from '@/lib/api';
 import { ConfirmDialog } from './confirm-dialog';
 
 /**
@@ -13,6 +13,10 @@ export function RevenueSharingConfirmations({ onChange }: { onChange?: () => voi
   const [pending, setPending] = useState<PendingRevenueSharing[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  // §3.5 — inline "ask the submitter to do something" composer, keyed by proposal id.
+  const [composeId, setComposeId] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const [sent, setSent] = useState<string | null>(null);
   const load = useCallback(() => { boardRevenueApi.pending().then(setPending).catch(() => setPending([])); }, []);
   useEffect(load, [load]);
 
@@ -23,6 +27,13 @@ export function RevenueSharingConfirmations({ onChange }: { onChange?: () => voi
     setBusy(id);
     try { await boardRevenueApi.verify(id); load(); onChange?.(); }
     catch { /* leave the row in place */ } finally { setBusy(null); }
+  };
+  const sendMessage = async (proposalId: string) => {
+    const body = draft.trim();
+    if (!body) return;
+    setBusy(proposalId);
+    try { await messagesApi.start(proposalId, body); setDraft(''); setComposeId(null); setSent(proposalId); onChange?.(); }
+    catch { /* */ } finally { setBusy(null); }
   };
 
   return (
@@ -37,17 +48,36 @@ export function RevenueSharingConfirmations({ onChange }: { onChange?: () => voi
           <li key={p.id} className="rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium">{p.publicId ? `${p.publicId} · ` : ''}{p.title}</span>
-              <button
-                onClick={() => setConfirmId(p.id)}
-                disabled={busy === p.id}
-                className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-              >
-                {busy === p.id ? 'Verifying…' : 'Verify revenue-sharing'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { setComposeId((v) => (v === p.id ? null : p.id)); setDraft(''); }}
+                  disabled={busy === p.id}
+                  className="rounded border border-neutral-300 px-3 py-1 text-xs font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700"
+                >
+                  Send message
+                </button>
+                <button
+                  onClick={() => setConfirmId(p.id)}
+                  disabled={busy === p.id}
+                  className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {busy === p.id ? '…' : 'Verify revenue-sharing'}
+                </button>
+              </div>
             </div>
             <div className="text-xs text-neutral-500">
               by {p.submitter ?? '—'}{p.categoryName ? ` · ${p.categoryName}` : ''}{p.roundNumber != null ? ` · Round #${p.roundNumber}` : ''}
             </div>
+            {composeId === p.id ? (
+              <div className="mt-2 space-y-1">
+                <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} placeholder="Ask the submitter to do something — e.g. send the promised tokens to the Treasury…" className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" />
+                <div className="flex gap-2">
+                  <button onClick={() => sendMessage(p.id)} disabled={busy === p.id || !draft.trim()} className="rounded bg-emerald-600 px-3 py-1 text-xs text-white hover:bg-emerald-700 disabled:opacity-50">Send</button>
+                  <button onClick={() => { setComposeId(null); setDraft(''); }} className="rounded border border-neutral-300 px-3 py-1 text-xs dark:border-neutral-700">Cancel</button>
+                </div>
+              </div>
+            ) : null}
+            {sent === p.id ? <div className="mt-1 text-xs text-emerald-600">✓ Message sent — the submitter will see it under Messages and can respond.</div> : null}
             {p.revenueSharingMd ? (
               <div className="mt-1 whitespace-pre-wrap rounded bg-neutral-50 p-2 text-xs text-neutral-600 dark:bg-neutral-900/40 dark:text-neutral-300">
                 {p.revenueSharingMd}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type EntryEligibility, type BoardAction } from '@/lib/api';
+import { expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardApi, boardExpertsApi, removalApi, filteringApi, internalProposalsApi, messagesApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type EntryEligibility, type BoardAction } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -22,6 +22,7 @@ import { RoundStageControls } from './round-stage-controls';
 import { InternalProposals } from './internal-proposals';
 import { FeeConfirmations } from './fee-confirmations';
 import { RevenueSharingConfirmations } from './revenue-sharing-confirmations';
+import { BoardMessages, SubmitterMessages } from './proposal-messages';
 import { PledgeConfirmations } from './pledge-confirmations';
 import { BoardPayments } from './board-payments';
 import { PreferencesPanel } from './preferences-panel';
@@ -128,6 +129,11 @@ export function MemberArea() {
     ),
   });
 
+  // §3.5 — submitter's Messages tab: appears once the board has messaged them about a proposal.
+  if (todo.messagesTotal > 0) {
+    tabs.push({ key: 'messages', label: 'Messages', badge: todo.messages, node: <SubmitterMessages /> });
+  }
+
   if (isBoard) {
     // §15 — Treasury is its own tab. Multisig setup, hot-wallet controls,
     // approve-and-sign (BoardActions), and the board-initiated send-ADA flow
@@ -217,6 +223,7 @@ function ActionsTab() {
         </label>
       </div>
       <BoardActions history={showHistory} filter="rewards" />
+      <BoardMessages />
       <RevenueSharingConfirmations />
       <StopFundingBoardPanel />
       <FeeConfirmations history={showHistory} />
@@ -254,13 +261,20 @@ function ApplicationsTab() {
  * proposals" awaiting this DRep's vote. Light polling.
  */
 function useTodoCounts(isBoard: boolean, canVote: boolean) {
-  const [counts, setCounts] = useState({ treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0 });
+  const [counts, setCounts] = useState({ treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0, messages: 0, messagesTotal: 0 });
   useEffect(() => {
     let alive = true;
     const poll = async () => {
-      const next = { treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0 };
+      const next = { treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0, messages: 0, messagesTotal: 0 };
+      // §3.5 — submitter's board messages: total (drives the Messages tab) + unread (board spoke
+      // last on an OPEN thread → the submitter still has to respond). Runs for everyone.
+      try {
+        const mineMsgs = await messagesApi.mine();
+        next.messagesTotal = mineMsgs.length;
+        next.messages = mineMsgs.filter((t) => t.status === 'OPEN' && t.lastFromBoard).length;
+      } catch { /* leave at 0 */ }
       if (isBoard) {
-        const [a, f, p, dapps, eapps, rem, stop, pl, rev] = await Promise.allSettled([
+        const [a, f, p, dapps, eapps, rem, stop, pl, rev, msg] = await Promise.allSettled([
           treasuryApi.boardActions(),
           boardFeeApi.pending(),
           boardPaymentsApi.pending(),
@@ -270,6 +284,7 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
           milestonesApi.pendingStopFunding(), // §11 — stop-funding awaiting THIS board member's 1p1v vote
           boardPledgeApi.pending(), // §3 — pledge payments to confirm
           boardRevenueApi.pending(), // §3.4 — revenue-sharing to verify (gates milestone POAs)
+          messagesApi.boardPending(), // §3.5 — submitter replies awaiting the board
         ]);
         // §15 — multisig sign queue (boardActions) is the Treasury tab; the
         // remaining review/audit items (fees, pledges, payouts, stop-funding)
@@ -286,7 +301,8 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
           (p.status === 'fulfilled' ? p.value.length : 0) +
           (stop.status === 'fulfilled' ? stop.value.count : 0) +
           (pl.status === 'fulfilled' ? pl.value.length : 0) +
-          (rev.status === 'fulfilled' ? rev.value.length : 0);
+          (rev.status === 'fulfilled' ? rev.value.length : 0) +
+          (msg.status === 'fulfilled' ? msg.value.length : 0);
         next.applications =
           (dapps.status === 'fulfilled' ? dapps.value.filter((x) => !x.myVote).length : 0) +
           (eapps.status === 'fulfilled' ? eapps.value.length : 0) +

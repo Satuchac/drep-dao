@@ -1258,6 +1258,35 @@ export interface FeeHistoryPage {
   offset: number;
   rows: FeeHistoryRow[];
 }
+// §3.5 — board ↔ submitter messaging per proposal.
+export interface MessageEntry {
+  id: string;
+  fromBoard: boolean;
+  author: string | null;
+  body: string;
+  createdAt: string;
+  mine: boolean;
+}
+export interface MessageThread {
+  id: string;
+  proposalId: string;
+  proposalTitle: string;
+  proposalPublicId: string | null;
+  status: 'OPEN' | 'DONE';
+  createdAt: string;
+  doneAt: string | null;
+  lastFromBoard: boolean;
+  entries: MessageEntry[];
+}
+export const messagesApi = {
+  forProposal: (proposalId: string) => request<MessageThread[]>(`/proposals/${proposalId}/messages`),
+  start: (proposalId: string, body: string) => request<MessageThread>(`/proposals/${proposalId}/messages`, { method: 'POST', body: JSON.stringify({ body }) }),
+  reply: (threadId: string, body: string) => request<MessageThread>(`/messages/${threadId}/reply`, { method: 'POST', body: JSON.stringify({ body }) }),
+  markDone: (threadId: string) => request<MessageThread>(`/messages/${threadId}/done`, { method: 'POST', body: JSON.stringify({}) }),
+  boardPending: () => request<MessageThread[]>('/messages/board-pending'),
+  mine: () => request<MessageThread[]>('/my/messages'),
+};
+
 export interface PendingRevenueSharing {
   id: string;
   publicId: string | null;
