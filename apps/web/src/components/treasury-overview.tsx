@@ -17,7 +17,7 @@ const roundColor = 'bg-violet-500';
 
 /** §15 — Treasury overview: budget buckets (allocated/spent/remaining) + balances. */
 export function TreasuryOverview() {
-  const [subTab, setSubTab] = useState<'overview' | 'transactions'>('overview');
+  const [subTab, setSubTab] = useState<'overview' | 'transactions' | 'setup'>('overview');
   const [data, setData] = useState<Overview | null>(null);
   const [buckets, setBuckets] = useState<TreasuryBucket[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +49,7 @@ export function TreasuryOverview() {
 
       {/* §15 — Overview | Transactions sub-menu. */}
       <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
-        {([['overview', 'Overview'], ['transactions', 'Transactions']] as const).map(([key, label]) => (
+        {([['overview', 'Overview'], ['transactions', 'Transactions'], ['setup', 'Treasury multisig setup']] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setSubTab(key)}
@@ -66,12 +66,13 @@ export function TreasuryOverview() {
 
       {subTab === 'transactions' ? (
         <TreasuryTransactions />
+      ) : subTab === 'setup' ? (
+        // §15 — multisig setup: roster of board key submissions + assembled script address
+        // (or "not yet built" banner). Moved to its own tab to keep the Overview focused.
+        <MultisigSetup onAssembled={load} />
       ) : (
         <>
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
-      {/* §15 — multisig setup panel above the balances: roster of board key
-          submissions + assembled script address (or "not yet built" banner). */}
-      <MultisigSetup onAssembled={load} />
       {!data ? (
         <p className="text-sm text-neutral-500">Loading…</p>
       ) : (
