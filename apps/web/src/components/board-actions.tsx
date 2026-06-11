@@ -22,6 +22,9 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
   // the user clicked (the previous single-error state lived at the section
   // top, easy to miss when there are several actions and you've scrolled).
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // §15 — transient "tx submitted" banner shown to the LAST signer right after the broadcast,
+  // while the just-signed action drops into history. Component-local, so it's gone on remount.
+  const [submitted, setSubmitted] = useState<string | null>(null);
   // §15.4 — Cancel-action confirm-dialog state. `cancelTarget` is the action
   // being cancelled; `cancelReason` is the required short audit note.
   const [cancelTarget, setCancelTarget] = useState<BoardAction | null>(null);
@@ -109,6 +112,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
       const r = await treasuryApi.submitWitness(a.id, witnessHex);
       if (r.status === 'CONFIRMED' && r.txHash) {
         setErr(a.id, null);
+        setSubmitted(r.txHash); // last signature → broadcast; show the transient submitted banner
       }
       load();
       onChange?.();
@@ -119,10 +123,18 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
     }
   };
 
-  if (actions.length === 0 && past.length === 0) return null;
+  // Keep rendering while a transient "submitted" banner is up, even if the signed action has
+  // already dropped into history (so the last signer still sees the confirmation).
+  if (actions.length === 0 && past.length === 0 && !submitted) return null;
 
   return (
     <section className="space-y-2 rounded-lg border border-amber-300 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+      {submitted ? (
+        <div className="flex items-center justify-between gap-2 rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+          <span>✓ Transaction submitted on-chain — <a href={txUrl(submitted)} target="_blank" rel="noreferrer" className="underline">{submitted.slice(0, 12)}…</a>. The signed action has moved to history.</span>
+          <button onClick={() => setSubmitted(null)} className="shrink-0 font-medium hover:underline">Dismiss</button>
+        </div>
+      ) : null}
       <h3 className="text-base font-semibold">Actions to sign</h3>
       <p className="text-xs text-neutral-500">
         The platform prepared these treasury/hot-wallet actions. Each one runs a two-phase ceremony:{' '}
