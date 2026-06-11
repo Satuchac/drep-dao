@@ -124,14 +124,27 @@ export function TreasuryOverview() {
             })}
           </div>
 
-          <div className="rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+          <div className="space-y-1 rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800">
             <div className="flex justify-between">
-              <span className="text-neutral-500">Treasury total</span>
+              <span className="text-neutral-500">Treasury total <span className="text-xs text-neutral-400">(all addresses, incl. hot wallet)</span></span>
               <span className="font-medium tabular-nums">{ada(data.totalAllocatedAda)} ₳</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between pl-3 text-xs text-neutral-500">
+              <span>· of which hot wallet</span>
+              <span className="tabular-nums">{ada(data.hotWallet.balanceAda)} ₳</span>
+            </div>
+            <div className="mt-1 flex justify-between border-t border-neutral-100 pt-1 dark:border-neutral-800">
               <span className="text-neutral-500">Total spent</span>
               <span className="font-medium tabular-nums">{ada(data.totalSpentAda)} ₳</span>
+            </div>
+            <div className="flex justify-between pl-3 text-xs text-neutral-500">
+              <span>· funding</span><span className="tabular-nums">{ada(data.spent.funding)} ₳</span>
+            </div>
+            <div className="flex justify-between pl-3 text-xs text-neutral-500">
+              <span>· rewards</span><span className="tabular-nums">{ada(data.spent.rewards)} ₳</span>
+            </div>
+            <div className="flex justify-between pl-3 text-xs text-neutral-500">
+              <span>· operations</span><span className="tabular-nums">{ada(data.spent.operations)} ₳</span>
             </div>
           </div>
         </>

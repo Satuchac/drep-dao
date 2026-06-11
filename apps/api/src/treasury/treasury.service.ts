@@ -132,6 +132,7 @@ export class TreasuryService {
       // the per-round breakdown of funding). Total spent = the three top categories' spend.
       totalAllocatedAda: totalAda,
       totalSpentAda: rewardsSpent + opsSpent + totalFundingSpent,
+      spent: { funding: totalFundingSpent, rewards: rewardsSpent, operations: opsSpent },
     };
   }
 

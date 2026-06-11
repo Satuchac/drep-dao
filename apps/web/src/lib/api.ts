@@ -183,8 +183,9 @@ export interface TreasuryOverview {
   treasury: { address: string | null; balanceAda: number; configured: boolean };
   hotWallet: { address: string | null; balanceAda: number; minAda: number };
   buckets: TreasuryBucket[];
-  totalAllocatedAda: number;
+  totalAllocatedAda: number; // treasury total — all ADA across every address (incl. hot wallet)
   totalSpentAda: number;
+  spent: { funding: number; rewards: number; operations: number };
 }
 export interface BoardAction {
   id: string;
