@@ -1523,7 +1523,15 @@ export interface InternalProposalVoter {
   weight: number; // final voting power
   rationale: string | null;
 }
+export interface InternalProposalSpending {
+  amountAda: number;
+  destAddress: string | null;
+  sourceBucketLabel: string | null;
+  action: { id: string; status: string; txHash: string | null; paidAt: string | null } | null;
+}
 export interface InternalProposalDetail extends InternalProposalSummary {
+  /** §10.5 — present for SPENDING proposals. */
+  spending?: InternalProposalSpending | null;
   contentMd: string;
   submitterDrepId: string | null;
   actors: string[] | null;
@@ -1537,6 +1545,10 @@ export interface InternalProposalDetail extends InternalProposalSummary {
   anchorHash: string | null;
 }
 export interface CreateInternalInput {
+  /** §10.5 SPENDING: amount + destination (+ optional source bucket). */
+  spendingAmountAda?: number;
+  spendingSourceBucketId?: string;
+  spendingDestAddress?: string;
   title: string;
   contentMd: string;
   internalType: string;

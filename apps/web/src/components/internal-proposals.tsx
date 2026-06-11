@@ -6,6 +6,8 @@ import {
   internalProposalsApi,
   daoApi,
   configApi,
+  treasuryBucketsApi,
+  type TreasuryBucket,
   type InternalProposalSummary,
   type InternalProposalDetail,
   type CreateInternalInput,
@@ -25,6 +27,7 @@ const TYPE_LABEL: Record<string, string> = {
   INSTRUCTIVE: 'Instructive (names actors to act)',
   INFORMATIVE: 'Informative (yes / no decision)',
   POLL: 'Poll (choose option(s))',
+  SPENDING: 'Spending (treasury payment on approval)',
 };
 const SCOPE_LABEL: Record<string, string> = {
   DREPS_ONLY: 'Non-board DReps only',
@@ -185,16 +188,23 @@ function SubmitInternalForm({ onDone, election = false }: { onDone: () => void; 
   const [deliveryDate, setDeliveryDate] = useState('');
   const [members, setMembers] = useState<DaoMember[]>([]);
   const [cfg, setCfg] = useState<PublicConfig | null>(null);
+  // §10.5 SPENDING: amount + source treasury bucket + destination.
+  const [spendAmount, setSpendAmount] = useState('');
+  const [spendBucket, setSpendBucket] = useState('');
+  const [spendDest, setSpendDest] = useState('');
+  const [buckets, setBuckets] = useState<TreasuryBucket[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     daoApi.members().then(setMembers).catch(() => setMembers([]));
     configApi.get().then(setCfg).catch(() => setCfg(null));
+    treasuryBucketsApi.list().then((r) => setBuckets(r.buckets)).catch(() => setBuckets([]));
   }, []);
 
   const isPoll = internalType === 'POLL';
   const isInstructive = internalType === 'INSTRUCTIVE';
+  const isSpending = internalType === 'SPENDING';
   const days = Math.max(0, Math.ceil((new Date(votingEnd).getTime() - Date.now()) / 86400_000));
   const dThresh = cfg?.internalThresholds.default;
   const iThresh = cfg?.internalThresholds.important;
@@ -245,6 +255,7 @@ function SubmitInternalForm({ onDone, election = false }: { onDone: () => void; 
       ...(isPoll ? { pollOptions: cleanOptions, pollMultiple } : {}),
       ...(isInstructive && actors.length ? { actors } : {}),
       ...(isInstructive && deliveryDate ? { deliveryDate: new Date(deliveryDate).toISOString() } : {}),
+      ...(isSpending ? { spendingAmountAda: Number(spendAmount) || 0, spendingDestAddress: spendDest.trim(), ...(spendBucket ? { spendingSourceBucketId: spendBucket } : {}) } : {}),
     };
     setBusy(true);
     try {
@@ -291,7 +302,29 @@ function SubmitInternalForm({ onDone, election = false }: { onDone: () => void; 
         </label>
       </div>
 
-      {!election && isPoll ? (
+      {!election && isSpending ? (
+            <div className="space-y-2 rounded border border-emerald-200 p-2 dark:border-emerald-900">
+              <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300">§10.5 — if approved, the platform prepares a treasury multisig transaction the board signs.</div>
+              <label className="block text-sm">
+                Amount (₳) <span className="text-red-500">*</span>
+                <input className={field} value={spendAmount} onChange={(e) => setSpendAmount(e.target.value)} placeholder="100" />
+              </label>
+              <label className="block text-sm">
+                From treasury address
+                <select className={field} value={spendBucket} onChange={(e) => setSpendBucket(e.target.value)}>
+                  <option value="">Operations (default)</option>
+                  {buckets.map((b) => (
+                    <option key={b.id} value={b.id}>{b.label} · {b.balanceAda.toLocaleString()} ₳</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm">
+                Destination address <span className="text-red-500">*</span>
+                <input className={field} value={spendDest} onChange={(e) => setSpendDest(e.target.value)} placeholder="addr…" />
+              </label>
+            </div>
+          ) : null}
+          {!election && isPoll ? (
         <div className="space-y-2 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
           <div className="text-sm font-medium">Poll options</div>
           {pollOptions.map((o, i) => (
@@ -541,6 +574,28 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <div className="mt-3 rounded-md border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
             {p.actors?.length ? <div><span className="font-medium">Actors:</span> {p.actors.join(', ')}</div> : null}
             {p.deliveryDate ? <div><span className="font-medium">Delivery date:</span> {fmtDateTime(p.deliveryDate)}</div> : null}
+          </div>
+        ) : null}
+        {/* §10.5 — spending parameters + the multisig action's progress once approved. */}
+        {p.spending ? (
+          <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50/40 px-3 py-2 text-xs dark:border-emerald-900 dark:bg-emerald-950/20">
+            <div className="font-medium text-emerald-800 dark:text-emerald-200">Treasury spending (on approval)</div>
+            <div className="mt-1"><span className="font-medium">Amount:</span> {p.spending.amountAda.toLocaleString()} ₳</div>
+            <div><span className="font-medium">From:</span> {p.spending.sourceBucketLabel ?? 'Operations (default)'}</div>
+            <div className="break-all"><span className="font-medium">To:</span> <span className="font-mono">{p.spending.destAddress}</span></div>
+            {p.spending.action ? (
+              p.spending.action.status === 'CONFIRMED' ? (
+                <div className="mt-1 text-emerald-700 dark:text-emerald-300">✓ Executed on-chain{p.spending.action.txHash ? ` — ${p.spending.action.txHash.slice(0, 16)}…` : ''}{p.spending.action.paidAt ? ` (${new Date(p.spending.action.paidAt).toLocaleDateString()})` : ''}</div>
+              ) : p.spending.action.status === 'FAILED' ? (
+                <div className="mt-1 text-red-600">✗ The prepared multisig action was cancelled — the board can review it under Treasury history.</div>
+              ) : (
+                <div className="mt-1 text-amber-600">⏳ Multisig transaction prepared — awaiting board signatures (Treasury → Actions).</div>
+              )
+            ) : p.status === 'APPROVED' ? (
+              <div className="mt-1 text-amber-600">Preparing the multisig transaction…</div>
+            ) : (
+              <div className="mt-1 text-neutral-500">If the vote passes, a multisig transaction is created for the board to sign.</div>
+            )}
           </div>
         ) : null}
       </div>

@@ -84,6 +84,7 @@ export const InternalType = {
   INSTRUCTIVE: 'INSTRUCTIVE',
   INFORMATIVE: 'INFORMATIVE',
   POLL: 'POLL',
+  SPENDING: 'SPENDING', // §10.5 — approved → an OPS multisig action the board signs
 } as const;
 export type InternalType = (typeof InternalType)[keyof typeof InternalType];
 

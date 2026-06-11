@@ -13,7 +13,7 @@ import {
   MinLength,
 } from 'class-validator';
 
-const INTERNAL_TYPES = ['INSTRUCTIVE', 'INFORMATIVE', 'POLL'];
+const INTERNAL_TYPES = ['INSTRUCTIVE', 'INFORMATIVE', 'POLL', 'SPENDING'];
 const SCOPES = ['DREPS_ONLY', 'BOARD_ONLY', 'BOTH'];
 const THRESHOLDS = ['DEFAULT', 'IMPORTANT'];
 const VOTING_TYPES = ['ONE_PERSON_ONE_VOTE', 'BALANCED'];
@@ -43,6 +43,12 @@ export class CreateInternalProposalDto {
   // INSTRUCTIVE only: who is expected to act if approved + the target delivery date.
   @IsOptional() @IsArray() @IsString({ each: true }) actors?: string[];
   @IsOptional() @IsISO8601() deliveryDate?: string;
+
+  // §10.5 SPENDING only: how much ADA leaves which treasury bucket to which address when
+  // the proposal is approved (the board then signs the prepared multisig action).
+  @IsOptional() @Min(1) spendingAmountAda?: number;
+  @IsOptional() @IsString() spendingSourceBucketId?: string;
+  @IsOptional() @IsString() @MaxLength(200) spendingDestAddress?: string;
 
   // §14 board-member election: when true, the proposal is an INSTRUCTIVE internal proposal
   // whose `candidates` (exactly 5 admitted-DRep UUIDs) become the new board on approval +

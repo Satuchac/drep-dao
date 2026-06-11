@@ -66,6 +66,23 @@ export class InternalProposalsService {
     if (dto.internalType === InternalType.POLL && (!dto.pollOptions || dto.pollOptions.length < 2)) {
       throw new BadRequestException('a poll needs at least two options');
     }
+    // §10.5 — "Spending internal proposal": amount + destination required; the source bucket is
+    // optional (defaults to the Operations bucket when the action is prepared on approval).
+    if (dto.internalType === InternalType.SPENDING) {
+      if (!(dto.spendingAmountAda && dto.spendingAmountAda > 0)) {
+        throw new BadRequestException('a spending proposal needs a positive ADA amount');
+      }
+      if (!dto.spendingDestAddress?.trim().startsWith('addr')) {
+        throw new BadRequestException('a spending proposal needs a destination address (bech32, addr…)');
+      }
+      if (dto.spendingSourceBucketId) {
+        const b = await this.prisma.treasuryBucket.findUnique({ where: { id: dto.spendingSourceBucketId } });
+        const active = await this.prisma.multisigConfig.findFirst({ where: { replacedAt: null }, orderBy: { assembledAt: 'desc' } });
+        if (!b || !active || b.configId !== active.id) {
+          throw new BadRequestException('the source address must belong to the active treasury multisig');
+        }
+      }
+    }
 
     const now = new Date();
     // Submitter picks an end date (the platform derives the days); a days duration is the fallback.
@@ -157,6 +174,10 @@ export class InternalProposalsService {
         votingStartAt: now,
         votingEndAt: end,
         submittedAt: now,
+        // §10.5 — spending parameters (lovelace), executed via multisig on approval.
+        spendingAmountAda: internalType === InternalType.SPENDING ? BigInt(Math.round(dto.spendingAmountAda! * 1_000_000)) : undefined,
+        spendingSourceBucketId: internalType === InternalType.SPENDING ? dto.spendingSourceBucketId ?? null : undefined,
+        spendingDestAddress: internalType === InternalType.SPENDING ? dto.spendingDestAddress!.trim() : undefined,
       },
     });
     // Freeze the eligible-voter set + power now, so voting can start immediately.
@@ -375,6 +396,8 @@ export class InternalProposalsService {
     await this.maybeFinalize(p);
     // §14 auto-install: an approved election whose installation date has passed → install now.
     await this.maybeInstallElection(p.id);
+    // §10.5 — make sure an approved spending proposal has its multisig action queued.
+    await this.maybePrepareSpending(p.id).catch(() => undefined);
     if (p.isPrivate && !ctx.isBoard) throw new ForbiddenException('this internal proposal is private to the board');
 
     const fresh = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
@@ -402,6 +425,16 @@ export class InternalProposalsService {
       ? (rawActors as { drepId: string; drepKeyHash: string; drepIdOnchain: string; displayName: string }[])
       : null;
     const freshAfterInstall = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    // §10.5 — spending proposals expose the parameters + the prepared multisig action's status.
+    const spendingAction = freshAfterInstall?.spendingActionId
+      ? await this.prisma.multisigAction.findUnique({
+          where: { id: freshAfterInstall.spendingActionId },
+          select: { id: true, status: true, txHash: true, paidAt: true },
+        })
+      : null;
+    const spendingBucket = freshAfterInstall?.spendingSourceBucketId
+      ? await this.prisma.treasuryBucket.findUnique({ where: { id: freshAfterInstall.spendingSourceBucketId }, select: { label: true } })
+      : null;
     return {
       id: p.id,
       publicId: p.publicId,
@@ -433,6 +466,13 @@ export class InternalProposalsService {
       tally,
       anchorTxHash: anchor?.txHash ?? null,
       anchorHash: anchor?.hash ?? null,
+      // §10.5 — spending parameters (ADA) + the board-signing action once approved.
+      spending: p.internalType === 'SPENDING' ? {
+        amountAda: Number(freshAfterInstall?.spendingAmountAda ?? 0n) / 1e6,
+        destAddress: freshAfterInstall?.spendingDestAddress ?? null,
+        sourceBucketLabel: spendingBucket?.label ?? null,
+        action: spendingAction,
+      } : null,
     };
   }
 
@@ -536,6 +576,37 @@ export class InternalProposalsService {
   }
 
   /**
+   * §10.5 — an APPROVED spending proposal prepares ONE OPS multisig action (amount from the
+   * chosen treasury bucket — Operations by default — to the destination). The board signs it
+   * through the normal Actions queue. Idempotent via spendingActionId.
+   */
+  private async maybePrepareSpending(proposalId: string) {
+    const p = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    if (!p || p.internalType !== InternalType.SPENDING) return;
+    if (p.status !== ProposalStatus.APPROVED) return;
+    if (p.spendingActionId || !p.spendingAmountAda || !p.spendingDestAddress) return;
+    const sourceBucketId = p.spendingSourceBucketId
+      ?? (await this.prisma.treasuryBucket.findFirst({
+        where: { isDefaultOperations: true, config: { replacedAt: null } },
+        select: { id: true },
+      }))?.id
+      ?? null;
+    const action = await this.prisma.multisigAction.create({
+      data: {
+        kind: 'OPS',
+        status: 'PENDING_SIGS',
+        amountAda: p.spendingAmountAda,
+        destAddress: p.spendingDestAddress,
+        sourceBucketId,
+        proposalId: p.id,
+        proposalTitle: p.title,
+        description: `Spending internal proposal · ${p.publicId ?? p.title} — approved by vote, ${(Number(p.spendingAmountAda) / 1e6).toLocaleString()} ₳ to ${p.spendingDestAddress.slice(0, 24)}…`,
+      },
+    });
+    await this.prisma.proposal.update({ where: { id: p.id }, data: { spendingActionId: action.id } });
+  }
+
+  /**
    * §14 — auto-install the new board when an approved election's installation date has passed
    * and we haven't installed yet. Triggered on every detail read so an admin needn't intervene.
    */
@@ -605,6 +676,8 @@ export class InternalProposalsService {
     const approved = t.kind === 'POLL' ? true : t.approved;
     const status = approved ? ProposalStatus.APPROVED : ProposalStatus.REJECTED;
     await this.prisma.proposal.update({ where: { id: proposalId }, data: { status, resultFinalizedAt: new Date() } });
+    // §10.5 — an approved spending proposal queues the multisig action for the board.
+    await this.maybePrepareSpending(proposalId).catch(() => undefined);
     await this.anchorResult(proposalId, status, t).catch(() => undefined); // anchoring never blocks the conclusion
     return { id: proposalId, publicId: proposal.publicId, status, tally: t };
   }

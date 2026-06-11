@@ -430,6 +430,12 @@ model Proposal {
   // candidates and whose deliveryDate is the install date. Set automatically on submit.
   isBoardElection  Boolean   @default(false) @map("is_board_election")
   boardInstalledAt DateTime? @map("board_installed_at") @db.Timestamptz(6)
+  // §10.5 — "Spending internal proposal": on approval the platform prepares an OPS multisig
+  // action (amount from a treasury bucket to the destination) that the board signs.
+  spendingAmountAda      BigInt?   @map("spending_amount_ada") // lovelace
+  spendingSourceBucketId String?   @map("spending_source_bucket_id") @db.Uuid
+  spendingDestAddress    String?   @map("spending_dest_address")
+  spendingActionId       String?   @map("spending_action_id") @db.Uuid // the prepared multisig action (idempotence + UI link)
 
   // common
   votingType           String // ONE_PERSON_ONE_VOTE or BALANCED

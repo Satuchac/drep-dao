@@ -145,6 +145,35 @@ const created = [];
     }
     const listForBoard = await svc.list(proposer);
     ok('private proposal visible to board list', listForBoard.some((x) => x.id === priv.id));
+
+    // 6) §10.5 SPENDING — approved → an OPS multisig action the board signs (idempotent).
+    const spend = await svc.submit(proposer, {
+      title: '__test__ Pay the auditor', contentMd: 'Pay 25 ₳ from the treasury to the auditor.',
+      internalType: 'SPENDING', votersScope: 'BOARD_ONLY', thresholdKind: 'DEFAULT',
+      votingType: 'ONE_PERSON_ONE_VOTE', votingPeriodDays: 7,
+      spendingAmountAda: 25,
+      spendingDestAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3',
+    });
+    created.push(spend.id);
+    ok('SPENDING submit → ACTIVE with parameters', spend.status === 'ACTIVE' && spend.spending?.amountAda === 25 && !!spend.spending?.destAddress, JSON.stringify(spend.spending));
+    ok('SPENDING has no action before approval', spend.spending?.action === null);
+    let spendRejected = false;
+    try { await svc.submit(proposer, { title: 'x', contentMd: 'x', internalType: 'SPENDING', votersScope: 'BOARD_ONLY', thresholdKind: 'DEFAULT', votingType: 'ONE_PERSON_ONE_VOTE', votingPeriodDays: 7, spendingDestAddress: 'addr_test1xyz' }); }
+    catch (e) { spendRejected = /positive ADA amount/.test(e.message); }
+    ok('SPENDING without an amount is rejected', spendRejected);
+
+    for (const uid of boardUsers) await svc.vote(uid, spend.id, { choice: 'YES' });
+    const spendFin = await svc.finalize(spend.id);
+    ok('SPENDING all-YES → APPROVED', spendFin.status === 'APPROVED', spendFin.status);
+    const spendDetail = await svc.detail(spend.id, proposer);
+    ok('approval prepares the OPS multisig action (PENDING_SIGS)', spendDetail.spending?.action?.status === 'PENDING_SIGS', JSON.stringify(spendDetail.spending?.action));
+    const act = await db.multisigAction.findUnique({ where: { id: spendDetail.spending.action.id } });
+    ok('action carries amount + destination + proposal link', act.kind === 'OPS' && act.amountAda === 25_000_000n && act.destAddress?.startsWith('addr_test1qp77') && act.proposalId === spend.id);
+    await svc.detail(spend.id, proposer); // idempotence: re-reading must NOT create a second action
+    const actCount = await db.multisigAction.count({ where: { proposalId: spend.id, kind: 'OPS' } });
+    ok('re-reads do not duplicate the action (idempotent)', actCount === 1, String(actCount));
+    created.spendActionId = act.id;
+
   } finally {
     for (const id of created) {
       await db.vote.deleteMany({ where: { proposalId: id } });
@@ -152,6 +181,7 @@ const created = [];
       await db.voteSnapshotEntry.deleteMany({ where: { snapshotId: { in: snaps.map((s) => s.id) } } });
       await db.voteSnapshot.deleteMany({ where: { proposalId: id } });
       await db.anchor.deleteMany({ where: { proposalId: id } });
+      await db.multisigAction.deleteMany({ where: { proposalId: id } }).catch(() => undefined);
       await db.proposal.deleteMany({ where: { id } });
     }
   }
