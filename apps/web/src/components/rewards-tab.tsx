@@ -101,7 +101,8 @@ function CalcCard({ calc, buckets, onChange }: { calc: RewardCalcView; buckets: 
     catch (e) {
       const m = e instanceof Error ? e.message : 'failed';
       // Insufficient-funds gets a styled warning dialog; other errors stay inline.
-      if (/insufficient funds/i.test(m)) setWarning(m); else setMsg(m);
+      if (/insufficient funds/i.test(m)) setWarning(m);
+      else { setMsg(m); if (/calculation not found/i.test(m)) onChange(); } // refresh a stale card
     } finally { setBusy(false); }
   };
   // §15.4 — cancel a prepared (not-yet-confirmed) payout so the calc re-opens and can be

@@ -58,6 +58,15 @@ export class RewardsService {
     }
   }
 
+  /** The id of a calc of this kind/round that has at least one PAID entry (immutable), else null. */
+  private async paidCalcId(roundId: string | null, kind: string): Promise<string | null> {
+    const c = await this.prisma.rewardCalculation.findFirst({
+      where: { roundId, kind, entries: { some: { paidAt: { not: null } } } },
+      select: { id: true },
+    });
+    return c?.id ?? null;
+  }
+
   /** Flat per-expert ADA for a stage (filtering/dv), added as entries on the calc. */
   private async addExpertFlat(calcId: string, roundId: string, field: 'filteringAda' | 'dvAda') {
     const rows = await this.prisma.expertReward.findMany({ where: { roundId } });
@@ -123,33 +132,51 @@ export class RewardsService {
     const totalCast = votes.length;
     const power = await this.drepFinalPower(propIds);
 
-    await this.clearCalc({ roundId, kind: 'DV_FIXED' });
-    await this.clearCalc({ roundId, kind: 'DV_BONUS' });
+    // Recompute only the UNPAID sub-pools; a paid one is immutable. This keeps recompute safe
+    // even after one part (e.g. the bonus) was already paid out — the fixed calc is rebuilt and
+    // the paid bonus is left untouched, instead of being wiped as collateral.
+    const fixedPaidId = await this.paidCalcId(roundId, 'DV_FIXED');
+    const bonusPaidId = await this.paidCalcId(roundId, 'DV_BONUS');
+    if (!fixedPaidId) await this.clearCalc({ roundId, kind: 'DV_FIXED' });
+    if (!bonusPaidId) await this.clearCalc({ roundId, kind: 'DV_BONUS' });
 
-    // FIXED: split EQUALLY per cast vote (voting power is NOT used) — reward-per-vote × ballots.
-    const fixedCalc = await this.prisma.rewardCalculation.create({ data: { roundId, kind: 'DV_FIXED', poolAda: fixedPool, totalUnits: totalCast } });
-    if (totalCast > 0) {
-      const perVote = fixedPool / BigInt(totalCast);
+    let fixedId: string;
+    if (fixedPaidId) {
+      fixedId = fixedPaidId;
+    } else {
+      // FIXED: split EQUALLY per cast vote (voting power is NOT used) — reward-per-vote × ballots.
+      const fixedCalc = await this.prisma.rewardCalculation.create({ data: { roundId, kind: 'DV_FIXED', poolAda: fixedPool, totalUnits: totalCast } });
+      if (totalCast > 0) {
+        const perVote = fixedPool / BigInt(totalCast);
+        for (const [drepId, n] of castByDrep) {
+          await this.prisma.rewardEntry.create({ data: { rewardCalculationId: fixedCalc.id, drepId, amountAda: perVote * BigInt(n), units: n } });
+        }
+      }
+      await this.addExpertFlat(fixedCalc.id, roundId, 'dvAda');
+      fixedId = fixedCalc.id;
+    }
+
+    let bonusId: string;
+    if (bonusPaidId) {
+      bonusId = bonusPaidId;
+    } else {
+      // BONUS: weighted by participation (votes/maxVotes) × final voting power.
+      const weights = new Map<string, number>();
+      let totalWeight = 0;
       for (const [drepId, n] of castByDrep) {
-        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: fixedCalc.id, drepId, amountAda: perVote * BigInt(n), units: n } });
+        const w = (maxVotes > 0 ? n / maxVotes : 0) * (power.get(drepId) ?? 0);
+        if (w > 0) { weights.set(drepId, w); totalWeight += w; }
       }
-    }
-    // BONUS: weighted by participation (votes/maxVotes) × final voting power.
-    const weights = new Map<string, number>();
-    let totalWeight = 0;
-    for (const [drepId, n] of castByDrep) {
-      const w = (maxVotes > 0 ? n / maxVotes : 0) * (power.get(drepId) ?? 0);
-      if (w > 0) { weights.set(drepId, w); totalWeight += w; }
-    }
-    const bonusCalc = await this.prisma.rewardCalculation.create({ data: { roundId, kind: 'DV_BONUS', poolAda: bonusPool, totalUnits: totalWeight } });
-    if (totalWeight > 0) {
-      for (const [drepId, w] of weights) {
-        const amt = BigInt(Math.round(Number(bonusPool) * (w / totalWeight)));
-        await this.prisma.rewardEntry.create({ data: { rewardCalculationId: bonusCalc.id, drepId, amountAda: amt, units: castByDrep.get(drepId) ?? 0 } });
+      const bonusCalc = await this.prisma.rewardCalculation.create({ data: { roundId, kind: 'DV_BONUS', poolAda: bonusPool, totalUnits: totalWeight } });
+      if (totalWeight > 0) {
+        for (const [drepId, w] of weights) {
+          const amt = BigInt(Math.round(Number(bonusPool) * (w / totalWeight)));
+          await this.prisma.rewardEntry.create({ data: { rewardCalculationId: bonusCalc.id, drepId, amountAda: amt, units: castByDrep.get(drepId) ?? 0 } });
+        }
       }
+      bonusId = bonusCalc.id;
     }
-    await this.addExpertFlat(fixedCalc.id, roundId, 'dvAda');
-    return { fixed: await this.calcView(fixedCalc.id), bonus: await this.calcView(bonusCalc.id) };
+    return { fixed: await this.calcView(fixedId), bonus: await this.calcView(bonusId) };
   }
 
   /** Final voting power per drep from the freshest snapshot among the proposals. */
@@ -396,22 +423,19 @@ export class RewardsService {
     // board can override with an explicit sourceBucketId (any bucket).
     const defaultOp = calc.kind === 'FILTER' ? 'SUBMISSION_FEES' : 'REWARDS';
     const source = sourceBucketId
-      ? await this.prisma.treasuryBucket.findUnique({ where: { id: sourceBucketId }, select: { id: true, bech32Address: true } })
+      ? await this.prisma.treasuryBucket.findUnique({ where: { id: sourceBucketId }, select: { id: true, bech32Address: true, label: true } })
       : await this.buckets.defaultBucketFor(defaultOp);
     const total = lines.reduce((s, l) => s + l.amountAda, 0);
 
-    // Pre-flight funds check: don't let the board initiate a payout the source can't cover.
-    // The broadcast falls back to the primary multisig when a chosen bucket is empty, so the
-    // effective balance is the bucket's — or the primary's if the bucket holds nothing.
+    // Pre-flight funds check on the SELECTED source — so picking an empty address (e.g. the
+    // Rewards bucket with 0 ₳) warns up front instead of silently sourcing elsewhere. The board
+    // funds that address or picks another in the dropdown.
     if (source?.bech32Address) {
-      let availableAda = Number((await this.cardano.addressBalance([source.bech32Address])).get(source.bech32Address) ?? 0n) / 1e6;
-      if (availableAda === 0) {
-        const primary = await this.prisma.multisigConfig.findFirst({ where: { replacedAt: null }, orderBy: { assembledAt: 'desc' }, select: { bech32Address: true } });
-        if (primary) availableAda = Number((await this.cardano.addressBalance([primary.bech32Address])).get(primary.bech32Address) ?? 0n) / 1e6;
-      }
+      const availableAda = Number((await this.cardano.addressBalance([source.bech32Address])).get(source.bech32Address) ?? 0n) / 1e6;
       if (availableAda < total + 1) {
+        const label = ('label' in source && source.label) ? source.label : 'the selected source';
         throw new BadRequestException(
-          `Insufficient funds: the source address holds ${availableAda.toLocaleString()} ₳, but this payout needs ${total.toLocaleString()} ₳ (plus the network fee). Fund the treasury, then prepare the payout again.`,
+          `Insufficient funds: ${label} holds ${availableAda.toLocaleString()} ₳, but this payout needs ${total.toLocaleString()} ₳ (plus the network fee). Fund that address or pick another source, then prepare the payout again.`,
         );
       }
     }
