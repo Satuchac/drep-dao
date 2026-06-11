@@ -89,7 +89,11 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
   const [msg, setMsg] = useState<string | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [warning, setWarning] = useState<string | null>(null);
-  const total = calc.entries.reduce((s, e) => s + e.amountAda, 0);
+  // Total = what can actually be sent (recipients with a reward address). Entries without one are
+  // held back — their ADA stays in the treasury until they set an address.
+  const total = calc.entries.filter((e) => e.recipient.address).reduce((s, e) => s + e.amountAda, 0);
+  const heldEntries = calc.entries.filter((e) => !e.recipient.address && !e.paid);
+  const heldBack = heldEntries.reduce((s, e) => s + e.amountAda, 0);
   const allPaid = calc.entries.length > 0 && calc.entries.every((e) => e.paid);
   // §12 — default source by stage: filtering draws from the Submission-fee bucket, everything
   // else from Rewards (fall back to the primary). The board can override before preparing.
@@ -201,6 +205,11 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
         </tbody>
         <tfoot><tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">Total</td>{calc.kind !== 'BOARD_MONTHLY' ? <td className="pt-1 tabular-nums">{calc.entries.reduce((s, e) => s + (e.units ?? 0), 0)}</td> : null}<td></td><td className="pt-1 tabular-nums">{total.toLocaleString()} ₳</td><td></td></tr></tfoot>
       </table>
+      {heldBack > 0 ? (
+        <p className="mt-1 text-xs text-amber-600">
+          ⚠ {heldBack.toLocaleString()} ₳ will not be sent — {heldEntries.length} member{heldEntries.length === 1 ? '' : 's'} without a payment address. It stays in the treasury until they set one.
+        </p>
+      ) : null}
       <ConfirmDialog
         open={confirmingCancel}
         title="Cancel this prepared payout?"
