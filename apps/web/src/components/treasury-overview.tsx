@@ -35,7 +35,6 @@ export function TreasuryOverview() {
   const treasuryTotal = buckets.length > 0
     ? buckets.reduce((s, b) => s + b.balanceAda, 0)
     : (data?.treasury.balanceAda ?? 0);
-  const subAddrCount = buckets.length || 1;
 
   return (
     <div className="space-y-4">
@@ -82,12 +81,31 @@ export function TreasuryOverview() {
             {/* Headline = SUM across all multisig sub-addresses; the per-address
                 breakdown (with Copy) lives in "Treasury buckets" below, so no
                 address is duplicated here. Highlighted in blue as the key figure. */}
-            <Card
-              label="Treasury (multisig) balance"
-              value={data.treasury.configured ? `${ada(treasuryTotal)} ₳` : 'not configured'}
-              note={data.treasury.configured ? `total across ${subAddrCount} sub-address${subAddrCount === 1 ? '' : 'es'} — see Treasury buckets below` : undefined}
-              tone="blue"
-            />
+            <div className="rounded-lg border border-blue-300 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/40">
+              <div className="text-xs text-neutral-500">Treasury (multisig) balance</div>
+              <div className="text-lg font-semibold tabular-nums text-blue-800 dark:text-blue-200">
+                {data.treasury.configured ? `${ada(treasuryTotal)} ₳` : 'not configured'}
+              </div>
+              {/* Every sub-address with its label, on-chain address, live balance + copy. */}
+              {buckets.length > 0 ? (
+                <ul className="mt-2 space-y-1.5 border-t border-blue-200 pt-2 dark:border-blue-900">
+                  {buckets.map((b) => (
+                    <li key={b.id} className="text-xs">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="font-medium">{b.label}{b.isPrimary ? <span className="ml-1 rounded bg-blue-100 px-1 text-[10px] uppercase text-blue-700 dark:bg-blue-900 dark:text-blue-300">primary</span> : null}</span>
+                        <span className="tabular-nums font-medium">{b.balanceAda.toLocaleString()} ₳</span>
+                      </div>
+                      <div className="mt-0.5 flex items-center gap-1.5">
+                        <span className="min-w-0 truncate font-mono text-[10px] text-neutral-500" title={b.bech32Address}>{b.bech32Address}</span>
+                        <CopyButton text={b.bech32Address} label="Copy" />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : data.treasury.configured ? (
+                <div className="mt-0.5 text-[11px] text-neutral-500">see Treasury buckets below</div>
+              ) : null}
+            </div>
             <Card
               label="Anchor hot wallet"
               value={`${ada(data.hotWallet.balanceAda)} ₳`}
@@ -99,7 +117,7 @@ export function TreasuryOverview() {
               balances + Copy). The panel self-renders create + rename + delete
               controls only for board members; everyone else sees the read-only
               roster. */}
-          <TreasuryBucketsPanel />
+          <TreasuryBucketsPanel onChange={load} />
           {/* §15.3 — board controls for the hot wallet (top up + sweep). Self-hides for non-board. */}
           <HotWalletControls />
 
