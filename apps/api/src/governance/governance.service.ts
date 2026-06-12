@@ -39,6 +39,10 @@ export class GovernanceService {
       coerced = n;
     } else {
       coerced = String(value);
+      // §15 — anything else would silently read as the 1_PHASE default downstream.
+      if (key === 'TX_SIGNING_PROCESS' && coerced !== '1_PHASE' && coerced !== '2_PHASE') {
+        throw new BadRequestException('TX_SIGNING_PROCESS must be 1_PHASE or 2_PHASE');
+      }
     }
     await this.prisma.platformConfig.upsert({
       where: { key },

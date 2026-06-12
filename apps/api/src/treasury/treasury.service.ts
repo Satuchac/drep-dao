@@ -150,7 +150,7 @@ export class TreasuryService implements OnModuleInit {
    *  funding gap before they approve. */
   async boardActionsFor(userId: string, includeHistory = false) {
     const board = await this.boardDrep(userId);
-    if (!board) return { count: 0, actions: [], history: [], treasury: null };
+    if (!board) return { count: 0, actions: [], history: [], treasury: null, signingMode: '1_PHASE' as const };
     // The hot-wallet top-up check hits remote db-sync; run it fire-and-forget so it never
     // delays the actions list (a top-up it prepares simply shows up on the next poll).
     void this.maybePrepareTopUp().catch(() => { /* platform top-up is non-critical */ });
@@ -171,6 +171,11 @@ export class TreasuryService implements OnModuleInit {
     });
     const threshold = active?.threshold ?? APPROVAL_THRESHOLD;
     const totalKeys = active?.totalKeys ?? APPROVAL_THRESHOLD;
+
+    // §15/§20 — TX_SIGNING_PROCESS: 1-phase has no Authorize step, so every
+    // pending action is immediately signable by any of the N keyholders.
+    const modeRow = await this.prisma.platformConfig.findUnique({ where: { key: 'TX_SIGNING_PROCESS' } });
+    const signingMode: '1_PHASE' | '2_PHASE' = modeRow?.value === '2_PHASE' ? '2_PHASE' : '1_PHASE';
 
     const actions = await this.prisma.multisigAction.findMany({
       where: { status: 'PENDING_SIGS' },
@@ -194,9 +199,9 @@ export class TreasuryService implements OnModuleInit {
     };
     const map = (a: Row) => {
       const amt = a.amountAda ? Number(a.amountAda) / ADA : null;
-      // §15 phase tracking: AUTHORIZE while committedKeyHashes is empty;
-      // SIGN once the threshold has been hit and the M keys are snapshotted.
-      const inSignPhase = (a.committedKeyHashes?.length ?? 0) >= threshold;
+      // §15 phase tracking (2-phase): AUTHORIZE while committedKeyHashes is
+      // empty; SIGN once the M keys are snapshotted. 1-phase is always SIGN.
+      const inSignPhase = signingMode === '1_PHASE' || (a.committedKeyHashes?.length ?? 0) >= threshold;
       return {
         id: a.id,
         kind: a.kind,
@@ -250,6 +255,7 @@ export class TreasuryService implements OnModuleInit {
       actions: view,
       history,
       treasury: { address: treasuryAddress, balanceAda: treasuryBalanceAda },
+      signingMode,
     };
   }
 

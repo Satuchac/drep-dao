@@ -22,13 +22,24 @@ const STAGE_LABEL: Record<string, string> = {
 };
 
 /**
- * §15 — real native-script multisig broadcast — 3-of-5, 2-phase.
+ * §15 — real native-script multisig broadcast — 3-of-5.
  *
- * Cardano CIP-30 + native scripts won't let us collect M-of-N witnesses in
- * a single click per signer: the tx body's required_signers list has to
- * name which M keys WILL sign before we can build the body, and the build
- * step has to happen BEFORE any wallet can sign. So we run a small
- * Authorize → Sign ceremony:
+ * Two ceremonies, switched by the TX_SIGNING_PROCESS platform parameter:
+ *
+ * 1_PHASE (default — requires the Eternl wallet)
+ *   The ledger never required required_signers for native scripts — it only
+ *   checks that the final tx carries ≥ M valid vkey witnesses matching keys
+ *   in the script. So we build ONE shared unsigned body with NO
+ *   required_signers, every board member sees a single Sign button, and the
+ *   platform broadcasts the moment the 3rd witness lands (first-3-wins).
+ *   The catch: some CIP-30 wallets refuse to produce a witness unless their
+ *   key is named in the body — Eternl signs script inputs fine, hence the
+ *   parameter note.
+ *
+ * 2_PHASE (fallback — works with any CIP-30 wallet)
+ *   The tx body's required_signers list names which M keys WILL sign, so it
+ *   has to be decided BEFORE any wallet can sign. We run a small
+ *   Authorize → Sign ceremony:
  *
  *   Phase 1 (Authorize)
  *     Board member CIP-30 data-signs a cheap commit message ("I commit to
@@ -46,9 +57,11 @@ const STAGE_LABEL: Record<string, string> = {
  *   the native script (ScriptNOfK(M, [N keys])) and submits via Koios.
  *
  * Per action methods:
- *   1. commitToSign(actionId, userId, sig) — phase 1; promotes when threshold hit.
- *   2. prepareTxBody(actionId)             — phase 2 only; refuses while still in 1.
- *   3. submitWitness(actionId, hex, userId) — phase 2; combines + broadcasts at M.
+ *   1. commitToSign(actionId, userId, sig) — 2_PHASE only; promotes at threshold.
+ *   2. prepareTxBody(actionId)             — builds the body for the CURRENT mode
+ *      (a cached body built under the other mode is discarded together with its
+ *      witnesses — they signed a different body hash).
+ *   3. submitWitness(actionId, hex, userId) — combines + broadcasts at M.
  *
  * Source script is determined by action kind:
  *   • OPS / PROJECT_FUNDING / REWARD_PAYOUT / BOARD_TRANSFER → active multisig.
@@ -73,6 +86,26 @@ export class MultisigBroadcastService {
     this.networkId = net === 'Mainnet' ? 1 : 0;
     this.base = this.config.get<string>('KOIOS_URL')
       ?? (net === 'Mainnet' ? 'https://api.koios.rest/api/v1' : 'https://preprod.koios.rest/api/v1');
+  }
+
+  /** §15/§20 — current signing ceremony from the TX_SIGNING_PROCESS platform
+   *  parameter. Anything other than an explicit '2_PHASE' means 1-phase (the
+   *  default), so a missing/garbled row can never strand actions. */
+  async signingMode(): Promise<'1_PHASE' | '2_PHASE'> {
+    const row = await this.prisma.platformConfig.findUnique({ where: { key: 'TX_SIGNING_PROCESS' } });
+    return row?.value === '2_PHASE' ? '2_PHASE' : '1_PHASE';
+  }
+
+  /** A cached tx body is only reusable under the mode it was built for:
+   *  2-phase bodies carry required_signers, 1-phase bodies don't. */
+  private bodyModeMismatch(txCbor: string, mode: '1_PHASE' | '2_PHASE'): boolean {
+    try {
+      const rs = CSL.Transaction.from_hex(txCbor).body().required_signers();
+      const hasRequired = !!rs && rs.len() > 0;
+      return hasRequired !== (mode === '2_PHASE');
+    } catch {
+      return true; // un-parseable cache → rebuild
+    }
   }
 
   /** Canonical phase-1 commit message — what each board member CIP-30
@@ -102,6 +135,9 @@ export class MultisigBroadcastService {
     if (!action) throw new NotFoundException('action not found');
     if (action.status !== 'PENDING_SIGS') {
       throw new ConflictException(`action is past the authorization phase (status ${action.status})`);
+    }
+    if ((await this.signingMode()) === '1_PHASE') {
+      throw new ConflictException('1-Phase signing is enabled — no authorization step; sign the transaction directly');
     }
     const source = await this.resolveSource(action);
     const scriptKeyHashes = new Set(source.keyHashes.map((k) => k.toLowerCase()));
@@ -173,21 +209,29 @@ export class MultisigBroadcastService {
     const action = await this.prisma.multisigAction.findUnique({ where: { id: actionId } });
     if (!action) throw new NotFoundException('action not found');
     if (action.status === 'CONFIRMED') throw new ConflictException('action already broadcast');
-    // §15 phase-2 gate: tx body can only be built once the M signers have
-    // been chosen via commitments. The committedKeyHashes list goes into
-    // required_signers verbatim and only those M can submit witnesses.
+    const mode = await this.signingMode();
+    // §15 2-phase gate: the body can only be built once the M signers have
+    // been chosen via commitments (committedKeyHashes goes into
+    // required_signers verbatim). In 1-phase there's nothing to wait for.
     const committed = action.committedKeyHashes ?? [];
-    if (committed.length < SIGNING_THRESHOLD) {
+    if (mode === '2_PHASE' && committed.length < SIGNING_THRESHOLD) {
       throw new ConflictException(`waiting on board authorizations — ${committed.length}/${SIGNING_THRESHOLD} committed`);
     }
     let source = await this.resolveSource(action);
     if (action.txCbor) {
-      return {
-        txBodyHex: action.txCbor,
-        sourceAddress: source.bech32Address,
-        scriptHash: source.scriptHash,
-        keyHashes: source.keyHashes,
-      };
+      if (!this.bodyModeMismatch(action.txCbor, mode)) {
+        return {
+          txBodyHex: action.txCbor,
+          sourceAddress: source.bech32Address,
+          scriptHash: source.scriptHash,
+          keyHashes: source.keyHashes,
+        };
+      }
+      // TX_SIGNING_PROCESS flipped since this body was cached — witnesses
+      // collected so far signed a different body hash, so they go too.
+      await this.prisma.multisigSignature.deleteMany({ where: { actionId } });
+      await this.prisma.multisigAction.update({ where: { id: actionId }, data: { txCbor: null } });
+      action.txCbor = null;
     }
     // REWARD_PAYOUT is multi-output (one per linked reward entry), so it has no single destAddress.
     if (!action.destAddress && action.kind !== 'REWARD_PAYOUT') throw new ConflictException('action has no destination address');
@@ -268,13 +312,15 @@ export class MultisigBroadcastService {
         txb.add_change_if_needed(srcAddr);
       }
     }
-    // §15 phase-2 — required_signers = the M committed keyhashes (NOT all
-    // N script keys). The ledger then enforces "these M must sign", matching
-    // what the M committed wallets will actually provide. Wallets sign
-    // because their key IS in required_signers; the native script's
-    // ScriptNOfK(M,N) is satisfied by the same M witnesses.
-    for (const kh of committed) {
-      txb.add_required_signer(CSL.Ed25519KeyHash.from_hex(kh));
+    // §15 2-phase only — required_signers = the M committed keyhashes (NOT
+    // all N script keys). The ledger then enforces "these M must sign",
+    // matching what the M committed wallets will actually provide. In
+    // 1-phase the body names nobody: the native script's ScriptNOfK(M,N) is
+    // satisfied by whichever M script keys end up witnessing.
+    if (mode === '2_PHASE') {
+      for (const kh of committed) {
+        txb.add_required_signer(CSL.Ed25519KeyHash.from_hex(kh));
+      }
     }
 
     const txBody = txb.build();
@@ -302,26 +348,29 @@ export class MultisigBroadcastService {
       include: { signatures: true },
     });
     if (!action) throw new NotFoundException('action not found');
-    const source = await this.resolveSource(action);
     // §15 — 3-of-5: threshold = SIGNING_THRESHOLD, not source.keyHashes.length.
     const threshold = SIGNING_THRESHOLD;
     if (action.status === 'CONFIRMED') {
       return { status: 'CONFIRMED', txHash: action.txHash, approvals: action.signatures.length, threshold };
     }
-    // §15 phase-2 — only the M committed signers may submit witnesses.
+    const mode = await this.signingMode();
+    // §15 2-phase — only the M committed signers may submit witnesses.
     const committed = action.committedKeyHashes ?? [];
-    if (committed.length < SIGNING_THRESHOLD) {
+    if (mode === '2_PHASE' && committed.length < SIGNING_THRESHOLD) {
       throw new ConflictException('action is still in the authorization phase — collect commits first');
     }
-    if (!action.txCbor) {
-      // Lazily build the tx body if the witness arrived before prepare was called.
+    const source = await this.resolveSource(action);
+    if (!action.txCbor || this.bodyModeMismatch(action.txCbor, mode)) {
+      // Lazily (re)build the tx body — either the witness arrived before
+      // prepare was called, or the signing mode flipped since the cache
+      // (prepareTxBody discards the stale body + its witnesses).
       await this.prepareTxBody(actionId);
       return this.submitWitness(actionId, witnessHex, userId);
     }
-    // Accept witnesses only from keys in the committed set (not just any
-    // script key) — required_signers enforces exactly these.
-    const scriptKeyHashes = new Set(committed.map((k) => k.toLowerCase()));
-    void source;
+    // 2-phase: accept witnesses only from the committed set —
+    // required_signers enforces exactly these. 1-phase: any of the N script
+    // keys may witness; the first M to land win.
+    const scriptKeyHashes = new Set((mode === '2_PHASE' ? committed : source.keyHashes).map((k) => k.toLowerCase()));
 
     let ws: CSL.TransactionWitnessSet;
     try { ws = CSL.TransactionWitnessSet.from_hex(witnessHex); }

@@ -17,6 +17,10 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
   const [actions, setActions] = useState<BoardAction[]>([]);
   const [past, setPast] = useState<BoardAction[]>([]);
   const [treasury, setTreasury] = useState<{ address: string | null; balanceAda: number } | null>(null);
+  // §15/§20 — TX_SIGNING_PROCESS. 1_PHASE: one Sign click per member (Eternl);
+  // 2_PHASE: Authorize → Sign ceremony. Server-decided; default to the stricter
+  // 2-phase until the first load answers.
+  const [mode, setMode] = useState<'1_PHASE' | '2_PHASE'>('2_PHASE');
   const [busy, setBusy] = useState<string | null>(null);
   // §15.3 — per-action error map so the message appears next to the button
   // the user clicked (the previous single-error state lived at the section
@@ -40,6 +44,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
             : filter === 'non-rewards' ? xs.filter((a) => a.kind !== 'REWARD_PAYOUT')
               : xs;
         setActions(keep(r.actions)); setPast(keep(r.history ?? [])); setTreasury(r.treasury);
+        setMode(r.signingMode === '1_PHASE' ? '1_PHASE' : '2_PHASE');
       })
       // A transient hiccup (poll timeout / 500) must NOT blank the list — keep the last-known
       // actions so a pending payout doesn't flicker in and out. Real removals arrive via .then.
@@ -136,14 +141,24 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
         </div>
       ) : null}
       <h3 className="text-base font-semibold">Actions to sign</h3>
-      <p className="text-xs text-neutral-500">
-        The platform prepared these treasury/hot-wallet actions. Each one runs a two-phase ceremony:{' '}
-        <strong>Authorize</strong> (cheap CIP-30 data-sig — once {actions[0]?.threshold ?? past[0]?.threshold ?? 3} board
-        members authorize, the platform picks them as signers) → <strong>Sign</strong> (those same{' '}
-        {actions[0]?.threshold ?? past[0]?.threshold ?? 3} sign the real tx with their HW wallets and the platform
-        broadcasts on the 3rd witness). Threshold: {actions[0]?.threshold ?? past[0]?.threshold ?? 3}-of-
-        {actions[0]?.totalKeys ?? past[0]?.totalKeys ?? '?'}.
-      </p>
+      {mode === '1_PHASE' ? (
+        <p className="text-xs text-neutral-500">
+          The platform prepared these treasury/hot-wallet actions. <strong>1-Phase signing</strong> is enabled
+          (requires the <strong>Eternl</strong> wallet): each board member signs the transaction once — the platform
+          broadcasts as soon as the first {actions[0]?.threshold ?? past[0]?.threshold ?? 3} signatures are in.
+          Threshold: {actions[0]?.threshold ?? past[0]?.threshold ?? 3}-of-
+          {actions[0]?.totalKeys ?? past[0]?.totalKeys ?? '?'}.
+        </p>
+      ) : (
+        <p className="text-xs text-neutral-500">
+          The platform prepared these treasury/hot-wallet actions. Each one runs a two-phase ceremony:{' '}
+          <strong>Authorize</strong> (cheap CIP-30 data-sig — once {actions[0]?.threshold ?? past[0]?.threshold ?? 3} board
+          members authorize, the platform picks them as signers) → <strong>Sign</strong> (those same{' '}
+          {actions[0]?.threshold ?? past[0]?.threshold ?? 3} sign the real tx with their HW wallets and the platform
+          broadcasts on the 3rd witness). Threshold: {actions[0]?.threshold ?? past[0]?.threshold ?? 3}-of-
+          {actions[0]?.totalKeys ?? past[0]?.totalKeys ?? '?'}.
+        </p>
+      )}
       {/* §15 — treasury source-of-truth: address + live on-chain balance, so the
           board can see at a glance whether pending payouts can be covered. */}
       {treasury ? (
@@ -225,7 +240,12 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
                 same 3 members chosen at phase-1 close (their keyhashes are
                 baked into required_signers). */}
             <div className="mt-1 text-xs text-neutral-500">
-              {a.phase === 'AUTHORIZE' ? (
+              {mode === '1_PHASE' ? (
+                <>
+                  Signatures: {a.approvals} of {a.threshold} needed ({a.threshold}-of-{a.totalKeys} multisig — any {a.threshold} board members)
+                  {a.mineApproved ? ' · you signed ✓' : ''}
+                </>
+              ) : a.phase === 'AUTHORIZE' ? (
                 <>
                   Phase 1 — authorizations: {a.commitments} of {a.threshold} needed ({a.threshold}-of-{a.totalKeys} multisig)
                   {a.mineCommitted ? ' · you authorized ✓' : ''}
@@ -237,9 +257,15 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
                 </>
               )}
             </div>
-            {/* §15 — who authorized (phase 1 = the chosen signers) and who has
-                actually signed the tx (phase 2), by name. */}
-            {a.committedBy.length > 0 ? (
+            {/* §15 — who authorized (2-phase: the chosen signers) and who has
+                actually signed the tx, by name. 1-phase has no Authorize step. */}
+            {mode === '1_PHASE' ? (
+              a.signedBy.length > 0 ? (
+                <div className="mt-0.5 text-[11px] text-neutral-500">
+                  Signed: <span className="text-emerald-700 dark:text-emerald-400">{a.signedBy.join(', ')}</span>
+                </div>
+              ) : null
+            ) : a.committedBy.length > 0 ? (
               <div className="mt-0.5 text-[11px] text-neutral-500">
                 {a.phase === 'AUTHORIZE' ? 'Authorized by' : 'Authorized signers'}: <span className="text-neutral-700 dark:text-neutral-300">{a.committedBy.join(', ')}</span>
                 {a.phase === 'SIGN' ? (
@@ -257,14 +283,16 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
                 >
                   {a.mineCommitted ? 'Authorized' : busy === a.id ? 'Authorizing…' : 'Authorize'}
                 </button>
-              ) : a.mineCommitted ? (
+              ) : mode === '1_PHASE' || a.mineCommitted ? (
                 <button
                   disabled={busy === a.id || a.mineApproved}
                   onClick={() => approve(a)}
                   className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
-                  title={`Sign the prepared tx with your HW wallet. Only the ${a.threshold} board members who authorized in phase 1 can sign.`}
+                  title={mode === '1_PHASE'
+                    ? `Sign the prepared tx with your wallet (1-Phase signing requires Eternl). The platform broadcasts once ${a.threshold} board members have signed.`
+                    : `Sign the prepared tx with your HW wallet. Only the ${a.threshold} board members who authorized in phase 1 can sign.`}
                 >
-                  {a.mineApproved ? 'Signed' : busy === a.id ? 'Signing…' : 'Sign tx with HW wallet'}
+                  {a.mineApproved ? 'Signed' : busy === a.id ? 'Signing…' : mode === '1_PHASE' ? 'Sign tx' : 'Sign tx with HW wallet'}
                 </button>
               ) : (
                 /* §15 — only the phase-1 signers sign the tx; everyone else just waits. */

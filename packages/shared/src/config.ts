@@ -27,6 +27,11 @@ export const PLATFORM_CONFIG_DEFAULTS = {
   ANCHOR_SCHEDULE_CRON: '0 2 * * *',
   // Block explorer used for all on-chain links (tx + address).
   CARDANO_EXPLORER: 'cardanoscan', // cardanoscan | cexplorer | adastat
+  // §15 — board multisig signing ceremony. 1_PHASE: every member signs the tx once
+  // (body built without required_signers — needs a wallet that signs native-script
+  // inputs without being named in the body, e.g. Eternl). 2_PHASE: Authorize → Sign
+  // ceremony that works with any CIP-30 wallet.
+  TX_SIGNING_PROCESS: '1_PHASE', // 1_PHASE | 2_PHASE
 } as const;
 
 export type PlatformConfigKey = keyof typeof PLATFORM_CONFIG_DEFAULTS;
@@ -60,6 +65,8 @@ export const PLATFORM_CONFIG_META: Record<PlatformConfigKey, string> = {
   BOARD_YEARLY_REWARD_ADA: 'Total ADA paid to the whole board per year (monthly per-member = this / 12 / seats).',
   ANCHOR_SCHEDULE_CRON: 'Cron schedule for the daily on-chain anchoring job (informational).',
   CARDANO_EXPLORER: 'Block explorer for on-chain links: cardanoscan, cexplorer, or adastat.',
+  TX_SIGNING_PROCESS:
+    'Multisig signing ceremony. 1-Phase: each board member signs the tx once — requires the Eternl wallet (first 3 signatures broadcast). 2-Phase: Authorize → Sign, works with any CIP-30 wallet.',
 };
 
 /**

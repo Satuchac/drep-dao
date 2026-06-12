@@ -48,6 +48,7 @@ const SUITES = [
   ['test-internal-election', '§14 board-member election: validation, voting → approval, install authorization, manual + auto install (self-cleaning, restores board)'],
   ['test-shared-math', 'Shared single-source math: money, §12 reward pools (588/252/560), reviewer ranking, §4.2 power'],
   ['test-audit-flows', 'Audit batch: §9.1 budget ranking, §9.2 quick polls, §11.5 extensions, §16.4 pledge grace, §2.1 submitter gating, §20.3 notifications, §6 auto-shift'],
+  ['test-signing-mode', '§15/§20 TX_SIGNING_PROCESS: 1-phase default + gates, 2-phase fallback gates, governance validation'],
 ];
 
 const failed = [];

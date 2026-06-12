@@ -236,6 +236,9 @@ export interface BoardActionsView {
   actions: BoardAction[];
   history: BoardAction[];
   treasury: { address: string | null; balanceAda: number } | null;
+  /** §15/§20 — TX_SIGNING_PROCESS: 1_PHASE = single Sign click per member
+   *  (requires Eternl); 2_PHASE = Authorize → Sign (any CIP-30 wallet). */
+  signingMode: '1_PHASE' | '2_PHASE';
 }
 export interface HotWalletHistoryItem {
   id: string;
