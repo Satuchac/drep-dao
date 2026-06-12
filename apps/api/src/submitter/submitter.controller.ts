@@ -44,12 +44,12 @@ export class BoardSubmittersController {
   }
 
   @Post(':id/approve')
-  approve(@Param('id', ParseUUIDPipe) id: string) {
-    return this.svc.approve(id);
+  approve(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.svc.approve(id, ctx.userId);
   }
 
   @Post(':id/reject')
-  reject(@Param('id', ParseUUIDPipe) id: string, @Body() dto: RejectSubmitterDto) {
-    return this.svc.reject(id, dto.reason);
+  reject(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: RejectSubmitterDto) {
+    return this.svc.reject(id, dto.reason, ctx.userId);
   }
 }

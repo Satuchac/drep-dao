@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { MeritService } from '../merit/merit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { SubmitterApplicationDto } from './dto';
 
@@ -11,7 +12,17 @@ const MIN_DESCRIPTION_WORDS = 100;
  */
 @Injectable()
 export class SubmitterService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly merit?: MeritService,
+  ) {}
+
+  /** §13.2 — reviewing a submitter application is board work: +1 merit, once per application. */
+  private async awardReviewMerit(reviewerUserId: string | undefined, applicationId: string) {
+    if (!reviewerUserId) return;
+    const drep = await this.prisma.drep.findUnique({ where: { userId: reviewerUserId }, select: { id: true } });
+    if (drep) await this.merit?.tryAward(drep.id, 'APPLICATION_REVIEW', applicationId);
+  }
 
   private wordCount(s: string): number {
     return s.trim().split(/\s+/).filter(Boolean).length;
@@ -208,10 +219,11 @@ export class SubmitterService {
     }));
   }
 
-  async approve(id: string) {
+  async approve(id: string, reviewerUserId?: string) {
     const a = await this.prisma.submitterApplication.findUnique({ where: { id }, include: { user: { select: { id: true, displayName: true } } } });
     if (!a) throw new NotFoundException('application not found');
     await this.prisma.submitterApplication.update({ where: { id }, data: { status: 'APPROVED', rejectionReason: null, reviewedAt: new Date() } });
+    await this.awardReviewMerit(reviewerUserId, id);
     // Give the user a display name from the application if they don't have one yet — so their
     // proposals show a name instead of a stake id.
     if (!a.user.displayName) {
@@ -220,12 +232,13 @@ export class SubmitterService {
     return { ok: true };
   }
 
-  async reject(id: string, reason: string) {
+  async reject(id: string, reason: string, reviewerUserId?: string) {
     const r = (reason ?? '').trim();
     if (!r) throw new BadRequestException('a reason is required to reject — the applicant will see it');
     const a = await this.prisma.submitterApplication.findUnique({ where: { id }, select: { id: true } });
     if (!a) throw new NotFoundException('application not found');
     await this.prisma.submitterApplication.update({ where: { id }, data: { status: 'REJECTED', rejectionReason: r, reviewedAt: new Date() } });
+    await this.awardReviewMerit(reviewerUserId, id);
     return { ok: true };
   }
 
