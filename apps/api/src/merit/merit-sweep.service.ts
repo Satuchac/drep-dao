@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MeritService } from './merit.service';
-import { ROUND_SETTING_DEFAULTS, RoundStatus, VotePhase } from '@drep-dao/shared';
+import { ROUND_SETTING_DEFAULTS, RoundStatus, VotePhase, PLATFORM_CONFIG_DEFAULTS } from '@drep-dao/shared';
 
 const DAY_MS = 24 * 3600 * 1000;
 const SWEEP_MS = 60 * 60 * 1000; // hourly; idempotent so frequency is just responsiveness
@@ -38,8 +38,24 @@ export class MeritSweepService implements OnModuleInit, OnModuleDestroy {
       await this.missedDv();
       await this.missedMilestone();
       await this.payouts();
+      await this.rewardDistributionLate();
     } catch (e) {
       this.logger.warn(`merit sweep failed: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  /** §13.3 — BOARD_REWARD_LATE (−10 collective): a reward calculation computed more than
+   *  BOARD_REWARD_DEADLINE_DAYS ago still has unpaid, unqueued entries. Once per calc. */
+  private async rewardDistributionLate(): Promise<void> {
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'BOARD_REWARD_DEADLINE_DAYS' } });
+    const days = typeof cfg?.value === 'number' ? cfg.value : (PLATFORM_CONFIG_DEFAULTS as Record<string, unknown>)['BOARD_REWARD_DEADLINE_DAYS'] as number;
+    const cutoff = new Date(Date.now() - days * 86_400_000);
+    const stale = await this.prisma.rewardCalculation.findMany({
+      where: { computedAt: { lte: cutoff }, entries: { some: { paidAt: null, payoutActionId: null } } },
+      select: { id: true },
+    });
+    for (const c of stale) {
+      await this.merit.awardBoard('BOARD_REWARD_LATE', c.id);
     }
   }
 

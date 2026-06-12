@@ -8,11 +8,7 @@ const EXPLORER_OPTIONS = ['cardanoscan', 'cexplorer', 'adastat'];
 
 // Params that are stored + editable but not yet read by any feature (the feature
 // itself isn't built). Shown with a "not yet wired" note so the board isn't misled.
-const NOT_YET_WIRED: Record<string, string> = {
-  AVOID_PERIOD_MAX_DAYS_PER_YEAR: 'availability / avoid-period not built yet',
-  BOARD_REWARD_DEADLINE_DAYS: 'reward distribution / penalty (§13) not built yet',
-  ANCHOR_SCHEDULE_CRON: 'informational — anchoring runs on demand, not on a cron',
-};
+const NOT_YET_WIRED: Record<string, string> = {};
 
 // §14.1 — each entry-gate param is governed by a switch; when the switch is off the
 // param is shadowed/disabled (not applied), so it's clear which switch controls what.

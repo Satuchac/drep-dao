@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { MERIT_DELTAS, type MeritReason, clampMerit } from '@drep-dao/shared';
+import { MERIT_DELTAS, type MeritReason, clampMerit, PLATFORM_CONFIG_DEFAULTS } from '@drep-dao/shared';
 
 /**
  * §13 — the single writer of the merit ledger. Every gain/loss is one ledger row;
@@ -100,6 +100,26 @@ export class MeritService {
     const e = new Date(endsAt);
     if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime()) || e <= s) {
       throw new BadRequestException('end must be after start');
+    }
+    // §13.4 — yearly cap (AVOID_PERIOD_MAX_DAYS_PER_YEAR): sum of this DRep's avoid days that
+    // fall into the calendar year(s) the new period touches, plus the new period, must stay
+    // within the configured maximum.
+    const cfg = await this.prisma.platformConfig.findUnique({ where: { key: 'AVOID_PERIOD_MAX_DAYS_PER_YEAR' } });
+    const maxDays = typeof cfg?.value === 'number' ? cfg.value : (PLATFORM_CONFIG_DEFAULTS as Record<string, unknown>)['AVOID_PERIOD_MAX_DAYS_PER_YEAR'] as number;
+    const DAY = 86_400_000;
+    const overlapDays = (aS: Date, aE: Date, bS: Date, bE: Date) =>
+      Math.max(0, (Math.min(aE.getTime(), bE.getTime()) - Math.max(aS.getTime(), bS.getTime())) / DAY);
+    const existing = await this.prisma.drepAvoidPeriod.findMany({ where: { drepId: drep.id } });
+    for (let year = s.getUTCFullYear(); year <= e.getUTCFullYear(); year++) {
+      const yS = new Date(Date.UTC(year, 0, 1));
+      const yE = new Date(Date.UTC(year + 1, 0, 1));
+      const used = existing.reduce((sum, pr) => sum + overlapDays(pr.startsAt, pr.endsAt, yS, yE), 0);
+      const wanted = overlapDays(s, e, yS, yE);
+      if (used + wanted > maxDays) {
+        throw new BadRequestException(
+          `avoid-period limit exceeded for ${year}: ${Math.ceil(used + wanted)} days requested, maximum ${maxDays} per year`,
+        );
+      }
     }
     return this.prisma.drepAvoidPeriod.create({ data: { drepId: drep.id, startsAt: s, endsAt: e, reason: reason ?? null } });
   }

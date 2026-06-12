@@ -127,7 +127,19 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     return false;
   }
 
+  /** ANCHOR_SCHEDULE_CRON ("m h * * *") → the UTC time-of-day the daily batch runs after. */
+  private async dailyRunAfterUtc(): Promise<{ h: number; m: number }> {
+    const row = await this.prisma.platformConfig.findUnique({ where: { key: 'ANCHOR_SCHEDULE_CRON' } });
+    const cron = typeof row?.value === 'string' ? row.value : '0 2 * * *';
+    const [m, h] = cron.trim().split(/\s+/);
+    return { h: Number.isFinite(Number(h)) ? Number(h) : 2, m: Number.isFinite(Number(m)) ? Number(m) : 0 };
+  }
+
   async dailyTick() {
+    // §27 — honor the configured schedule: don't start today's batch before the cron time (UTC).
+    const at = await this.dailyRunAfterUtc();
+    const now = new Date();
+    if (now.getUTCHours() * 60 + now.getUTCMinutes() < at.h * 60 + at.m) return;
     if (!(await this.ranToday('daily'))) {
       await this.dailyAnchors().catch((e) => this.logger.warn(`daily anchors: ${e instanceof Error ? e.message : e}`));
       await this.pledgeGraceCheck().catch((e) => this.logger.warn(`pledge grace: ${e instanceof Error ? e.message : e}`));
