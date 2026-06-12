@@ -65,14 +65,18 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
   const toggleSub = (id: string) =>
     setSubs((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
+  const bioWords = bio.trim().split(/\s+/).filter(Boolean).length;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSaved(false);
+    // §14.3 — the bio is mandatory: at least 100 words (also enforced server-side).
+    if (bioWords < 100) { setError(`The bio must be at least 100 words (currently ${bioWords}).`); return; }
     setBusy(true);
     const input: DrepApplicationInput = {
       displayName: displayName.trim() || undefined,
-      bio: bio.trim() || undefined,
+      bio: bio.trim(),
       // Always send `photo` so an explicit clear (empty string) reaches the API.
       photo: photo ?? '',
       subcategoryIds: subs,
@@ -128,8 +132,8 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       />
 
       <label className="block space-y-1">
-        <span className="text-sm font-medium">Motivation / experience</span>
-        <textarea className={field} rows={3} value={bio} onChange={(e) => setBio(e.target.value)} />
+        <span className="text-sm font-medium">Bio — motivation / experience <span className="text-red-500">*</span> <span className="text-xs font-normal text-neutral-500">(min 100 words — {bioWords}/100)</span></span>
+        <textarea className={field} rows={5} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Who you are, your experience, why you participate in the DAO…" />
       </label>
 
       {/* §2.1 — same disclosure as the submitter profile. */}

@@ -22,6 +22,9 @@ import { AnchorService } from '../cardano/anchor.service';
 import { verifyCip30Signature } from '../auth/cip30';
 import { AdmissionVoteDto, DrepApplicationDto, ExpertApplicationDto, UpdateDrepDto } from './dto';
 
+const MIN_BIO_WORDS = 100;
+const bioWordCount = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
+
 @Injectable()
 export class DrepService {
   constructor(
@@ -430,6 +433,10 @@ export class DrepService {
     if (dto.photo !== undefined && dto.photo !== '' && !/^data:image\/(png|jpe?g|webp|gif);base64,/.test(dto.photo)) {
       throw new ConflictException('photo must be a data URL (data:image/<type>;base64,…)');
     }
+    // §14.3 — the bio (motivation / experience) is mandatory: at least 100 words.
+    if (bioWordCount(dto.bio ?? '') < MIN_BIO_WORDS) {
+      throw new ConflictException(`the bio must be at least ${MIN_BIO_WORDS} words`);
+    }
 
     if (dto.displayName !== undefined) {
       await this.prisma.appUser.update({ where: { id: userId }, data: { displayName: dto.displayName } });
@@ -491,6 +498,10 @@ export class DrepService {
   async updateMine(userId: string, dto: UpdateDrepDto) {
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
     if (!drep) throw new NotFoundException('no DRep profile — apply first');
+    // §14.3 — profile saves must carry a ≥100-word bio (board members included).
+    if (dto.bio !== undefined && bioWordCount(dto.bio ?? '') < MIN_BIO_WORDS) {
+      throw new ConflictException(`the bio must be at least ${MIN_BIO_WORDS} words`);
+    }
 
     if (dto.displayName !== undefined) {
       await this.prisma.appUser.update({ where: { id: userId }, data: { displayName: dto.displayName } });
