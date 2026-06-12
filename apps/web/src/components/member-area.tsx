@@ -300,11 +300,13 @@ function TreasuryTab() {
           Show history
         </label>
       </div>
-      <MultisigSetup />
-      <TreasuryBucketsPanel onChange={bumpRefresh} />
+      {/* Attention-first ordering: the Approve & sign queue (things waiting on THIS member)
+          on top, operational panels next, the rarely-touched multisig setup at the bottom. */}
+      <BoardActions history={showHistory} refreshKey={refreshKey} onChange={bumpRefresh} filter="non-rewards" />
       <HotWalletControls onChange={bumpRefresh} />
       <SendFromTreasuryPanel onChange={bumpRefresh} />
-      <BoardActions history={showHistory} refreshKey={refreshKey} onChange={bumpRefresh} filter="non-rewards" />
+      <TreasuryBucketsPanel onChange={bumpRefresh} />
+      <MultisigSetup />
     </div>
   );
 }
