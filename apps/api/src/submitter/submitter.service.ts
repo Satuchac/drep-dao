@@ -1,5 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { MeritService } from '../merit/merit.service';
+import { AnchorService } from '../cardano/anchor.service';
+import { GovSubject } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
 import type { SubmitterApplicationDto } from './dto';
 
@@ -15,6 +17,7 @@ export class SubmitterService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly merit?: MeritService,
+    @Optional() private readonly anchor?: AnchorService,
   ) {}
 
   /** §13.2 — reviewing a submitter application is board work: +1 merit, once per application. */
@@ -259,6 +262,21 @@ export class SubmitterService {
     }
     await this.prisma.submitterApplication.update({ where: { id }, data: { status: 'APPROVED', rejectionReason: null, reviewedAt: new Date() } });
     await this.awardReviewMerit(reviewerUserId, id);
+    // §24.1 — anchor the admission on-chain: short proof with name + wallet identity
+    // (DRep ID when they have one, else the stake address). Best-effort.
+    try {
+      const who = await this.prisma.appUser.findUnique({
+        where: { id: a.user.id },
+        select: { stakeAddress: true, displayName: true, drep: { select: { drepIdOnchain: true } } },
+      });
+      await this.anchor?.anchorMembership({
+        kind: GovSubject.SUBMITTER_ADMISSION,
+        event: 'new submitter admitted',
+        name: who?.displayName ?? a.displayName,
+        walletKind: who?.drep ? 'drep_id' : 'stake_address',
+        walletId: who?.drep?.drepIdOnchain ?? who?.stakeAddress ?? '',
+      });
+    } catch { /* anchoring never blocks the approval */ }
     // Give the user a display name from the application if they don't have one yet — so their
     // proposals show a name instead of a stake id.
     if (!a.user.displayName) {

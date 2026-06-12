@@ -401,6 +401,57 @@ export class AnchorService implements OnModuleInit {
   }
 
   /**
+   * §2.1/§14 — membership anchor: a short proof that a member was admitted (new DAO member /
+   * new submitter), naming them and their wallet identity (DRep ID for DAO members; stake
+   * address — or DRep ID when they have one — for submitters).
+   */
+  async anchorMembership(params: {
+    kind: GovSubject;
+    event: string; // e.g. "new submitter admitted"
+    name: string;
+    walletKind: 'drep_id' | 'stake_address';
+    walletId: string;
+  }): Promise<AnchorResult> {
+    const preimage = {
+      subject: params.kind,
+      ref: `${params.event} — ${params.name}`,
+      event: params.event,
+      name: params.name,
+      wallet: { kind: params.walletKind, id: params.walletId },
+      decidedAt: new Date().toISOString(),
+    };
+    const hash = sha256hex(JSON.stringify(preimage));
+    const metadata = {
+      v: 1,
+      title: SUBJECT_TITLE[params.kind],
+      subject: params.kind,
+      event: params.event,
+      name: params.name,
+      wallet_kind: params.walletKind,
+      wallet_id: params.walletId,
+      decided_at: preimage.decidedAt,
+      proof_hash: hash,
+    };
+    let txHash: string | null = null;
+    try {
+      txHash = await this.submitMetadataTx(metadata as Record<string, unknown>);
+    } catch (e) {
+      this.logger.warn(`membership anchor submit skipped/failed: ${e instanceof Error ? e.message : e}`);
+    }
+    await this.prisma.anchor.create({
+      data: {
+        kind: params.kind,
+        hash,
+        preimage: preimage as unknown as object,
+        metadataLabel: GOVERNANCE_METADATA_LABEL,
+        txHash,
+        submittedAt: txHash ? new Date() : null,
+      },
+    });
+    return { hash, txHash, submitted: !!txHash };
+  }
+
+  /**
    * §24.1 — daily digest anchor: hash of yesterday's vote rows / merit deltas. The preimage
    * keeps the full row digest so anyone can recompute the hash from the API data.
    */
