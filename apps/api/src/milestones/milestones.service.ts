@@ -490,7 +490,7 @@ export class MilestonesService {
       } else {
         await this.prisma.vote.create({ data: { proposalId: m.proposalId, milestoneId, drepId: drep.id, phase: VotePhase.MILESTONE, choice, rationale: rationale ?? null } });
       }
-      // §13.2 — DReps earn +0.5 for checking a milestone (idempotent); misses are
+      // §13.2 — DReps earn +1 for checking a milestone (idempotent); misses are
       // penalized by the daily sweep. Experts are paid in ADA, not merit.
       await this.merit?.tryAward(drep.id, 'MILESTONE_CHECK', milestoneId);
     } else {

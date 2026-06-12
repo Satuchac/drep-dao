@@ -1296,7 +1296,7 @@ A DRep starts at 0 merit points. Range is `[−200, +200]`. Linear mapping: ever
 | Vote in D&V (funding) | +1 per vote |
 | Vote in D&V (internal) | +1 per vote |
 | Complete a filtering review (Feedback 1+2) | +1 |
-| Check a milestone | +0.5 |
+| Check a milestone | +1 |
 | Submit an internal proposal | +1 |
 | Vote in a Quick Poll | +1 |
 
@@ -1318,7 +1318,7 @@ A DRep starts at 0 merit points. Range is `[−200, +200]`. Linear mapping: ever
 | **DReps:** miss vote in D&V (no avoid signaled) | −1 per missed vote |
 | **DReps:** miss filtering vote in time | −1 |
 | **DReps:** miss milestone check in time | −1 |
-| **DReps:** miss a Quick Poll | −0.5 |
+| **DReps:** miss a Quick Poll | −1 |
 | **Board:** fail to send rewards in time (>1 month after stage end) | −10 |
 
 ### 13.4 Avoid period interaction (per decision #13)

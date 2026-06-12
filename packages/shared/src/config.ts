@@ -223,7 +223,7 @@ export const MeritReason = {
   DV_VOTE: 'DV_VOTE', // +1
   DV_VOTE_INTERNAL: 'DV_VOTE_INTERNAL', // +1
   FILTER_COMPLETE: 'FILTER_COMPLETE', // +1
-  MILESTONE_CHECK: 'MILESTONE_CHECK', // +0.5
+  MILESTONE_CHECK: 'MILESTONE_CHECK', // +1
   INTERNAL_SUBMIT: 'INTERNAL_SUBMIT', // +1 (drep) / +5 (board)
   QUICK_POLL_VOTE: 'QUICK_POLL_VOTE', // +1
   APPLICATION_REVIEW: 'APPLICATION_REVIEW', // +1 — board member decided a submitter application
@@ -240,7 +240,7 @@ export const MeritReason = {
   MISSED_DV: 'MISSED_DV', // -1
   MISSED_FILTER: 'MISSED_FILTER', // -1
   MISSED_MILESTONE: 'MISSED_MILESTONE', // -1
-  MISSED_QUICK_POLL: 'MISSED_QUICK_POLL', // -0.5
+  MISSED_QUICK_POLL: 'MISSED_QUICK_POLL', // -1
   BOARD_REWARD_LATE: 'BOARD_REWARD_LATE', // -10
   BOARD_PAYOUT_LATE: 'BOARD_PAYOUT_LATE', // -10 collective — milestone payout missed the deadline
 } as const;
@@ -253,7 +253,7 @@ export const MERIT_DELTAS: Record<MeritReason, number> = {
   DV_VOTE: 1,
   DV_VOTE_INTERNAL: 1,
   FILTER_COMPLETE: 1,
-  MILESTONE_CHECK: 0.5,
+  MILESTONE_CHECK: 1,
   INTERNAL_SUBMIT: 1,
   QUICK_POLL_VOTE: 1,
   APPLICATION_REVIEW: 1,
@@ -270,7 +270,7 @@ export const MERIT_DELTAS: Record<MeritReason, number> = {
   MISSED_DV: -1,
   MISSED_FILTER: -1,
   MISSED_MILESTONE: -1,
-  MISSED_QUICK_POLL: -0.5,
+  MISSED_QUICK_POLL: -1,
   BOARD_REWARD_LATE: -10,
   BOARD_PAYOUT_LATE: -10,
 };
