@@ -38,7 +38,9 @@ export function TreasuryTransactions() {
         <p className="text-xs text-neutral-500">
           Every on-chain transaction that touched a treasury address (the multisig + its buckets),
           newest first. <span className="text-emerald-700 dark:text-emerald-400">Incoming</span> in green,{' '}
-          <span className="text-red-700 dark:text-red-400">outgoing</span> in red.
+          <span className="text-amber-700 dark:text-amber-400">internal</span> (between DAO wallets, incl. the
+          hot wallet) in yellow, <span className="text-red-700 dark:text-red-400">outgoing</span> (funds leaving
+          to an external address) in red.
           {isBoard ? ' Board members can add context with Edit.' : ''}
         </p>
       </div>
@@ -49,6 +51,7 @@ export function TreasuryTransactions() {
         <ul className="space-y-2">
           {txs.map((t) => {
             const inbound = t.direction === 'IN';
+            const internal = t.direction === 'INTERNAL';
             const displayLabel = t.annotationTitle || t.label;
             return (
               <li
@@ -56,7 +59,9 @@ export function TreasuryTransactions() {
                 className={`rounded-md border p-3 text-sm ${
                   inbound
                     ? 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20'
-                    : 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'
+                    : internal
+                      ? 'border-amber-300 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20'
+                      : 'border-red-200 bg-red-50/40 dark:border-red-900 dark:bg-red-950/20'
                 }`}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -65,20 +70,27 @@ export function TreasuryTransactions() {
                       className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                         inbound
                           ? 'bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100'
-                          : 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100'
+                          : internal
+                            ? 'bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100'
+                            : 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100'
                       }`}
                     >
-                      {inbound ? 'Incoming' : 'Outgoing'}
+                      {inbound ? 'Incoming' : internal ? 'Internal' : 'Outgoing'}
                     </span>
                     <span className="font-medium">{displayLabel}</span>
                   </span>
                   <span className="flex items-center gap-2">
                     <span
                       className={`tabular-nums font-semibold ${
-                        inbound ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
+                        inbound
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : internal
+                            ? 'text-amber-700 dark:text-amber-400'
+                            : 'text-red-700 dark:text-red-400'
                       }`}
                     >
-                      {inbound ? '+' : '−'}
+                      {/* Internal moves don't change what the DAO holds — no +/− sign. */}
+                      {inbound ? '+' : internal ? '' : '−'}
                       {t.amountAda.toLocaleString(undefined, { maximumFractionDigits: 6 })} ₳
                     </span>
                     {isBoard ? (

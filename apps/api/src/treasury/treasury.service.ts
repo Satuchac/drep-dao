@@ -12,7 +12,9 @@ const ADA = 1_000_000;
 export interface TreasuryTx {
   hash: string;
   time: number; // unix seconds
-  direction: 'IN' | 'OUT';
+  // INTERNAL = both ends are DAO wallets (multisig/buckets/hot wallet) — money
+  // moved, but none left the DAO. OUT is reserved for external destinations.
+  direction: 'IN' | 'OUT' | 'INTERNAL';
   amountAda: number;
   label: string; // auto-detected: "submission fee", "hot-wallet top-up", "anonymous income"…
   proposalId?: string;
@@ -597,7 +599,18 @@ export class TreasuryService implements OnModuleInit {
     const KIND_LABEL: Record<string, string> = {
       OPS: 'hot-wallet top-up', PROJECT_FUNDING: 'milestone payout', REWARD_PAYOUT: 'reward payout',
       PLEDGE_RETURN: 'pledge return', LEFTOVER_RETURN: 'leftover return', MIGRATION: 'treasury migration',
+      BOARD_TRANSFER: 'treasury transfer',
     };
+
+    // §15 — every wallet the DAO controls. A tx whose destination is one of
+    // these moved money around, not out — shown as INTERNAL, never red.
+    const internalAddrs = new Set(addresses);
+    const hotAddr = this.anchor.hotWalletAddress();
+    if (hotAddr) internalAddrs.add(hotAddr);
+    // Hot-wallet sweeps land at the multisig as plain incoming with no
+    // MultisigAction — recognize them by their recorded tx hash.
+    const sweeps = await this.prisma.hotWalletSweep.findMany({ select: { txHash: true } });
+    const sweepHashes = new Set(sweeps.map((s) => s.txHash).filter(Boolean));
 
     const transactions: TreasuryTx[] = txs.map((t): TreasuryTx | null => {
       const net = t.inLovelace - t.outLovelace;
@@ -612,15 +625,25 @@ export class TreasuryService implements OnModuleInit {
       if (!action && !fee && t.inLovelace > 0n && t.outLovelace > 0n && movedOut >= 0n && movedOut < 2_000_000n) {
         return null;
       }
-      // A board-initiated external payout (reward/milestone/pledge/leftover/migration) is a tx
-      // WE broadcast — always outgoing, amount = the action's. Trust that over the computed net,
-      // because db-sync's consumed-marking lags and a just-sent payout can look like incoming
-      // change. OPS is an internal top-up (multisig → hot wallet, both ours) so leave it to net.
-      const boardPayout = action && action.kind !== 'OPS';
-      const direction: 'IN' | 'OUT' = boardPayout ? 'OUT' : net >= 0n ? 'IN' : 'OUT';
-      const amountAda = boardPayout ? Number(action.amountAda) / ADA : Number(net >= 0n ? net : -net) / ADA;
+      // A board action whose destination is one of OUR wallets (top-up to the
+      // hot wallet, bucket-to-bucket transfer, migration to the new multisig)
+      // moved money around, not out → INTERNAL. A board action to an external
+      // address is a real payout — always OUT with the action's amount. Trust
+      // that over the computed net, because db-sync's consumed-marking lags
+      // and a just-sent payout can look like incoming change. Hot-wallet
+      // sweeps come back as plain incoming → INTERNAL via their tx hash.
+      const internalMove = action
+        ? (action.kind === 'OPS' || (action.destAddress != null && internalAddrs.has(action.destAddress)))
+        : sweepHashes.has(t.hash);
+      const boardPayout = action && !internalMove;
+      const direction: 'IN' | 'OUT' | 'INTERNAL' = internalMove ? 'INTERNAL' : boardPayout ? 'OUT' : net >= 0n ? 'IN' : 'OUT';
+      const amountAda = action?.amountAda != null && (boardPayout || internalMove)
+        ? Number(action.amountAda) / ADA
+        : Number(net >= 0n ? net : -net) / ADA;
       const tx: TreasuryTx = { hash: t.hash, time: t.time, direction, amountAda, label: 'outgoing transfer' };
-      if (direction === 'IN') {
+      if (direction === 'INTERNAL' && !action) {
+        tx.label = 'hot-wallet sweep';
+      } else if (direction === 'IN') {
         if (fee) {
           tx.label = 'submission fee';
           tx.proposalId = fee.id;

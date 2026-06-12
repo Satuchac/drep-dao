@@ -257,7 +257,8 @@ export interface HotWalletHistoryItem {
 export interface TreasuryTx {
   hash: string;
   time: number; // unix seconds
-  direction: 'IN' | 'OUT';
+  /** INTERNAL = between DAO wallets (multisig/buckets/hot wallet) — nothing left the DAO. */
+  direction: 'IN' | 'OUT' | 'INTERNAL';
   amountAda: number;
   label: string;
   proposalId?: string;
