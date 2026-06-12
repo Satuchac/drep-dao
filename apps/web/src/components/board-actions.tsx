@@ -173,7 +173,11 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
                   ? <>Milestone #{(a.milestoneIdx ?? 0) + 1} payout — {a.proposalTitle}</>
                   : (a.description ?? a.kind)}
               </span>
-              {a.amountAda != null ? <span className="tabular-nums text-neutral-500">{a.amountAda.toLocaleString()} ₳</span> : null}
+              <span className="flex items-center gap-3">
+                {/* When several similar actions queue up, the timestamp tells them apart. */}
+                <span className="text-xs text-neutral-400" title="When this action was prepared">prepared {new Date(a.createdAt).toLocaleString()}</span>
+                {a.amountAda != null ? <span className="tabular-nums text-neutral-500">{a.amountAda.toLocaleString()} ₳</span> : null}
+              </span>
             </div>
             {/* Full destination address (no truncation) + copy button. Label
                 changes by action kind so it reads naturally:
@@ -310,6 +314,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
               <li key={a.id} className="rounded border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">{a.proposalTitle ? `Milestone #${(a.milestoneIdx ?? 0) + 1} payout — ${a.proposalTitle}` : (a.description ?? a.kind)}</span>
+                  <span className="text-xs text-neutral-400">prepared {new Date(a.createdAt).toLocaleString()}</span>
                   <span className="flex items-center gap-2 text-neutral-500">
                     {a.amountAda != null ? <span className="tabular-nums">{a.amountAda.toLocaleString()} ₳</span> : null}
                     <span className="rounded bg-neutral-100 px-1.5 py-0.5 dark:bg-neutral-800">{a.status === 'CONFIRMED' ? 'PAID' : a.status}</span>

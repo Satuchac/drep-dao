@@ -201,6 +201,7 @@ export interface BoardAction {
   description: string | null;
   amountAda: number | null;
   status: string;
+  createdAt: string;
   txHash: string | null;
   approvals: number;
   /** §15 — 3-of-5 board signing. `threshold` is the M needed; `totalKeys`
