@@ -7,6 +7,7 @@ import { MultisigSetup } from './multisig-setup';
 import { HotWalletControls } from './hot-wallet-controls';
 import { TreasuryBucketsPanel } from './treasury-buckets-panel';
 import { TreasuryTransactions } from './treasury-transactions';
+import { useTreasuryAutoRefresh } from '@/lib/treasury-refresh';
 
 const ada = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 const BUCKET_COLOR: Record<string, string> = {
@@ -29,6 +30,9 @@ export function TreasuryOverview() {
     treasuryBucketsApi.list().then((r) => setBuckets(r.buckets)).catch(() => setBuckets([]));
   }, []);
   useEffect(() => { load(); }, [load]);
+  // §15 — reload on multisig broadcast (+ delayed re-checks for db-sync lag)
+  // and on a slow background poll, so balances update without F5.
+  useTreasuryAutoRefresh(load);
 
   // Total treasury = sum across every multisig sub-address (falls back to the
   // primary balance from the overview if the bucket list isn't loaded yet).

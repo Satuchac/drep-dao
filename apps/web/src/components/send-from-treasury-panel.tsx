@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { treasuryApi, configApi, treasuryBucketsApi, type TreasuryOverview, type PublicConfig, type TreasuryBucket } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { useTreasuryAutoRefresh } from '@/lib/treasury-refresh';
 
 /**
  * §15.4 — any board member can initiate an arbitrary outbound treasury
@@ -36,6 +37,8 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
     treasuryBucketsApi.list().then((r) => setBuckets(r.buckets)).catch(() => setBuckets([]));
   }, []);
   useEffect(load, [load]);
+  // Keep the source balances live after a broadcast (no F5).
+  useTreasuryAutoRefresh(load);
 
   if (!isBoard) return null;
   // §15.3 — without the assembled multisig there's no on-chain source to

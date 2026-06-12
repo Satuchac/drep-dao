@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
 import { ConfirmDialog } from './confirm-dialog';
+import { notifyTreasuryChanged } from '@/lib/treasury-refresh';
 
 /** §15.3 — pending board/treasury actions the platform prepared, awaiting 3-of-5 approval.
  *  `refreshKey` is a parent-controlled counter — bumping it triggers an
@@ -118,6 +119,9 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
       if (r.status === 'CONFIRMED' && r.txHash) {
         setErr(a.id, null);
         setSubmitted(r.txHash); // last signature → broadcast; show the transient submitted banner
+        // Tell the treasury views (overview balances, transactions) to reload
+        // now + re-check while db-sync indexes the new tx — no F5 needed.
+        notifyTreasuryChanged();
       }
       load();
       onChange?.();
@@ -446,7 +450,7 @@ function PayoutTxVerify({ action, onChange }: { action: BoardAction; onChange: (
     try {
       const r = await treasuryApi.submitPayoutTx(action.id, trimmed);
       setResult(r);
-      if (r.status === 'CONFIRMED') onChange();
+      if (r.status === 'CONFIRMED') { onChange(); notifyTreasuryChanged(); }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'failed');
     } finally {

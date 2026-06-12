@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { treasuryApi, type TreasuryTx } from '@/lib/api';
 import { useExplorer } from '@/lib/explorer';
 import { useAuth } from '@/lib/auth-context';
+import { useTreasuryAutoRefresh } from '@/lib/treasury-refresh';
 
 /**
  * §15 — Treasury → Transactions: every on-chain tx that touched a treasury address,
@@ -27,6 +28,9 @@ export function TreasuryTransactions() {
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
   }, []);
   useEffect(() => { load(); }, [load]);
+  // §15 — new txs appear without F5: reload on multisig broadcast (+ delayed
+  // re-checks while db-sync catches up) and on a slow background poll.
+  useTreasuryAutoRefresh(load);
 
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (txs === null) return <p className="text-sm text-neutral-500">Loading…</p>;

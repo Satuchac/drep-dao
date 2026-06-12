@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { treasuryApi, treasuryBucketsApi, type TreasuryBucket } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { useTreasuryAutoRefresh } from '@/lib/treasury-refresh';
 
 /**
  * §15.5 — internal transfer: move ADA between the DAO's own treasury
@@ -29,6 +30,8 @@ export function InternalTransferPanel({ onChange }: { onChange?: () => void }) {
     treasuryBucketsApi.list().then((r) => setBuckets(r.buckets)).catch(() => setBuckets([]));
   }, []);
   useEffect(load, [load]);
+  // Keep the dropdowns' balances live after a broadcast (no F5).
+  useTreasuryAutoRefresh(load);
 
   if (!isBoard) return null;
   // One address = nothing to transfer between; the panel appears once the
