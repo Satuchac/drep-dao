@@ -88,20 +88,26 @@ export function TreasuryOverview() {
               </div>
               {/* Every sub-address with its label, on-chain address, live balance + copy. */}
               {buckets.length > 0 ? (
-                <ul className="mt-2 space-y-1.5 border-t border-blue-200 pt-2 dark:border-blue-900">
-                  {buckets.map((b) => (
-                    <li key={b.id} className="text-xs">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="font-medium">{b.label}{b.isPrimary ? <span className="ml-1 rounded bg-blue-100 px-1 text-[10px] uppercase text-blue-700 dark:bg-blue-900 dark:text-blue-300">primary</span> : null}</span>
-                        <span className="tabular-nums font-medium">{b.balanceAda.toLocaleString()} ₳</span>
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-1.5">
-                        <span className="min-w-0 truncate font-mono text-[10px] text-neutral-500" title={b.bech32Address}>{b.bech32Address}</span>
-                        <CopyButton text={b.bech32Address} label="Copy" />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <div className="mt-2 border-t border-blue-200 pt-1 dark:border-blue-900">
+                  <div className="flex items-baseline justify-between text-[10px] uppercase tracking-wide text-neutral-400">
+                    <span>Address</span>
+                    <span>Balance (on-chain)</span>
+                  </div>
+                  <ul className="divide-y divide-blue-200 dark:divide-blue-900">
+                    {buckets.map((b) => (
+                      <li key={b.id} className="py-1.5 text-xs">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <span className="font-medium">{b.label}{b.isPrimary ? <span className="ml-1 rounded bg-blue-100 px-1 text-[10px] uppercase text-blue-700 dark:bg-blue-900 dark:text-blue-300">primary</span> : null}</span>
+                          <span className="tabular-nums font-medium">{b.balanceAda.toLocaleString()} ₳</span>
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-1.5">
+                          <span className="min-w-0 truncate font-mono text-[10px] text-neutral-500" title={b.bech32Address}>{b.bech32Address}</span>
+                          <CopyButton text={b.bech32Address} label="Copy" />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               ) : data.treasury.configured ? (
                 <div className="mt-0.5 text-[11px] text-neutral-500">see Treasury buckets below</div>
               ) : null}
