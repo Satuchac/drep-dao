@@ -32,6 +32,7 @@ const { MilestonesService } = require(root + '/apps/api/dist/milestones/mileston
 const { ProposalsService } = require(root + '/apps/api/dist/proposals/proposals.service.js');
 const { RoundsService } = require(root + '/apps/api/dist/rounds/rounds.service.js');
 const { NotificationsService } = require(root + '/apps/api/dist/notifications/notifications.service.js');
+const { SubmitterService } = require(root + '/apps/api/dist/submitter/submitter.service.js');
 const { JobsService } = require(root + '/apps/api/dist/jobs/jobs.service.js');
 const { prisma: db } = require(root + '/packages/db/dist/index.js');
 
@@ -180,6 +181,17 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     await throws('§2.1 createDraft refused without an approved submitter role',
       () => proposals.createDraft(user.id, { roundId: round.id, categoryId: cat.id, title: 't', contentMd: 'c', isCommercial: false, requestedAmountAda: 10, milestones: [{ description: 'm', amountAda: 10 }] }),
       /approved submitter/);
+
+    // ── §2.1 no self-review of submitter applications ────────────────────────
+    const submitters = new SubmitterService(prisma);
+    const selfApp = await db.submitterApplication.create({
+      data: { userId: user.id, status: 'PENDING', displayName: 'Self', description: 'x', socialLinks: [], country: 'Testland' },
+    });
+    await throws('§2.1 approving your OWN application is forbidden', () => submitters.approve(selfApp.id, user.id), /own application/);
+    await throws('§2.1 rejecting your OWN application is forbidden', () => submitters.reject(selfApp.id, 'no', user.id), /own application/);
+    await submitters.approve(selfApp.id, d1.userId); // another member can
+    ok('§2.1 another member can approve it', (await db.submitterApplication.findUnique({ where: { id: selfApp.id } })).status === 'APPROVED');
+    await db.submitterApplication.delete({ where: { id: selfApp.id } });
 
     // ── §20.3 notification dedupe ────────────────────────────────────────────
     const n1 = await notify.notifyUsers([user.id], 'TEST_KIND', 'ref-1', { title: 'x' });

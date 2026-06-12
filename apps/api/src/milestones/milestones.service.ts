@@ -57,13 +57,13 @@ export class MilestonesService {
   async candidates(proposalId: string) {
     const proposal = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
-      select: { id: true, subcategoryIds: true, submitterDrepId: true, roundId: true },
+      select: { id: true, subcategoryIds: true, submitterDrepId: true, submitterUserId: true, roundId: true },
     });
     if (!proposal) throw new NotFoundException('proposal not found');
 
     const eligible = await this.prisma.roundDrepEligibility.findMany({
       where: { roundId: proposal.roundId ?? undefined, drep: { status: 'ADMITTED' } },
-      include: { drep: { select: { id: true, drepIdOnchain: true, subcategoryIds: true, user: { select: { displayName: true } } } } },
+      include: { drep: { select: { id: true, userId: true, drepIdOnchain: true, subcategoryIds: true, user: { select: { displayName: true } } } } },
     });
 
     // Equal-participation: per-DRep count of milestone assignments across the round.
@@ -80,7 +80,7 @@ export class MilestonesService {
 
     const propSubs = new Set(proposal.subcategoryIds ?? []);
     const dreps = eligible
-      .filter((e) => e.drepId !== proposal.submitterDrepId)
+      .filter((e) => e.drepId !== proposal.submitterDrepId && e.drep.userId !== proposal.submitterUserId)
       .map((e) => ({
         kind: 'DRep' as const,
         id: e.drep.id,
@@ -150,6 +150,12 @@ export class MilestonesService {
     const expertIds = unique.filter((r) => r.kind === 'Expert').map((r) => r.id);
     if (drepIds.includes(proposal.submitterDrepId ?? '')) {
       throw new BadRequestException('the submitter cannot review their own milestones');
+    }
+    if (drepIds.length) {
+      const owners = await this.prisma.drep.findMany({ where: { id: { in: drepIds } }, select: { userId: true } });
+      if (owners.some((o) => o.userId === proposal.submitterUserId)) {
+        throw new BadRequestException('the submitter cannot review their own milestones');
+      }
     }
     // DReps must be admitted + round-eligible; experts must be board-approved.
     if (drepIds.length) {
@@ -223,13 +229,17 @@ export class MilestonesService {
     }
     const proposal = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
-      select: { id: true, status: true, stage: true, roundId: true, submitterDrepId: true, milestones: { select: { id: true, status: true } } },
+      select: { id: true, status: true, stage: true, roundId: true, submitterDrepId: true, submitterUserId: true, milestones: { select: { id: true, status: true } } },
     });
     if (!proposal) throw new NotFoundException('proposal not found');
     if (proposal.stage !== ProposalStage.FUNDING || proposal.status !== ProposalStatus.APPROVED) {
       throw new ConflictException('proposal is not in the FUNDING stage');
     }
     if (newDrepId === proposal.submitterDrepId) {
+      throw new BadRequestException('the submitter cannot review their own milestones');
+    }
+    const newOwner = await this.prisma.drep.findUnique({ where: { id: newDrepId }, select: { userId: true } });
+    if (newOwner?.userId === proposal.submitterUserId) {
       throw new BadRequestException('the submitter cannot review their own milestones');
     }
 

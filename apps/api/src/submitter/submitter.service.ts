@@ -222,6 +222,10 @@ export class SubmitterService {
   async approve(id: string, reviewerUserId?: string) {
     const a = await this.prisma.submitterApplication.findUnique({ where: { id }, include: { user: { select: { id: true, displayName: true } } } });
     if (!a) throw new NotFoundException('application not found');
+    // §2.1 — nobody reviews their own application (self-approval + merit farming).
+    if (reviewerUserId && a.userId === reviewerUserId) {
+      throw new ForbiddenException('you cannot review your own application — another board member must decide it');
+    }
     await this.prisma.submitterApplication.update({ where: { id }, data: { status: 'APPROVED', rejectionReason: null, reviewedAt: new Date() } });
     await this.awardReviewMerit(reviewerUserId, id);
     // Give the user a display name from the application if they don't have one yet — so their
@@ -235,8 +239,11 @@ export class SubmitterService {
   async reject(id: string, reason: string, reviewerUserId?: string) {
     const r = (reason ?? '').trim();
     if (!r) throw new BadRequestException('a reason is required to reject — the applicant will see it');
-    const a = await this.prisma.submitterApplication.findUnique({ where: { id }, select: { id: true } });
+    const a = await this.prisma.submitterApplication.findUnique({ where: { id }, select: { id: true, userId: true } });
     if (!a) throw new NotFoundException('application not found');
+    if (reviewerUserId && a.userId === reviewerUserId) {
+      throw new ForbiddenException('you cannot review your own application — another board member must decide it');
+    }
     await this.prisma.submitterApplication.update({ where: { id }, data: { status: 'REJECTED', rejectionReason: r, reviewedAt: new Date() } });
     await this.awardReviewMerit(reviewerUserId, id);
     return { ok: true };

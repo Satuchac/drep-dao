@@ -53,9 +53,11 @@ export class FilteringService {
     // §7.1 — eligible admitted DReps in the round, with their declared subcategories.
     const eligible = await this.prisma.roundDrepEligibility.findMany({
       where: { roundId: proposal.roundId ?? undefined, drep: { status: 'ADMITTED' } },
-      select: { drepId: true, drep: { select: { subcategoryIds: true } } },
+      select: { drepId: true, drep: { select: { subcategoryIds: true, userId: true } } },
     });
-    let cands = eligible.filter((e) => e.drepId !== proposal.submitterDrepId);
+    // The submitter NEVER reviews their own proposal — excluded by drep id AND by user id
+    // (covers proposals submitted before the user had a DRep row).
+    let cands = eligible.filter((e) => e.drepId !== proposal.submitterDrepId && e.drep.userId !== proposal.submitterUserId);
     if (cands.length === 0) throw new BadRequestException('no eligible reviewers in this round');
     // §13.4 — DReps who signalled an avoid period aren't drawn (unless excluding
     // them would leave nobody, in which case the board reassigns manually).
@@ -427,13 +429,13 @@ export class FilteringService {
   async candidates(proposalId: string, options: { includeOutsideRound?: boolean } = {}) {
     const proposal = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
-      select: { id: true, subcategoryIds: true, submitterDrepId: true, roundId: true },
+      select: { id: true, subcategoryIds: true, submitterDrepId: true, submitterUserId: true, roundId: true },
     });
     if (!proposal) throw new NotFoundException('proposal not found');
 
     const eligible = await this.prisma.roundDrepEligibility.findMany({
       where: { roundId: proposal.roundId ?? undefined, drep: { status: 'ADMITTED' } },
-      include: { drep: { select: { id: true, drepIdOnchain: true, subcategoryIds: true, user: { select: { displayName: true } } } } },
+      include: { drep: { select: { id: true, userId: true, drepIdOnchain: true, subcategoryIds: true, user: { select: { displayName: true } } } } },
     });
     // The full set of admitted DReps in the DAO, when the board wants to pick one
     // who is not yet in this round's eligibility list.
@@ -441,7 +443,7 @@ export class FilteringService {
     const outside = options.includeOutsideRound
       ? await this.prisma.drep.findMany({
           where: { status: 'ADMITTED', id: { notIn: [...eligibleSet] } },
-          select: { id: true, drepIdOnchain: true, subcategoryIds: true, user: { select: { displayName: true } } },
+          select: { id: true, userId: true, drepIdOnchain: true, subcategoryIds: true, user: { select: { displayName: true } } },
         })
       : [];
 
@@ -471,7 +473,7 @@ export class FilteringService {
 
     const propSubs = new Set(proposal.subcategoryIds ?? []);
     const inRoundRows = eligible
-      .filter((e) => e.drepId !== proposal.submitterDrepId)
+      .filter((e) => e.drepId !== proposal.submitterDrepId && e.drep.userId !== proposal.submitterUserId)
       .map((e) => {
         const match = propSubs.size > 0 && e.drep.subcategoryIds.some((s) => propSubs.has(s));
         return {
@@ -488,7 +490,7 @@ export class FilteringService {
         };
       });
     const outsideRows = outside
-      .filter((d) => d.id !== proposal.submitterDrepId)
+      .filter((d) => d.id !== proposal.submitterDrepId && d.userId !== proposal.submitterUserId)
       .map((d) => {
         const match = propSubs.size > 0 && d.subcategoryIds.some((s) => propSubs.has(s));
         return {
@@ -529,7 +531,7 @@ export class FilteringService {
     }
     const proposal = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
-      select: { id: true, status: true, stage: true, roundId: true, submitterDrepId: true },
+      select: { id: true, status: true, stage: true, roundId: true, submitterDrepId: true, submitterUserId: true },
     });
     if (!proposal) throw new NotFoundException('proposal not found');
     if (proposal.stage !== ProposalStage.FILTERING || proposal.status !== ProposalStatus.ACTIVE) {
@@ -550,6 +552,10 @@ export class FilteringService {
       throw new ConflictException('this reviewer has already voted — their vote is final and cannot be replaced');
     }
     // The replacement must be an admitted DRep + not the submitter + not already on this proposal.
+    const newDrepUser = await this.prisma.drep.findUnique({ where: { id: newDrepId }, select: { userId: true } });
+    if (newDrepUser?.userId === proposal.submitterUserId) {
+      throw new BadRequestException('the submitter cannot review their own proposal');
+    }
     if (newDrepId === proposal.submitterDrepId) {
       throw new BadRequestException('the submitter cannot review their own proposal');
     }
