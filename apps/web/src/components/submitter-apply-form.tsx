@@ -27,6 +27,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   const [conflict, setConflict] = useState('');
   const [noSelfVote, setNoSelfVote] = useState(false);
   const [telegram, setTelegram] = useState('');
+  const [prevFunding, setPrevFunding] = useState('');
   const [email, setEmail] = useState('');
   const [logo, setLogo] = useState('');
   const [country, setCountry] = useState('');
@@ -45,6 +46,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         setSocials(m.socialLinks ?? []); setLogo(m.logoDataUrl ?? ''); setCountry(m.country);
         setConflict(m.conflictOfInterest ?? ''); setNoSelfVote(!!m.noSelfVotePledge);
         setTelegram(m.telegram ?? ''); setEmail(m.email ?? '');
+        setPrevFunding(m.previousFunding ?? '');
       }
     }).catch(() => setLoaded(true));
   useEffect(() => { load(); }, []);
@@ -82,6 +84,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         noSelfVotePledge: noSelfVote,
         telegram: telegram.trim(),
         email: email.trim(),
+        previousFunding: prevFunding.trim(),
         logoDataUrl: logo || undefined,
         country,
         agreePersist,
@@ -174,6 +177,12 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" checked={noSelfVote} onChange={(e) => setNoSelfVote(e.target.checked)} className="mt-0.5" />
           <span>I will not vote for my own proposal <span className="text-xs text-neutral-500">(informative — optional)</span></span>
+        </label>
+
+        <label className="block">
+          <span className="text-sm font-medium">Previous funding <span className="text-xs font-normal text-neutral-500">(optional — please keep it updated)</span></span>
+          <p className="text-xs text-neutral-500">List ALL previous funding you received in the Cardano ecosystem — Catalyst, Treasury Withdrawals, Builder DAO, or other funding vehicles. Update this regularly as you receive new funding.</p>
+          <textarea value={prevFunding} onChange={(e) => setPrevFunding(e.target.value)} rows={3} maxLength={20000} className={`mt-1 ${inputCls}`} placeholder="e.g. Catalyst F11 — Project X, 50k ₳ (2024); Builder DAO grant — 10k ₳ (2025)…" />
         </label>
 
         <div className="grid gap-3 sm:grid-cols-2">

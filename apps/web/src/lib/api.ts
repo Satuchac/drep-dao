@@ -621,6 +621,7 @@ export interface SubmitterApplicationInput {
   noSelfVotePledge?: boolean;
   telegram: string;
   email: string;
+  previousFunding?: string;
   agreePersist?: boolean;
 }
 export interface SubmitterHistoryItem {
@@ -634,6 +635,7 @@ export interface SubmitterHistoryItem {
   noSelfVotePledge: boolean;
   telegram: string;
   email: string;
+  previousFunding: string;
   snapshotAt: string;
 }
 export interface MySubmitter {
@@ -649,6 +651,7 @@ export interface MySubmitter {
   noSelfVotePledge: boolean;
   telegram: string;
   email: string;
+  previousFunding: string;
   rejectionReason: string | null;
   leftAt: string | null;
   history: SubmitterHistoryItem[];
@@ -668,6 +671,7 @@ export interface ApprovedSubmitter {
   conflictOfInterest: string;
   telegram: string;
   email: string;
+  previousFunding: string;
   stakeAddress: string;
   drepIdOnchain: string | null;
   isDaoMember: boolean;

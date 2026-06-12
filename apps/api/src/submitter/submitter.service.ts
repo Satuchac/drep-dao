@@ -62,6 +62,7 @@ export class SubmitterService {
     if (!telegram) throw new BadRequestException('a Telegram handle is required');
     const email = (dto.email ?? '').trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequestException('a valid email is required');
+    const previousFunding = (dto.previousFunding ?? '').trim();
     const socialLinks = (dto.socialLinks ?? []).map((s) => s.trim()).filter(Boolean);
     const githubUrls = (dto.githubUrls ?? []).map((s) => s.trim()).filter(Boolean);
     const logoDataUrl = dto.logoDataUrl?.trim() || null;
@@ -85,7 +86,8 @@ export class SubmitterService {
       existing.conflictOfInterest !== conflictOfInterest ||
       existing.noSelfVotePledge !== !!dto.noSelfVotePledge ||
       existing.telegram !== telegram ||
-      existing.email !== email
+      existing.email !== email ||
+      existing.previousFunding !== previousFunding
     );
     if (existing && existing.status === 'APPROVED' && changed) {
       await this.prisma.submitterApplicationHistory.create({
@@ -101,10 +103,11 @@ export class SubmitterService {
           noSelfVotePledge: existing.noSelfVotePledge,
           telegram: existing.telegram,
           email: existing.email,
+          previousFunding: existing.previousFunding,
         },
       });
     }
-    const data = { status, displayName, description, githubUrls, socialLinks, logoDataUrl, country, conflictOfInterest, noSelfVotePledge: !!dto.noSelfVotePledge, telegram, email, rejectionReason: null };
+    const data = { status, displayName, description, githubUrls, socialLinks, logoDataUrl, country, conflictOfInterest, noSelfVotePledge: !!dto.noSelfVotePledge, telegram, email, previousFunding, rejectionReason: null };
     await this.prisma.submitterApplication.upsert({
       where: { userId },
       update: data,
@@ -131,6 +134,7 @@ export class SubmitterService {
       noSelfVotePledge: h.noSelfVotePledge,
       telegram: h.telegram,
       email: h.email,
+      previousFunding: h.previousFunding,
       snapshotAt: h.snapshotAt,
     }));
   }
@@ -151,6 +155,7 @@ export class SubmitterService {
       noSelfVotePledge: a.noSelfVotePledge,
       telegram: a.telegram,
       email: a.email,
+      previousFunding: a.previousFunding,
       rejectionReason: a.rejectionReason,
       leftAt: a.leftAt,
       history: await this.historyFor(userId),
@@ -204,6 +209,7 @@ export class SubmitterService {
       conflictOfInterest: a.conflictOfInterest,
       telegram: a.telegram,
       email: a.email,
+      previousFunding: a.previousFunding,
       // The platform knows the wallet — expose it (and the DRep identity when they have one).
       stakeAddress: a.user.stakeAddress,
       drepIdOnchain: a.user.drep?.drepIdOnchain ?? null,
@@ -228,7 +234,7 @@ export class SubmitterService {
     });
     const histByUser = new Map<string, ReturnType<typeof mapHist>[]>();
     function mapHist(h: (typeof hist)[number]) {
-      return { displayName: h.displayName, description: h.description, githubUrls: h.githubUrls, socialLinks: h.socialLinks, logoDataUrl: h.logoDataUrl, country: h.country, conflictOfInterest: h.conflictOfInterest, noSelfVotePledge: h.noSelfVotePledge, telegram: h.telegram, email: h.email, snapshotAt: h.snapshotAt };
+      return { displayName: h.displayName, description: h.description, githubUrls: h.githubUrls, socialLinks: h.socialLinks, logoDataUrl: h.logoDataUrl, country: h.country, conflictOfInterest: h.conflictOfInterest, noSelfVotePledge: h.noSelfVotePledge, telegram: h.telegram, email: h.email, previousFunding: h.previousFunding, snapshotAt: h.snapshotAt };
     }
     for (const h of hist) {
       if (!histByUser.has(h.userId)) histByUser.set(h.userId, []);
@@ -247,6 +253,7 @@ export class SubmitterService {
       noSelfVotePledge: a.noSelfVotePledge,
       telegram: a.telegram,
       email: a.email,
+      previousFunding: a.previousFunding,
       rejectionReason: a.rejectionReason,
       stakeAddress: a.user.stakeAddress,
       history: histByUser.get(a.userId) ?? [],

@@ -80,6 +80,10 @@ export function SubmittersDirectory() {
                       <p className="mt-0.5 whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">{s.description}</p>
                     </div>
                     <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Previous funding</div>
+                      <p className="mt-0.5 whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">{s.previousFunding || '— none declared —'}</p>
+                    </div>
+                    <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Conflict of interest</div>
                       <p className="mt-0.5 whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">{s.conflictOfInterest || '—'}</p>
                     </div>

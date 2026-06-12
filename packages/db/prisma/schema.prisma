@@ -73,6 +73,9 @@ model SubmitterApplication {
   noSelfVotePledge   Boolean @default(false) @map("no_self_vote_pledge")
   telegram           String  @default("")
   email              String  @default("")
+  // §2.1 — all previous Cardano-ecosystem funding (Catalyst, Treasury Withdrawals, Builder
+  // DAO, …). Optional, expected to be kept up to date.
+  previousFunding    String  @default("") @map("previous_funding")
   rejectionReason String?   @map("rejection_reason")
   leftAt          DateTime? @map("left_at") @db.Timestamptz(6) // §2.1 — deregistered (profile kept)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -98,6 +101,7 @@ model SubmitterApplicationHistory {
   noSelfVotePledge   Boolean @default(false) @map("no_self_vote_pledge")
   telegram           String  @default("")
   email              String  @default("")
+  previousFunding    String  @default("") @map("previous_funding")
   snapshotAt  DateTime @default(now()) @map("snapshot_at") @db.Timestamptz(6) // when this version was replaced
 
   @@index([userId])

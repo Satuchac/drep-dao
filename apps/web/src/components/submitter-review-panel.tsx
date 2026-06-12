@@ -54,6 +54,11 @@ export function SubmitterReviewPanel({ onChange, history = false }: { onChange?:
             <div className="mt-1 text-xs"><span className="font-medium">GitHub:</span>{' '}
               {a.githubUrls.length ? a.githubUrls.map((g, i) => <a key={i} href={g} target="_blank" rel="noreferrer" className="mr-2 break-all text-emerald-700 underline dark:text-emerald-400">{g}</a>) : <span className="text-neutral-400">not provided</span>}
             </div>
+            {a.previousFunding ? (
+              <div className="mt-1 text-xs"><span className="font-medium">Previous funding:</span>{' '}
+                <span className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{a.previousFunding}</span>
+              </div>
+            ) : null}
             {/* §2.1 — disclosure + contact for the board's review. */}
             <div className="mt-1 text-xs">
               <span className="font-medium">Conflict of interest:</span>{' '}
