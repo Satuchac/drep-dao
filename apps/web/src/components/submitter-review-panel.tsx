@@ -71,8 +71,22 @@ export function SubmitterReviewPanel({ onChange, history = false }: { onChange?:
                   {a.history.map((h, i) => (
                     <li key={i} className="rounded border border-neutral-200 p-1.5 dark:border-neutral-800">
                       <div className="text-neutral-400">Replaced {new Date(h.snapshotAt).toLocaleString()}</div>
-                      <div><span className="font-medium">{h.displayName}</span> · {h.country}</div>
+                      <div className="flex items-center gap-2">
+                        {h.logoDataUrl ? <img src={h.logoDataUrl} alt="" className="h-6 w-6 rounded object-cover" /> : null}
+                        <span className="font-medium">{h.displayName}</span> · {h.country}
+                      </div>
                       <div className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{h.description}</div>
+                      {h.conflictOfInterest ? <div className="mt-0.5"><span className="font-medium">Conflict of interest:</span> <span className="whitespace-pre-wrap">{h.conflictOfInterest}</span></div> : null}
+                      <div className="mt-0.5 text-neutral-500">
+                        {h.noSelfVotePledge ? '✓ no-self-vote pledge' : 'no self-vote pledge'}
+                        {h.telegram ? <> · Telegram: <span className="font-mono">{h.telegram}</span></> : null}
+                        {h.email ? <> · Email: {h.email}</> : null}
+                      </div>
+                      {(h.githubUrls?.length || h.socialLinks?.length) ? (
+                        <div className="mt-0.5 flex flex-wrap gap-2">
+                          {[...(h.githubUrls ?? []), ...(h.socialLinks ?? [])].map((l, j) => <span key={j} className="break-all text-neutral-500">{l}</span>)}
+                        </div>
+                      ) : null}
                     </li>
                   ))}
                 </ul>

@@ -3,14 +3,17 @@
 import { useEffect, useState } from 'react';
 import { submitterApi, type ApprovedSubmitter } from '@/lib/api';
 import { card } from '@/lib/ui';
+import { FallbackAvatar } from './fallback-avatar';
 
 /**
  * §2.1 — public directory of APPROVED submitters (mirrors the DAO members overview).
- * A submitter who is ALSO a DAO member is flagged prominently — they both submit
- * proposals and vote on funding, which matters for conflict-of-interest review.
+ * Click a row to open the FULL profile (photo — or a universal B/W placeholder head —
+ * description, country, conflict-of-interest, pledge, contact, every link). A submitter
+ * who is ALSO a DAO member is flagged prominently: they both submit and vote.
  */
 export function SubmittersDirectory() {
   const [rows, setRows] = useState<ApprovedSubmitter[] | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   useEffect(() => {
     submitterApi.directory().then(setRows).catch(() => setRows([]));
   }, []);
@@ -20,45 +23,77 @@ export function SubmittersDirectory() {
       <div>
         <h2 className="text-lg font-semibold">Submitters</h2>
         <p className="text-sm text-neutral-500">
-          Approved submitters — accounts allowed to submit funding proposals. Submitters who are
-          also DAO members (they vote, too) are flagged.
+          Approved submitters — accounts allowed to submit funding proposals. Click a row for the
+          full profile. Submitters who are also DAO members (they vote, too) are flagged.
         </p>
       </div>
       {rows === null ? <p className="text-sm text-neutral-500">Loading…</p> : null}
       {rows?.length === 0 ? <p className="text-sm text-neutral-500">No approved submitters yet.</p> : null}
       <div className="space-y-3">
-        {rows?.map((s) => (
-          <section key={s.id} className={card}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="flex items-center gap-2">
-                {s.logoDataUrl ? <img src={s.logoDataUrl} alt="" className="h-9 w-9 rounded object-cover" /> : null}
-                <span className="font-medium">{s.displayName}</span>
-                {s.country ? <span className="text-xs text-neutral-500">{s.country}</span> : null}
-                {s.isDaoMember ? (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200" title="This submitter also votes on funding proposals">
-                    ⚠ also a DAO member
-                  </span>
-                ) : null}
-                {s.noSelfVotePledge ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">✓ no self-vote pledge</span> : null}
-              </span>
-              {s.since ? <span className="text-xs text-neutral-400">approved {new Date(s.since).toLocaleDateString()}</span> : null}
-            </div>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-700 dark:text-neutral-300">{s.description}</p>
-            {s.conflictOfInterest ? (
-              <div className="mt-1 text-xs">
-                <span className="font-medium">Conflict of interest:</span>{' '}
-                <span className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{s.conflictOfInterest}</span>
-              </div>
-            ) : null}
-            {(s.githubUrls.length || s.socialLinks.length) ? (
-              <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                {[...s.githubUrls, ...s.socialLinks].map((l, i) => (
-                  <a key={i} href={l} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{l}</a>
-                ))}
-              </div>
-            ) : null}
-          </section>
-        ))}
+        {rows?.map((s) => {
+          const open = openId === s.id;
+          return (
+            <section key={s.id} className={card}>
+              <button onClick={() => setOpenId(open ? null : s.id)} className="flex w-full flex-wrap items-center justify-between gap-2 text-left">
+                <span className="flex items-center gap-2">
+                  {s.logoDataUrl
+                    ? <img src={s.logoDataUrl} alt="" className="h-9 w-9 rounded object-cover" />
+                    : <FallbackAvatar name={s.displayName} className="h-9 w-9 rounded" />}
+                  <span className="font-medium">{s.displayName}</span>
+                  {s.country ? <span className="text-xs text-neutral-500">{s.country}</span> : null}
+                  {s.isDaoMember ? (
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200" title="This submitter also votes on funding proposals">
+                      ⚠ also a DAO member
+                    </span>
+                  ) : null}
+                  {s.noSelfVotePledge ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">✓ no self-vote pledge</span> : null}
+                </span>
+                <span className="flex items-center gap-2 text-xs text-neutral-400">
+                  {s.since ? <span>approved {new Date(s.since).toLocaleDateString()}</span> : null}
+                  <span>{open ? '▴' : '▾'}</span>
+                </span>
+              </button>
+
+              {open ? (
+                <div className="mt-3 flex flex-wrap gap-4 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+                  {s.logoDataUrl
+                    ? <img src={s.logoDataUrl} alt="" className="h-24 w-24 rounded-lg object-cover" />
+                    : <FallbackAvatar name={s.displayName} className="h-24 w-24 rounded-lg" />}
+                  <div className="min-w-0 flex-1 space-y-2 text-sm">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Description</div>
+                      <p className="mt-0.5 whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">{s.description}</p>
+                    </div>
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Conflict of interest</div>
+                      <p className="mt-0.5 whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">{s.conflictOfInterest || '—'}</p>
+                    </div>
+                    <div className="text-xs text-neutral-600 dark:text-neutral-300">
+                      <span className="font-medium">Pledge:</span> {s.noSelfVotePledge ? '✓ will not vote for own proposals' : 'no self-vote pledge given (informative)'}
+                      {s.isDaoMember ? <span className="ml-2 font-medium text-amber-700 dark:text-amber-300">⚠ this submitter is also a DAO member and votes on funding</span> : null}
+                    </div>
+                    <div className="text-xs">
+                      <span className="font-medium">Contact:</span>{' '}
+                      {s.telegram ? <span className="font-mono">{s.telegram}</span> : '—'}
+                      {' · '}
+                      {s.email ? <a href={`mailto:${s.email}`} className="text-emerald-700 underline dark:text-emerald-400">{s.email}</a> : '—'}
+                    </div>
+                    {(s.githubUrls.length || s.socialLinks.length) ? (
+                      <div>
+                        <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Links</div>
+                        <div className="mt-0.5 flex flex-wrap gap-2 text-xs">
+                          {[...s.githubUrls, ...s.socialLinks].map((l, i) => (
+                            <a key={i} href={l} target="_blank" rel="noreferrer" className="break-all text-emerald-700 underline dark:text-emerald-400">{l}</a>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </section>
+          );
+        })}
       </div>
     </div>
   );

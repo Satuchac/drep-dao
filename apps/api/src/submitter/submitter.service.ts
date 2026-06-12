@@ -162,6 +162,8 @@ export class SubmitterService {
       logoDataUrl: a.logoDataUrl,
       noSelfVotePledge: a.noSelfVotePledge,
       conflictOfInterest: a.conflictOfInterest,
+      telegram: a.telegram,
+      email: a.email,
       // §2.1 — important context: this submitter also votes (DAO member / board).
       isDaoMember: a.user.drep?.status === 'ADMITTED' || (!!a.user.drepKeyHash && boardKeys.has(a.user.drepKeyHash)),
       since: a.reviewedAt,

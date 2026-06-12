@@ -664,6 +664,8 @@ export interface ApprovedSubmitter {
   logoDataUrl: string | null;
   noSelfVotePledge: boolean;
   conflictOfInterest: string;
+  telegram: string;
+  email: string;
   isDaoMember: boolean;
   since: string | null;
 }
