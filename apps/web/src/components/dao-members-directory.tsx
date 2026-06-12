@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { daoApi, type DaoMember, type DaoMemberDetail } from '@/lib/api';
 import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
+import { FallbackAvatar } from './fallback-avatar';
 
 /**
  * "DAO members" left-nav view: a directory of every current DAO member as a card grid.
@@ -169,6 +170,13 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
       {!d ? (
         <p className="text-sm text-neutral-500">Loading…</p>
       ) : (
+        <>
+        {/* DRep ID: fully visible on one line (whole card width), linked to cexplorer, with copy. */}
+        <div className="flex items-center gap-2 overflow-x-auto rounded border border-neutral-200 bg-neutral-50 px-2 py-1.5 dark:border-neutral-800 dark:bg-neutral-900">
+          <span className="shrink-0 text-[11px] font-medium text-neutral-500">DRep ID:</span>
+          <a href={drepUrl(d.drepId)} target="_blank" rel="noreferrer" className="whitespace-nowrap font-mono text-[11px] text-emerald-700 underline dark:text-emerald-400">{d.drepId}</a>
+          <CopyButton text={d.drepId} label="Copy" />
+        </div>
         <div className="grid gap-6 md:grid-cols-[280px_1fr]">
           <div className="space-y-3">
             <div className="overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
@@ -185,19 +193,7 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
                   </span>
                 ) : null}
               </div>
-              {/* DRep ID: one line (truncated), linked to cexplorer, with copy. */}
-              <div className="mt-0.5 flex items-center gap-1.5">
-                <a
-                  href={drepUrl(d.drepId)}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={d.drepId}
-                  className="min-w-0 truncate whitespace-nowrap font-mono text-[11px] text-emerald-700 underline dark:text-emerald-400"
-                >
-                  {d.drepId}
-                </a>
-                <CopyButton text={d.drepId} label="Copy" />
-              </div>
+
             </div>
           </div>
           <div className="space-y-4">
@@ -219,13 +215,14 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
               </div>
               <div className="mt-1 text-xs">
                 {d.noSelfVotePledge
-                  ? <span className="text-emerald-600">✓ pledges not to vote for own proposals</span>
-                  : <span className="text-neutral-400">no self-vote pledge given (informative)</span>}
+                  ? <span className="font-medium text-emerald-600">✓ Pledged NOT to vote for own proposals</span>
+                  : <span className="font-medium text-red-600">✗ Has NOT pledged to abstain from voting on own proposals</span>}
               </div>
             </div>
             <Links socials={d.socials} contact={d.contact} />
           </div>
         </div>
+        </>
       )}
     </div>
   );
@@ -299,20 +296,10 @@ function AspectSquare({ children }: { children: React.ReactNode }) {
 }
 
 function Avatar({ src, name }: { src: string | null; name: string }) {
-  const initials = name
-    .split(/\s+/)
-    .map((p) => p[0])
-    .filter(Boolean)
-    .slice(0, 2)
-    .join('')
-    .toUpperCase();
   if (src) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={src} alt={name} className="h-full w-full object-cover" />;
   }
-  return (
-    <div className="flex h-full w-full items-center justify-center bg-neutral-200 text-3xl font-semibold text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
-      {initials || '?'}
-    </div>
-  );
+  // §2.1 — universal placeholder: a funny black-and-white head, stable per name.
+  return <FallbackAvatar name={name} className="h-full w-full object-cover" />;
 }
