@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { boardSubmittersApi, type SubmitterApplication } from '@/lib/api';
-import { linkLabel } from '@/lib/ui';
 
 /** §2.1 — board to-do: approve/reject submitter applications. Reject requires a reason (shown to the applicant). */
 export function SubmitterReviewPanel({ onChange, history = false }: { onChange?: () => void; history?: boolean }) {
@@ -52,7 +51,9 @@ export function SubmitterReviewPanel({ onChange, history = false }: { onChange?:
             </div>
             <div className="mt-1 break-all font-mono text-[11px] text-neutral-400">{a.stakeAddress}</div>
             <div className="mt-1 whitespace-pre-wrap text-xs text-neutral-600 dark:text-neutral-300">{a.description}</div>
-            {a.githubUrls.length ? <div className="mt-1 flex flex-wrap gap-2 text-xs">{a.githubUrls.map((g, i) => <a key={i} href={g} target="_blank" rel="noreferrer" title={g} className="text-emerald-700 underline dark:text-emerald-400"><span className="font-medium text-neutral-500">{linkLabel(g, 'GitHub')}:</span> {g}</a>)}</div> : null}
+            <div className="mt-1 text-xs"><span className="font-medium">GitHub:</span>{' '}
+              {a.githubUrls.length ? a.githubUrls.map((g, i) => <a key={i} href={g} target="_blank" rel="noreferrer" className="mr-2 break-all text-emerald-700 underline dark:text-emerald-400">{g}</a>) : <span className="text-neutral-400">not provided</span>}
+            </div>
             {/* §2.1 — disclosure + contact for the board's review. */}
             <div className="mt-1 text-xs">
               <span className="font-medium">Conflict of interest:</span>{' '}
@@ -63,7 +64,9 @@ export function SubmitterReviewPanel({ onChange, history = false }: { onChange?:
               {' · '}Telegram: <span className="font-mono">{a.telegram || '—'}</span>
               {' · '}Email: <a href={`mailto:${a.email}`} className="text-emerald-700 underline dark:text-emerald-400">{a.email || '—'}</a>
             </div>
-            {a.socialLinks.length ? <div className="mt-1 flex flex-wrap gap-2 text-xs">{a.socialLinks.map((l, i) => <a key={i} href={l} target="_blank" rel="noreferrer" title={l} className="text-emerald-700 underline dark:text-emerald-400"><span className="font-medium text-neutral-500">{linkLabel(l, 'Social')}:</span> {l}</a>)}</div> : null}
+            <div className="mt-1 text-xs"><span className="font-medium">Social media:</span>{' '}
+              {a.socialLinks.length ? a.socialLinks.map((l, i) => <a key={i} href={l} target="_blank" rel="noreferrer" className="mr-2 break-all text-emerald-700 underline dark:text-emerald-400">{l}</a>) : <span className="text-neutral-400">not provided</span>}
+            </div>
             {a.status === 'REJECTED' && a.rejectionReason ? <div className="mt-1 text-xs text-red-600">Reason: {a.rejectionReason}</div> : null}
             {a.history.length > 0 ? (
               <details className="mt-1 text-xs">
