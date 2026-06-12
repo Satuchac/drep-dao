@@ -85,38 +85,18 @@ export function MemberArea() {
     label: isMember ? 'Profile' : expertApproved || expertPending ? 'Expert' : 'Get started',
     badge: todo.profile,
     node: (
-      <div className="space-y-6">
-        {isMember ? (
-          <>
-            <section className={card}><MyDrepStatus /></section>
-            <section className={card}>
-              <h3 className="text-base font-semibold">Your DRep profile</h3>
-              <p className="mb-3 text-sm text-neutral-500">
-                {isBoard ? 'As a board member you are a DAO member.' : 'You are a DAO member.'} Keep your details up to date.
-              </p>
-              <DrepForm mode="profile" />
-              {/* §14 — any DAO member can voluntarily leave; a board member also steps down. */}
-              <LeaveDao isBoard={isBoard} />
-            </section>
-          </>
-        ) : daoPending ? (
-          <section className={card}><MyDrepStatus /></section>
-        ) : expertPending || expertApproved ? (
-          <section className={card}><ExpertApplyForm onChange={loadExpert} /></section>
-        ) : showApply ? (
-          <section className={card}><ApplyOptions registeredDRep={isRegisteredDRep} onExpertChange={loadExpert} onSubmitterChange={onSubmitterChange} showSubmitterCard={!hasSubmitterApp} /></section>
-        ) : null}
-        {/* §2.1 — submitter profile editor (with change history). Shows for members/board/experts,
-            and for anyone (incl. viewers) who already has a submitter application — so the
-            "Become a submitter" card disappears and their profile takes its place. */}
-        {hasSubmitterApp || !showApply ? <section className={card}><SubmitterApplyForm onChange={onSubmitterChange} /></section> : null}
-        {/* §15.4 — DReps + board members register a payment address here so
-            they can receive rewards. Amber-nags when empty. */}
-        {isMember ? <RewardAddressPanel /> : null}
-        {/* §13 — merit points + ledger + avoid-period (vacancy) signalling. */}
-        {isMember ? <section className={card}><MeritPanel /></section> : null}
-        <section className={card}><PreferencesPanel /></section>
-      </div>
+      <ProfileTab
+        isMember={isMember}
+        isBoard={isBoard}
+        daoPending={daoPending}
+        expertApproved={expertApproved}
+        expertPending={expertPending}
+        showApply={showApply}
+        isRegisteredDRep={isRegisteredDRep}
+        hasSubmitterApp={hasSubmitterApp}
+        loadExpert={loadExpert}
+        onSubmitterChange={onSubmitterChange}
+      />
     ),
   });
 
@@ -185,6 +165,97 @@ export function MemberArea() {
  * milestone reviews. Mirrors the Actions/Applications pattern with a "Show history"
  * switch that also reveals decided assignments (passed → APPROVED/REJECTED rounds).
  */
+/**
+ * §2 — the Profile tab. A DAO member's own profile and the submitter profile are SEPARATE
+ * sub-profiles: the DAO member profile is the default; once a submitter application exists,
+ * a sub-item switches to it. A member without one sees an "Apply to become a submitter"
+ * button instead. Non-members (viewer / expert / submitter-only) see their single profile.
+ */
+function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPending, showApply, isRegisteredDRep, hasSubmitterApp, loadExpert, onSubmitterChange }: {
+  isMember: boolean;
+  isBoard: boolean;
+  daoPending: boolean;
+  expertApproved: boolean;
+  expertPending: boolean;
+  showApply: boolean;
+  isRegisteredDRep: boolean;
+  hasSubmitterApp: boolean;
+  loadExpert: () => void;
+  onSubmitterChange: () => void;
+}) {
+  // 'dao' = the member profile (default); 'submitter' = the submitter sub-profile.
+  const [sub, setSub] = useState<'dao' | 'submitter'>('dao');
+  // A member without an application clicks "Apply…" → the submitter sub-profile opens with the form.
+  const [applying, setApplying] = useState(false);
+  const showSubmitterSub = hasSubmitterApp || applying;
+
+  if (!isMember) {
+    // Non-members: a single profile, as before (viewer chooser / expert / submitter-only).
+    return (
+      <div className="space-y-6">
+        {daoPending ? (
+          <section className={card}><MyDrepStatus /></section>
+        ) : expertPending || expertApproved ? (
+          <section className={card}><ExpertApplyForm onChange={loadExpert} /></section>
+        ) : showApply ? (
+          <section className={card}><ApplyOptions registeredDRep={isRegisteredDRep} onExpertChange={loadExpert} onSubmitterChange={onSubmitterChange} showSubmitterCard={!hasSubmitterApp} /></section>
+        ) : null}
+        {hasSubmitterApp || !showApply ? <section className={card}><SubmitterApplyForm onChange={onSubmitterChange} /></section> : null}
+        <section className={card}><PreferencesPanel /></section>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Sub-profiles: only shown once a submitter profile exists (or is being created). */}
+      {showSubmitterSub ? (
+        <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
+          {([['dao', isBoard ? 'Board member profile' : 'DAO member profile'], ['submitter', 'Submitter profile']] as const).map(([k, l]) => (
+            <button key={k} onClick={() => setSub(k)} className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${sub === k ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}>
+              {l}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {sub === 'submitter' && showSubmitterSub ? (
+        <div className="space-y-6">
+          <section className={card}><SubmitterApplyForm onChange={onSubmitterChange} /></section>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          <section className={card}><MyDrepStatus /></section>
+          <section className={card}>
+            <h3 className="text-base font-semibold">Your DRep profile</h3>
+            <p className="mb-3 text-sm text-neutral-500">
+              {isBoard ? 'As a board member you are a DAO member.' : 'You are a DAO member.'} Keep your details up to date.
+            </p>
+            <DrepForm mode="profile" />
+            {/* §14 — any DAO member can voluntarily leave; a board member also steps down. */}
+            <LeaveDao isBoard={isBoard} />
+          </section>
+          {/* §2.1 — separate submitter role: apply from here; the sub-profile appears once applied. */}
+          {!showSubmitterSub ? (
+            <section className={card}>
+              <h3 className="text-base font-semibold">Submitter role</h3>
+              <p className="mt-1 text-sm text-neutral-500">To submit funding proposals you need the separate submitter role (board-approved).</p>
+              <button onClick={() => { setApplying(true); setSub('submitter'); }} className="mt-2 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">
+                Apply to become a submitter
+              </button>
+            </section>
+          ) : null}
+          {/* §15.4 — payment address for rewards. Amber-nags when empty. */}
+          <RewardAddressPanel />
+          {/* §13 — merit points + ledger + avoid-period (vacancy) signalling. */}
+          <section className={card}><MeritPanel /></section>
+          <section className={card}><PreferencesPanel /></section>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function VotingReviewsTab() {
   const [showHistory, setShowHistory] = useState(false);
   return (
