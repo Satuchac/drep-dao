@@ -17,14 +17,16 @@ import { ProposalDetail } from './proposal-detail';
 import { JoinDaoButton } from './join-dao-button';
 import { NotificationBadge } from './notification-badge';
 import { NotificationBell } from './notification-bell';
+import { SubmittersDirectory } from './submitters-directory';
 import { WalletStatusBanner } from './wallet-status-banner';
 import { useMyAreaTodoCount } from '@/lib/use-my-area-todo';
 import { HealthBadge } from '@/app/health-badge';
 
-type View = 'overview' | 'members' | 'me' | 'rounds' | 'proposals' | 'internal' | 'proofs' | 'treasury' | 'setup';
+type View = 'overview' | 'members' | 'submitters' | 'me' | 'rounds' | 'proposals' | 'internal' | 'proofs' | 'treasury' | 'setup';
 const NAV: { key: View; label: string; boardOnly?: boolean }[] = [
   { key: 'overview', label: 'DAO Member overview' },
   { key: 'members', label: 'DAO members' },
+  { key: 'submitters', label: 'Submitters' },
   { key: 'me', label: 'My area' },
   { key: 'rounds', label: 'Rounds' },
   { key: 'proposals', label: 'Funding proposals' },
@@ -134,6 +136,8 @@ export function HomeShell() {
           </section>
         ) : view === 'overview' ? (
           <DaoOverview />
+        ) : view === 'submitters' ? (
+          <SubmittersDirectory />
         ) : view === 'members' ? (
           <DaoMembersDirectory />
         ) : view === 'me' ? (

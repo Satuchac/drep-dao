@@ -45,7 +45,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const hu = await prisma.appUser.findUnique({ where: { stakeKeyHash: stakeKeyHashFromBech32(personas.heidi.stakeAddress) } });
   if (hu) { const d = await prisma.drep.findUnique({ where: { userId: hu.id } }); if (d) { await prisma.drepRemovalVote.deleteMany({ where: { removal: { targetDrepId: d.id } } }); await prisma.drepRemoval.deleteMany({ where: { targetDrepId: d.id } }); await prisma.admissionVote.deleteMany({ where: { drepId: d.id } }); await prisma.roundDrepEligibility.deleteMany({ where: { drepId: d.id } }); await prisma.drep.delete({ where: { id: d.id } }); } }
   const heidi = await login('heidi');
-  const app = await drep.apply(heidi, { displayName: 'Heidi', bio: __bio100 });
+  const app = await drep.apply(heidi, { displayName: 'Heidi', bio: __bio100, country: 'Testland' });
   for (const b of [alice, dave, erin]) await drep.voteOnApplication(b, app.id, { choice: 'YES', feedback: 'ok' });
   ok('Heidi admitted', (await prisma.drep.findUnique({ where: { id: app.id } })).status === 'ADMITTED');
 
@@ -68,7 +68,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   console.log('\n=== Removed member can re-apply ===');
   const prof = await users.getProfile(heidi);
   ok('Heidi no longer DAO_MEMBER', !prof.roles.includes('DAO_MEMBER'), prof.roles.join(','));
-  const reapp = await drep.apply(heidi, { displayName: 'Heidi', bio: __bio100 });
+  const reapp = await drep.apply(heidi, { displayName: 'Heidi', bio: __bio100, country: 'Testland' });
   ok('re-application pending', reapp.status === 'PENDING_ADMISSION');
 
   console.log('\n=== Cleanup ===');

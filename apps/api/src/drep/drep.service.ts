@@ -50,11 +50,11 @@ export class DrepService {
     // yet), plus admitted DReps still registered on-chain. Keyed by drep id.
     // `since` = when they became a member: board install date (board_seat.addedAt)
     // for board members, board-approval date (drep.admittedAt) for admitted DReps.
-    interface Row { drepId: string; displayName: string; isBoard: boolean; drepRowId?: string; stakeAddress?: string; since: Date | null; photo: string | null; votesOnFundingProposals: boolean }
+    interface Row { drepId: string; displayName: string; isBoard: boolean; drepRowId?: string; stakeAddress?: string; since: Date | null; photo: string | null; votesOnFundingProposals: boolean; country: string }
     const byId = new Map<string, Row>();
     // Genesis-seated board members without a Drep row default to "votes on funding"
     // (the default for new board members).
-    for (const s of seats) byId.set(s.drepId, { drepId: s.drepId, displayName: s.displayName, isBoard: true, since: s.addedAt, photo: null, votesOnFundingProposals: true });
+    for (const s of seats) byId.set(s.drepId, { drepId: s.drepId, displayName: s.displayName, isBoard: true, since: s.addedAt, photo: null, votesOnFundingProposals: true, country: '' });
     for (const d of admitted) {
       const isBoard = d.user.drepKeyHash ? boardKeys.has(d.user.drepKeyHash) : false;
       if (!isBoard && !d.user.drepRegistered) continue; // skip lapsed non-board members
@@ -65,6 +65,7 @@ export class DrepService {
         if (d.user.displayName) existing.displayName = d.user.displayName; // prefer self-set name
         existing.photo = d.photo;
         existing.votesOnFundingProposals = d.votesOnFundingProposals;
+        existing.country = d.country;
         // keep the board-install date for board members
       } else {
         byId.set(d.drepIdOnchain, {
@@ -76,6 +77,7 @@ export class DrepService {
           since: d.admittedAt,
           photo: d.photo,
           votesOnFundingProposals: d.votesOnFundingProposals,
+          country: d.country,
         });
       }
     }
@@ -146,6 +148,7 @@ export class DrepService {
           // who always vote). The funding-proposal totals subtract board members
           // whose flag is false.
           votesOnFundingProposals: r.votesOnFundingProposals,
+          country: r.country,
         };
       }),
     );
@@ -168,7 +171,7 @@ export class DrepService {
     // bio and no votes to count yet.
     const drep = await this.prisma.drep.findUnique({
       where: { drepIdOnchain },
-      select: { id: true, bio: true, socials: true, contact: true, subcategoryIds: true, votesOnFundingProposals: true, conflictOfInterest: true, noSelfVotePledge: true },
+      select: { id: true, bio: true, socials: true, contact: true, subcategoryIds: true, votesOnFundingProposals: true, conflictOfInterest: true, noSelfVotePledge: true, country: true },
     });
 
     const admissionVotes = drep
@@ -198,6 +201,7 @@ export class DrepService {
       // §2.1 — public disclosure (transparency for funding decisions).
       conflictOfInterest: drep?.conflictOfInterest ?? '',
       noSelfVotePledge: drep?.noSelfVotePledge ?? false,
+      country: drep?.country ?? '',
     };
   }
 
@@ -388,6 +392,7 @@ export class DrepService {
       votesOnFundingProposals: drep.votesOnFundingProposals,
       conflictOfInterest: drep.conflictOfInterest,
       noSelfVotePledge: drep.noSelfVotePledge,
+      country: drep.country,
       yes: votes.filter((v) => v.choice === 'YES').length,
       no: votes.filter((v) => v.choice === 'NO').length,
       threshold,
@@ -437,12 +442,14 @@ export class DrepService {
     if (bioWordCount(dto.bio ?? '') < MIN_BIO_WORDS) {
       throw new ConflictException(`the bio must be at least ${MIN_BIO_WORDS} words`);
     }
+    if (!(dto.country ?? '').trim()) throw new ConflictException('please select a country');
 
     if (dto.displayName !== undefined) {
       await this.prisma.appUser.update({ where: { id: userId }, data: { displayName: dto.displayName } });
     }
 
     const data = {
+      country: (dto.country ?? '').trim(),
       drepIdOnchain,
       status: DRepStatus.PENDING_ADMISSION,
       bio: dto.bio ?? null,
@@ -502,6 +509,7 @@ export class DrepService {
     if (dto.bio !== undefined && bioWordCount(dto.bio ?? '') < MIN_BIO_WORDS) {
       throw new ConflictException(`the bio must be at least ${MIN_BIO_WORDS} words`);
     }
+    if (dto.country !== undefined && !dto.country.trim()) throw new ConflictException('please select a country');
 
     if (dto.displayName !== undefined) {
       await this.prisma.appUser.update({ where: { id: userId }, data: { displayName: dto.displayName } });
@@ -525,6 +533,7 @@ export class DrepService {
         ...(dto.votesOnFundingProposals !== undefined ? { votesOnFundingProposals: dto.votesOnFundingProposals } : {}),
         ...(dto.conflictOfInterest !== undefined ? { conflictOfInterest: dto.conflictOfInterest } : {}),
         ...(dto.noSelfVotePledge !== undefined ? { noSelfVotePledge: dto.noSelfVotePledge } : {}),
+        ...(dto.country !== undefined ? { country: dto.country } : {}),
       },
     });
   }

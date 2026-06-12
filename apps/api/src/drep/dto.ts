@@ -31,6 +31,7 @@ export class DrepApplicationDto {
   // §2.1 — conflict-of-interest disclosure + informative no-self-vote pledge.
   @IsOptional() @IsString() @MaxLength(20000) conflictOfInterest?: string;
   @IsOptional() @IsBoolean() noSelfVotePledge?: boolean;
+  @IsOptional() @IsString() @MaxLength(100) country?: string;
   @IsOptional() @IsBoolean() callsOptin?: boolean;
   @IsOptional() @IsBoolean() admissionCallOptin?: boolean;
 }
@@ -49,6 +50,7 @@ export class UpdateDrepDto {
   // §2.1 — conflict-of-interest disclosure + informative no-self-vote pledge.
   @IsOptional() @IsString() @MaxLength(20000) conflictOfInterest?: string;
   @IsOptional() @IsBoolean() noSelfVotePledge?: boolean;
+  @IsOptional() @IsString() @MaxLength(100) country?: string;
   @IsOptional() @IsBoolean() callsOptin?: boolean;
   @IsOptional() @IsBoolean() admissionCallOptin?: boolean;
   // §8.2 — board-member self-toggle for "I'll vote on funding proposals".

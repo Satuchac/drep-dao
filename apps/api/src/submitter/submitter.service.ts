@@ -142,6 +142,32 @@ export class SubmitterService {
     return a?.status === 'APPROVED';
   }
 
+  /** §2.1 — public directory of APPROVED submitters; flags those who are also DAO members. */
+  async listApproved() {
+    const rows = await this.prisma.submitterApplication.findMany({
+      where: { status: 'APPROVED' },
+      orderBy: { displayName: 'asc' },
+      include: { user: { select: { id: true, displayName: true, drepKeyHash: true, drep: { select: { status: true } } } } },
+    });
+    const boardKeys = new Set(
+      (await this.prisma.boardSeat.findMany({ where: { removedAt: null }, select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
+    );
+    return rows.map((a) => ({
+      id: a.id,
+      displayName: a.user.displayName ?? a.displayName,
+      description: a.description,
+      country: a.country,
+      githubUrls: a.githubUrls,
+      socialLinks: a.socialLinks,
+      logoDataUrl: a.logoDataUrl,
+      noSelfVotePledge: a.noSelfVotePledge,
+      conflictOfInterest: a.conflictOfInterest,
+      // §2.1 — important context: this submitter also votes (DAO member / board).
+      isDaoMember: a.user.drep?.status === 'ADMITTED' || (!!a.user.drepKeyHash && boardKeys.has(a.user.drepKeyHash)),
+      since: a.reviewedAt,
+    }));
+  }
+
   /** Board to-do: applications awaiting review (or all, with showAll). Each carries its change history. */
   async listApplications(showAll = false) {
     const rows = await this.prisma.submitterApplication.findMany({

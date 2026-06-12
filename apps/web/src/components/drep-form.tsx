@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { useAuth } from '@/lib/auth-context';
+import { COUNTRIES } from '@/lib/countries';
 import { drepApi, type DrepApplicationInput } from '@/lib/api';
 
 const field =
@@ -32,6 +33,7 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
   const [votesOnFunding, setVotesOnFunding] = useState(true);
   // §2.1 — conflict-of-interest disclosure + informative no-self-vote pledge.
   const [conflict, setConflict] = useState('');
+  const [country, setCountry] = useState('');
   const [noSelfVote, setNoSelfVote] = useState(false); // §8.2 board-only toggle (default on)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -58,6 +60,7 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       setAdmissionCall(d.admissionCallOptin);
       setVotesOnFunding(d.votesOnFundingProposals);
       setConflict(d.conflictOfInterest ?? '');
+      setCountry(d.country ?? '');
       setNoSelfVote(!!d.noSelfVotePledge);
     });
   }, []);
@@ -73,6 +76,7 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
     setSaved(false);
     // §14.3 — the bio is mandatory: at least 100 words (also enforced server-side).
     if (bioWords < 100) { setError(`The bio must be at least 100 words (currently ${bioWords}).`); return; }
+    if (!country) { setError('Please select a country.'); return; }
     setBusy(true);
     const input: DrepApplicationInput = {
       displayName: displayName.trim() || undefined,
@@ -98,6 +102,7 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       // §2.1 — disclosure + pledge (same semantics as the submitter profile).
       conflictOfInterest: conflict.trim(),
       noSelfVotePledge: noSelfVote,
+      country,
     };
     try {
       if (mode === 'join') await drepApi.apply(input);
@@ -134,6 +139,14 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       <label className="block space-y-1">
         <span className="text-sm font-medium">Bio — motivation / experience <span className="text-red-500">*</span> <span className="text-xs font-normal text-neutral-500">(min 100 words — {bioWords}/100)</span></span>
         <textarea className={field} rows={5} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Who you are, your experience, why you participate in the DAO…" />
+      </label>
+
+      <label className="block">
+        <span className="text-sm font-medium">Country <span className="text-red-500">*</span></span>
+        <select className={field} value={country} onChange={(e) => setCountry(e.target.value)}>
+          <option value="">— select a country —</option>
+          {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
       </label>
 
       {/* §2.1 — same disclosure as the submitter profile. */}

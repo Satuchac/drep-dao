@@ -76,6 +76,7 @@ export interface DrepApplicationInput {
   kycOptin?: boolean;
   conflictOfInterest?: string;
   noSelfVotePledge?: boolean;
+  country?: string;
   callsOptin?: boolean;
   admissionCallOptin?: boolean;
   // §8.2 — board-only self-toggle for "I'll vote on funding proposals".
@@ -100,6 +101,7 @@ export interface MyDrep {
   // §2.1 — disclosure mirrored from the submitter profile.
   conflictOfInterest: string;
   noSelfVotePledge: boolean;
+  country: string;
   yes: number;
   no: number;
   threshold: number;
@@ -122,7 +124,7 @@ export interface DaoMember {
   meetsEntryRequirements: boolean; // §14.1 — still meets the power/delegator minimum (board always true)
   // §8.2 — only meaningful for board members. Funding-proposal totals subtract
   // board members whose flag is false; non-board are always voters.
-  votesOnFundingProposals: boolean;
+  votesOnFundingProposals: boolean;  country: string;
 }
 
 export interface OnChainProof {
@@ -143,7 +145,7 @@ export interface DaoMemberDetail extends DaoMember {
   subcategoryIds: string[];
   // Admission votes the member cast as a board reviewer (non-board members are 0).
   admissionVotesCast: { yes: number; no: number; total: number };  conflictOfInterest: string;
-  noSelfVotePledge: boolean;
+  noSelfVotePledge: boolean;  country: string;
 }
 
 export const daoApi = {
@@ -652,10 +654,24 @@ export interface MySubmitter {
 export interface SubmitterApplication extends MySubmitter {
   stakeAddress: string;
 }
+export interface ApprovedSubmitter {
+  id: string;
+  displayName: string;
+  description: string;
+  country: string;
+  githubUrls: string[];
+  socialLinks: string[];
+  logoDataUrl: string | null;
+  noSelfVotePledge: boolean;
+  conflictOfInterest: string;
+  isDaoMember: boolean;
+  since: string | null;
+}
 export const submitterApi = {
   mine: () => request<MySubmitter | null>('/me/submitter'),
   apply: (input: SubmitterApplicationInput) =>
     request<MySubmitter>('/me/submitter-application', { method: 'POST', body: JSON.stringify(input) }),
+  directory: () => request<ApprovedSubmitter[]>('/dao/submitters'),
 };
 export const boardSubmittersApi = {
   applications: (history = false) =>

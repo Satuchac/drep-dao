@@ -194,6 +194,7 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
               ) : (
                 <p className="mt-1 text-xs italic text-neutral-400">No bio provided.</p>
               )}
+              {d.country ? <div className="mt-2 text-xs text-neutral-500">Country: <span className="font-medium text-neutral-700 dark:text-neutral-300">{d.country}</span></div> : null}
               {/* §2.1 — conflict-of-interest disclosure + pledge (transparency). */}
               {d.conflictOfInterest ? (
                 <div className="mt-2 text-xs">

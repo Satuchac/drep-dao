@@ -21,6 +21,18 @@ export class MeSubmitterController {
   }
 }
 
+@Controller('dao')
+@UseGuards(JwtAuthGuard)
+export class DaoSubmittersController {
+  constructor(private readonly svc: SubmitterService) {}
+
+  // §2.1 — public (logged-in) directory of approved submitters.
+  @Get('submitters')
+  list() {
+    return this.svc.listApproved();
+  }
+}
+
 @Controller('admin/submitters')
 @UseGuards(JwtAuthGuard, BoardGuard)
 export class BoardSubmittersController {
