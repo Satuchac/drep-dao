@@ -9,6 +9,7 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
   const [pendingToken, setPendingToken] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -65,15 +66,26 @@ export default function AdminLoginPage() {
             onChange={(e) => setUsername(e.target.value)}
             required
           />
-          <input
-            className={field}
-            type="password"
-            placeholder="Password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+          <div className="relative">
+            <input
+              className={`${field} pr-10`}
+              type={showPw ? 'text' : 'password'}
+              placeholder="Password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+            {/* Eye toggle — show the password on demand. */}
+            <button
+              type="button"
+              onClick={() => setShowPw((v) => !v)}
+              title={showPw ? 'Hide password' : 'Show password'}
+              className="absolute inset-y-0 right-2 flex items-center text-slate-500 hover:text-slate-300"
+            >
+              {showPw ? '🙈' : '👁'}
+            </button>
+          </div>
           {error ? <div className="text-sm text-red-400">{error}</div> : null}
           <button
             type="submit"
