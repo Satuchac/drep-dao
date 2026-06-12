@@ -25,6 +25,12 @@ export class ProposalsController {
     return this.proposals.listByRound(roundId, status);
   }
 
+  /** §26.2 — every proposal across ALL rounds (the "All rounds" picker option). */
+  @Get('proposals')
+  allRounds(@Query('status') status?: string) {
+    return this.proposals.listAllRounds(status);
+  }
+
   // Public, but the owner may read their own private DRAFT/PENDING (optional auth).
   @UseGuards(OptionalJwtAuthGuard)
   @Get('proposals/:id')

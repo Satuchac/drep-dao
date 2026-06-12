@@ -22,10 +22,12 @@ export function ActiveProposals() {
   // Newest first.
   const ordered = useMemo(() => (rounds ? [...rounds].sort((a, b) => b.number - a.number) : []), [rounds]);
 
-  // The URL's round if valid; else default to the latest round still in the SUBMISSION phase
-  // (where proposals are being submitted), then the latest active round, then the most recent.
+  // The URL's round if valid ('all' = every round); else default to the latest round still in
+  // the SUBMISSION phase (where proposals are being submitted), then the latest active round,
+  // then the most recent.
   const selected = useMemo(() => {
     if (!rounds) return null;
+    if (roundParam === 'all') return 'all';
     if (roundParam && rounds.some((r) => r.id === roundParam)) return roundParam;
     return (
       ordered.find((r) => r.status === 'SUBMISSION')?.id ??
@@ -64,6 +66,8 @@ export function ActiveProposals() {
           value={selected ?? ''}
           onChange={(e) => setParams({ round: e.target.value, proposal: null })}
         >
+          {/* §26.2 — every proposal ever processed in the DAO, across all rounds. */}
+          <option value="all">All rounds</option>
           {ordered.map((r) => (
             <option key={r.id} value={r.id}>
               Round #{r.number}

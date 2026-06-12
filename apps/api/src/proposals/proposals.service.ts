@@ -1069,6 +1069,28 @@ export class ProposalsService {
     return this.enrichSummaries(proposals);
   }
 
+  /** §26.2 — every proposal ever processed, across ALL rounds ("All rounds"
+   *  picker option). Same row shape as listByRound; newest first, capped at
+   *  1000; DRAFTs stay hidden. */
+  async listAllRounds(status?: string) {
+    const statusFilter =
+      status && !ProposalsService.LIST_HIDDEN_STATUSES.includes(status as ProposalStatus)
+        ? status
+        : { notIn: ProposalsService.LIST_HIDDEN_STATUSES };
+    const proposals = await this.prisma.proposal.findMany({
+      where: { status: statusFilter },
+      orderBy: { createdAt: 'desc' },
+      take: 1000,
+      include: {
+        category: { select: { name: true } },
+        submitterUser: { select: { displayName: true, stakeAddress: true } },
+        submitterDrep: { select: { drepIdOnchain: true } },
+        round: { select: { status: true, filterReviewerCount: true, filterApprovalVotes: true, milestoneApprovalVotes: true } },
+      },
+    });
+    return this.enrichSummaries(proposals);
+  }
+
   /**
    * §26.2 — enrich each list row with stage-specific context so a viewer of the
    * round's proposals can see at a glance "what's needed now": for ACTIVE rows in

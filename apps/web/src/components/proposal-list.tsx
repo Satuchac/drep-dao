@@ -1,22 +1,46 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { proposalsApi, type ProposalSummary, type ProposalProgress } from '@/lib/api';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { StatusBadge, PROPOSAL_STATUS_CLS } from './round-ui';
 
-/** §26.2 — public list of a round's proposals (DRAFTs are never returned). Click → shareable detail URL. */
+/** §26.2 — three reader-facing buckets over the detailed proposal statuses:
+ *    approved — cleared its current gate / ready for the next stage (APPROVED, COMPLETE)
+ *    rejected — explicitly rejected or failed (REJECTED, FAILED)
+ *    pending  — waiting on a DAO/board member action (PENDING, ACTIVE, anything else)
+ */
+type Bucket = 'pending' | 'approved' | 'rejected';
+const bucketOf = (status: string): Bucket =>
+  status === 'APPROVED' || status === 'COMPLETE' ? 'approved'
+    : status === 'REJECTED' || status === 'FAILED' ? 'rejected'
+      : 'pending';
+// Pending first (needs someone's action), then approved, then rejected.
+const BUCKET_ORDER: Record<Bucket, number> = { pending: 0, approved: 1, rejected: 2 };
+const BUCKET_TABS = [
+  { key: '', label: 'All' },
+  { key: 'pending', label: 'Pending' },
+  { key: 'approved', label: 'Approved' },
+  { key: 'rejected', label: 'Rejected' },
+] as const;
+const PAGE_SIZE = 50;
+
+/** §26.2 — public list of a round's proposals (DRAFTs are never returned). Click → shareable
+ *  detail URL. `roundId='all'` shows every proposal ever processed, across all rounds. */
 export function ProposalList({ roundId }: { roundId: string }) {
   // Opening a proposal sets ?proposal=<id>; the shell renders the detail (shareable link).
   const { setParams } = useUrlNav();
   const [proposals, setProposals] = useState<ProposalSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [bucket, setBucket] = useState<'' | Bucket>('');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let alive = true;
     setProposals(null);
-    proposalsApi
-      .byRound(roundId)
+    setPage(1);
+    (roundId === 'all' ? proposalsApi.allRounds() : proposalsApi.byRound(roundId))
       .then((p) => alive && setProposals(p))
       .catch((e) => alive && setError(e instanceof Error ? e.message : 'failed to load'));
     return () => {
@@ -24,13 +48,58 @@ export function ProposalList({ roundId }: { roundId: string }) {
     };
   }, [roundId]);
 
+  // Filter (bucket + ID/title search) → group-sort (pending/approved/rejected) → paginate.
+  const filtered = useMemo(() => {
+    if (!proposals) return [];
+    const q = search.trim().toLowerCase();
+    return proposals
+      .filter((p) => (bucket ? bucketOf(p.status) === bucket : true))
+      .filter((p) => !q || p.title.toLowerCase().includes(q) || (p.publicId ?? '').toLowerCase().includes(q))
+      .sort((a, b) => BUCKET_ORDER[bucketOf(a.status)] - BUCKET_ORDER[bucketOf(b.status)]);
+  }, [proposals, bucket, search]);
+
   if (error) return <div className="text-sm text-red-600">{error}</div>;
   if (!proposals) return <p className="text-sm text-neutral-500">Loading…</p>;
   if (proposals.length === 0) return <p className="text-sm text-neutral-500">No proposals in this round yet.</p>;
 
+  const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pages);
+  const visible = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
   return (
+    <div className="space-y-2">
+      {/* Bucket filter + ID/title search. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex overflow-hidden rounded-md border border-neutral-300 dark:border-neutral-700">
+          {BUCKET_TABS.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => { setBucket(t.key as '' | Bucket); setPage(1); }}
+              className={`px-2.5 py-1 text-xs font-medium ${
+                bucket === t.key
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-white text-neutral-600 hover:bg-neutral-100 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+        <input
+          value={search}
+          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          placeholder="Search by proposal ID (R1-P2) or title…"
+          className="min-w-64 flex-1 rounded-md border border-neutral-300 px-2.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+        />
+        <span className="text-xs text-neutral-500">{filtered.length} proposal{filtered.length === 1 ? '' : 's'}</span>
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="text-sm text-neutral-500">No proposals match the filter.</p>
+      ) : null}
+
     <ul className="space-y-2">
-      {proposals.map((p) => {
+      {visible.map((p) => {
         // Row colour per the user's spec:
         //   yellow → status PENDING (waiting for the platform/board)
         //   red    → REJECTED / FAILED (submitter may need to fix something)
@@ -102,6 +171,28 @@ export function ProposalList({ roundId }: { roundId: string }) {
         );
       })}
     </ul>
+
+      {/* Pager — max 50 proposals per page. */}
+      {pages > 1 ? (
+        <div className="flex items-center justify-center gap-3 pt-1 text-xs">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={safePage <= 1}
+            className="rounded border border-neutral-300 px-2.5 py-1 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            ← Previous
+          </button>
+          <span className="text-neutral-500">Page {safePage} of {pages}</span>
+          <button
+            onClick={() => setPage((p) => Math.min(pages, p + 1))}
+            disabled={safePage >= pages}
+            className="rounded border border-neutral-300 px-2.5 py-1 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            Next →
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

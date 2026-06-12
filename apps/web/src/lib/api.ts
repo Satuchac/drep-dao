@@ -976,6 +976,8 @@ export interface ProposalDetail extends ProposalSummary {
 
 export const proposalsApi = {
   byRound: (roundId: string) => request<ProposalSummary[]>(`/rounds/${roundId}/proposals`),
+  /** §26.2 — every proposal across ALL rounds (newest first, capped at 1000). */
+  allRounds: () => request<ProposalSummary[]>('/proposals'),
   get: (id: string) => request<ProposalDetail>(`/proposals/${id}`),
   mine: () => request<ProposalSummary[]>('/me/proposals'),
   create: (input: CreateProposalInput) =>
