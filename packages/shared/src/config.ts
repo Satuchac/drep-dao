@@ -21,9 +21,9 @@ export const PLATFORM_CONFIG_DEFAULTS = {
   AVOID_PERIOD_MAX_DAYS_PER_YEAR: 42,
   MERIT_POINT_MAX: 200,
   BOARD_REWARD_DEADLINE_DAYS: 30,
-  // §12/§13 — total ADA paid to the whole board per YEAR. Monthly per-member comp
-  // = this / 12 / (active board seats). 0 = board compensation disabled.
-  BOARD_YEARLY_REWARD_ADA: 0,
+  // NOTE: the yearly board reward budget (BOARD_YEARLY_REWARD_ADA) is intentionally
+  // NOT listed here — it has a single editing place in Rewards → Board rewards,
+  // which writes the platform_config row directly (see RewardsService.setBoardYearly).
   ANCHOR_SCHEDULE_CRON: '0 2 * * *',
   // Block explorer used for all on-chain links (tx + address).
   CARDANO_EXPLORER: 'cardanoscan', // cardanoscan | cexplorer | adastat
@@ -62,7 +62,6 @@ export const PLATFORM_CONFIG_META: Record<PlatformConfigKey, string> = {
   AVOID_PERIOD_MAX_DAYS_PER_YEAR: 'Maximum days per year a DRep may mark themselves unavailable.',
   MERIT_POINT_MAX: "Cap on a DRep's merit score (also bounds the voting-power multiplier).",
   BOARD_REWARD_DEADLINE_DAYS: 'Days the board has to distribute rewards after a round before a penalty applies.',
-  BOARD_YEARLY_REWARD_ADA: 'Total ADA paid to the whole board per year (monthly per-member = this / 12 / seats).',
   ANCHOR_SCHEDULE_CRON: 'Cron schedule for the daily on-chain anchoring job (informational).',
   CARDANO_EXPLORER: 'Block explorer for on-chain links: cardanoscan, cexplorer, or adastat.',
   TX_SIGNING_PROCESS:

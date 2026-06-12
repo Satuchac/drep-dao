@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { PrismaService } from '../prisma/prisma.service';
 import { TreasuryBucketsService } from '../treasury/treasury-buckets.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
-import { ROUND_SETTING_DEFAULTS, RoundStatus, VotePhase, basePower, meritMultiplier, clampMerit, PLATFORM_CONFIG_DEFAULTS, computeRewardPools } from '@drep-dao/shared';
+import { ROUND_SETTING_DEFAULTS, RoundStatus, VotePhase, basePower, meritMultiplier, clampMerit, computeRewardPools } from '@drep-dao/shared';
 
 const LOVELACE = 1_000_000n;
 const toLovelace = (ada: number) => BigInt(Math.round(ada * 1_000_000));
@@ -320,7 +320,9 @@ export class RewardsService {
 
   private async boardYearlyAda(): Promise<bigint> {
     const row = await this.prisma.platformConfig.findUnique({ where: { key: 'BOARD_YEARLY_REWARD_ADA' } });
-    const ada = typeof row?.value === 'number' ? row.value : PLATFORM_CONFIG_DEFAULTS.BOARD_YEARLY_REWARD_ADA;
+    // 0 = board compensation disabled. This key has a single editing place —
+    // Rewards → Board rewards (setBoardYearly) — and is NOT in the Platform setup.
+    const ada = typeof row?.value === 'number' ? row.value : 0;
     return toLovelace(ada);
   }
 
@@ -442,7 +444,7 @@ export class RewardsService {
 
   async getBoardYearly() {
     const row = await this.prisma.platformConfig.findUnique({ where: { key: 'BOARD_YEARLY_REWARD_ADA' } });
-    return { yearlyAda: typeof row?.value === 'number' ? row.value : PLATFORM_CONFIG_DEFAULTS.BOARD_YEARLY_REWARD_ADA };
+    return { yearlyAda: typeof row?.value === 'number' ? row.value : 0 };
   }
 
   async setBoardYearly(ada: number) {
