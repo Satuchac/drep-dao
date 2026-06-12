@@ -20,8 +20,13 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   const [loaded, setLoaded] = useState(false);
   const [name, setName] = useState('');
   const [desc, setDesc] = useState('');
-  const [github, setGithub] = useState('');
+  const [githubs, setGithubs] = useState<string[]>([]);
   const [socials, setSocials] = useState<string[]>([]);
+  // §2.1 — disclosure + contact.
+  const [conflict, setConflict] = useState('');
+  const [noSelfVote, setNoSelfVote] = useState(false);
+  const [telegram, setTelegram] = useState('');
+  const [email, setEmail] = useState('');
   const [logo, setLogo] = useState('');
   const [country, setCountry] = useState('');
   const [busy, setBusy] = useState(false);
@@ -31,8 +36,10 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
     submitterApi.mine().then((m) => {
       setMine(m); setLoaded(true);
       if (m) {
-        setName(m.displayName); setDesc(m.description); setGithub(m.githubUrl ?? '');
+        setName(m.displayName); setDesc(m.description); setGithubs(m.githubUrls ?? []);
         setSocials(m.socialLinks ?? []); setLogo(m.logoDataUrl ?? ''); setCountry(m.country);
+        setConflict(m.conflictOfInterest ?? ''); setNoSelfVote(!!m.noSelfVotePledge);
+        setTelegram(m.telegram ?? ''); setEmail(m.email ?? '');
       }
     }).catch(() => setLoaded(true));
   useEffect(() => { load(); }, []);
@@ -51,7 +58,8 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   const needsFullDesc = mine?.status !== 'APPROVED';
   const effectiveName = knownName || name.trim();
   const memberNeedsProfileName = isMember && !knownName; // §2.1 — set the profile name first
-  const canSubmit = !memberNeedsProfileName && !!effectiveName && !!country && !!desc.trim() && (!needsFullDesc || words >= MIN_WORDS);
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const canSubmit = !memberNeedsProfileName && !!effectiveName && !!country && !!desc.trim() && !!conflict.trim() && !!telegram.trim() && emailOk && (!needsFullDesc || words >= MIN_WORDS);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,8 +70,12 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
       await submitterApi.apply({
         displayName: effectiveName,
         description: desc.trim(),
-        githubUrl: github.trim() || undefined,
+        githubUrls: githubs.map((s) => s.trim()).filter(Boolean),
         socialLinks: socials.map((s) => s.trim()).filter(Boolean),
+        conflictOfInterest: conflict.trim(),
+        noSelfVotePledge: noSelfVote,
+        telegram: telegram.trim(),
+        email: email.trim(),
         logoDataUrl: logo || undefined,
         country,
       });
@@ -128,10 +140,43 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
           </select>
         </label>
 
+        <div>
+          <span className="text-sm font-medium">GitHub links <span className="text-xs font-normal text-neutral-500">(optional)</span></span>
+          <div className="mt-1 space-y-1">
+            {githubs.map((g, i) => (
+              <div key={i} className="flex gap-2">
+                <input value={g} onChange={(e) => setGithubs((arr) => arr.map((v, idx) => (idx === i ? e.target.value : v)))} maxLength={500} className={inputCls} placeholder="https://github.com/…" />
+                <button type="button" onClick={() => setGithubs((arr) => arr.filter((_, idx) => idx !== i))} className="rounded border border-neutral-300 px-2 text-sm dark:border-neutral-700">✕</button>
+              </div>
+            ))}
+            <button type="button" onClick={() => setGithubs((arr) => [...arr, ''])} className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">
+              + Add {githubs.length === 0 ? 'a GitHub link' : 'another link'}
+            </button>
+          </div>
+        </div>
+
+        {/* §2.1 — disclosure + contact (board may need to reach the team). */}
         <label className="block">
-          <span className="text-sm font-medium">GitHub <span className="text-xs font-normal text-neutral-500">(optional)</span></span>
-          <input value={github} onChange={(e) => setGithub(e.target.value)} maxLength={500} className={`mt-1 ${inputCls}`} placeholder="https://github.com/…" />
+          <span className="text-sm font-medium">Conflict of interest <span className="text-red-500">*</span></span>
+          <p className="text-xs text-neutral-500">Disclose everything related to a conflict of interest around approving funding (write &quot;none&quot; if you have none).</p>
+          <textarea value={conflict} onChange={(e) => setConflict(e.target.value)} rows={3} maxLength={20000} className={`mt-1 ${inputCls}`} placeholder="e.g. I am affiliated with project X which competes for the same category…" />
         </label>
+
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={noSelfVote} onChange={(e) => setNoSelfVote(e.target.checked)} className="mt-0.5" />
+          <span>I will not vote for my own proposal <span className="text-xs text-neutral-500">(informative — optional)</span></span>
+        </label>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="text-sm font-medium">Telegram <span className="text-red-500">*</span></span>
+            <input value={telegram} onChange={(e) => setTelegram(e.target.value)} maxLength={200} className={`mt-1 ${inputCls}`} placeholder="@handle" />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium">Email <span className="text-red-500">*</span></span>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={320} className={`mt-1 ${inputCls}`} placeholder="team@example.org" />
+          </label>
+        </div>
 
         <div>
           <span className="text-sm font-medium">Social links <span className="text-xs font-normal text-neutral-500">(optional)</span></span>
@@ -159,7 +204,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         </div>
 
         {error ? <div className="text-xs text-red-600">{error}</div> : null}
-        {!canSubmit ? <div className="text-xs text-amber-600">{memberNeedsProfileName ? 'Profile display name is required. ' : !effectiveName ? 'Display name is required. ' : ''}{!country ? 'Country is required. ' : ''}{!desc.trim() ? 'Description is required. ' : needsFullDesc && words < MIN_WORDS ? `Description needs at least ${MIN_WORDS} words (${words}/${MIN_WORDS}).` : ''}</div> : null}
+        {!canSubmit ? <div className="text-xs text-amber-600">{memberNeedsProfileName ? 'Profile display name is required. ' : !effectiveName ? 'Display name is required. ' : ''}{!country ? 'Country is required. ' : ''}{!conflict.trim() ? 'Conflict-of-interest disclosure is required. ' : ''}{!telegram.trim() ? 'Telegram is required. ' : ''}{!emailOk ? 'A valid email is required. ' : ''}{!desc.trim() ? 'Description is required. ' : needsFullDesc && words < MIN_WORDS ? `Description needs at least ${MIN_WORDS} words (${words}/${MIN_WORDS}).` : ''}</div> : null}
         <button type="submit" disabled={busy} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
           {busy ? 'Submitting…' : mine && mine.status !== 'REJECTED' ? 'Update application' : mine?.status === 'REJECTED' ? 'Re-apply' : 'Apply'}
         </button>

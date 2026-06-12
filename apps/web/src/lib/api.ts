@@ -605,18 +605,26 @@ export const boardExpertsApi = {
 export interface SubmitterApplicationInput {
   displayName: string;
   description: string;
-  githubUrl?: string;
+  githubUrls?: string[];
   socialLinks?: string[];
   logoDataUrl?: string;
   country: string;
+  conflictOfInterest: string;
+  noSelfVotePledge?: boolean;
+  telegram: string;
+  email: string;
 }
 export interface SubmitterHistoryItem {
   displayName: string;
   description: string;
-  githubUrl: string | null;
+  githubUrls: string[];
   socialLinks: string[];
   logoDataUrl: string | null;
   country: string;
+  conflictOfInterest: string;
+  noSelfVotePledge: boolean;
+  telegram: string;
+  email: string;
   snapshotAt: string;
 }
 export interface MySubmitter {
@@ -624,10 +632,14 @@ export interface MySubmitter {
   status: 'PENDING' | 'APPROVED' | 'REJECTED';
   displayName: string;
   description: string;
-  githubUrl: string | null;
+  githubUrls: string[];
   socialLinks: string[];
   logoDataUrl: string | null;
   country: string;
+  conflictOfInterest: string;
+  noSelfVotePledge: boolean;
+  telegram: string;
+  email: string;
   rejectionReason: string | null;
   history: SubmitterHistoryItem[];
 }

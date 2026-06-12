@@ -51,7 +51,17 @@ export function SubmitterReviewPanel({ onChange, history = false }: { onChange?:
             </div>
             <div className="mt-1 break-all font-mono text-[11px] text-neutral-400">{a.stakeAddress}</div>
             <div className="mt-1 whitespace-pre-wrap text-xs text-neutral-600 dark:text-neutral-300">{a.description}</div>
-            {a.githubUrl ? <div className="mt-1 text-xs"><a href={a.githubUrl} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{a.githubUrl}</a></div> : null}
+            {a.githubUrls.length ? <div className="mt-1 flex flex-wrap gap-2 text-xs">{a.githubUrls.map((g, i) => <a key={i} href={g} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{g}</a>)}</div> : null}
+            {/* §2.1 — disclosure + contact for the board's review. */}
+            <div className="mt-1 text-xs">
+              <span className="font-medium">Conflict of interest:</span>{' '}
+              <span className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{a.conflictOfInterest || '—'}</span>
+            </div>
+            <div className="mt-0.5 text-xs text-neutral-500">
+              {a.noSelfVotePledge ? '✓ pledges not to vote for own proposals' : 'no self-vote pledge given (informative)'}
+              {' · '}Telegram: <span className="font-mono">{a.telegram || '—'}</span>
+              {' · '}Email: <a href={`mailto:${a.email}`} className="text-emerald-700 underline dark:text-emerald-400">{a.email || '—'}</a>
+            </div>
             {a.socialLinks.length ? <div className="mt-1 flex flex-wrap gap-2 text-xs">{a.socialLinks.map((l, i) => <a key={i} href={l} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{l}</a>)}</div> : null}
             {a.status === 'REJECTED' && a.rejectionReason ? <div className="mt-1 text-xs text-red-600">Reason: {a.rejectionReason}</div> : null}
             {a.history.length > 0 ? (

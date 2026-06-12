@@ -36,8 +36,15 @@ export class SubmitterService {
     if (!displayName) throw new BadRequestException('display name is required');
     if (!country) throw new BadRequestException('country is required');
     if (!description) throw new BadRequestException('description is required');
+    // §2.1 — disclosure + contact (the board must be able to reach the team).
+    const conflictOfInterest = (dto.conflictOfInterest ?? '').trim();
+    if (!conflictOfInterest) throw new BadRequestException('the conflict-of-interest disclosure is required (write "none" if you have none)');
+    const telegram = (dto.telegram ?? '').trim();
+    if (!telegram) throw new BadRequestException('a Telegram handle is required');
+    const email = (dto.email ?? '').trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new BadRequestException('a valid email is required');
     const socialLinks = (dto.socialLinks ?? []).map((s) => s.trim()).filter(Boolean);
-    const githubUrl = dto.githubUrl?.trim() || null;
+    const githubUrls = (dto.githubUrls ?? []).map((s) => s.trim()).filter(Boolean);
     const logoDataUrl = dto.logoDataUrl?.trim() || null;
     const existing = await this.prisma.submitterApplication.findUnique({ where: { userId } });
     // The 100-word minimum is for applications the board still has to review. An already-approved
@@ -52,10 +59,14 @@ export class SubmitterService {
     const changed = !!existing && (
       existing.displayName !== displayName ||
       existing.description !== description ||
-      (existing.githubUrl ?? null) !== githubUrl ||
+      JSON.stringify(existing.githubUrls) !== JSON.stringify(githubUrls) ||
       JSON.stringify(existing.socialLinks) !== JSON.stringify(socialLinks) ||
       (existing.logoDataUrl ?? null) !== logoDataUrl ||
-      existing.country !== country
+      existing.country !== country ||
+      existing.conflictOfInterest !== conflictOfInterest ||
+      existing.noSelfVotePledge !== !!dto.noSelfVotePledge ||
+      existing.telegram !== telegram ||
+      existing.email !== email
     );
     if (existing && existing.status === 'APPROVED' && changed) {
       await this.prisma.submitterApplicationHistory.create({
@@ -63,14 +74,18 @@ export class SubmitterService {
           userId,
           displayName: existing.displayName,
           description: existing.description,
-          githubUrl: existing.githubUrl,
+          githubUrls: existing.githubUrls,
           socialLinks: existing.socialLinks,
           logoDataUrl: existing.logoDataUrl,
           country: existing.country,
+          conflictOfInterest: existing.conflictOfInterest,
+          noSelfVotePledge: existing.noSelfVotePledge,
+          telegram: existing.telegram,
+          email: existing.email,
         },
       });
     }
-    const data = { status, displayName, description, githubUrl, socialLinks, logoDataUrl, country, rejectionReason: null };
+    const data = { status, displayName, description, githubUrls, socialLinks, logoDataUrl, country, conflictOfInterest, noSelfVotePledge: !!dto.noSelfVotePledge, telegram, email, rejectionReason: null };
     await this.prisma.submitterApplication.upsert({
       where: { userId },
       update: data,
@@ -89,10 +104,14 @@ export class SubmitterService {
     return rows.map((h) => ({
       displayName: h.displayName,
       description: h.description,
-      githubUrl: h.githubUrl,
+      githubUrls: h.githubUrls,
       socialLinks: h.socialLinks,
       logoDataUrl: h.logoDataUrl,
       country: h.country,
+      conflictOfInterest: h.conflictOfInterest,
+      noSelfVotePledge: h.noSelfVotePledge,
+      telegram: h.telegram,
+      email: h.email,
       snapshotAt: h.snapshotAt,
     }));
   }
@@ -105,10 +124,14 @@ export class SubmitterService {
       status: a.status as 'PENDING' | 'APPROVED' | 'REJECTED',
       displayName: a.displayName,
       description: a.description,
-      githubUrl: a.githubUrl,
+      githubUrls: a.githubUrls,
       socialLinks: a.socialLinks,
       logoDataUrl: a.logoDataUrl,
       country: a.country,
+      conflictOfInterest: a.conflictOfInterest,
+      noSelfVotePledge: a.noSelfVotePledge,
+      telegram: a.telegram,
+      email: a.email,
       rejectionReason: a.rejectionReason,
       history: await this.historyFor(userId),
     };
@@ -132,7 +155,7 @@ export class SubmitterService {
     });
     const histByUser = new Map<string, ReturnType<typeof mapHist>[]>();
     function mapHist(h: (typeof hist)[number]) {
-      return { displayName: h.displayName, description: h.description, githubUrl: h.githubUrl, socialLinks: h.socialLinks, logoDataUrl: h.logoDataUrl, country: h.country, snapshotAt: h.snapshotAt };
+      return { displayName: h.displayName, description: h.description, githubUrls: h.githubUrls, socialLinks: h.socialLinks, logoDataUrl: h.logoDataUrl, country: h.country, conflictOfInterest: h.conflictOfInterest, noSelfVotePledge: h.noSelfVotePledge, telegram: h.telegram, email: h.email, snapshotAt: h.snapshotAt };
     }
     for (const h of hist) {
       if (!histByUser.has(h.userId)) histByUser.set(h.userId, []);
@@ -143,10 +166,14 @@ export class SubmitterService {
       status: a.status as 'PENDING' | 'APPROVED' | 'REJECTED',
       displayName: a.displayName,
       description: a.description,
-      githubUrl: a.githubUrl,
+      githubUrls: a.githubUrls,
       socialLinks: a.socialLinks,
       logoDataUrl: a.logoDataUrl,
       country: a.country,
+      conflictOfInterest: a.conflictOfInterest,
+      noSelfVotePledge: a.noSelfVotePledge,
+      telegram: a.telegram,
+      email: a.email,
       rejectionReason: a.rejectionReason,
       stakeAddress: a.user.stakeAddress,
       history: histByUser.get(a.userId) ?? [],

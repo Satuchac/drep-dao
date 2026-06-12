@@ -63,10 +63,16 @@ model SubmitterApplication {
   status          String    @default("PENDING") // PENDING | APPROVED | REJECTED
   displayName     String    @map("display_name")
   description     String
-  githubUrl       String?   @map("github_url")
+  githubUrls      String[]  @map("github_urls")
   socialLinks     String[]  @map("social_links")
   logoDataUrl     String?   @map("logo_data_url") // base64 data URL
   country         String
+  // §2.1 — disclosure + contact: conflicts of interest around funding approval, the informative
+  // "won't vote for my own proposal" pledge, and the contact the board reaches the team on.
+  conflictOfInterest String  @default("") @map("conflict_of_interest")
+  noSelfVotePledge   Boolean @default(false) @map("no_self_vote_pledge")
+  telegram           String  @default("")
+  email              String  @default("")
   rejectionReason String?   @map("rejection_reason")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -83,10 +89,14 @@ model SubmitterApplicationHistory {
   userId      String   @map("user_id") @db.Uuid
   displayName String   @map("display_name")
   description String
-  githubUrl   String?  @map("github_url")
+  githubUrls  String[] @map("github_urls")
   socialLinks String[] @map("social_links")
   logoDataUrl String?  @map("logo_data_url")
   country     String
+  conflictOfInterest String  @default("") @map("conflict_of_interest")
+  noSelfVotePledge   Boolean @default(false) @map("no_self_vote_pledge")
+  telegram           String  @default("")
+  email              String  @default("")
   snapshotAt  DateTime @default(now()) @map("snapshot_at") @db.Timestamptz(6) // when this version was replaced
 
   @@index([userId])
