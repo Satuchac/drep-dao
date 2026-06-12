@@ -4,7 +4,8 @@
 > or the board-action flow. See `ANCHOR-WALLET.md` for the hot-wallet specifics
 > and `PROJECT.md` §7 for the overview.
 >
-> **Last updated:** 2026-05-23.
+> **Last updated:** 2026-06-12 (configurable signing mode, internal transfers,
+> tx-history classification/filter/search/pager, auto-refresh).
 
 ## Decision: native multisig, platform-assisted
 
@@ -71,9 +72,19 @@ address** for clean accounting:
 ## Board actions (preparing & signing a spend)
 
 Implemented in `apps/api/src/treasury` (`treasury.service.ts`,
-`multisig-broadcast.service.ts`) + `components/board-actions.tsx`. A spend runs a
-**two-phase ceremony** so a native 3-of-5 script tx can be assembled deterministically
-(the fee + witness set depend on *which* 3 keys sign, so that set is fixed first):
+`multisig-broadcast.service.ts`) + `components/board-actions.tsx`.
+
+**The signing ceremony is configurable** via the `TX_SIGNING_PROCESS` platform
+parameter — see `MULTISIG-SIGNING.md` for the full picture:
+
+- **`1_PHASE` (default, requires Eternl):** one shared unsigned tx, no
+  `required_signers`, the multisig script rides in the witness set so wallets
+  recognize their key; every board member signs once, first 3 signatures broadcast.
+- **`2_PHASE` (fallback, any CIP-30 wallet):** the Authorize → Sign ceremony in
+  steps 2–3 below (the signer set is fixed first because `required_signers` makes
+  the ledger demand exactly those keys).
+
+The 2-phase flow:
 
 1. **Prepare** — `MultisigAction { kind, amountAda, description, status:
    PENDING_SIGS }`. Created explicitly by a board member, or auto-prepared when the
@@ -112,7 +123,8 @@ as a platform secret, so it has an address from day one and just needs funding.
 ### Lifecycle
 
 ```
-PENDING_SIGS ──(phase 1: 3 commit)──▶ PENDING_SIGS (signing) ──(phase 2: 3 witnesses → combine)──▶ CONFIRMED
+1_PHASE: PENDING_SIGS ──(any 3 of 5 witness the shared body → combine)──▶ CONFIRMED
+2_PHASE: PENDING_SIGS ──(phase 1: 3 commit)──▶ PENDING_SIGS (signing) ──(phase 2: 3 witnesses → combine)──▶ CONFIRMED
      │
      └──(any member cancels)──▶ FAILED
 ```
@@ -121,10 +133,49 @@ Real native-script broadcast is **live** on Preprod — the platform assembles t
 witnesses + script and submits the multisig payment; `READY`/`BROADCASTED` remain as
 intermediate states for the paste-the-tx-hash fallback path.
 
+## Internal transfers (Treasury → Actions)
+
+Moves ADA **between the DAO's own treasury addresses** (primary multisig + labeled
+buckets). Both ends are picked from dropdowns over the active multisig's buckets —
+no free-form address, so funds cannot leave the DAO through this form; source ≠
+destination is enforced and the panel self-hides with fewer than two addresses.
+Queues a `BOARD_TRANSFER` action (`POST /admin/treasury/prepare-internal-transfer`)
+through the standard signing ceremony; the requester is stamped as initiator
+(+1 `TX_INITIATED` merit on broadcast).
+
+## Transaction history (Treasury → Transactions)
+
+Every on-chain tx that touched a treasury address (multisig + buckets), enriched
+with platform context, classified by **where the money went**:
+
+- **Incoming (green)** — deposits: submission fees (linked to proposal +
+  submitter), otherwise "anonymous income".
+- **Internal (yellow)** — both ends are DAO wallets (multisig, buckets, hot
+  wallet): top-ups, internal transfers, migrations, hot-wallet sweeps (recognized
+  by the sweep's recorded tx hash). Amount shown is the action's clean amount,
+  unsigned — the DAO's holdings didn't change.
+- **Outgoing (red)** — funds actually left to an external address (milestone/reward
+  payouts, pledge/leftover returns, board-signed external sends).
+
+Each board-action row shows **"Signed by <names>"** — the 3-of-5 whose witnesses
+sent it. Board members can override any label/note with **Edit** (annotations).
+
+**Filter / search / pager:** direction tabs (All default), debounced search over
+source + destination address, tx hash, proposal public ID (R1-P2) / title, labels,
+annotations, submitter and signer names; server-side pagination capped at 50/page
+(over the 1000 most recent treasury txs).
+
+**Auto-refresh:** treasury views reload the moment a multisig tx broadcasts
+(`lib/treasury-refresh.ts` event + re-checks at 10/30/75 s while db-sync indexes
+it) and on a slow 30 s poll (covers broadcasts made by other members' browsers).
+
 ## Data model (Prisma, §24.9)
 
-- `MultisigAction { kind, txCbor?, txHash?, status, amountAda?, description }` —
-  `kind ∈ {REWARD_PAYOUT, PROJECT_FUNDING, PLEDGE_RETURN, OPS, LEFTOVER_RETURN}`.
+- `MultisigAction { kind, txCbor?, txHash?, status, amountAda?, description,
+  committedKeyHashes, sourceBucketId?, initiatorUserId? }` —
+  `kind ∈ {REWARD_PAYOUT, PROJECT_FUNDING, PLEDGE_RETURN, OPS, LEFTOVER_RETURN,
+  BOARD_TRANSFER, MIGRATION}`. `initiatorUserId` = the board member who manually
+  requested it (earns `TX_INITIATED` merit on broadcast; NULL for platform-prepared).
 - `MultisigSignature { actionId, boardDrepId, witnessCbor }` — unique
   `(actionId, boardDrepId)`.
 - `Round { number, budgetAda, rewardsPoolAda, multisigAddress, … }`.
