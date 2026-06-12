@@ -158,7 +158,7 @@ export class SubmitterService {
     const rows = await this.prisma.submitterApplication.findMany({
       where: { status: 'APPROVED' },
       orderBy: { displayName: 'asc' },
-      include: { user: { select: { id: true, displayName: true, drepKeyHash: true, drep: { select: { status: true } } } } },
+      include: { user: { select: { id: true, displayName: true, stakeAddress: true, drepKeyHash: true, drep: { select: { status: true, drepIdOnchain: true } } } } },
     });
     const boardKeys = new Set(
       (await this.prisma.boardSeat.findMany({ where: { removedAt: null }, select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
@@ -175,6 +175,9 @@ export class SubmitterService {
       conflictOfInterest: a.conflictOfInterest,
       telegram: a.telegram,
       email: a.email,
+      // The platform knows the wallet — expose it (and the DRep identity when they have one).
+      stakeAddress: a.user.stakeAddress,
+      drepIdOnchain: a.user.drep?.drepIdOnchain ?? null,
       // §2.1 — important context: this submitter also votes (DAO member / board).
       isDaoMember: a.user.drep?.status === 'ADMITTED' || (!!a.user.drepKeyHash && boardKeys.has(a.user.drepKeyHash)),
       since: a.reviewedAt,

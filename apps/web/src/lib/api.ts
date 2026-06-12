@@ -666,6 +666,8 @@ export interface ApprovedSubmitter {
   conflictOfInterest: string;
   telegram: string;
   email: string;
+  stakeAddress: string;
+  drepIdOnchain: string | null;
   isDaoMember: boolean;
   since: string | null;
 }

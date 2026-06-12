@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { submitterApi, type ApprovedSubmitter } from '@/lib/api';
 import { card } from '@/lib/ui';
 import { FallbackAvatar } from './fallback-avatar';
+import { CopyButton } from './copy-button';
+import { useExplorer } from '@/lib/explorer';
 
 /**
  * §2.1 — public directory of APPROVED submitters (mirrors the DAO members overview).
@@ -12,6 +14,7 @@ import { FallbackAvatar } from './fallback-avatar';
  * who is ALSO a DAO member is flagged prominently: they both submit and vote.
  */
 export function SubmittersDirectory() {
+  const { drepUrl } = useExplorer();
   const [rows, setRows] = useState<ApprovedSubmitter[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   useEffect(() => {
@@ -78,6 +81,19 @@ export function SubmittersDirectory() {
                       {' · '}
                       {s.email ? <a href={`mailto:${s.email}`} className="text-emerald-700 underline dark:text-emerald-400">{s.email}</a> : '—'}
                     </div>
+                    {/* The platform knows the wallet — surface the on-chain identity. */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="font-medium">Wallet (stake):</span>
+                      <span className="break-all font-mono text-neutral-600 dark:text-neutral-300">{s.stakeAddress}</span>
+                      <CopyButton text={s.stakeAddress} label="Copy" />
+                    </div>
+                    {s.drepIdOnchain ? (
+                      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                        <span className="font-medium">DRep ID:</span>
+                        <a href={drepUrl(s.drepIdOnchain)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">{s.drepIdOnchain}</a>
+                        <CopyButton text={s.drepIdOnchain} label="Copy" />
+                      </div>
+                    ) : null}
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Links</div>
                       <div className="mt-0.5 space-y-0.5 text-xs">
