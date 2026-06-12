@@ -26,6 +26,9 @@ export interface TreasuryTx {
   annotationTitle?: string;
   annotationNote?: string;
   annotatedBy?: string; // board member who set the context
+  // §15 — board members who signed the multisig tx (outgoing/internal board
+  // actions only; deposits have no platform signers).
+  signers?: string[];
 }
 const APPROVAL_THRESHOLD = 3; // 3-of-5 board multisig
 const HOT_WALLET_MIN_ADA = 100; // below this, the platform prepares a top-up
@@ -414,7 +417,8 @@ export class TreasuryService implements OnModuleInit {
         status: 'PENDING_SIGS',
         amountAda: BigInt(Math.round(dto.amountAda * ADA)),
         destAddress: dst.bech32Address,
-        description: `Internal transfer: ${src.label} → ${dst.label}`,
+        // The primary bucket's stored label is '' (the list API synthesizes it).
+        description: `Internal transfer: ${src.label || 'Primary'} → ${dst.label || 'Primary'}`,
         // NULL = primary bucket (bare multisig script) for the broadcast service.
         sourceBucketId: src.isPrimary ? null : src.id,
         // §13.2 — the requester earns +1 (TX_INITIATED) once the tx is on-chain.
@@ -623,7 +627,11 @@ export class TreasuryService implements OnModuleInit {
     // Board-action context, keyed by the broadcast tx hash (+ their proposals' public ids).
     const actions = await this.prisma.multisigAction.findMany({
       where: { txHash: { not: null } },
-      select: { txHash: true, kind: true, amountAda: true, description: true, proposalTitle: true, proposalId: true, destAddress: true },
+      select: {
+        txHash: true, kind: true, amountAda: true, description: true, proposalTitle: true, proposalId: true, destAddress: true,
+        // §15 — who signed, so the history shows the 3-of-5 behind each tx.
+        signatures: { select: { drep: { select: { user: { select: { displayName: true } } } } } },
+      },
     });
     const actionByHash = new Map(actions.filter((a) => a.txHash).map((a) => [a.txHash as string, a]));
     const actionPropIds = [...new Set(actions.map((a) => a.proposalId).filter(Boolean) as string[])];
@@ -694,6 +702,9 @@ export class TreasuryService implements OnModuleInit {
         tx.proposalPublicId = action.proposalId ? publicIdById.get(action.proposalId) ?? undefined : undefined;
         tx.proposalTitle = action.proposalTitle ?? action.description ?? undefined;
         tx.destAddress = action.destAddress ?? undefined;
+      }
+      if (action && action.signatures.length > 0) {
+        tx.signers = action.signatures.map((s) => s.drep?.user?.displayName ?? 'board member');
       }
       return tx;
     }).filter((t): t is TreasuryTx => t !== null);

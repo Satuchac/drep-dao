@@ -135,6 +135,14 @@ export function TreasuryTransactions() {
                   </div>
                 ) : null}
 
+                {/* §15 — the 3-of-5 board members whose signatures sent this tx. */}
+                {t.signers && t.signers.length > 0 ? (
+                  <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
+                    Signed by{' '}
+                    <span className="font-medium text-neutral-700 dark:text-neutral-300">{t.signers.join(', ')}</span>
+                  </div>
+                ) : null}
+
                 {/* Board-provided note + attribution. */}
                 {t.annotationNote || t.annotatedBy ? (
                   <div className="mt-1 rounded border border-neutral-200 bg-white/60 px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900/40">

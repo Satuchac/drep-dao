@@ -259,6 +259,8 @@ export interface TreasuryTx {
   time: number; // unix seconds
   /** INTERNAL = between DAO wallets (multisig/buckets/hot wallet) — nothing left the DAO. */
   direction: 'IN' | 'OUT' | 'INTERNAL';
+  /** Board members who signed the multisig tx (board actions only). */
+  signers?: string[];
   amountAda: number;
   label: string;
   proposalId?: string;
