@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { submitterApi, type MySubmitter } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { COUNTRIES } from '@/lib/countries';
 
 const MIN_WORDS = 100;
@@ -11,6 +12,10 @@ const inputCls = 'w-full rounded border border-neutral-300 px-2 py-1 text-sm dar
 
 /** §2.1 — apply for the submitter role. The board approves/rejects; only then can you submit. */
 export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
+  const { profile } = useAuth();
+  // §2.1 — never ask for a name the platform knows: members reuse the profile display name.
+  const knownName = profile?.user.displayName?.trim() || '';
+  const isMember = !!profile && (profile.roles.includes('DAO_MEMBER') || profile.roles.includes('BOARD') || profile.roles.includes('DREP'));
   const [mine, setMine] = useState<MySubmitter | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [name, setName] = useState('');
@@ -44,7 +49,9 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   // §2.1 — the 100-word minimum gates a NEW application the board reviews; an already-approved
   // member can update their profile with any non-empty description.
   const needsFullDesc = mine?.status !== 'APPROVED';
-  const canSubmit = !!name.trim() && !!country && !!desc.trim() && (!needsFullDesc || words >= MIN_WORDS);
+  const effectiveName = knownName || name.trim();
+  const memberNeedsProfileName = isMember && !knownName; // §2.1 — set the profile name first
+  const canSubmit = !memberNeedsProfileName && !!effectiveName && !!country && !!desc.trim() && (!needsFullDesc || words >= MIN_WORDS);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +60,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
     setBusy(true);
     try {
       await submitterApi.apply({
-        displayName: name.trim(),
+        displayName: effectiveName,
         description: desc.trim(),
         githubUrl: github.trim() || undefined,
         socialLinks: socials.map((s) => s.trim()).filter(Boolean),
@@ -88,10 +95,25 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
       </div>
 
       <form onSubmit={submit} className="space-y-3">
-        <label className="block">
-          <span className="text-sm font-medium">Display name <span className="text-red-500">*</span></span>
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} className={`mt-1 ${inputCls}`} placeholder="Your name or project name" />
-        </label>
+        {knownName ? (
+          // §2.1 — the platform already knows this user's name; no duplicate input.
+          <div className="text-sm">
+            <span className="font-medium">Display name</span>
+            <div className="mt-1 rounded border border-neutral-200 bg-neutral-50 px-2 py-1 text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
+              {knownName} <span className="text-xs text-neutral-400">— from your profile</span>
+            </div>
+          </div>
+        ) : memberNeedsProfileName ? (
+          <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+            ⚠ Set your <strong>display name</strong> in your DRep profile (above on this page) first — the
+            submitter role reuses it. The form unlocks once it&apos;s saved.
+          </div>
+        ) : (
+          <label className="block">
+            <span className="text-sm font-medium">Display name <span className="text-red-500">*</span></span>
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} className={`mt-1 ${inputCls}`} placeholder="Your name or project name" />
+          </label>
+        )}
 
         <label className="block">
           <span className="text-sm font-medium">Description <span className="text-red-500">*</span> <span className="text-xs font-normal text-neutral-500">{needsFullDesc ? `(min 100 words — ${words}/100)` : `(${words} words)`}</span></span>
@@ -137,7 +159,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         </div>
 
         {error ? <div className="text-xs text-red-600">{error}</div> : null}
-        {!canSubmit ? <div className="text-xs text-amber-600">{!name.trim() ? 'Display name is required. ' : ''}{!country ? 'Country is required. ' : ''}{!desc.trim() ? 'Description is required. ' : needsFullDesc && words < MIN_WORDS ? `Description needs at least ${MIN_WORDS} words (${words}/${MIN_WORDS}).` : ''}</div> : null}
+        {!canSubmit ? <div className="text-xs text-amber-600">{memberNeedsProfileName ? 'Profile display name is required. ' : !effectiveName ? 'Display name is required. ' : ''}{!country ? 'Country is required. ' : ''}{!desc.trim() ? 'Description is required. ' : needsFullDesc && words < MIN_WORDS ? `Description needs at least ${MIN_WORDS} words (${words}/${MIN_WORDS}).` : ''}</div> : null}
         <button type="submit" disabled={busy} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
           {busy ? 'Submitting…' : mine && mine.status !== 'REJECTED' ? 'Update application' : mine?.status === 'REJECTED' ? 'Re-apply' : 'Apply'}
         </button>

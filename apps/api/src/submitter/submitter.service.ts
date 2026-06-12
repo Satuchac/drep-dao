@@ -18,7 +18,19 @@ export class SubmitterService {
   }
 
   async apply(userId: string, dto: SubmitterApplicationDto) {
-    const displayName = (dto.displayName ?? '').trim();
+    // §2.1 — never ask for a name the platform already knows: members (board / DAO / DRep)
+    // use their profile display name; a member WITHOUT one must set it in the profile first.
+    // Only viewers (no profile) provide a name here.
+    const me = await this.prisma.appUser.findUnique({
+      where: { id: userId },
+      select: { displayName: true, drepKeyHash: true, drep: { select: { id: true } } },
+    });
+    const isMember = !!me?.drep || (!!me?.drepKeyHash && !!(await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: me.drepKeyHash } })));
+    let displayName = (me?.displayName ?? '').trim() || (dto.displayName ?? '').trim();
+    if (me?.displayName?.trim()) displayName = me.displayName.trim(); // profile name always wins
+    else if (isMember) {
+      throw new BadRequestException('set your display name in your profile first — the submitter role reuses it');
+    }
     const description = (dto.description ?? '').trim();
     const country = (dto.country ?? '').trim();
     if (!displayName) throw new BadRequestException('display name is required');
@@ -64,8 +76,11 @@ export class SubmitterService {
       update: data,
       create: { userId, ...data },
     });
-    // Keep the user's display name in sync so it shows in the login section + on proposals.
-    await this.prisma.appUser.update({ where: { id: userId }, data: { displayName } });
+    // Viewers: sync the name to the account so it shows in the login section + on proposals.
+    // (Members already had it — never overwrite the profile from here.)
+    if (!me?.displayName?.trim()) {
+      await this.prisma.appUser.update({ where: { id: userId }, data: { displayName } });
+    }
     return this.mine(userId);
   }
 
