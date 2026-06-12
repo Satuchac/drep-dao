@@ -32,9 +32,10 @@ const STAGE_LABEL: Record<string, string> = {
  *   in the script. So we build ONE shared unsigned body with NO
  *   required_signers, every board member sees a single Sign button, and the
  *   platform broadcasts the moment the 3rd witness lands (first-3-wins).
- *   The catch: some CIP-30 wallets refuse to produce a witness unless their
- *   key is named in the body — Eternl signs script inputs fine, hence the
- *   parameter note.
+ *   The unsigned tx carries the multisig script in its witness set — that's
+ *   how a wallet detects its key participates (there are no required_signers
+ *   to tell it). Eternl signs script-input txs this way; wallets that still
+ *   refuse are why the 2-phase fallback exists.
  *
  * 2_PHASE (fallback — works with any CIP-30 wallet)
  *   The tx body's required_signers list names which M keys WILL sign, so it
@@ -94,6 +95,27 @@ export class MultisigBroadcastService {
   async signingMode(): Promise<'1_PHASE' | '2_PHASE'> {
     const row = await this.prisma.platformConfig.findUnique({ where: { key: 'TX_SIGNING_PROCESS' } });
     return row?.value === '2_PHASE' ? '2_PHASE' : '1_PHASE';
+  }
+
+  /** §15 1-phase — make sure the unsigned tx carries the multisig script in
+   *  its witness set. Without it (and without required_signers) a wallet has
+   *  no way to know its key participates and refuses to sign. Re-wrapping
+   *  changes only the witness set — the body (and thus its hash, which is
+   *  what gets signed) stays byte-identical. Returns the input on any
+   *  parse hiccup. */
+  private ensureScriptAttached(txCbor: string, spendingScriptJson: object): string {
+    try {
+      const tx = CSL.Transaction.from_hex(txCbor);
+      const existing = tx.witness_set().native_scripts();
+      if (existing && existing.len() > 0) return txCbor;
+      const ws = CSL.TransactionWitnessSet.new();
+      const scripts = CSL.NativeScripts.new();
+      scripts.add(this.scriptJsonToCSL(spendingScriptJson));
+      ws.set_native_scripts(scripts);
+      return Buffer.from(CSL.Transaction.new(tx.body(), ws).to_bytes()).toString('hex');
+    } catch {
+      return txCbor;
+    }
   }
 
   /** A cached tx body is only reusable under the mode it was built for:
@@ -220,8 +242,21 @@ export class MultisigBroadcastService {
     let source = await this.resolveSource(action);
     if (action.txCbor) {
       if (!this.bodyModeMismatch(action.txCbor, mode)) {
+        // §15 1-phase — older cached bodies were wrapped with an EMPTY witness
+        // set; wallets then can't tell their key is involved (no
+        // required_signers either) and refuse with "signature not needed".
+        // Re-wrap with the script attached — the BODY is untouched, so any
+        // witnesses already collected stay valid.
+        let txHex = action.txCbor;
+        if (mode === '1_PHASE') {
+          const rewrapped = this.ensureScriptAttached(txHex, source.spendingScriptJson);
+          if (rewrapped !== txHex) {
+            txHex = rewrapped;
+            await this.prisma.multisigAction.update({ where: { id: actionId }, data: { txCbor: txHex } });
+          }
+        }
         return {
-          txBodyHex: action.txCbor,
+          txBodyHex: txHex,
           sourceAddress: source.bech32Address,
           scriptHash: source.scriptHash,
           keyHashes: source.keyHashes,
@@ -326,9 +361,17 @@ export class MultisigBroadcastService {
     const txBody = txb.build();
     void totalIn;
     // CIP-30 signTx expects a full Transaction CBOR (Array), not a raw
-    // TransactionBody (Map). Wrap with an empty witness set.
-    const emptyWs = CSL.TransactionWitnessSet.new();
-    const tx = CSL.Transaction.new(txBody, emptyWs);
+    // TransactionBody (Map). In 1-phase the body names no required_signers,
+    // so the multisig script rides along in the witness set — that's how a
+    // wallet (Eternl) learns its key participates and prompts to sign.
+    // Doesn't affect the body hash, so it never invalidates witnesses.
+    const ws = CSL.TransactionWitnessSet.new();
+    if (mode === '1_PHASE') {
+      const scripts = CSL.NativeScripts.new();
+      scripts.add(nativeScript);
+      ws.set_native_scripts(scripts);
+    }
+    const tx = CSL.Transaction.new(txBody, ws);
     const txHex = Buffer.from(tx.to_bytes()).toString('hex');
     await this.prisma.multisigAction.update({ where: { id: actionId }, data: { txCbor: txHex } });
     return {
