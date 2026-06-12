@@ -69,5 +69,11 @@ export function useExplorer() {
     cfg,
     txUrl: (hash: string) => (cfg ? txUrl(cfg, hash) : '#'),
     addressUrl: (address: string) => (cfg ? addressUrl(cfg, address) : '#'),
+    // DRep pages live on cexplorer (cardanoscan has no stable DRep route).
+    drepUrl: (drepId: string) => {
+      const net = cfg?.network ?? 'Preprod';
+      const sub = net === 'Mainnet' ? '' : net === 'Preview' ? 'preview.' : 'preprod.';
+      return `https://${sub}cexplorer.io/drep/${drepId}`;
+    },
   };
 }

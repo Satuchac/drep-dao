@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { daoApi, type DaoMember, type DaoMemberDetail } from '@/lib/api';
+import { CopyButton } from './copy-button';
+import { useExplorer } from '@/lib/explorer';
 
 /**
  * "DAO members" left-nav view: a directory of every current DAO member as a card grid.
@@ -144,6 +146,7 @@ function BioPreview({ drepId }: { drepId: string }) {
 }
 
 function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }) {
+  const { drepUrl } = useExplorer();
   const [d, setD] = useState<DaoMemberDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -182,7 +185,19 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
                   </span>
                 ) : null}
               </div>
-              <div className="mt-0.5 break-all font-mono text-[11px] text-neutral-500">{d.drepId}</div>
+              {/* DRep ID: one line (truncated), linked to cexplorer, with copy. */}
+              <div className="mt-0.5 flex items-center gap-1.5">
+                <a
+                  href={drepUrl(d.drepId)}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={d.drepId}
+                  className="min-w-0 truncate whitespace-nowrap font-mono text-[11px] text-emerald-700 underline dark:text-emerald-400"
+                >
+                  {d.drepId}
+                </a>
+                <CopyButton text={d.drepId} label="Copy" />
+              </div>
             </div>
           </div>
           <div className="space-y-4">
@@ -194,17 +209,19 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
               ) : (
                 <p className="mt-1 text-xs italic text-neutral-400">No bio provided.</p>
               )}
-              {d.country ? <div className="mt-2 text-xs text-neutral-500">Country: <span className="font-medium text-neutral-700 dark:text-neutral-300">{d.country}</span></div> : null}
+              <div className="mt-2 text-xs text-neutral-500">Country: {d.country ? <span className="font-medium text-neutral-700 dark:text-neutral-300">{d.country}</span> : <span className="italic text-neutral-400">not provided</span>}</div>
               {/* §2.1 — conflict-of-interest disclosure + pledge (transparency). */}
-              {d.conflictOfInterest ? (
-                <div className="mt-2 text-xs">
-                  <span className="font-medium">Conflict of interest:</span>{' '}
-                  <span className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{d.conflictOfInterest}</span>
-                </div>
-              ) : null}
-              {d.noSelfVotePledge ? (
-                <div className="mt-1 text-xs text-emerald-600">✓ pledges not to vote for own proposals</div>
-              ) : null}
+              <div className="mt-2 text-xs">
+                <span className="font-medium">Conflict of interest:</span>{' '}
+                {d.conflictOfInterest
+                  ? <span className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{d.conflictOfInterest}</span>
+                  : <span className="italic text-neutral-400">not provided</span>}
+              </div>
+              <div className="mt-1 text-xs">
+                {d.noSelfVotePledge
+                  ? <span className="text-emerald-600">✓ pledges not to vote for own proposals</span>
+                  : <span className="text-neutral-400">no self-vote pledge given (informative)</span>}
+              </div>
             </div>
             <Links socials={d.socials} contact={d.contact} />
           </div>
