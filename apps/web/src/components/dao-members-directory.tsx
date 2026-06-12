@@ -5,7 +5,6 @@ import { daoApi, type DaoMember, type DaoMemberDetail } from '@/lib/api';
 import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
 import { FallbackAvatar } from './fallback-avatar';
-import { MeritSystemTable } from './merit-system-table';
 
 /**
  * "DAO members" left-nav view: a directory of every current DAO member as a card grid.
@@ -73,8 +72,6 @@ export function DaoMembersDirectory() {
               ))}
             </div>
           )}
-          {/* §13 — what earns / costs merit points, for transparency. */}
-          <MeritSystemTable />
         </>
       )}
     </section>

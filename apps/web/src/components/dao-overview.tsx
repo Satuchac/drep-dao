@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { SUBCAT_LABEL } from '@/lib/ui';
 import { daoApi, type DaoMember, type DaoExpert } from '@/lib/api';
 import { fmtDate } from './round-ui';
+import { MeritSystemTable } from './merit-system-table';
 
 
 
@@ -233,6 +234,9 @@ export function DaoOverview() {
           </ul>
         )}
       </div>
+
+      {/* §13 — what earns / costs merit points, per DAO members and board. */}
+      <MeritSystemTable />
     </div>
   );
 }
