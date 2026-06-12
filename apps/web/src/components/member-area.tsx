@@ -282,6 +282,9 @@ function VotingReviewsTab() {
  *  queue. Separated from Actions so the latter stays focused on review/audit
  *  to-dos (fees, pledges, stop-funding, budget settlements). */
 function TreasuryTab() {
+  // §15 — Treasury sub-items: Signatures (default — the queue awaiting this member),
+  // Actions (send / top-up / buckets), Multisig setup (rarely touched).
+  const [sub, setSub] = useState<'signatures' | 'actions' | 'setup'>('signatures');
   const [showHistory, setShowHistory] = useState(false);
   // Bump on any treasury-affecting action (queue transfer, top-up, sweep) so
   // BoardActions immediately refetches and the new pending row appears
@@ -289,24 +292,38 @@ function TreasuryTab() {
   const [refreshKey, setRefreshKey] = useState(0);
   const bumpRefresh = () => setRefreshKey((n) => n + 1);
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-neutral-500">
-          Treasury operations: multisig setup, hot-wallet top-ups/sweeps, board-initiated transfers, and the
-          Approve&nbsp;&amp;&nbsp;sign queue for every multisig action.
-        </p>
-        <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
-          <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
-          Show history
-        </label>
+        <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
+          {([['signatures', 'Signatures'], ['actions', 'Actions'], ['setup', 'Multisig setup']] as const).map(([k, l]) => (
+            <button key={k} onClick={() => setSub(k)} className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${sub === k ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}>
+              {l}
+            </button>
+          ))}
+        </div>
+        {sub === 'signatures' ? (
+          <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
+            <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
+            Show history
+          </label>
+        ) : null}
       </div>
-      {/* Attention-first ordering: the Approve & sign queue (things waiting on THIS member)
-          on top, operational panels next, the rarely-touched multisig setup at the bottom. */}
-      <BoardActions history={showHistory} refreshKey={refreshKey} onChange={bumpRefresh} filter="non-rewards" />
-      <HotWalletControls onChange={bumpRefresh} />
-      <SendFromTreasuryPanel onChange={bumpRefresh} />
-      <TreasuryBucketsPanel onChange={bumpRefresh} />
-      <MultisigSetup />
+      {sub === 'signatures' ? (
+        <div className="space-y-6">
+          <p className="text-sm text-neutral-500">The Approve &amp; sign queue — every multisig action awaiting the board&apos;s 3-of-5 ceremony.</p>
+          <BoardActions history={showHistory} refreshKey={refreshKey} onChange={bumpRefresh} filter="non-rewards" />
+          {!showHistory ? <p className="text-xs text-neutral-400">Nothing to sign? Turn on &quot;Show history&quot; to browse past actions.</p> : null}
+        </div>
+      ) : sub === 'actions' ? (
+        <div className="space-y-6">
+          <p className="text-sm text-neutral-500">Treasury operations: board-initiated transfers, hot-wallet top-ups/sweeps, and bucket configuration.</p>
+          <SendFromTreasuryPanel onChange={bumpRefresh} />
+          <HotWalletControls onChange={bumpRefresh} />
+          <TreasuryBucketsPanel onChange={bumpRefresh} />
+        </div>
+      ) : (
+        <MultisigSetup />
+      )}
     </div>
   );
 }
