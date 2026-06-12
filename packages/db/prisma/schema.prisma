@@ -983,6 +983,10 @@ model MultisigAction {
   // §15.5 — for BOARD_TRANSFER (and similar) actions: which labeled bucket
   // the funds come from. NULL = primary (bare multisig) bucket.
   sourceBucketId  String? @map("source_bucket_id") @db.Uuid
+  // §13.2 — board member who manually initiated this action (e.g. a hot-wallet
+  // top-up). NULL for platform-prepared actions. Earns +1 merit (TX_INITIATED)
+  // once the tx reaches the network.
+  initiatorUserId String? @map("initiator_user_id") @db.Uuid
   createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   signatures  MultisigSignature[]

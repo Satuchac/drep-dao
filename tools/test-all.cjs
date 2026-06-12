@@ -49,6 +49,7 @@ const SUITES = [
   ['test-shared-math', 'Shared single-source math: money, §12 reward pools (588/252/560), reviewer ranking, §4.2 power'],
   ['test-audit-flows', 'Audit batch: §9.1 budget ranking, §9.2 quick polls, §11.5 extensions, §16.4 pledge grace, §2.1 submitter gating, §20.3 notifications, §6 auto-shift'],
   ['test-signing-mode', '§15/§20 TX_SIGNING_PROCESS: 1-phase default + gates, 2-phase fallback gates, governance validation'],
+  ['test-merit-tx', '§13.2 treasury-action merit: TX_INITIATED/TX_SIGNED deltas, initiator tracking, idempotent award'],
 ];
 
 const failed = [];

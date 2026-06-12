@@ -538,6 +538,17 @@ export class MultisigBroadcastService {
     } catch (e) {
       this.logger.warn(`TX_SIGNED merit skipped: ${e instanceof Error ? e.message : e}`);
     }
+    // §13.2 — the board member who initiated the action (e.g. requested the
+    // hot-wallet top-up) earns +1 on top of any TX_SIGNED they may also get.
+    // Platform-prepared actions have no initiator. Idempotent per action.
+    if (action.initiatorUserId) {
+      try {
+        const initiator = await this.prisma.drep.findUnique({ where: { userId: action.initiatorUserId }, select: { id: true } });
+        if (initiator) await this.merit?.tryAward(initiator.id, 'TX_INITIATED', actionId);
+      } catch (e) {
+        this.logger.warn(`TX_INITIATED merit skipped: ${e instanceof Error ? e.message : e}`);
+      }
+    }
     this.logger.warn(`multisig action ${actionId} broadcast: ${txHash}`);
     return { status: 'CONFIRMED', txHash, approvals: vkeyWitnesses.len(), threshold };
   }

@@ -230,6 +230,7 @@ export const MeritReason = {
   MULTISIG_KEY_PROVIDED: 'MULTISIG_KEY_PROVIDED', // +1 — board member submitted their multisig key/address
   MULTISIG_READY: 'MULTISIG_READY', // +1 — multisig assembled (each contributing board member)
   TX_SIGNED: 'TX_SIGNED', // +1 — signed a multisig tx that reached the network
+  TX_INITIATED: 'TX_INITIATED', // +1 — initiated a treasury action (e.g. hot-wallet top-up) that reached the network
   BOARD_ROUND_START: 'BOARD_ROUND_START', // +10
   BOARD_ROUND_END: 'BOARD_ROUND_END', // +10
   BOARD_ROUND_CONFIGURE: 'BOARD_ROUND_CONFIGURE', // +10
@@ -259,6 +260,7 @@ export const MERIT_DELTAS: Record<MeritReason, number> = {
   MULTISIG_KEY_PROVIDED: 1,
   MULTISIG_READY: 1,
   TX_SIGNED: 1,
+  TX_INITIATED: 1,
   BOARD_ROUND_START: 10,
   BOARD_ROUND_END: 10,
   BOARD_ROUND_CONFIGURE: 10,

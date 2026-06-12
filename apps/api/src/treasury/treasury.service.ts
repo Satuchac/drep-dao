@@ -323,6 +323,8 @@ export class TreasuryService implements OnModuleInit {
         destAddress: hot,
         description: `Top up the anchor hot wallet (board-requested)`,
         sourceBucketId: sourceId,
+        // §13.2 — the requester earns +1 (TX_INITIATED) once the tx is on-chain.
+        initiatorUserId: userId,
       },
     });
     // Strip BigInt so the JSON serializer doesn't choke; the UI only needs
