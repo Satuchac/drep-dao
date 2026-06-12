@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { submitterApi, type ApprovedSubmitter } from '@/lib/api';
-import { card } from '@/lib/ui';
+import { card, linkLabel } from '@/lib/ui';
 import { FallbackAvatar } from './fallback-avatar';
 
 /**
@@ -82,8 +82,14 @@ export function SubmittersDirectory() {
                       <div>
                         <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Links</div>
                         <div className="mt-0.5 flex flex-wrap gap-2 text-xs">
-                          {[...s.githubUrls, ...s.socialLinks].map((l, i) => (
-                            <a key={i} href={l} target="_blank" rel="noreferrer" className="break-all text-emerald-700 underline dark:text-emerald-400">{l}</a>
+                          {[
+                            ...s.githubUrls.map((l) => ({ l, kind: 'GitHub' })),
+                            ...s.socialLinks.map((l) => ({ l, kind: 'Social' })),
+                          ].map(({ l, kind }, i) => (
+                            <a key={i} href={l} target="_blank" rel="noreferrer" title={l} className="inline-flex items-center gap-1 rounded border border-neutral-200 px-1.5 py-0.5 text-emerald-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-emerald-400 dark:hover:bg-neutral-800">
+                              <span className="font-medium text-neutral-500">{linkLabel(l, kind)}</span>
+                              <span className="max-w-[16rem] truncate">{l}</span>
+                            </a>
                           ))}
                         </div>
                       </div>
