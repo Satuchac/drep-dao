@@ -261,6 +261,8 @@ export interface TreasuryTx {
   direction: 'IN' | 'OUT' | 'INTERNAL';
   /** Board members who signed the multisig tx (board actions only). */
   signers?: string[];
+  /** Which treasury address the funds left (board actions; used by search). */
+  sourceAddress?: string;
   amountAda: number;
   label: string;
   proposalId?: string;
@@ -275,7 +277,16 @@ export interface TreasuryTx {
 
 export const treasuryApi = {
   overview: () => request<TreasuryOverview>('/dao/treasury'),
-  transactions: () => request<{ transactions: TreasuryTx[] }>('/dao/treasury/transactions'),
+  transactions: (params?: { direction?: 'IN' | 'OUT' | 'INTERNAL'; q?: string; page?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.direction) sp.set('direction', params.direction);
+    if (params?.q) sp.set('q', params.q);
+    if (params?.page && params.page > 1) sp.set('page', String(params.page));
+    const qs = sp.toString();
+    return request<{ transactions: TreasuryTx[]; total: number; page: number; pageSize: number }>(
+      `/dao/treasury/transactions${qs ? `?${qs}` : ''}`,
+    );
+  },
   annotateTx: (txHash: string, body: { title?: string; description?: string }) =>
     request<{ ok: boolean }>(`/admin/treasury/transactions/${encodeURIComponent(txHash)}/annotate`, {
       method: 'POST',

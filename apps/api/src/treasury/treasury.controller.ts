@@ -65,11 +65,14 @@ export class TreasuryController {
     return this.treasury.overview();
   }
 
-  /** §15 — on-chain tx history for the treasury addresses, enriched with context. */
+  /** §15 — on-chain tx history for the treasury addresses, enriched with context.
+   *  Supports ?direction=IN|OUT|INTERNAL, ?q=<address / proposal id / title /
+   *  name>, ?page=N (50 per page). */
   @UseGuards(JwtAuthGuard)
   @Get('dao/treasury/transactions')
-  transactions() {
-    return this.treasury.treasuryTransactions();
+  transactions(@Query('direction') direction?: string, @Query('q') q?: string, @Query('page') page?: string) {
+    const dir = direction === 'IN' || direction === 'OUT' || direction === 'INTERNAL' ? direction : undefined;
+    return this.treasury.treasuryTransactions({ direction: dir, q, page: page ? Number(page) : undefined });
   }
 
   /** §15 — a board member adds/edits context (title + note) for a treasury tx. */

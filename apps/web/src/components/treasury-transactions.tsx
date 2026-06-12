@@ -13,6 +13,13 @@ import { useTreasuryAutoRefresh } from '@/lib/treasury-refresh';
  * tx (e.g. label an anonymous deposit "Intersect — Milestone 1"). Incoming green,
  * outgoing red.
  */
+const DIRECTION_TABS = [
+  { key: '', label: 'All' },
+  { key: 'IN', label: 'Incoming' },
+  { key: 'INTERNAL', label: 'Internal' },
+  { key: 'OUT', label: 'Outgoing' },
+] as const;
+
 export function TreasuryTransactions() {
   const { txUrl } = useExplorer();
   const { profile } = useAuth();
@@ -20,13 +27,26 @@ export function TreasuryTransactions() {
   const [txs, setTxs] = useState<TreasuryTx[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  // §15 — direction filter (default: all), free-text search (debounced) and
+  // server-side pagination (max 50 per page).
+  const [direction, setDirection] = useState<'' | 'IN' | 'OUT' | 'INTERNAL'>('');
+  const [search, setSearch] = useState('');
+  const [q, setQ] = useState(''); // debounced value actually sent to the API
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [pageSize, setPageSize] = useState(50);
+
+  useEffect(() => {
+    const t = setTimeout(() => { setQ(search.trim()); setPage(1); }, 400);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const load = useCallback(() => {
     treasuryApi
-      .transactions()
-      .then((r) => setTxs(r.transactions))
+      .transactions({ direction: direction || undefined, q: q || undefined, page })
+      .then((r) => { setTxs(r.transactions); setTotal(r.total); setPageSize(r.pageSize); setPage(r.page); })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
-  }, []);
+  }, [direction, q, page]);
   useEffect(() => { load(); }, [load]);
   // §15 — new txs appear without F5: reload on multisig broadcast (+ delayed
   // re-checks while db-sync catches up) and on a slow background poll.
@@ -34,6 +54,7 @@ export function TreasuryTransactions() {
 
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (txs === null) return <p className="text-sm text-neutral-500">Loading…</p>;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
     <section className="space-y-2">
@@ -49,8 +70,34 @@ export function TreasuryTransactions() {
         </p>
       </div>
 
+      {/* Filter + search row. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex overflow-hidden rounded-md border border-neutral-300 dark:border-neutral-700">
+          {DIRECTION_TABS.map((d) => (
+            <button
+              key={d.key}
+              onClick={() => { setDirection(d.key as typeof direction); setPage(1); }}
+              className={`px-2.5 py-1 text-xs font-medium ${
+                direction === d.key
+                  ? 'bg-emerald-600 text-white'
+                  : 'bg-white text-neutral-600 hover:bg-neutral-100 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
+              }`}
+            >
+              {d.label}
+            </button>
+          ))}
+        </div>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search address, tx hash, proposal ID (R1-P2) or title…"
+          className="min-w-64 flex-1 rounded-md border border-neutral-300 px-2.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+        />
+        <span className="text-xs text-neutral-500">{total} transaction{total === 1 ? '' : 's'}</span>
+      </div>
+
       {txs.length === 0 ? (
-        <p className="text-sm text-neutral-500">No treasury transactions yet.</p>
+        <p className="text-sm text-neutral-500">{q || direction ? 'No transactions match the filter.' : 'No treasury transactions yet.'}</p>
       ) : (
         <ul className="space-y-2">
           {txs.map((t) => {
@@ -173,6 +220,27 @@ export function TreasuryTransactions() {
           })}
         </ul>
       )}
+
+      {/* Pager — server returns max 50 per page. */}
+      {pages > 1 ? (
+        <div className="flex items-center justify-center gap-3 pt-1 text-xs">
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1}
+            className="rounded border border-neutral-300 px-2.5 py-1 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            ← Previous
+          </button>
+          <span className="text-neutral-500">Page {page} of {pages}</span>
+          <button
+            onClick={() => setPage((p) => Math.min(pages, p + 1))}
+            disabled={page >= pages}
+            className="rounded border border-neutral-300 px-2.5 py-1 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
+          >
+            Next →
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -29,6 +29,8 @@ export interface TreasuryTx {
   // §15 — board members who signed the multisig tx (outgoing/internal board
   // actions only; deposits have no platform signers).
   signers?: string[];
+  // Which treasury address the funds left (board actions; for search).
+  sourceAddress?: string;
 }
 const APPROVAL_THRESHOLD = 3; // 3-of-5 board multisig
 const HOT_WALLET_MIN_ADA = 100; // below this, the platform prepares a top-up
@@ -588,10 +590,10 @@ export class TreasuryService implements OnModuleInit {
    *   • incoming with no known context → "anonymous income"
    * Direction/amount from net (received − spent) at the treasury addresses.
    */
-  async treasuryTransactions() {
+  async treasuryTransactions(opts?: { direction?: 'IN' | 'OUT' | 'INTERNAL'; q?: string; page?: number; pageSize?: number }) {
     const active = await this.prisma.multisigConfig.findFirst({ where: { replacedAt: null }, orderBy: { assembledAt: 'desc' } });
     const bks = active
-      ? await this.prisma.treasuryBucket.findMany({ where: { configId: active.id }, select: { bech32Address: true } })
+      ? await this.prisma.treasuryBucket.findMany({ where: { configId: active.id }, select: { id: true, bech32Address: true } })
       : [];
     // §15 — only the multisig + its labeled buckets. The low-balance hot/anchor wallet is
     // deliberately excluded: its on-chain-proof txs are self-transfers (noise), and its many
@@ -602,9 +604,10 @@ export class TreasuryService implements OnModuleInit {
     if (active?.bech32Address) addrSet.add(active.bech32Address);
     for (const b of bks) if (b.bech32Address) addrSet.add(b.bech32Address);
     const addresses = [...addrSet];
-    if (addresses.length === 0) return { transactions: [] as TreasuryTx[] };
+    if (addresses.length === 0) return { transactions: [] as TreasuryTx[], total: 0, page: 1, pageSize: opts?.pageSize ?? 50 };
 
-    const txs = await this.cardano.addressTransactions(addresses, 100);
+    // 1000 most recent — filter/search/pagination below work over this window.
+    const txs = await this.cardano.addressTransactions(addresses, 1000);
 
     // Submission-fee context: proposal + submitter, keyed by every fee tx hash.
     const proposals = await this.prisma.proposal.findMany({
@@ -628,11 +631,13 @@ export class TreasuryService implements OnModuleInit {
     const actions = await this.prisma.multisigAction.findMany({
       where: { txHash: { not: null } },
       select: {
-        txHash: true, kind: true, amountAda: true, description: true, proposalTitle: true, proposalId: true, destAddress: true,
+        txHash: true, kind: true, amountAda: true, description: true, proposalTitle: true, proposalId: true, destAddress: true, sourceBucketId: true,
         // §15 — who signed, so the history shows the 3-of-5 behind each tx.
         signatures: { select: { drep: { select: { user: { select: { displayName: true } } } } } },
       },
     });
+    // Source address per action (bucket address; NULL bucket = the primary multisig).
+    const bucketAddrById = new Map(bks.map((b) => [b.id, b.bech32Address]));
     const actionByHash = new Map(actions.filter((a) => a.txHash).map((a) => [a.txHash as string, a]));
     const actionPropIds = [...new Set(actions.map((a) => a.proposalId).filter(Boolean) as string[])];
     const publicIdById = new Map(
@@ -706,6 +711,9 @@ export class TreasuryService implements OnModuleInit {
       if (action && action.signatures.length > 0) {
         tx.signers = action.signatures.map((s) => s.drep?.user?.displayName ?? 'board member');
       }
+      if (action) {
+        tx.sourceAddress = (action.sourceBucketId ? bucketAddrById.get(action.sourceBucketId) : undefined) ?? active?.bech32Address ?? undefined;
+      }
       return tx;
     }).filter((t): t is TreasuryTx => t !== null);
 
@@ -723,7 +731,28 @@ export class TreasuryService implements OnModuleInit {
         t.annotatedBy = a.byName;
       }
     }
-    return { transactions };
+
+    // §15 — direction filter + free-text search + pagination (max 50/page).
+    // Search matches addresses (source + destination), tx hash, proposal id
+    // (R1-P2) / title, labels, annotations, submitter and signer names.
+    let filtered = transactions;
+    if (opts?.direction) filtered = filtered.filter((t) => t.direction === opts.direction);
+    const q = opts?.q?.trim().toLowerCase();
+    if (q) {
+      filtered = filtered.filter((t) =>
+        [
+          t.hash, t.destAddress, t.sourceAddress, t.label,
+          t.proposalPublicId, t.proposalTitle, t.submitter,
+          t.annotationTitle, t.annotationNote,
+          ...(t.signers ?? []),
+        ].some((v) => v?.toLowerCase().includes(q)),
+      );
+    }
+    const pageSize = Math.min(Math.max(opts?.pageSize ?? 50, 1), 50);
+    const total = filtered.length;
+    const pages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(Math.max(opts?.page ?? 1, 1), pages);
+    return { transactions: filtered.slice((page - 1) * pageSize, page * pageSize), total, page, pageSize };
   }
 
   /** §15 — a board member sets/updates/clears the context for a treasury tx.
