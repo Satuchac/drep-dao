@@ -387,6 +387,43 @@ export class TreasuryService implements OnModuleInit {
     return { id: row.id, status: row.status, amountAda: dto.amountAda, destAddress: dest };
   }
 
+  /** §15.5 — internal transfer between two treasury buckets (incl. the
+   *  primary). Both ends are chosen from the active multisig's buckets — no
+   *  free-form address — so funds can't leave the DAO through this path.
+   *  Same 3-of-5 signing flow; shows as INTERNAL in the tx history. */
+  async prepareInternalTransfer(userId: string, dto: { sourceBucketId: string; destBucketId: string; amountAda: number }) {
+    if (!(await this.boardDrep(userId))) throw new ForbiddenException('board members only');
+    if (!Number.isFinite(dto.amountAda) || dto.amountAda <= 0) {
+      throw new BadRequestException('amountAda must be a positive number');
+    }
+    if (!dto.sourceBucketId || !dto.destBucketId) throw new BadRequestException('pick a source and a destination bucket');
+    if (dto.sourceBucketId === dto.destBucketId) {
+      throw new BadRequestException('source and destination must be two different treasury addresses');
+    }
+    const active = await this.prisma.multisigConfig.findFirst({ where: { replacedAt: null }, orderBy: { assembledAt: 'desc' } });
+    if (!active) throw new BadRequestException('no active multisig');
+    const [src, dst] = await Promise.all([
+      this.prisma.treasuryBucket.findUnique({ where: { id: dto.sourceBucketId } }),
+      this.prisma.treasuryBucket.findUnique({ where: { id: dto.destBucketId } }),
+    ]);
+    if (!src || src.configId !== active.id) throw new BadRequestException('source bucket does not belong to the active multisig');
+    if (!dst || dst.configId !== active.id) throw new BadRequestException('destination bucket does not belong to the active multisig');
+    const row = await this.prisma.multisigAction.create({
+      data: {
+        kind: 'BOARD_TRANSFER',
+        status: 'PENDING_SIGS',
+        amountAda: BigInt(Math.round(dto.amountAda * ADA)),
+        destAddress: dst.bech32Address,
+        description: `Internal transfer: ${src.label} → ${dst.label}`,
+        // NULL = primary bucket (bare multisig script) for the broadcast service.
+        sourceBucketId: src.isPrimary ? null : src.id,
+        // §13.2 — the requester earns +1 (TX_INITIATED) once the tx is on-chain.
+        initiatorUserId: userId,
+      },
+    });
+    return { id: row.id, status: row.status, amountAda: dto.amountAda, destAddress: dst.bech32Address };
+  }
+
   /** §15.4 — any board member can cancel a pending multisig action. Single
    *  click (no threshold). Marks the action FAILED so it disappears from
    *  the live queue + appears in history with the cancellation reason.

@@ -292,6 +292,12 @@ export const treasuryApi = {
       '/admin/treasury/prepare-transfer',
       { method: 'POST', body: JSON.stringify(body) },
     ),
+  /** §15.5 — internal transfer between two treasury buckets (no free-form address). */
+  prepareInternalTransfer: (body: { sourceBucketId: string; destBucketId: string; amountAda: number }) =>
+    request<{ id: string; status: string; amountAda: number; destAddress: string }>(
+      '/admin/treasury/prepare-internal-transfer',
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
   /** §15.3 — sweep entire hot-wallet balance back into the multisig treasury. */
   sweepHotWallet: () =>
     request<{ txHash: string; to: string }>('/admin/treasury/sweep-hot-wallet', { method: 'POST' }),

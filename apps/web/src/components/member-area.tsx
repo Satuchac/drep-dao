@@ -36,6 +36,7 @@ import { RewardsTab } from './rewards-tab';
 import { MultisigSetup } from './multisig-setup';
 import { HotWalletControls } from './hot-wallet-controls';
 import { SendFromTreasuryPanel } from './send-from-treasury-panel';
+import { InternalTransferPanel } from './internal-transfer-panel';
 import { TreasuryBucketsPanel } from './treasury-buckets-panel';
 import { LeaveDao } from './leave-dao';
 import { BackButton } from './round-ui';
@@ -318,6 +319,7 @@ function TreasuryTab() {
         <div className="space-y-6">
           <p className="text-sm text-neutral-500">Treasury operations: board-initiated transfers, hot-wallet top-ups/sweeps, and bucket configuration.</p>
           <SendFromTreasuryPanel onChange={bumpRefresh} />
+          <InternalTransferPanel onChange={bumpRefresh} />
           <HotWalletControls onChange={bumpRefresh} />
           <TreasuryBucketsPanel onChange={bumpRefresh} />
         </div>

@@ -18,6 +18,12 @@ export class BoardTransferDto {
   /** §15.5 — optional source bucket id. Null/missing = primary bucket. */
   @IsOptional() @IsString() @MaxLength(40) sourceBucketId?: string;
 }
+/** §15.5 — internal transfer: both ends are treasury buckets, never free-form. */
+export class InternalTransferDto {
+  @IsString() @MaxLength(40) sourceBucketId!: string;
+  @IsString() @MaxLength(40) destBucketId!: string;
+  @IsNumber() @Min(0.000001) amountAda!: number;
+}
 // No body needed — sweeps the entire hot-wallet balance.
 export class EmptyDto {}
 export class ApproveActionDto {
@@ -92,6 +98,14 @@ export class TreasuryController {
   @Post('admin/treasury/prepare-transfer')
   prepareTransfer(@CurrentUser() ctx: AuthContext, @Body() dto: BoardTransferDto) {
     return this.treasury.prepareBoardTransfer(ctx.userId, dto);
+  }
+
+  /** §15.5 — internal transfer between two treasury buckets (no free-form
+   *  address). Same 3-of-5 signing flow; INTERNAL in the tx history. */
+  @UseGuards(JwtAuthGuard, BoardGuard)
+  @Post('admin/treasury/prepare-internal-transfer')
+  prepareInternalTransfer(@CurrentUser() ctx: AuthContext, @Body() dto: InternalTransferDto) {
+    return this.treasury.prepareInternalTransfer(ctx.userId, dto);
   }
 
   /** §15.3 — sweep the entire hot-wallet balance back into the multisig

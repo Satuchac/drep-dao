@@ -50,6 +50,7 @@ const SUITES = [
   ['test-audit-flows', 'Audit batch: §9.1 budget ranking, §9.2 quick polls, §11.5 extensions, §16.4 pledge grace, §2.1 submitter gating, §20.3 notifications, §6 auto-shift'],
   ['test-signing-mode', '§15/§20 TX_SIGNING_PROCESS: 1-phase default + gates, 2-phase fallback gates, governance validation'],
   ['test-merit-tx', '§13.2 treasury-action merit: TX_INITIATED/TX_SIGNED deltas, initiator tracking, idempotent award'],
+  ['test-internal-transfer', '§15.5 internal transfers: board-only, distinct buckets, bucket-address destination, initiator stamp'],
 ];
 
 const failed = [];
