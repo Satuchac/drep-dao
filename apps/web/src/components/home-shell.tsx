@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { ConnectWallet } from './connect-wallet';
@@ -24,10 +24,11 @@ import { HealthBadge } from '@/app/health-badge';
 
 type View = 'overview' | 'members' | 'submitters' | 'me' | 'rounds' | 'proposals' | 'internal' | 'proofs' | 'treasury' | 'setup';
 const NAV: { key: View; label: string; boardOnly?: boolean }[] = [
+  // §2 — "My area" first: it is the member's home (to-dos, profile, proposals).
+  { key: 'me', label: 'My area' },
   { key: 'overview', label: 'DAO Member overview' },
   { key: 'members', label: 'DAO members' },
   { key: 'submitters', label: 'Submitters' },
-  { key: 'me', label: 'My area' },
   { key: 'rounds', label: 'Rounds' },
   { key: 'proposals', label: 'Funding proposals' },
   { key: 'internal', label: 'Internal proposals' },
@@ -45,7 +46,11 @@ export function HomeShell() {
   const openProposal = get('proposal');
   // Switching the menu (or signing in as a different user) clears all sub-navigation —
   // tab inside My-area, opened round / funding proposal, opened internal proposal (`ip`).
-  const setView = (v: View) => setParams({ view: v, tab: null, round: null, proposal: null, ip: null });
+  const [viewNonce, setViewNonce] = useState(0);
+  const setView = (v: View) => {
+    if (v === view) setViewNonce((n) => n + 1); // same item → reset to its overview
+    setParams({ view: v, tab: null, round: null, proposal: null, ip: null });
+  };
 
   // Reset sub-navigation whenever the signed-in user changes (login / logout / switch wallet) so
   // a fresh login never inherits the previous user's open detail page (e.g. an ?ip= internal
@@ -129,7 +134,7 @@ export function HomeShell() {
 
       {/* Center: content starts at the top. A ?proposal=<id> link shows that proposal on
           top of whatever view is selected, so proposal URLs are shareable from anywhere. */}
-      <main className="order-last min-w-0 flex-1 lg:order-none">
+      <main key={`${view}-${viewNonce}`} className="order-last min-w-0 flex-1 lg:order-none">
         {openProposal ? (
           <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
             <ProposalDetail id={openProposal} onBack={() => setParams({ proposal: null })} />
