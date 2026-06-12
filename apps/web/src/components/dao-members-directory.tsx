@@ -194,6 +194,16 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
               ) : (
                 <p className="mt-1 text-xs italic text-neutral-400">No bio provided.</p>
               )}
+              {/* §2.1 — conflict-of-interest disclosure + pledge (transparency). */}
+              {d.conflictOfInterest ? (
+                <div className="mt-2 text-xs">
+                  <span className="font-medium">Conflict of interest:</span>{' '}
+                  <span className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{d.conflictOfInterest}</span>
+                </div>
+              ) : null}
+              {d.noSelfVotePledge ? (
+                <div className="mt-1 text-xs text-emerald-600">✓ pledges not to vote for own proposals</div>
+              ) : null}
             </div>
             <Links socials={d.socials} contact={d.contact} />
           </div>

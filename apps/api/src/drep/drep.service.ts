@@ -165,7 +165,7 @@ export class DrepService {
     // bio and no votes to count yet.
     const drep = await this.prisma.drep.findUnique({
       where: { drepIdOnchain },
-      select: { id: true, bio: true, socials: true, contact: true, subcategoryIds: true, votesOnFundingProposals: true },
+      select: { id: true, bio: true, socials: true, contact: true, subcategoryIds: true, votesOnFundingProposals: true, conflictOfInterest: true, noSelfVotePledge: true },
     });
 
     const admissionVotes = drep
@@ -192,6 +192,9 @@ export class DrepService {
       // The dao-members-directory UI hides the field for non-board so the constant
       // `true` never surfaces incorrectly.
       votesOnFundingProposals: summary.isBoard ? (drep?.votesOnFundingProposals ?? true) : true,
+      // §2.1 — public disclosure (transparency for funding decisions).
+      conflictOfInterest: drep?.conflictOfInterest ?? '',
+      noSelfVotePledge: drep?.noSelfVotePledge ?? false,
     };
   }
 
@@ -380,6 +383,8 @@ export class DrepService {
       callsOptin: drep.callsOptin,
       admissionCallOptin: drep.admissionCallOptin,
       votesOnFundingProposals: drep.votesOnFundingProposals,
+      conflictOfInterest: drep.conflictOfInterest,
+      noSelfVotePledge: drep.noSelfVotePledge,
       yes: votes.filter((v) => v.choice === 'YES').length,
       no: votes.filter((v) => v.choice === 'NO').length,
       threshold,
@@ -507,6 +512,8 @@ export class DrepService {
         ...(dto.callsOptin !== undefined ? { callsOptin: dto.callsOptin } : {}),
         ...(dto.admissionCallOptin !== undefined ? { admissionCallOptin: dto.admissionCallOptin } : {}),
         ...(dto.votesOnFundingProposals !== undefined ? { votesOnFundingProposals: dto.votesOnFundingProposals } : {}),
+        ...(dto.conflictOfInterest !== undefined ? { conflictOfInterest: dto.conflictOfInterest } : {}),
+        ...(dto.noSelfVotePledge !== undefined ? { noSelfVotePledge: dto.noSelfVotePledge } : {}),
       },
     });
   }

@@ -114,6 +114,10 @@ model Drep {
   contact            Json?
   subcategoryIds     String[]  @map("subcategory_ids")
   kycOptin           Boolean   @default(false) @map("kyc_optin")
+  // §2.1 — same disclosure as the submitter profile: conflicts of interest around approving
+  // funding + the informative "won't vote for my own proposal" pledge.
+  conflictOfInterest String    @default("") @map("conflict_of_interest")
+  noSelfVotePledge   Boolean   @default(false) @map("no_self_vote_pledge")
   callsOptin         Boolean   @default(false) @map("calls_optin")
   admissionCallOptin Boolean   @default(false) @map("admission_call_optin")
   // §8.2 — board members vote on funding D&V only when this is true (default).

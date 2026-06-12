@@ -74,6 +74,8 @@ export interface DrepApplicationInput {
   socials?: Record<string, string>;
   contact?: Record<string, string>;
   kycOptin?: boolean;
+  conflictOfInterest?: string;
+  noSelfVotePledge?: boolean;
   callsOptin?: boolean;
   admissionCallOptin?: boolean;
   // §8.2 — board-only self-toggle for "I'll vote on funding proposals".
@@ -95,6 +97,9 @@ export interface MyDrep {
   // §8.2 — board-only toggle: when false, this board member doesn't count in
   // funding D&V tallies. Always true for non-board (they always vote).
   votesOnFundingProposals: boolean;
+  // §2.1 — disclosure mirrored from the submitter profile.
+  conflictOfInterest: string;
+  noSelfVotePledge: boolean;
   yes: number;
   no: number;
   threshold: number;
@@ -137,7 +142,8 @@ export interface DaoMemberDetail extends DaoMember {
   contact: Record<string, string> | null;
   subcategoryIds: string[];
   // Admission votes the member cast as a board reviewer (non-board members are 0).
-  admissionVotesCast: { yes: number; no: number; total: number };
+  admissionVotesCast: { yes: number; no: number; total: number };  conflictOfInterest: string;
+  noSelfVotePledge: boolean;
 }
 
 export const daoApi = {

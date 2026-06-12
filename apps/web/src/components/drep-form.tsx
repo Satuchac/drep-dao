@@ -29,7 +29,10 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
   const [kyc, setKyc] = useState(false);
   const [calls, setCalls] = useState(false);
   const [admissionCall, setAdmissionCall] = useState(false);
-  const [votesOnFunding, setVotesOnFunding] = useState(true); // §8.2 board-only toggle (default on)
+  const [votesOnFunding, setVotesOnFunding] = useState(true);
+  // §2.1 — conflict-of-interest disclosure + informative no-self-vote pledge.
+  const [conflict, setConflict] = useState('');
+  const [noSelfVote, setNoSelfVote] = useState(false); // §8.2 board-only toggle (default on)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -54,6 +57,8 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       setCalls(d.callsOptin);
       setAdmissionCall(d.admissionCallOptin);
       setVotesOnFunding(d.votesOnFundingProposals);
+      setConflict(d.conflictOfInterest ?? '');
+      setNoSelfVote(!!d.noSelfVotePledge);
     });
   }, []);
 
@@ -86,6 +91,9 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
         : {}),
       // §8.2 — board members can toggle this in profile mode (non-board don't see it).
       ...(mode === 'profile' && isBoard ? { votesOnFundingProposals: votesOnFunding } : {}),
+      // §2.1 — disclosure + pledge (same semantics as the submitter profile).
+      conflictOfInterest: conflict.trim(),
+      noSelfVotePledge: noSelfVote,
     };
     try {
       if (mode === 'join') await drepApi.apply(input);
@@ -122,6 +130,17 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       <label className="block space-y-1">
         <span className="text-sm font-medium">Motivation / experience</span>
         <textarea className={field} rows={3} value={bio} onChange={(e) => setBio(e.target.value)} />
+      </label>
+
+      {/* §2.1 — same disclosure as the submitter profile. */}
+      <label className="block">
+        <span className="text-sm font-medium">Conflict of interest</span>
+        <p className="text-xs text-neutral-500">Disclose everything related to a conflict of interest around approving funding (write &quot;none&quot; if you have none).</p>
+        <textarea className={field} rows={3} maxLength={20000} value={conflict} onChange={(e) => setConflict(e.target.value)} placeholder="e.g. I am affiliated with project X which competes for the same category…" />
+      </label>
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" checked={noSelfVote} onChange={(e) => setNoSelfVote(e.target.checked)} className="mt-0.5" />
+        <span>I will not vote for my own proposal <span className="text-xs text-neutral-500">(informative — optional)</span></span>
       </label>
 
       <div className="space-y-1">

@@ -28,6 +28,9 @@ export class DrepApplicationDto {
   @IsOptional() @IsObject() contact?: Record<string, unknown>;
   @IsOptional() @IsArray() @IsString({ each: true }) subcategoryIds?: string[];
   @IsOptional() @IsBoolean() kycOptin?: boolean;
+  // §2.1 — conflict-of-interest disclosure + informative no-self-vote pledge.
+  @IsOptional() @IsString() @MaxLength(20000) conflictOfInterest?: string;
+  @IsOptional() @IsBoolean() noSelfVotePledge?: boolean;
   @IsOptional() @IsBoolean() callsOptin?: boolean;
   @IsOptional() @IsBoolean() admissionCallOptin?: boolean;
 }
@@ -43,6 +46,9 @@ export class UpdateDrepDto {
   @IsOptional() @IsObject() contact?: Record<string, unknown>;
   @IsOptional() @IsArray() @IsString({ each: true }) subcategoryIds?: string[];
   @IsOptional() @IsBoolean() kycOptin?: boolean;
+  // §2.1 — conflict-of-interest disclosure + informative no-self-vote pledge.
+  @IsOptional() @IsString() @MaxLength(20000) conflictOfInterest?: string;
+  @IsOptional() @IsBoolean() noSelfVotePledge?: boolean;
   @IsOptional() @IsBoolean() callsOptin?: boolean;
   @IsOptional() @IsBoolean() admissionCallOptin?: boolean;
   // §8.2 — board-member self-toggle for "I'll vote on funding proposals".
