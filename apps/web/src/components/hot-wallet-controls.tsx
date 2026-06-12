@@ -63,7 +63,7 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
     setError(null); setSuccess(null); setBusy('topup');
     try {
       await treasuryApi.prepareTopUp(num, sourceBucketId || undefined);
-      setSuccess(`Top-up of ${num.toLocaleString()} ₳ prepared — awaiting all board signatures in Actions.`);
+      setSuccess(`Top-up of ${num.toLocaleString()} ₳ prepared — awaiting 3-of-5 board signatures in Actions.`);
       setAmount('');
       load();
       onChange?.();

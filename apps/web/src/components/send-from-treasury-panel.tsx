@@ -80,7 +80,7 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
         context: context.trim(),
         sourceBucketId: sourceBucketId || undefined,
       });
-      setSuccess(`Transfer of ${amt.toLocaleString()} ₳ queued — awaiting all board signatures in the queue below.`);
+      setSuccess(`Transfer of ${amt.toLocaleString()} ₳ queued — awaiting 3-of-5 board signatures in the queue below.`);
       setDest(''); setAmount(''); setContext('');
       load();
       onChange?.();
