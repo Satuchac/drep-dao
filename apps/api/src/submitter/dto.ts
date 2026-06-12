@@ -12,6 +12,8 @@ export class SubmitterApplicationDto {
   @IsOptional() noSelfVotePledge?: boolean;
   @IsString() @IsNotEmpty() @MaxLength(200) telegram!: string;
   @IsString() @IsNotEmpty() @MaxLength(320) email!: string;
+  // §2.1 — consent that the profile is persisted by the platform (kept even after leaving).
+  @IsOptional() agreePersist?: boolean;
 }
 
 export class RejectSubmitterDto {

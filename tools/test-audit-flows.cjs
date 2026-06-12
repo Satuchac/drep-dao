@@ -191,6 +191,18 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     await throws('§2.1 rejecting your OWN application is forbidden', () => submitters.reject(selfApp.id, 'no', user.id), /own application/);
     await submitters.approve(selfApp.id, d1.userId); // another member can
     ok('§2.1 another member can approve it', (await db.submitterApplication.findUnique({ where: { id: selfApp.id } })).status === 'APPROVED');
+    // §2.1 — leave/deregister: blocked while a proposal is in flight; profile kept (LEFT).
+    const lp = await db.proposal.create({
+      data: { type: 'FUNDING', votingType: 'BALANCED', status: 'PENDING', title: 'LV', roundId: round.id, categoryId: cat.id, submitterUserId: user.id, requestedAmountAda: 0n, contentMd: 'c' },
+    });
+    cleanupProposalIds.push(lp.id);
+    await throws('§2.1 leaving is blocked while a proposal is active', () => submitters.leave(user.id), /active proposal/);
+    // Close EVERYTHING in flight for this user (earlier sections approved several proposals).
+    await db.proposal.updateMany({ where: { submitterUserId: user.id, status: { in: ['PENDING', 'ACTIVE', 'APPROVED'] } }, data: { status: 'COMPLETE' } });
+    await submitters.leave(user.id);
+    const leftApp = await db.submitterApplication.findUnique({ where: { id: selfApp.id } });
+    ok('§2.1 leaving keeps the profile (status LEFT + leftAt)', leftApp.status === 'LEFT' && !!leftApp.leftAt);
+    ok('§2.1 a LEFT submitter is no longer approved (role gone)', (await submitters.isApproved(user.id)) === false);
     await db.submitterApplication.delete({ where: { id: selfApp.id } });
 
     // ── §20.3 notification dedupe ────────────────────────────────────────────

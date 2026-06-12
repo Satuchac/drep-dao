@@ -621,6 +621,7 @@ export interface SubmitterApplicationInput {
   noSelfVotePledge?: boolean;
   telegram: string;
   email: string;
+  agreePersist?: boolean;
 }
 export interface SubmitterHistoryItem {
   displayName: string;
@@ -637,7 +638,7 @@ export interface SubmitterHistoryItem {
 }
 export interface MySubmitter {
   id: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'LEFT';
   displayName: string;
   description: string;
   githubUrls: string[];
@@ -649,6 +650,7 @@ export interface MySubmitter {
   telegram: string;
   email: string;
   rejectionReason: string | null;
+  leftAt: string | null;
   history: SubmitterHistoryItem[];
 }
 export interface SubmitterApplication extends MySubmitter {
@@ -669,13 +671,16 @@ export interface ApprovedSubmitter {
   stakeAddress: string;
   drepIdOnchain: string | null;
   isDaoMember: boolean;
+  status: 'APPROVED' | 'LEFT';
+  leftAt: string | null;
   since: string | null;
 }
 export const submitterApi = {
   mine: () => request<MySubmitter | null>('/me/submitter'),
   apply: (input: SubmitterApplicationInput) =>
     request<MySubmitter>('/me/submitter-application', { method: 'POST', body: JSON.stringify(input) }),
-  directory: () => request<ApprovedSubmitter[]>('/dao/submitters'),
+  directory: (includeLeft = false) => request<ApprovedSubmitter[]>(`/dao/submitters${includeLeft ? '?includeLeft=1' : ''}`),
+  leave: () => request<{ ok: boolean }>('/me/submitter/leave', { method: 'POST' }),
 };
 export const boardSubmittersApi = {
   applications: (history = false) =>

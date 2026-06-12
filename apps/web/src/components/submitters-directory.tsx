@@ -17,9 +17,12 @@ export function SubmittersDirectory() {
   const { drepUrl } = useExplorer();
   const [rows, setRows] = useState<ApprovedSubmitter[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  // §2.1 — deregistered profiles stay in the history; show them on demand.
+  const [showLeft, setShowLeft] = useState(false);
   useEffect(() => {
-    submitterApi.directory().then(setRows).catch(() => setRows([]));
-  }, []);
+    setRows(null);
+    submitterApi.directory(showLeft).then(setRows).catch(() => setRows([]));
+  }, [showLeft]);
 
   return (
     <div className="space-y-4">
@@ -30,6 +33,10 @@ export function SubmittersDirectory() {
           full profile. Submitters who are also DAO members (they vote, too) are flagged.
         </p>
       </div>
+      <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
+        <input type="checkbox" checked={showLeft} onChange={(e) => setShowLeft(e.target.checked)} />
+        Show deleted accounts (submitters who left — profiles are kept in the history)
+      </label>
       {rows === null ? <p className="text-sm text-neutral-500">Loading…</p> : null}
       {rows?.length === 0 ? <p className="text-sm text-neutral-500">No approved submitters yet.</p> : null}
       <div className="space-y-3">
@@ -44,6 +51,11 @@ export function SubmittersDirectory() {
                     : <FallbackAvatar name={s.displayName} className="h-9 w-9 rounded" />}
                   <span className="font-medium">{s.displayName}</span>
                   {s.country ? <span className="text-xs text-neutral-500">{s.country}</span> : null}
+                  {s.status === 'LEFT' ? (
+                    <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300" title={s.leftAt ? `left ${new Date(s.leftAt).toLocaleDateString()}` : 'left the platform'}>
+                      left{s.leftAt ? ` ${new Date(s.leftAt).toLocaleDateString()}` : ''}
+                    </span>
+                  ) : null}
                   {s.isDaoMember ? (
                     <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200" title="This submitter also votes on funding proposals">
                       ⚠ also a DAO member

@@ -74,6 +74,7 @@ model SubmitterApplication {
   telegram           String  @default("")
   email              String  @default("")
   rejectionReason String?   @map("rejection_reason")
+  leftAt          DateTime? @map("left_at") @db.Timestamptz(6) // §2.1 — deregistered (profile kept)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
   reviewedAt      DateTime? @map("reviewed_at") @db.Timestamptz(6)

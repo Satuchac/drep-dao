@@ -19,6 +19,12 @@ export class MeSubmitterController {
   mine(@CurrentUser() ctx: AuthContext) {
     return this.svc.mine(ctx.userId);
   }
+
+  // §2.1 — an approved submitter deregisters (blocked while proposals are in flight).
+  @Post('submitter/leave')
+  leave(@CurrentUser() ctx: AuthContext) {
+    return this.svc.leave(ctx.userId);
+  }
 }
 
 @Controller('dao')
@@ -26,10 +32,10 @@ export class MeSubmitterController {
 export class DaoSubmittersController {
   constructor(private readonly svc: SubmitterService) {}
 
-  // §2.1 — public (logged-in) directory of approved submitters.
+  // §2.1 — public (logged-in) directory of approved submitters (+ left ones on demand).
   @Get('submitters')
-  list() {
-    return this.svc.listApproved();
+  list(@Query('includeLeft') includeLeft?: string) {
+    return this.svc.listApproved(includeLeft === '1' || includeLeft === 'true');
   }
 }
 

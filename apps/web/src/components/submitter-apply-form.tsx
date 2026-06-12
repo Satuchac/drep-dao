@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { submitterApi, type MySubmitter } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { COUNTRIES } from '@/lib/countries';
+import { ConfirmDialog } from './confirm-dialog';
 
 const MIN_WORDS = 100;
 const MAX_LOGO_BYTES = 256 * 1024;
@@ -31,6 +32,10 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   const [country, setCountry] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // §2.1 — persistence consent (required to apply) + leave flow.
+  const [agreePersist, setAgreePersist] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
 
   const load = () =>
     submitterApi.mine().then((m) => {
@@ -59,7 +64,8 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   const effectiveName = knownName || name.trim();
   const memberNeedsProfileName = isMember && !knownName; // §2.1 — set the profile name first
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const canSubmit = !memberNeedsProfileName && !!effectiveName && !!country && !!desc.trim() && !!conflict.trim() && !!telegram.trim() && emailOk && (!needsFullDesc || words >= MIN_WORDS);
+  const needsConsent = mine?.status !== 'APPROVED';
+  const canSubmit = !memberNeedsProfileName && !!effectiveName && !!country && !!desc.trim() && !!conflict.trim() && !!telegram.trim() && emailOk && (!needsConsent || agreePersist) && (!needsFullDesc || words >= MIN_WORDS);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,6 +101,8 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
           <p className="text-sm text-emerald-600">You are an approved submitter ✅ — submit proposals under <strong>My proposals</strong>. You can still update your profile below.</p>
         ) : mine?.status === 'PENDING' ? (
           <p className="text-sm text-amber-600">Your application is under board review. You can update it below.</p>
+        ) : mine?.status === 'LEFT' ? (
+          <p className="text-sm text-neutral-500">You left the platform{mine.leftAt ? ` on ${new Date(mine.leftAt).toLocaleDateString()}` : ''} — your profile is kept in the history. You can re-apply below.</p>
         ) : mine?.status === 'REJECTED' ? (
           <div className="rounded border border-red-200 bg-red-50 p-2 text-sm dark:border-red-900 dark:bg-red-950/30">
             <div className="font-medium text-red-800 dark:text-red-200">Application rejected</div>
@@ -204,11 +212,44 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         </div>
 
         {error ? <div className="text-xs text-red-600">{error}</div> : null}
-        {!canSubmit ? <div className="text-xs text-amber-600">{memberNeedsProfileName ? 'Profile display name is required. ' : !effectiveName ? 'Display name is required. ' : ''}{!country ? 'Country is required. ' : ''}{!conflict.trim() ? 'Conflict-of-interest disclosure is required. ' : ''}{!telegram.trim() ? 'Telegram is required. ' : ''}{!emailOk ? 'A valid email is required. ' : ''}{!desc.trim() ? 'Description is required. ' : needsFullDesc && words < MIN_WORDS ? `Description needs at least ${MIN_WORDS} words (${words}/${MIN_WORDS}).` : ''}</div> : null}
+        {!canSubmit ? <div className="text-xs text-amber-600">{memberNeedsProfileName ? 'Profile display name is required. ' : !effectiveName ? 'Display name is required. ' : ''}{!country ? 'Country is required. ' : ''}{!conflict.trim() ? 'Conflict-of-interest disclosure is required. ' : ''}{!telegram.trim() ? 'Telegram is required. ' : ''}{!emailOk ? 'A valid email is required. ' : ''}{needsConsent && !agreePersist ? 'You must agree to profile persistence. ' : ''}{!desc.trim() ? 'Description is required. ' : needsFullDesc && words < MIN_WORDS ? `Description needs at least ${MIN_WORDS} words (${words}/${MIN_WORDS}).` : ''}</div> : null}
+        {needsConsent ? (
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={agreePersist} onChange={(e) => setAgreePersist(e.target.checked)} className="mt-0.5" />
+            <span>I agree that the profile will be persisted by the platform <span className="text-red-500">*</span> <span className="text-xs text-neutral-500">(it stays in the history even after leaving)</span></span>
+          </label>
+        ) : null}
         <button type="submit" disabled={busy} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
           {busy ? 'Submitting…' : mine && mine.status !== 'REJECTED' ? 'Update application' : mine?.status === 'REJECTED' ? 'Re-apply' : 'Apply'}
         </button>
       </form>
+
+      {approved ? (
+        <div className="rounded border border-red-200 p-3 dark:border-red-900">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-neutral-500">Deregister as a submitter. Your profile stays in the platform&apos;s history.</p>
+            <button onClick={() => { setLeaveError(null); setConfirmLeave(true); }} className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700">
+              Leave DAO
+            </button>
+          </div>
+          {leaveError ? <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">⚠ {leaveError}</div> : null}
+        </div>
+      ) : null}
+      <ConfirmDialog
+        open={confirmLeave}
+        title="Leave as a submitter?"
+        message="You will lose the submitter role and won't be able to submit proposals. Your profile is kept in the platform's history (visible under Submitters → show deleted accounts). You can re-apply later. Are you sure?"
+        confirmLabel="Leave DAO"
+        cancelLabel="Stay"
+        tone="danger"
+        onCancel={() => setConfirmLeave(false)}
+        onConfirm={() => {
+          setConfirmLeave(false);
+          void submitterApi.leave()
+            .then(async () => { await load(); onChange?.(); })
+            .catch((e) => setLeaveError(e instanceof Error ? e.message : 'failed'));
+        }}
+      />
 
       {mine && mine.history.length > 0 ? (
         <details className="rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">

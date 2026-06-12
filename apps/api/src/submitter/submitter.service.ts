@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { MeritService } from '../merit/merit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import type { SubmitterApplicationDto } from './dto';
@@ -45,6 +45,11 @@ export class SubmitterService {
     const description = (dto.description ?? '').trim();
     const country = (dto.country ?? '').trim();
     if (!displayName) throw new BadRequestException('display name is required');
+    // §2.1 — applying means consenting to profile persistence (it stays even after leaving).
+    const prior = await this.prisma.submitterApplication.findUnique({ where: { userId }, select: { status: true } });
+    if (prior?.status !== 'APPROVED' && !dto.agreePersist) {
+      throw new BadRequestException('you must agree that the profile will be persisted by the platform');
+    }
     if (!country) throw new BadRequestException('country is required');
     if (!description) throw new BadRequestException('description is required');
     // §2.1 — disclosure + contact (the board must be able to reach the team).
@@ -132,7 +137,7 @@ export class SubmitterService {
     if (!a) return null;
     return {
       id: a.id,
-      status: a.status as 'PENDING' | 'APPROVED' | 'REJECTED',
+      status: a.status as 'PENDING' | 'APPROVED' | 'REJECTED' | 'LEFT',
       displayName: a.displayName,
       description: a.description,
       githubUrls: a.githubUrls,
@@ -144,8 +149,29 @@ export class SubmitterService {
       telegram: a.telegram,
       email: a.email,
       rejectionReason: a.rejectionReason,
+      leftAt: a.leftAt,
       history: await this.historyFor(userId),
     };
+  }
+
+  /**
+   * §2.1 — an approved submitter deregisters. Blocked while any of their proposals is still
+   * in flight (PENDING / ACTIVE / APPROVED): finish it, or the board cancels it. The profile
+   * row is KEPT (status LEFT + leftAt) — it stays visible in the directory's history view.
+   */
+  async leave(userId: string) {
+    const a = await this.prisma.submitterApplication.findUnique({ where: { userId }, select: { id: true, status: true } });
+    if (!a || a.status !== 'APPROVED') throw new ConflictException('only an approved submitter can leave');
+    const active = await this.prisma.proposal.count({
+      where: { submitterUserId: userId, status: { in: ['PENDING', 'ACTIVE', 'APPROVED'] } },
+    });
+    if (active > 0) {
+      throw new ConflictException(
+        `you cannot leave while you have ${active} active proposal${active === 1 ? '' : 's'} — finish ${active === 1 ? 'it' : 'them'} first, or ask the board to cancel ${active === 1 ? 'it' : 'them'}`,
+      );
+    }
+    await this.prisma.submitterApplication.update({ where: { id: a.id }, data: { status: 'LEFT', leftAt: new Date() } });
+    return { ok: true };
   }
 
   async isApproved(userId: string): Promise<boolean> {
@@ -154,9 +180,9 @@ export class SubmitterService {
   }
 
   /** §2.1 — public directory of APPROVED submitters; flags those who are also DAO members. */
-  async listApproved() {
+  async listApproved(includeLeft = false) {
     const rows = await this.prisma.submitterApplication.findMany({
-      where: { status: 'APPROVED' },
+      where: { status: includeLeft ? { in: ['APPROVED', 'LEFT'] } : 'APPROVED' },
       orderBy: { displayName: 'asc' },
       include: { user: { select: { id: true, displayName: true, stakeAddress: true, drepKeyHash: true, drep: { select: { status: true, drepIdOnchain: true } } } } },
     });
@@ -180,6 +206,8 @@ export class SubmitterService {
       drepIdOnchain: a.user.drep?.drepIdOnchain ?? null,
       // §2.1 — important context: this submitter also votes (DAO member / board).
       isDaoMember: a.user.drep?.status === 'ADMITTED' || (!!a.user.drepKeyHash && boardKeys.has(a.user.drepKeyHash)),
+      status: a.status as 'APPROVED' | 'LEFT',
+      leftAt: a.leftAt,
       since: a.reviewedAt,
     }));
   }
