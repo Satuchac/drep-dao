@@ -1,8 +1,9 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as CSL from '@emurgo/cardano-serialization-lib-nodejs';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
+import { MeritService } from '../merit/merit.service';
 import { verifyCip30Signature } from '../auth/cip30';
 
 const LOVELACE = 1_000_000;
@@ -40,6 +41,7 @@ export class BoardMultisigService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly cardano: CardanoQueryService,
+    @Optional() private readonly merit?: MeritService,
   ) {
     const net = (this.config.get<string>('CARDANO_NETWORK') ?? 'Preprod').trim();
     this.networkId = net === 'Mainnet' ? 1 : 0;
@@ -236,6 +238,10 @@ export class BoardMultisigService {
       create: { boardSeatId: seat.id, userId, paymentKeyHash, paymentBech32: bech, hardwareAttested: !!dto.hardwareAttested, attestationSignature: dto.signature, attestationKey: dto.key, attestationTs: dto.ts },
     });
 
+    // §13.2 — providing a multisig key is board setup work: +1, once per seat.
+    const myDrep = await this.prisma.drep.findUnique({ where: { userId }, select: { id: true } });
+    if (myDrep) await this.merit?.tryAward(myDrep.id, 'MULTISIG_KEY_PROVIDED', seat.id);
+
     await this.tryAssemble();
     return this.status();
   }
@@ -275,6 +281,18 @@ export class BoardMultisigService {
       if (active) {
         await tx.multisigConfig.update({ where: { id: active.id }, data: { replacedAt: now, replacedByConfigId: created.id } });
       }
+      return created;
+    }).then(async (created) => {
+      // §13.2 — multisig READY: +1 to every board member who contributed a key (once per config).
+      const contributors = await this.prisma.boardMultisigKey.findMany({
+        where: { boardSeatId: { in: seats.map((s) => s.id) } },
+        select: { userId: true },
+      });
+      const dreps = await this.prisma.drep.findMany({
+        where: { userId: { in: contributors.map((c) => c.userId) } },
+        select: { id: true },
+      });
+      await this.merit?.awardMany(dreps.map((d) => d.id), 'MULTISIG_READY', created.id);
       return created;
     });
   }

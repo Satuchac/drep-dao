@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as CSL from '@emurgo/cardano-serialization-lib-nodejs';
 import { PrismaService } from '../prisma/prisma.service';
@@ -6,6 +6,7 @@ import { AnchorService } from '../cardano/anchor.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { verifyCip30Signature } from '../auth/cip30';
 import { PledgeReturnService } from './pledge-return.service';
+import { MeritService } from '../merit/merit.service';
 
 const LOVELACE = 1_000_000;
 const SIGNING_THRESHOLD = 3; // §15 — 3-of-5 board signatures required to broadcast
@@ -66,6 +67,7 @@ export class MultisigBroadcastService {
     private readonly anchor: AnchorService,
     private readonly cardano: CardanoQueryService,
     private readonly pledgeReturn: PledgeReturnService,
+    @Optional() private readonly merit?: MeritService,
   ) {
     const net = (this.config.get<string>('CARDANO_NETWORK') ?? 'Preprod').trim();
     this.networkId = net === 'Mainnet' ? 1 : 0;
@@ -479,6 +481,13 @@ export class MultisigBroadcastService {
           this.logger.warn(`pledge-return check failed: ${e instanceof Error ? e.message : e}`);
         }
       }
+    }
+    // §13.2 — every signer of a tx that reached the network earns +1 (once per action).
+    try {
+      const sigs = await this.prisma.multisigSignature.findMany({ where: { actionId }, select: { boardDrepId: true } });
+      await this.merit?.awardMany(sigs.map((s) => s.boardDrepId), 'TX_SIGNED', actionId);
+    } catch (e) {
+      this.logger.warn(`TX_SIGNED merit skipped: ${e instanceof Error ? e.message : e}`);
     }
     this.logger.warn(`multisig action ${actionId} broadcast: ${txHash}`);
     return { status: 'CONFIRMED', txHash, approvals: vkeyWitnesses.len(), threshold };
