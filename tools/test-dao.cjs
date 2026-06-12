@@ -27,6 +27,7 @@ let fail = 0;
 const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${d}` : ''}`); if (!c) fail++; };
 
 (async () => {
+  const __bio100 = Array.from({ length: 100 }, (_, i) => `word${i}`).join(' '); // §14.3 — bio needs ≥100 words
   const prisma = new PrismaService(config);
   const cardano = new CardanoQueryService(config);
   const users = new UsersService(prisma, cardano);
@@ -72,7 +73,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
     heidi.profile.roles.join(','));
 
   console.log('\n=== Heidi requests to join → board 3-of-5 vote (rationale required) ===');
-  const applied = await drep.apply(heidi.userId, { displayName: 'Heidi', bio: 'Long-time Cardano contributor.', subcategoryIds: ['governance'] });
+  const applied = await drep.apply(heidi.userId, { displayName: 'Heidi', bio: __bio100, subcategoryIds: ['governance'] });
   ok('application is PENDING_ADMISSION', applied.status === 'PENDING_ADMISSION');
 
   // rationale required

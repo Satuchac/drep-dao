@@ -62,6 +62,7 @@ function signCip8(id, messageUtf8) {
 }
 
 (async () => {
+  const __bio100 = Array.from({ length: 100 }, (_, i) => `word${i}`).join(' '); // §14.3 — bio needs ≥100 words
   const prisma = new PrismaService(config);
   const cardano = new CardanoQueryService(config);
   const anchor = new AnchorService(config, prisma);
@@ -82,7 +83,7 @@ function signCip8(id, messageUtf8) {
   const hu = await prisma.appUser.findUnique({ where: { stakeKeyHash: stakeKeyHashFromBech32(personas.heidi.stakeAddress) } });
   if (hu) { const d = await prisma.drep.findUnique({ where: { userId: hu.id } }); if (d) { await prisma.admissionVote.deleteMany({ where: { drepId: d.id } }); await prisma.drep.delete({ where: { id: d.id } }); } }
   const heidi = await login('heidi');
-  const app = await drep.apply(heidi, { displayName: 'Heidi' });
+  const app = await drep.apply(heidi, { displayName: 'Heidi', bio: __bio100 });
   const heidiDrepId = personas.heidi.drepKeyHash; // unused; ref is drepIdOnchain
   const applicantDrepIdOnchain = app.drepIdOnchain;
 

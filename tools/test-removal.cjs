@@ -25,6 +25,7 @@ let fail = 0;
 const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${d}` : ''}`); if (!c) fail++; };
 
 (async () => {
+  const __bio100 = Array.from({ length: 100 }, (_, i) => `word${i}`).join(' '); // §14.3 — bio needs ≥100 words
   const prisma = new PrismaService(config);
   const cardano = new CardanoQueryService(config);
   const users = new UsersService(prisma, cardano);
@@ -44,7 +45,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const hu = await prisma.appUser.findUnique({ where: { stakeKeyHash: stakeKeyHashFromBech32(personas.heidi.stakeAddress) } });
   if (hu) { const d = await prisma.drep.findUnique({ where: { userId: hu.id } }); if (d) { await prisma.drepRemovalVote.deleteMany({ where: { removal: { targetDrepId: d.id } } }); await prisma.drepRemoval.deleteMany({ where: { targetDrepId: d.id } }); await prisma.admissionVote.deleteMany({ where: { drepId: d.id } }); await prisma.roundDrepEligibility.deleteMany({ where: { drepId: d.id } }); await prisma.drep.delete({ where: { id: d.id } }); } }
   const heidi = await login('heidi');
-  const app = await drep.apply(heidi, { displayName: 'Heidi' });
+  const app = await drep.apply(heidi, { displayName: 'Heidi', bio: __bio100 });
   for (const b of [alice, dave, erin]) await drep.voteOnApplication(b, app.id, { choice: 'YES', feedback: 'ok' });
   ok('Heidi admitted', (await prisma.drep.findUnique({ where: { id: app.id } })).status === 'ADMITTED');
 
@@ -67,7 +68,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   console.log('\n=== Removed member can re-apply ===');
   const prof = await users.getProfile(heidi);
   ok('Heidi no longer DAO_MEMBER', !prof.roles.includes('DAO_MEMBER'), prof.roles.join(','));
-  const reapp = await drep.apply(heidi, { displayName: 'Heidi' });
+  const reapp = await drep.apply(heidi, { displayName: 'Heidi', bio: __bio100 });
   ok('re-application pending', reapp.status === 'PENDING_ADMISSION');
 
   console.log('\n=== Cleanup ===');
