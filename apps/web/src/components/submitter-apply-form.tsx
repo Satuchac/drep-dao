@@ -84,6 +84,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         email: email.trim(),
         logoDataUrl: logo || undefined,
         country,
+        agreePersist,
       });
       await load();
       onChange?.();
