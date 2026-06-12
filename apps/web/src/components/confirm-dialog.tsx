@@ -44,12 +44,25 @@ export function ConfirmDialog({
   onCancel: () => void;
 }) {
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
+  // Callbacks live in refs so the open-effect below depends ONLY on `open`.
+  // Call sites pass inline arrows (new identity every render); if the effect
+  // re-ran on them it would re-focus the confirm button on EVERY parent
+  // re-render — stealing focus from a textarea inside `message` after each
+  // typed character.
+  const onCancelRef = useRef(onCancel);
+  const onConfirmRef = useRef(onConfirm);
+  useEffect(() => { onCancelRef.current = onCancel; onConfirmRef.current = onConfirm; });
   useEffect(() => {
     if (!open) return;
     confirmBtnRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); onCancel(); }
-      else if (e.key === 'Enter') { e.preventDefault(); void onConfirm(); }
+      if (e.key === 'Escape') { e.preventDefault(); onCancelRef.current(); }
+      else if (e.key === 'Enter') {
+        // Enter inside a textarea makes a newline, never a confirm.
+        if ((e.target as HTMLElement | null)?.tagName === 'TEXTAREA') return;
+        e.preventDefault();
+        void onConfirmRef.current();
+      }
     };
     window.addEventListener('keydown', onKey);
     // Lock background scroll while open.
@@ -59,7 +72,7 @@ export function ConfirmDialog({
       window.removeEventListener('keydown', onKey);
       document.body.style.overflow = prevOverflow;
     };
-  }, [open, onCancel, onConfirm]);
+  }, [open]);
 
   if (!open) return null;
   const confirmCls = tone === 'danger'
