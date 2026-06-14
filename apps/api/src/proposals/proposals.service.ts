@@ -26,6 +26,24 @@ const LOVELACE = 1_000_000;
 const toLovelace = (ada: number): bigint => BigInt(Math.round(ada * LOVELACE));
 const toAda = (l: bigint | null): number => (l == null ? 0 : Number(l) / LOVELACE);
 
+/** §11 — one segment of the milestone progress bar (one per milestone). */
+export interface MilestoneSegment {
+  idx: number;
+  title: string | null;
+  amountAda: number;
+  /** NOT_STARTED → grey · UNDER_REVIEW → amber · REJECTED (resubmit) → orange ·
+   *  PAYMENT_PENDING (POA approved, not paid) → blue · PAID → green ·
+   *  LOST (proposal cancelled, can no longer be paid) → red. */
+  state: 'NOT_STARTED' | 'UNDER_REVIEW' | 'REJECTED' | 'PAYMENT_PENDING' | 'PAID' | 'LOST';
+  poaAttempts: number;          // how many POAs have been submitted (>1 = a resubmit)
+  poaSubmittedAt: string | null; // latest POA submission
+  reviewYes: number;            // YES votes so far (for UNDER_REVIEW)
+  reviewThreshold: number;      // YES votes needed to approve the POA
+  reviewers: string[];          // who is allocated to review this milestone
+  deadlineAt: string | null;    // POA deadline (how long the milestone is planned for)
+  paidInTx: string | null;
+}
+
 /** Display label for a proposal's submitter: name → DRep id → stake address (§2). */
 function submitterDisplay(
   user?: { displayName: string | null; stakeAddress?: string | null } | null,
@@ -1186,6 +1204,13 @@ export class ProposalsService {
     });
     // §12 — pending budget-change requests outrank the normal progress chip:
     // a proposal blocked on board approval should read that way, not "0/4 voted".
+    // §11 — milestone progress bar for proposals that reached the FUNDING stage
+    // (shown on the list row + kept in history). Batched across the whole list.
+    const barsByProposal = await this.milestoneBars(
+      proposals
+        .filter((p) => p.stage === ProposalStage.FUNDING)
+        .map((p) => ({ id: p.id, status: p.status, milestoneThreshold: p.round?.milestoneApprovalVotes ?? ROUND_SETTING_DEFAULTS.milestoneApprovalVotes })),
+    );
     const pendingBudgets = await this.prisma.budgetChangeRequest.findMany({
       where: { proposalId: { in: ids }, status: 'PENDING' },
       select: { proposalId: true },
@@ -1382,7 +1407,7 @@ export class ProposalsService {
         }
       }
 
-      return { ...base, progress, rejectionReasons, milestoneReviewers, milestoneReviewerNames };
+      return { ...base, progress, rejectionReasons, milestoneReviewers, milestoneReviewerNames, milestoneBar: barsByProposal.get(p.id) ?? null };
     });
   }
 
@@ -1601,7 +1626,7 @@ export class ProposalsService {
           category: { select: { name: true, minAda: true, maxAda: true, conditions: true } },
           submitterUser: { select: { displayName: true } },
           submitterDrep: { select: { drepIdOnchain: true } },
-          round: { select: { status: true, filterResubmissionsAllowed: true, filterBudgetChangesAllowed: true } },
+          round: { select: { status: true, filterResubmissionsAllowed: true, filterBudgetChangesAllowed: true, milestoneApprovalVotes: true } },
         },
       }),
       this.prisma.budgetChangeRequest.findFirst({
@@ -1614,8 +1639,14 @@ export class ProposalsService {
     if (ProposalsService.PRIVATE_STATUSES.includes(p.status as ProposalStatus) && p.submitterUserId !== viewerUserId) {
       throw new NotFoundException('proposal not found');
     }
+    // §11 — milestone progress bar, only once the proposal reached the FUNDING
+    // stage (then it persists into history). Shown above the description.
+    const milestoneBar = p.stage === ProposalStage.FUNDING
+      ? (await this.milestoneBars([{ id: p.id, status: p.status, milestoneThreshold: p.round?.milestoneApprovalVotes ?? ROUND_SETTING_DEFAULTS.milestoneApprovalVotes }])).get(p.id) ?? null
+      : null;
     return {
       ...this.summary(p),
+      milestoneBar,
       categoryId: p.categoryId,
       contentMd: p.contentMd,
       costBreakdownMd: p.costBreakdownMd,
@@ -1681,6 +1712,78 @@ export class ProposalsService {
         status: m.status,
       })),
     };
+  }
+
+  /**
+   * §11 — build the milestone progress bar (one segment per milestone) for the
+   * given funding-stage proposals. Batched: one query each for milestones, POAs,
+   * milestone votes, and reviewer assignments. The per-segment `state` already
+   * folds in the proposal status (a cancelled proposal's unpaid milestones become
+   * LOST), so the UI just maps state → colour.
+   */
+  private async milestoneBars(
+    metas: { id: string; status: string; milestoneThreshold: number }[],
+  ): Promise<Map<string, MilestoneSegment[]>> {
+    const out = new Map<string, MilestoneSegment[]>();
+    if (metas.length === 0) return out;
+    const metaById = new Map(metas.map((m) => [m.id, m]));
+    const milestones = await this.prisma.milestone.findMany({
+      where: { proposalId: { in: metas.map((m) => m.id) } },
+      orderBy: { idx: 'asc' },
+      select: { id: true, proposalId: true, idx: true, title: true, amountAda: true, status: true, paidAt: true, paidInTx: true, deadlineAt: true },
+    });
+    const msIds = milestones.map((m) => m.id);
+    const [poas, votes, assigns] = await Promise.all([
+      this.prisma.milestonePoa.findMany({ where: { milestoneId: { in: msIds } }, select: { milestoneId: true, submittedAt: true } }),
+      this.prisma.vote.findMany({ where: { milestoneId: { in: msIds }, phase: 'MILESTONE' }, select: { milestoneId: true, choice: true } }),
+      this.prisma.milestoneAssignment.findMany({
+        where: { milestoneId: { in: msIds }, releasedAt: null },
+        select: { milestoneId: true, reviewerDrep: { select: { drepIdOnchain: true, user: { select: { displayName: true } } } }, reviewerExpert: { select: { displayName: true } } },
+      }),
+    ]);
+    const attemptsByMs = new Map<string, { count: number; latest: Date | null }>();
+    for (const p of poas) {
+      const cur = attemptsByMs.get(p.milestoneId) ?? { count: 0, latest: null };
+      cur.count += 1;
+      if (!cur.latest || p.submittedAt > cur.latest) cur.latest = p.submittedAt;
+      attemptsByMs.set(p.milestoneId, cur);
+    }
+    const yesByMs = new Map<string, number>();
+    for (const v of votes) if (v.choice === 'YES' && v.milestoneId) yesByMs.set(v.milestoneId, (yesByMs.get(v.milestoneId) ?? 0) + 1);
+    const reviewersByMs = new Map<string, Set<string>>();
+    for (const a of assigns) {
+      const name = a.reviewerDrep?.user?.displayName ?? a.reviewerDrep?.drepIdOnchain?.slice(0, 12) ?? a.reviewerExpert?.displayName ?? null;
+      if (!name) continue;
+      if (!reviewersByMs.has(a.milestoneId)) reviewersByMs.set(a.milestoneId, new Set());
+      reviewersByMs.get(a.milestoneId)!.add(name);
+    }
+    for (const m of milestones) {
+      const meta = metaById.get(m.proposalId)!;
+      const attempts = attemptsByMs.get(m.id) ?? { count: 0, latest: null };
+      let state: MilestoneSegment['state'];
+      if (m.paidAt) state = 'PAID';
+      else if (meta.status === 'FAILED') state = 'LOST';
+      else if (m.status === 'APPROVED') state = 'PAYMENT_PENDING';
+      else if (m.status === 'POA_SUBMITTED') state = 'UNDER_REVIEW';
+      else if (m.status === 'REJECTED') state = 'REJECTED';
+      else state = 'NOT_STARTED';
+      if (!out.has(m.proposalId)) out.set(m.proposalId, []);
+      out.get(m.proposalId)!.push({
+        idx: m.idx,
+        title: m.title,
+        amountAda: toAda(m.amountAda),
+        state,
+        poaAttempts: attempts.count,
+        poaSubmittedAt: attempts.latest ? attempts.latest.toISOString() : null,
+        reviewYes: yesByMs.get(m.id) ?? 0,
+        reviewThreshold: meta.milestoneThreshold,
+        reviewers: [...(reviewersByMs.get(m.id) ?? [])],
+        deadlineAt: m.deadlineAt ? m.deadlineAt.toISOString() : null,
+        paidInTx: m.paidInTx ?? null,
+      });
+    }
+    for (const segs of out.values()) segs.sort((a, b) => a.idx - b.idx);
+    return out;
   }
 
   private summary(p: {

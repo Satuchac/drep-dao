@@ -956,6 +956,22 @@ export interface ProposalSummary {
   milestoneReviewers?: 'assigned' | 'not_assigned' | null;
   /** §11 — names of the assigned milestone reviewers (when assigned). */
   milestoneReviewerNames?: string[];
+  /** §11 — milestone progress bar; present only once the proposal reached the
+   *  FUNDING stage (then it persists into history). One entry per milestone. */
+  milestoneBar?: MilestoneSegment[] | null;
+}
+export interface MilestoneSegment {
+  idx: number;
+  title: string | null;
+  amountAda: number;
+  state: 'NOT_STARTED' | 'UNDER_REVIEW' | 'REJECTED' | 'PAYMENT_PENDING' | 'PAID' | 'LOST';
+  poaAttempts: number;
+  poaSubmittedAt: string | null;
+  reviewYes: number;
+  reviewThreshold: number;
+  reviewers: string[];
+  deadlineAt: string | null;
+  paidInTx: string | null;
 }
 export interface ProposalDetail extends ProposalSummary {
   categoryId: string;

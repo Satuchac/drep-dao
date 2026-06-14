@@ -39,6 +39,7 @@ import { CopyButton } from './copy-button';
 import { ConfirmDialog } from './confirm-dialog';
 import { RevenueSharingBlock } from './proposal-submit';
 import { ProposalMessagesPanel } from './proposal-messages';
+import { MilestoneBar } from './milestone-bar';
 import { boardDeadlinesApi } from '@/lib/api';
 
 
@@ -158,6 +159,13 @@ export function ProposalDetail({
             <ResubmitPanel id={id} proposal={p} onChange={load} />
             <EditSection id={id} proposal={p} onChange={load} open={editingOpen} onOpenChange={setEditingOpen} />
           </>
+        ) : null}
+        {/* §11 — milestone progress bar above the description (FUNDING stage only;
+            backend sends it only then, and it persists into history). */}
+        {p.milestoneBar && p.milestoneBar.length > 0 ? (
+          <div className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+            <MilestoneBar segments={p.milestoneBar} interactive />
+          </div>
         ) : null}
         {/* When editing is open, every field below is duplicated by the form above —
             hide the read-only blocks so the submitter sees one canonical copy. */}

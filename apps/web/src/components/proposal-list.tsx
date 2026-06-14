@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { proposalsApi, type ProposalSummary, type ProposalProgress } from '@/lib/api';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { StatusBadge, PROPOSAL_STATUS_CLS } from './round-ui';
+import { MilestoneBar } from './milestone-bar';
 
 /** §26.2 — three reader-facing buckets over the detailed proposal statuses:
  *    approved — cleared its current gate / ready for the next stage (APPROVED, COMPLETE)
@@ -141,6 +142,12 @@ export function ProposalList({ roundId }: { roundId: string }) {
               {p.requestedAmountAda ? ` · ${p.requestedAmountAda.toLocaleString()} ₳` : ''}
               {p.isCommercial != null ? ` · ${p.isCommercial ? 'commercial' : 'open-source'}` : ''}
             </div>
+            {/* §11 — milestone progress bar (FUNDING-stage proposals; persists into history). */}
+            {p.milestoneBar && p.milestoneBar.length > 0 ? (
+              <div className="mt-2">
+                <MilestoneBar segments={p.milestoneBar} />
+              </div>
+            ) : null}
             {/* §16/§7/§8 — show WHY a proposal was rejected (fee feedback OR the NO rationales
                 from the filtering / D&V vote that decided it). Avoids opening the detail just to
                 find out why. */}
