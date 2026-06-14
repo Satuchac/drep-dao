@@ -702,11 +702,37 @@ export interface ApprovedSubmitter {
   leftAt: string | null;
   since: string | null;
 }
+export interface SubmitterProposalRow {
+  id: string;
+  publicId: string | null;
+  title: string;
+  status: string;
+  stage: string | null;
+  roundNumber: number | null;
+  roundName: string | null;
+  requestedAda: number;
+  milestonesTotal: number;
+  milestonesPaid: number;
+  paidAda: number;
+}
+export interface SubmitterPortfolio {
+  proposals: SubmitterProposalRow[];
+  stats: {
+    submitted: number;
+    requestedAda: number;
+    approvedAda: number;
+    paidAda: number;
+    completed: number;
+    inProgress: number;
+    missingMilestones: number;
+  };
+}
 export const submitterApi = {
   mine: () => request<MySubmitter | null>('/me/submitter'),
   apply: (input: SubmitterApplicationInput) =>
     request<MySubmitter>('/me/submitter-application', { method: 'POST', body: JSON.stringify(input) }),
   directory: (includeLeft = false) => request<ApprovedSubmitter[]>(`/dao/submitters${includeLeft ? '?includeLeft=1' : ''}`),
+  portfolio: (id: string) => request<SubmitterPortfolio>(`/dao/submitters/${id}/portfolio`),
   leave: () => request<{ ok: boolean }>('/me/submitter/leave', { method: 'POST' }),
 };
 export const boardSubmittersApi = {

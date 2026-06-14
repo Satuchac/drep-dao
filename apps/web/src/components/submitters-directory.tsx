@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { submitterApi, type ApprovedSubmitter } from '@/lib/api';
+import { submitterApi, type ApprovedSubmitter, type SubmitterPortfolio } from '@/lib/api';
 import { card } from '@/lib/ui';
 import { FallbackAvatar } from './fallback-avatar';
 import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
+import { useUrlNav } from '@/lib/use-url-nav';
+import { StatusBadge, PROPOSAL_STATUS_CLS } from './round-ui';
 
 /**
  * §2.1 — public directory of APPROVED submitters (mirrors the DAO members overview).
@@ -132,12 +134,105 @@ export function SubmittersDirectory() {
                       </div>
                     </div>
                   </div>
+                  {/* §2.1 — full funding-proposal portfolio + headline stats. */}
+                  <div className="w-full border-t border-neutral-200 pt-3 dark:border-neutral-800">
+                    <SubmitterPortfolioSection submitterId={s.id} />
+                  </div>
                 </div>
               ) : null}
             </section>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/** §2.1 — a submitter's funding proposals (status + round) and the headline numbers:
+ *  how many submitted, total requested, granted budget, paid so far, completed,
+ *  in-progress + milestones still missing. Lazy-loaded when the profile opens. */
+function SubmitterPortfolioSection({ submitterId }: { submitterId: string }) {
+  const { setParams } = useUrlNav();
+  const [data, setData] = useState<SubmitterPortfolio | null>(null);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    submitterApi.portfolio(submitterId).then((d) => alive && setData(d)).catch(() => alive && setError(true));
+    return () => { alive = false; };
+  }, [submitterId]);
+
+  if (error) return <p className="text-xs text-red-600">Couldn&apos;t load this submitter&apos;s proposals.</p>;
+  if (!data) return <p className="text-xs text-neutral-500">Loading proposals…</p>;
+
+  const { stats, proposals } = data;
+  const ada = (n: number) => `${n.toLocaleString(undefined, { maximumFractionDigits: 0 })} ₳`;
+
+  return (
+    <div className="space-y-2">
+      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Funding proposals</div>
+
+      {/* Headline stats. */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+        <Stat label="Submitted" value={String(stats.submitted)} />
+        <Stat label="Requested" value={ada(stats.requestedAda)} />
+        <Stat label="Granted budget" value={ada(stats.approvedAda)} hint="proposals that were approved for funding" />
+        <Stat label="Paid so far" value={ada(stats.paidAda)} hint="sent after delivered milestones" />
+        <Stat label="Completed" value={String(stats.completed)} />
+        <Stat
+          label="In progress"
+          value={String(stats.inProgress)}
+          hint={`${stats.missingMilestones} milestone${stats.missingMilestones === 1 ? '' : 's'} still to deliver`}
+        />
+      </div>
+      {stats.inProgress > 0 ? (
+        <p className="text-[11px] text-neutral-500">
+          {stats.inProgress} funded proposal{stats.inProgress === 1 ? '' : 's'} not yet completed —{' '}
+          <span className="font-medium text-amber-700 dark:text-amber-300">{stats.missingMilestones} milestone{stats.missingMilestones === 1 ? '' : 's'} still missing</span>.
+        </p>
+      ) : null}
+
+      {/* Per-proposal list. */}
+      {proposals.length === 0 ? (
+        <p className="text-xs text-neutral-500">No funding proposals submitted yet.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {proposals.map((p) => (
+            <li key={p.id}>
+              <button
+                onClick={() => setParams({ proposal: p.id })}
+                className="block w-full rounded-md border border-neutral-200 px-3 py-2 text-left text-sm hover:border-emerald-400 dark:border-neutral-800"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-medium">
+                    {p.publicId ? <span className="mr-2 font-mono text-xs text-neutral-500">{p.publicId}</span> : null}
+                    {p.title}
+                  </span>
+                  <span className="flex items-center gap-2 text-xs text-neutral-500">
+                    {p.roundNumber != null ? (
+                      <span>Round #{p.roundNumber}{p.roundName ? ` — ${p.roundName}` : ''}</span>
+                    ) : <span className="italic text-neutral-400">no round</span>}
+                    <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} />
+                  </span>
+                </div>
+                <div className="mt-1 text-xs text-neutral-500">
+                  {p.requestedAda > 0 ? `Requested ${ada(p.requestedAda)}` : 'no budget set'}
+                  {p.milestonesTotal > 0 ? ` · milestones ${p.milestonesPaid}/${p.milestonesTotal} paid · ${ada(p.paidAda)} received` : ''}
+                  {p.stage ? ` · stage ${p.stage}` : ''}
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <div className="rounded-md border border-neutral-200 px-2.5 py-1.5 dark:border-neutral-800" title={hint}>
+      <div className="text-[10px] uppercase tracking-wide text-neutral-500">{label}</div>
+      <div className="font-semibold tabular-nums">{value}</div>
     </div>
   );
 }

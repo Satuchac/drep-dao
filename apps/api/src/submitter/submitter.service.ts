@@ -221,6 +221,85 @@ export class SubmitterService {
     }));
   }
 
+  /**
+   * §2.1 — a submitter's funding-proposal portfolio + headline stats, shown at the
+   * bottom of their profile. Keyed by the APPLICATION id (what the directory uses).
+   * Counts only FUNDING proposals that entered the process (DRAFTs excluded).
+   *
+   * Stats:
+   *  - submitted: how many proposals they ran through the DAO
+   *  - requestedAda: total budget asked across all of them
+   *  - approvedAda: budget granted (proposals that reached APPROVED/COMPLETE)
+   *  - paidAda: actually sent so far (sum of milestones marked paid on-chain)
+   *  - completed: proposals fully delivered (COMPLETE)
+   *  - inProgress: funded but not yet complete (APPROVED) + missingMilestones across them
+   */
+  async submitterPortfolio(applicationId: string) {
+    const app = await this.prisma.submitterApplication.findUnique({
+      where: { id: applicationId },
+      select: { userId: true },
+    });
+    if (!app) throw new NotFoundException('submitter not found');
+
+    const ADA = 1_000_000;
+    const rows = await this.prisma.proposal.findMany({
+      where: { submitterUserId: app.userId, type: 'FUNDING', status: { not: 'DRAFT' } },
+      orderBy: [{ createdAt: 'desc' }],
+      select: {
+        id: true, publicId: true, title: true, status: true, stage: true,
+        requestedAmountAda: true,
+        round: { select: { number: true, name: true } },
+        milestones: { select: { amountAda: true, paidAt: true } },
+      },
+    });
+
+    const FUNDED = new Set(['APPROVED', 'COMPLETE']);
+    let requestedLov = 0n, approvedLov = 0n, paidLov = 0n;
+    let completed = 0, inProgress = 0, missingMilestones = 0;
+
+    const proposals = rows.map((p) => {
+      const requested = p.requestedAmountAda ?? 0n;
+      requestedLov += requested;
+      const msTotal = p.milestones.length;
+      const msPaid = p.milestones.filter((m) => m.paidAt).length;
+      const paid = p.milestones.reduce((s, m) => s + (m.paidAt ? m.amountAda : 0n), 0n);
+      paidLov += paid;
+      if (FUNDED.has(p.status)) approvedLov += requested;
+      if (p.status === 'COMPLETE') completed += 1;
+      // Funded but not yet complete → in progress; its unpaid milestones are "missing".
+      if (p.status === 'APPROVED') {
+        inProgress += 1;
+        missingMilestones += msTotal - msPaid;
+      }
+      return {
+        id: p.id,
+        publicId: p.publicId,
+        title: p.title,
+        status: p.status,
+        stage: p.stage,
+        roundNumber: p.round?.number ?? null,
+        roundName: p.round?.name ?? null,
+        requestedAda: Number(requested) / ADA,
+        milestonesTotal: msTotal,
+        milestonesPaid: msPaid,
+        paidAda: Number(paid) / ADA,
+      };
+    });
+
+    return {
+      proposals,
+      stats: {
+        submitted: rows.length,
+        requestedAda: Number(requestedLov) / ADA,
+        approvedAda: Number(approvedLov) / ADA,
+        paidAda: Number(paidLov) / ADA,
+        completed,
+        inProgress,
+        missingMilestones,
+      },
+    };
+  }
+
   /** Board to-do: applications awaiting review (or all, with showAll). Each carries its change history. */
   async listApplications(showAll = false) {
     const rows = await this.prisma.submitterApplication.findMany({

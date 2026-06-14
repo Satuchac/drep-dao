@@ -37,6 +37,12 @@ export class DaoSubmittersController {
   list(@Query('includeLeft') includeLeft?: string) {
     return this.svc.listApproved(includeLeft === '1' || includeLeft === 'true');
   }
+
+  // §2.1 — a submitter's funding-proposal portfolio + stats (bottom of the profile).
+  @Get('submitters/:id/portfolio')
+  portfolio(@Param('id', ParseUUIDPipe) id: string) {
+    return this.svc.submitterPortfolio(id);
+  }
 }
 
 @Controller('admin/submitters')
