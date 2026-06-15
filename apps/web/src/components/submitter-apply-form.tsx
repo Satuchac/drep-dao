@@ -15,13 +15,9 @@ const inputCls = 'w-full rounded border border-neutral-300 px-2 py-1 text-sm dar
 /** §2.1 — apply for the submitter role. The board approves/rejects; only then can you submit. */
 export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   const { profile } = useAuth();
-  // §2.1 — never ask for a name the platform knows: members reuse the profile display name.
-  const knownName = profile?.user.displayName?.trim() || '';
-  // Only an actual DAO member / board member has the DRep profile editor on the
-  // same My-area Profile page, so only they set their name there and the submitter
-  // role reuses it. A registered-DRep-only user (not in the DAO) has no such
-  // editor — they type a display name directly in this form, like a viewer.
-  const isMember = !!profile && (profile.roles.includes('DAO_MEMBER') || profile.roles.includes('BOARD'));
+  // §2 — the submitter profile is INDEPENDENT of the DAO-member / expert profile: it has its
+  // own name, photo, country, etc. The member's display name is only used to PRE-FILL a brand-new
+  // application as a convenience; it stays fully editable so a submitter can use a different name.
   const [mine, setMine] = useState<MySubmitter | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [name, setName] = useState('');
@@ -53,6 +49,9 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         setConflict(m.conflictOfInterest ?? ''); setNoSelfVote(!!m.noSelfVotePledge);
         setTelegram(m.telegram ?? ''); setEmail(m.email ?? '');
         setPrevFunding(m.previousFunding ?? '');
+      } else if (profile?.user.displayName) {
+        // Convenience prefill for a NEW application — editable, fully independent.
+        setName(profile.user.displayName);
       }
     }).catch(() => setLoaded(true));
   useEffect(() => { load(); }, []);
@@ -70,11 +69,10 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   // §2.1 — the 100-word minimum gates a NEW application the board reviews; an already-approved
   // member can update their profile with any non-empty description.
   const needsFullDesc = mine?.status !== 'APPROVED';
-  const effectiveName = knownName || name.trim();
-  const memberNeedsProfileName = isMember && !knownName; // §2.1 — set the profile name first
+  const trimmedName = name.trim();
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const needsConsent = mine?.status !== 'APPROVED';
-  const canSubmit = !memberNeedsProfileName && !!effectiveName && !!country && !!desc.trim() && !!conflict.trim() && !!telegram.trim() && emailOk && (!needsConsent || agreePersist) && (!needsFullDesc || words >= MIN_WORDS);
+  const canSubmit = !!trimmedName && !!country && !!desc.trim() && !!conflict.trim() && !!telegram.trim() && emailOk && (!needsConsent || agreePersist) && (!needsFullDesc || words >= MIN_WORDS);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,7 +84,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
     setBusy(true);
     try {
       await submitterApi.apply({
-        displayName: effectiveName,
+        displayName: trimmedName,
         description: desc.trim(),
         githubUrls: githubs.map((s) => s.trim()).filter(Boolean),
         socialLinks: socials.map((s) => s.trim()).filter(Boolean),
@@ -130,25 +128,11 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
       </div>
 
       <form onSubmit={submit} className="space-y-3">
-        {knownName ? (
-          // §2.1 — the platform already knows this user's name; no duplicate input.
-          <div className="text-sm">
-            <span className="font-medium">Display name</span>
-            <div className="mt-1 rounded border border-neutral-200 bg-neutral-50 px-2 py-1 text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-300">
-              {knownName} <span className="text-xs text-neutral-400">— from your profile</span>
-            </div>
-          </div>
-        ) : memberNeedsProfileName ? (
-          <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-            ⚠ Set your <strong>display name</strong> in your DRep profile (above on this page) first — the
-            submitter role reuses it. The form unlocks once it&apos;s saved.
-          </div>
-        ) : (
-          <label className="block">
-            <span className="text-sm font-medium">Display name <span className="text-red-500">*</span></span>
-            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} className={`mt-1 ${inputCls}`} placeholder="Your name or project name" />
-          </label>
-        )}
+        <label className="block">
+          <span className="text-sm font-medium">Display name <span className="text-red-500">*</span></span>
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} className={`mt-1 ${inputCls}`} placeholder="Your name or project name" />
+          <p className="mt-1 text-[11px] text-neutral-500">Independent from your DAO-member / expert profile — set whatever name you want shown as a submitter.</p>
+        </label>
 
         <MarkdownEditor
           value={desc}
@@ -247,7 +231,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         </div>
 
         {error ? <div className="text-xs text-red-600">{error}</div> : null}
-        {!canSubmit ? <div className="text-xs text-amber-600">{memberNeedsProfileName ? 'Profile display name is required. ' : !effectiveName ? 'Display name is required. ' : ''}{!country ? 'Country is required. ' : ''}{!conflict.trim() ? 'Conflict-of-interest disclosure is required. ' : ''}{!telegram.trim() ? 'Telegram is required. ' : ''}{!emailOk ? 'A valid email is required. ' : ''}{needsConsent && !agreePersist ? 'You must agree to profile persistence. ' : ''}{!desc.trim() ? 'Description is required. ' : needsFullDesc && words < MIN_WORDS ? `Description needs at least ${MIN_WORDS} words (${words}/${MIN_WORDS}).` : ''}</div> : null}
+        {!canSubmit ? <div className="text-xs text-amber-600">{!trimmedName ? 'Display name is required. ' : ''}{!country ? 'Country is required. ' : ''}{!conflict.trim() ? 'Conflict-of-interest disclosure is required. ' : ''}{!telegram.trim() ? 'Telegram is required. ' : ''}{!emailOk ? 'A valid email is required. ' : ''}{needsConsent && !agreePersist ? 'You must agree to profile persistence. ' : ''}{!desc.trim() ? 'Description is required. ' : needsFullDesc && words < MIN_WORDS ? `Description needs at least ${MIN_WORDS} words (${words}/${MIN_WORDS}).` : ''}</div> : null}
         {needsConsent ? (
           <label className="flex items-start gap-2 text-sm">
             <input type="checkbox" checked={agreePersist} onChange={(e) => setAgreePersist(e.target.checked)} className="mt-0.5" />

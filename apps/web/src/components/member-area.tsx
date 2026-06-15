@@ -175,6 +175,21 @@ export function MemberArea() {
  * a sub-item switches to it. A member without one sees an "Apply to become a submitter"
  * button instead. Non-members (viewer / expert / submitter-only) see their single profile.
  */
+/**
+ * §2 — cross-link banner shown on one profile pointing at the account's OTHER profile. The
+ * profiles (DAO member / board / expert ↔ submitter) are independent (own name, photo, country),
+ * so this is just a labelled jump-link between them.
+ */
+function ProfileCrossLink({ label, onOpen }: { label: string; onOpen: () => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+      <span className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Also a {label}</span>
+      <span>This account has a separate, independent {label} profile.</span>
+      <button type="button" onClick={onOpen} className="font-medium underline hover:no-underline">Open {label} profile →</button>
+    </div>
+  );
+}
+
 function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPending, isSubmitter, showApply, isRegisteredDRep, hasSubmitterApp, loadExpert, onSubmitterChange }: {
   isMember: boolean;
   isBoard: boolean;
@@ -202,12 +217,6 @@ function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPendi
       ))}
     </div>
   );
-  // §2.1 — shown on the primary profile when the account is ALSO an approved submitter.
-  const alsoSubmitterFlag = isSubmitter ? (
-    <div className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
-      ✓ Also a <strong>submitter</strong> — this account can submit funding proposals. See the Submitter profile tab.
-    </div>
-  ) : null;
   // §2.1 — the "apply for the separate submitter role" card (button + explanation, never the
   // form stacked on this page). Hidden once a submitter profile exists.
   const submitterRoleCard = !showSubmitterSub ? (
@@ -239,10 +248,13 @@ function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPendi
         <div className="space-y-4">
           {showSubmitterSub ? subTab('Expert profile') : null}
           {sub === 'submitter' && showSubmitterSub ? (
-            <section className={card}><SubmitterApplyForm onChange={onSubmitterChange} /></section>
+            <div className="space-y-6">
+              <ProfileCrossLink label="Expert" onOpen={() => setSub('dao')} />
+              <section className={card}><SubmitterApplyForm onChange={onSubmitterChange} /></section>
+            </div>
           ) : (
             <div className="space-y-6">
-              {alsoSubmitterFlag}
+              {isSubmitter ? <ProfileCrossLink label="Submitter" onOpen={() => setSub('submitter')} /> : null}
               <section className={card}><ExpertApplyForm onChange={loadExpert} /></section>
               {/* §15.4 — approved experts earn ADA rewards, so they need a reward
                   payment address. This is what the My-area to-do badge points at
@@ -283,10 +295,12 @@ function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPendi
 
       {sub === 'submitter' && showSubmitterSub ? (
         <div className="space-y-6">
+          <ProfileCrossLink label={isBoard ? 'Board member' : 'DAO member'} onOpen={() => setSub('dao')} />
           <section className={card}><SubmitterApplyForm onChange={onSubmitterChange} /></section>
         </div>
       ) : (
         <div className="space-y-6">
+          {isSubmitter ? <ProfileCrossLink label="Submitter" onOpen={() => setSub('submitter')} /> : null}
           <section className={card}><MyDrepStatus /></section>
           <section className={card}>
             <h3 className="text-base font-semibold">Your DRep profile</h3>
