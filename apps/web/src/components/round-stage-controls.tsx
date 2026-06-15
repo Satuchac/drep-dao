@@ -19,6 +19,17 @@ function untilLabel(ms: number): string {
   return u(mins, 'minute');
 }
 
+/** Stage length from a start→end ms span: "10 days", "3 weeks (21 days)", "2 months (64 days)". */
+function durationLabel(startMs: number, endMs: number): string | null {
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs <= startMs) return null;
+  const hours = Math.round((endMs - startMs) / 3_600_000);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.round((endMs - startMs) / 86_400_000);
+  if (days < 14) return `${days} day${days === 1 ? '' : 's'}`;
+  if (days < 60) return `${Math.round(days / 7)} weeks (${days} days)`;
+  return `${Math.round(days / 30)} months (${days} days)`;
+}
+
 const STAGE_LABEL: Record<string, string> = {
   SUBMISSION: 'Submission',
   FILTERING: 'Filtering',
@@ -273,22 +284,44 @@ function StageRow({
   const [startsAt, setStartsAt] = useState(toLocalInput(row?.startsAt));
   const [endsAt, setEndsAt] = useState(toLocalInput(row?.endsAt));
   const [autoStart, setAutoStart] = useState(row?.autoStart ?? false);
+  const [confirmLaunch, setConfirmLaunch] = useState(false);
   // Live clock for the next-stage countdown (minute granularity → days/hours).
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
+  const startMs = startsAt ? new Date(startsAt).getTime() : NaN;
+  const endMs = endsAt ? new Date(endsAt).getTime() : NaN;
+  // Live stage-length label from the (editable) start→end, recomputed as the inputs change.
+  const editDuration = durationLabel(startMs, endMs);
+  // Small reusable validation-problem list renderer.
+  const Problems = ({ items }: { items: string[] }) =>
+    items.length ? (
+      <ul className="mt-1 list-disc pl-4 text-[11px] text-red-600 dark:text-red-400">
+        {items.map((p) => <li key={p}>{p}</li>)}
+      </ul>
+    ) : null;
   if (kind === 'past') {
     if (!row) {
       return <PastRow label={label} note="no schedule row" />;
     }
+    const lasted = durationLabel(new Date(row.startsAt).getTime(), new Date(row.endsAt).getTime());
     return (
       <PastRow
         label={label}
-        note={`${fmtDateTime(row.startsAt)} → ${fmtDateTime(row.endsAt)}`}
+        note={`${fmtDateTime(row.startsAt)} → ${fmtDateTime(row.endsAt)}${lasted ? ` · lasted ${lasted}` : ''}`}
       />
     );
   }
   if (kind === 'current') {
     if (!row) return <PastRow label={label} note="no schedule row" />;
+    // Start is frozen; only the end is editable. Length runs from the frozen start.
+    const frozenStartMs = new Date(row.startsAt).getTime();
+    const curDuration = durationLabel(frozenStartMs, endMs);
+    const problems: string[] = [];
+    if (!endsAt) problems.push('Set an end date.');
+    else if (Number.isNaN(endMs) ) problems.push('The end date is invalid.');
+    else if (endMs <= now) problems.push('The end date must be in the future.');
+    else if (endMs <= frozenStartMs) problems.push('The end date must be after the start date.');
+    const valid = problems.length === 0;
     return (
       <div className="rounded border border-emerald-300 bg-emerald-50/40 p-2 dark:border-emerald-900 dark:bg-emerald-950/20">
         <div className="text-xs">
@@ -298,6 +331,7 @@ function StageRow({
           <span className="font-medium">{label}</span>
           {' · '}
           <span className="text-neutral-500">started {fmtDateTime(row.startsAt)} (frozen)</span>
+          {curDuration ? <span className="text-neutral-500"> · planned length {curDuration}</span> : null}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 text-xs text-neutral-500">
@@ -306,12 +340,13 @@ function StageRow({
           </div>
           <button
             onClick={() => onRun(() => boardRoundsApi.updateCurrentStage(roundId, new Date(endsAt).toISOString()), tag)}
-            disabled={busy !== null || !endsAt}
+            disabled={busy !== null || !valid}
             className="rounded border border-neutral-400 px-2.5 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:hover:bg-neutral-800"
           >
             {busy === tag ? 'Saving…' : 'Save new end date'}
           </button>
         </div>
+        <Problems items={problems} />
       </div>
     );
   }
@@ -320,6 +355,16 @@ function StageRow({
     // §6/§8 — overdue: the planned start is in the past but the stage hasn't begun.
     const plannedStartMs = nextStage?.planned?.startsAt ? new Date(nextStage.planned.startsAt).getTime() : null;
     const overdue = plannedStartMs != null && plannedStartMs < now;
+    // "Confirm date" needs valid dates: a start in the future and an end after the start.
+    // (To start a stage right now, use "Launch … now" instead.)
+    const confirmProblems: string[] = [];
+    if (!startsAt) confirmProblems.push('Set a start date.');
+    else if (Number.isNaN(startMs)) confirmProblems.push('The start date is invalid.');
+    else if (startMs <= now) confirmProblems.push('The start date must be in the future (or use “Launch now” to start immediately).');
+    if (!endsAt) confirmProblems.push('Set an end date.');
+    else if (Number.isNaN(endMs)) confirmProblems.push('The end date is invalid.');
+    else if (!Number.isNaN(startMs) && endMs <= startMs) confirmProblems.push('The end date must be after the start date.');
+    const confirmValid = confirmProblems.length === 0;
     return (
       <div className={`rounded border p-2 ${overdue ? 'border-red-300 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20' : 'border-amber-300 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20'}`}>
         <div className="text-xs">
@@ -359,6 +404,7 @@ function StageRow({
             <input type="checkbox" checked={autoStart} onChange={(e) => setAutoStart(e.target.checked)} />
             auto-start at the planned time
           </label>
+          {editDuration ? <span className="text-xs text-neutral-500">· will last {editDuration}</span> : null}
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           <button
@@ -372,23 +418,41 @@ function StageRow({
                 `${tag}-confirm`,
               )
             }
-            disabled={busy !== null}
+            disabled={busy !== null || !confirmValid}
             className="rounded border border-neutral-400 px-2.5 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:hover:bg-neutral-800"
           >
             {busy === `${tag}-confirm` ? 'Saving…' : 'Confirm date'}
           </button>
           <button
-            onClick={() => onRun(() => boardRoundsApi.launchNext(roundId), `${tag}-launch`)}
+            onClick={() => setConfirmLaunch(true)}
             disabled={busy !== null}
             className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
           >
             {busy === `${tag}-launch` ? 'Launching…' : `Launch ${label} now`}
           </button>
         </div>
+        <Problems items={confirmProblems} />
+        <ConfirmDialog
+          open={confirmLaunch}
+          title={`Launch ${label} now?`}
+          message={`This starts the ${label} stage immediately (instead of at the planned time). The stage keeps its planned length and any later stages shift accordingly. This can't be undone.`}
+          confirmLabel={`Launch ${label} now`}
+          cancelLabel="Cancel"
+          onConfirm={() => { setConfirmLaunch(false); void onRun(() => boardRoundsApi.launchNext(roundId), `${tag}-launch`); }}
+          onCancel={() => setConfirmLaunch(false)}
+        />
       </div>
     );
   }
   // FUTURE — beyond next. Re-plannable dates; no transition controls.
+  const planProblems: string[] = [];
+  if (!startsAt) planProblems.push('Set a start date.');
+  else if (Number.isNaN(startMs)) planProblems.push('The start date is invalid.');
+  else if (startMs <= now) planProblems.push('The start date must be in the future.');
+  if (!endsAt) planProblems.push('Set an end date.');
+  else if (Number.isNaN(endMs)) planProblems.push('The end date is invalid.');
+  else if (!Number.isNaN(startMs) && endMs <= startMs) planProblems.push('The end date must be after the start date.');
+  const planValid = planProblems.length === 0;
   return (
     <div className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
       <div className="text-xs">
@@ -398,6 +462,7 @@ function StageRow({
         <span className="font-medium">{label}</span>
         {' · '}
         <span className="text-neutral-500">re-plan ahead</span>
+        {editDuration ? <span className="text-neutral-500"> · will last {editDuration}</span> : null}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1 text-xs text-neutral-500">
@@ -423,12 +488,13 @@ function StageRow({
               tag,
             )
           }
-          disabled={busy !== null || !startsAt || !endsAt}
+          disabled={busy !== null || !planValid}
           className="rounded border border-neutral-400 px-2.5 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:hover:bg-neutral-800"
         >
           {busy === tag ? 'Saving…' : 'Save plan'}
         </button>
       </div>
+      <Problems items={planProblems} />
     </div>
   );
 }
