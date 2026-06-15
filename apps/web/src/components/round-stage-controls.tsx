@@ -143,7 +143,9 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
   const legacyDv = round.schedule.find((s) => s.stageKey === 'debate_vote');
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
+  // §6 — two sub-views: the stage timeline (advance the round) and the round setup
+  // (edit name / budget / categories / settings). Horizontal submenu, like My-area.
+  const [subTab, setSubTab] = useState<'stages' | 'setup'>('stages');
   const [confirmClose, setConfirmClose] = useState(false);
   // A round's fields (name, budget, categories, settings) are editable until review starts.
   const canEdit = round.status === 'PREPARATION' || round.status === 'SUBMISSION';
@@ -168,26 +170,38 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
           Round #{round.number}
           {round.name ? ` — ${round.name}` : ''}
         </span>
-        <span className="flex items-center gap-2">
-          {canEdit ? (
-            <button
-              onClick={() => setEditing((v) => !v)}
-              className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
-            >
-              {editing ? 'Close editor' : 'Edit round'}
-            </button>
-          ) : null}
-          <StatusBadge status={round.status} />
-        </span>
+        <StatusBadge status={round.status} />
       </div>
 
-      {/* §6 — board edits the round's fields (name/budget/categories/settings) while pre-review. */}
-      {editing ? (
+      {/* §6 — horizontal submenu: stage timeline vs. round setup. */}
+      <div className="mt-2 flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
+        {([['stages', 'Round stage control'], ['setup', 'Round setup']] as const).map(([k, l]) => (
+          <button
+            key={k}
+            onClick={() => setSubTab(k)}
+            className={`-mb-px border-b-2 px-3 py-1.5 text-xs font-medium ${subTab === k ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* §6 — round setup: edit name / budget / categories / settings (locked once review starts). */}
+      {subTab === 'setup' ? (
         <div className="mt-3">
-          <CreateRoundForm initial={round} roundId={round.id} onDone={() => { setEditing(false); onChange(); }} />
+          {canEdit ? (
+            <CreateRoundForm initial={round} roundId={round.id} onDone={onChange} />
+          ) : (
+            <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+              ⚠ Round setup is locked once review starts (Filtering onward). The schedule can still be
+              adjusted under <strong>Round stage control</strong>.
+            </p>
+          )}
         </div>
       ) : null}
 
+      {subTab === 'stages' ? (
+      <>
       <div className="mt-2">
         <div className="text-xs text-neutral-500">Proposals (verify readiness before advancing):</div>
         <div className="mt-1"><ProposalCounts counts={round.proposalCounts} /></div>
@@ -256,6 +270,8 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
           <div className="text-xs text-neutral-500">Round complete.</div>
         ) : null}
       </div>
+      </>
+      ) : null}
       {error ? <div className="mt-2 text-xs text-red-600">{error}</div> : null}
     </div>
   );
