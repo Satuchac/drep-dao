@@ -765,19 +765,50 @@ const STATUS_STAGE_IDX: Record<string, number> = {
 };
 const fmtShort = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
 
+/** "1 day and 5 hours" / "5 hours and 12 minutes" / "8 minutes" from a ms delta. */
+function untilLabel(ms: number): string {
+  const totalMin = Math.max(0, Math.floor(ms / 60_000));
+  const days = Math.floor(totalMin / 1440);
+  const hours = Math.floor((totalMin % 1440) / 60);
+  const mins = totalMin % 60;
+  const u = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  if (days > 0) return `${u(days, 'day')} and ${u(hours, 'hour')}`;
+  if (hours > 0) return `${u(hours, 'hour')} and ${u(mins, 'minute')}`;
+  return u(mins, 'minute');
+}
+
 /** §6 — horizontal bar of every stage + its dates, with the current stage marked.
  *  A stage whose planned START has passed but which hasn't been started yet is
  *  OVERDUE — its date turns red and a banner tells the board to start it. */
 function StagesBar({ round }: { round: RoundDetail }) {
   const curIdx = STATUS_STAGE_IDX[round.status] ?? -1;
   const byKey = new Map(round.schedule.map((e) => [e.stageKey, e]));
-  const now = Date.now();
+  // Live clock so the countdown ticks (minute granularity is enough for days/hours).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
   const isOverdue = (i: number, e?: RoundScheduleEntry) =>
     // not started (upcoming) AND its planned start is in the past
     (curIdx === -1 || i > curIdx) && !!e?.startsAt && new Date(e.startsAt).getTime() < now;
   const overdueLabels = STAGE_DEFS.filter((s, i) => isOverdue(i, byKey.get(s.key))).map((s) => s.label);
+  // §6 — the next stage to begin (Submission while in Preparation, else the one
+  // after the current stage) + its planned start, for the countdown header.
+  const nextIdx = curIdx < 0 ? 0 : curIdx + 1;
+  const nextStage = nextIdx < STAGE_DEFS.length ? STAGE_DEFS[nextIdx] : null;
+  const nextEntry = nextStage ? byKey.get(nextStage.key) : undefined;
+  const nextStartMs = nextEntry?.startsAt ? new Date(nextEntry.startsAt).getTime() : null;
   return (
     <div>
+      {/* §6 — countdown to the next stage. */}
+      {nextStage && nextStartMs != null ? (
+        <div className="mb-1.5 text-sm">
+          <span className="font-medium text-neutral-700 dark:text-neutral-200">Next stage: {nextStage.label.toUpperCase()}</span>
+          {nextStartMs > now ? (
+            <span className="text-neutral-500"> · Starts in: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(nextStartMs - now)}</span> <span className="text-xs">({fmtShort(nextEntry?.startsAt)})</span></span>
+          ) : (
+            <span className="font-medium text-red-600 dark:text-red-400"> · was due {fmtShort(nextEntry?.startsAt)} — overdue, start it now or move the date</span>
+          )}
+        </div>
+      ) : null}
       <div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">
         <span>Stages</span>
         {curIdx === -1 ? (
