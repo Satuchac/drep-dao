@@ -395,6 +395,9 @@ function StageRow({
     if (!Number.isNaN(startMs) && startMs <= now) confirmProblems.push('The start date must be in the future (or use “Launch now” to start immediately).');
     const launchValid = relProblems.length === 0;
     const confirmValid = confirmProblems.length === 0;
+    // "Dirty" for the next stage = either the dates/auto-start were edited, or the stage isn't
+    // confirmed yet. When it's already confirmed AND unchanged, there's nothing to confirm.
+    const nextDirty = planDirty || !confirmed;
     return (
       <div className={`rounded border p-2 ${overdue ? 'border-red-300 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20' : 'border-amber-300 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20'}`}>
         <div className="text-xs">
@@ -450,7 +453,7 @@ function StageRow({
                 `${tag}-confirm`,
               )
             }
-            disabled={busy !== null || !confirmValid}
+            disabled={busy !== null || !confirmValid || !nextDirty}
             className="rounded border border-neutral-400 px-2.5 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:hover:bg-neutral-800"
           >
             {busy === `${tag}-confirm` ? 'Saving…' : 'Confirm date'}
@@ -462,6 +465,7 @@ function StageRow({
           >
             {busy === `${tag}-launch` ? 'Launching…' : `Launch ${label} now`}
           </button>
+          <SavedBadge dirty={nextDirty} />
         </div>
         <Problems items={confirmProblems} />
         <ConfirmDialog
