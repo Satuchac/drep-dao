@@ -595,12 +595,14 @@ export const boardApi = {
 export interface ExpertApplicationInput {
   displayName: string;
   bio?: string;
+  conflictOfInterest?: string;
   subcategoryIds?: string[];
 }
 export interface MyExpert {
   id: string;
   displayName: string;
   bio: string | null;
+  conflictOfInterest: string | null;
   subcategoryIds: string[];
   approvedByBoard: boolean;
 }
@@ -608,6 +610,7 @@ export interface ExpertApplication {
   id: string;
   displayName: string;
   bio: string | null;
+  conflictOfInterest: string | null;
   stakeAddress: string;
   subcategoryIds: string[];
   approved: boolean;
@@ -616,6 +619,7 @@ export interface DaoExpert {
   id: string;
   displayName: string;
   bio: string | null;
+  conflictOfInterest: string | null;
   subcategoryIds: string[];
 }
 

@@ -226,6 +226,8 @@ model Expert {
   userId          String   @map("user_id") @db.Uuid
   displayName     String   @map("display_name")
   bio             String?
+  // §2 — conflict-of-interest disclosure (markdown), same as DRep/submitter profiles.
+  conflictOfInterest String? @map("conflict_of_interest")
   subcategoryIds  String[] @map("subcategory_ids")
   approvedByBoard Boolean  @default(false) @map("approved_by_board")
 

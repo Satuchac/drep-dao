@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { expertApi, type MyExpert } from '@/lib/api';
+import { MarkdownEditor } from './markdown';
 
 const field =
   'w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900';
@@ -12,6 +13,7 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
   const [mine, setMine] = useState<MyExpert | null>(null);
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
+  const [conflict, setConflict] = useState('');
   const [subs, setSubs] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,6 +24,7 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
       if (e) {
         setName(e.displayName);
         setBio(e.bio ?? '');
+        setConflict(e.conflictOfInterest ?? '');
         setSubs(e.subcategoryIds ?? []);
       }
     });
@@ -37,7 +40,7 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
     setError(null);
     setBusy(true);
     try {
-      await expertApi.apply({ displayName: name.trim(), bio: bio.trim() || undefined, subcategoryIds: subs });
+      await expertApi.apply({ displayName: name.trim(), bio: bio.trim() || undefined, conflictOfInterest: conflict.trim() || undefined, subcategoryIds: subs });
       await load();
       onChange?.();
     } catch (err) {
@@ -71,10 +74,22 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
         <span className="text-sm font-medium">Display name</span>
         <input className={field} value={name} onChange={(e) => setName(e.target.value)} required />
       </label>
-      <label className="block space-y-1">
-        <span className="text-sm font-medium">Experience / skills</span>
-        <textarea className={field} rows={3} value={bio} onChange={(e) => setBio(e.target.value)} />
-      </label>
+      <MarkdownEditor
+        value={bio}
+        onChange={setBio}
+        title="Experience / skills"
+        subtitle="Your background and relevant expertise. Supports bold, italics, headers, lists."
+        placeholder="Your experience reviewing / building in these areas…"
+        minRows={5}
+      />
+      <MarkdownEditor
+        value={conflict}
+        onChange={setConflict}
+        title="Conflict of interest"
+        subtitle={'Disclose anything that could bias your milestone reviews or feedback (write "none" if you have none). Supports bold, italics, headers, lists.'}
+        placeholder="e.g. I advise project X which submits in the Tooling category…"
+        minRows={3}
+      />
       <div className="space-y-1">
         <span className="text-sm font-medium">Expertise</span>
         <div className="flex flex-wrap gap-1.5">

@@ -290,6 +290,7 @@ export class DrepService {
     const data = {
       displayName: dto.displayName,
       bio: dto.bio ?? null,
+      conflictOfInterest: dto.conflictOfInterest ?? null,
       subcategoryIds: dto.subcategoryIds ?? [],
       approvedByBoard: false,
     };
@@ -317,6 +318,7 @@ export class DrepService {
       id: e.id,
       displayName: e.displayName,
       bio: e.bio,
+      conflictOfInterest: e.conflictOfInterest,
       stakeAddress: e.user.stakeAddress,
       subcategoryIds: e.subcategoryIds,
       approved: e.approvedByBoard,
@@ -346,6 +348,7 @@ export class DrepService {
       id: e.id,
       displayName: e.displayName,
       bio: e.bio,
+      conflictOfInterest: e.conflictOfInterest,
       subcategoryIds: e.subcategoryIds,
     }));
   }

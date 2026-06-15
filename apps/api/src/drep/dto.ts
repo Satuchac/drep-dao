@@ -12,7 +12,8 @@ import {
 // §2/§14 — an ADA holder applies to become an Expert; the board then approves.
 export class ExpertApplicationDto {
   @IsString() @IsNotEmpty() @MaxLength(100) displayName!: string;
-  @IsOptional() @IsString() @MaxLength(5000) bio?: string;
+  @IsOptional() @IsString() @MaxLength(20000) bio?: string;
+  @IsOptional() @IsString() @MaxLength(20000) conflictOfInterest?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) subcategoryIds?: string[];
 }
 

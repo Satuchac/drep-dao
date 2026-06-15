@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { boardExpertsApi, type ExpertApplication } from '@/lib/api';
+import { ClampedMarkdown } from './clamped-markdown';
 
 /** Board-only: review Expert applications (§2 — approved by the board). `history` also shows
  *  already-approved experts (done); rejected applications are deleted, so they leave no record. */
@@ -50,7 +51,13 @@ export function ExpertReviewPanel({ history = false }: { history?: boolean }) {
                 ) : null}
               </div>
               <div className="font-mono text-xs text-neutral-500 break-all">{a.stakeAddress}</div>
-              {a.bio ? <p className="mt-1 text-neutral-600 dark:text-neutral-400">{a.bio}</p> : null}
+              {a.bio ? <div className="mt-1 text-neutral-600 dark:text-neutral-400"><ClampedMarkdown maxLines={15}>{a.bio}</ClampedMarkdown></div> : null}
+              {a.conflictOfInterest ? (
+                <div className="mt-1 text-xs">
+                  <span className="font-medium text-neutral-500">Conflict of interest:</span>
+                  <ClampedMarkdown className="text-neutral-600 dark:text-neutral-400" maxLines={15}>{a.conflictOfInterest}</ClampedMarkdown>
+                </div>
+              ) : null}
               {a.subcategoryIds.length ? (
                 <div className="mt-1 flex flex-wrap gap-1">
                   {a.subcategoryIds.map((s) => (

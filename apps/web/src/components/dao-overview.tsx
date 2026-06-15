@@ -5,6 +5,7 @@ import { SUBCAT_LABEL } from '@/lib/ui';
 import { daoApi, type DaoMember, type DaoExpert } from '@/lib/api';
 import { fmtDate } from './round-ui';
 import { MeritSystemTable } from './merit-system-table';
+import { ClampedMarkdown } from './clamped-markdown';
 
 
 
@@ -217,7 +218,17 @@ export function DaoOverview() {
                   <span className="font-medium">{x.displayName}</span>
                   <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">Expert</span>
                 </div>
-                {x.bio ? <div className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">{x.bio}</div> : null}
+                {x.bio ? (
+                  <div className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">
+                    <ClampedMarkdown maxLines={15}>{x.bio}</ClampedMarkdown>
+                  </div>
+                ) : null}
+                {x.conflictOfInterest ? (
+                  <div className="mt-1 text-xs">
+                    <span className="font-medium text-neutral-500">Conflict of interest:</span>
+                    <ClampedMarkdown className="text-neutral-600 dark:text-neutral-400" maxLines={15}>{x.conflictOfInterest}</ClampedMarkdown>
+                  </div>
+                ) : null}
                 {x.subcategoryIds.length ? (
                   <div className="mt-1 flex flex-wrap gap-1">
                     {x.subcategoryIds.map((id) => (
