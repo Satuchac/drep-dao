@@ -295,7 +295,13 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
       description: c.description ?? '',
     })) ?? [{ name: '', type: 'GRANT', allocatedAda: 4_000_000, description: '' }],
   );
-  const [sched, setSched] = useState<Record<string, { startsAt: string; endsAt: string }>>({});
+  // New round: default the Submission stage's start to today (00:00 local) — the
+  // round usually opens now, and the "expected days" helper chains the rest off it.
+  const [sched, setSched] = useState<Record<string, { startsAt: string; endsAt: string }>>(() => {
+    if (editing) return {};
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    return { [STAGE_DEFS[0].key]: { startsAt: toLocalInput(d.toISOString()), endsAt: '' } };
+  });
   // §6 — per-stage "expected days" helper: set N days → compute start (from the
   // previous stage's end if this stage has no start yet) + end = start + N days.
   const [days, setDays] = useState<Record<string, string>>({});
@@ -658,9 +664,9 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
           // Prefill the days box from the current dates so it reflects what's set.
           const daysFromDates = startMs != null && endMs != null && endMs > startMs ? String(Math.round((endMs - startMs) / 86_400_000)) : '';
           return (
-            <div key={s.key} className="mb-2 text-sm">
+            <div key={s.key} className={`py-2.5 text-sm ${idx > 0 ? 'border-t border-neutral-200 dark:border-neutral-800' : ''}`}>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="w-28 shrink-0 text-neutral-500">{s.label}</span>
+                <span className="w-28 shrink-0 font-medium text-neutral-600 dark:text-neutral-300">{s.label}</span>
                 <DateTimeField value={v?.startsAt ?? ''} onChange={(val) => setPart('startsAt', val)} />
                 <span className="text-neutral-400">→</span>
                 <DateTimeField value={v?.endsAt ?? ''} onChange={(val) => setPart('endsAt', val)} />
