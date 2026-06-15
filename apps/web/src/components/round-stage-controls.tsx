@@ -305,6 +305,12 @@ function StageRow({
   const startsBeforePrev = !Number.isNaN(startMs) && !Number.isNaN(prevEndMs) && startMs < prevEndMs;
   // Live stage-length label from the (editable) start→end, recomputed as the inputs change.
   const editDuration = durationLabel(startMs, endMs);
+  // §6 — "dirty" = the inputs differ from the saved schedule row. Drives the Saved / Not-saved
+  // badge and disables the save button once everything is persisted (re-enables on any edit).
+  const savedStart = toLocalInput(row?.startsAt);
+  const savedEnd = toLocalInput(row?.endsAt);
+  const planDirty = startsAt !== savedStart || endsAt !== savedEnd || autoStart !== (row?.autoStart ?? false);
+  const endDirty = endsAt !== savedEnd;
   // Small reusable validation-problem list renderer.
   const Problems = ({ items }: { items: string[] }) =>
     items.length ? (
@@ -312,6 +318,11 @@ function StageRow({
         {items.map((p) => <li key={p}>{p}</li>)}
       </ul>
     ) : null;
+  // Saved / Not-saved indicator shown next to a save button.
+  const SavedBadge = ({ dirty }: { dirty: boolean }) =>
+    dirty
+      ? <span className="text-xs font-medium text-red-600 dark:text-red-400">● Not saved</span>
+      : <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">✓ Saved</span>;
   if (kind === 'past') {
     if (!row) {
       return <PastRow label={label} note="no schedule row" />;
@@ -353,11 +364,12 @@ function StageRow({
           </div>
           <button
             onClick={() => onRun(() => boardRoundsApi.updateCurrentStage(roundId, new Date(endsAt).toISOString()), tag)}
-            disabled={busy !== null || !valid}
+            disabled={busy !== null || !valid || !endDirty}
             className="rounded border border-neutral-400 px-2.5 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:hover:bg-neutral-800"
           >
             {busy === tag ? 'Saving…' : 'Save new end date'}
           </button>
+          <SavedBadge dirty={endDirty} />
         </div>
         <Problems items={problems} />
       </div>
@@ -511,11 +523,12 @@ function StageRow({
               tag,
             )
           }
-          disabled={busy !== null || !planValid}
+          disabled={busy !== null || !planValid || !planDirty}
           className="rounded border border-neutral-400 px-2.5 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:hover:bg-neutral-800"
         >
           {busy === tag ? 'Saving…' : 'Save plan'}
         </button>
+        <SavedBadge dirty={planDirty} />
       </div>
       <Problems items={planProblems} />
     </div>
