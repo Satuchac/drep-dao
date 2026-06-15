@@ -8,7 +8,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DRepStatus, ProposalStatus, RoundStatus, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared';
+import { DRepStatus, ProposalStage, ProposalStatus, RoundStatus, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { DvService } from '../proposals/dv.service';
 import { MeritService } from '../merit/merit.service';
@@ -59,24 +59,44 @@ const ACTIVE_ROUND_STATUSES: string[] = [
   RoundStatus.FUNDING,
 ];
 
-// §6 — per-category proposal activity shown on the round's Categories tab.
+// §6 — per-category proposal activity shown on the round's Categories tab, broken
+// down by the stage the proposals are in. The frontend renders one labelled row per
+// stage the round has reached (SUBMISSION → FILTERING → DEBATE & VOTE → FUNDING).
 interface CategoryStats {
+  // SUBMISSION — everything submitted (private DRAFTs excluded).
   submitted: number; // non-DRAFT proposals in the category
   totalRequestedAda: number; // sum of requested budget across them
-  accepted: number; // APPROVED / COMPLETE / FAILED (admitted to funding)
-  rejected: number; // REJECTED
-  pending: number; // PENDING / ACTIVE (still in flight)
   submitters: number; // distinct submitters (may differ from proposal count)
   feesCollectedAda: number; // submission fees actually collected by the DAO
+  // FILTERING — the §7 jury review.
+  inFiltering: number; // still under review (ACTIVE @ FILTERING)
+  passedFiltering: number; // cleared filtering → reached Debate & Vote (incl. those since decided)
+  rejectedFiltering: number; // REJECTED at filtering
+  // DEBATE & VOTE — the §9 ballot (approve/reject, incl. budget-cut + quick-poll outcomes).
+  inVoting: number; // still in Debate & Vote (ACTIVE @ DEBATE_VOTE — incl. unresolved quick polls)
+  approved: number; // APPROVED / COMPLETE / FAILED (won funding)
+  rejectedVote: number; // REJECTED at Debate & Vote (threshold miss or budget-cut)
+  // FUNDING — §11 milestone delivery for the approved proposals.
+  fundedAllocatedAda: number; // budget committed to the approved proposals
+  milestonesTotal: number;
+  milestonesApproved: number;
+  milestonesPaid: number;
 }
 const EMPTY_CATEGORY_STATS: CategoryStats = {
   submitted: 0,
   totalRequestedAda: 0,
-  accepted: 0,
-  rejected: 0,
-  pending: 0,
   submitters: 0,
   feesCollectedAda: 0,
+  inFiltering: 0,
+  passedFiltering: 0,
+  rejectedFiltering: 0,
+  inVoting: 0,
+  approved: 0,
+  rejectedVote: 0,
+  fundedAllocatedAda: 0,
+  milestonesTotal: 0,
+  milestonesApproved: 0,
+  milestonesPaid: 0,
 };
 
 @Injectable()
@@ -311,10 +331,12 @@ export class RoundsService {
         categoryId: true,
         status: true,
         stage: true,
+        resultFinalizedAt: true,
         requestedAmountAda: true,
         submissionFeeAda: true,
         submitterUserId: true,
         submitterDrepId: true,
+        milestones: { select: { status: true, paidAt: true } },
       },
     });
     const byCat = new Map<string, CategoryStats & { _submitters: Set<string> }>();
@@ -326,22 +348,47 @@ export class RoundsService {
         s = { ...EMPTY_CATEGORY_STATS, _submitters: new Set<string>() };
         byCat.set(p.categoryId, s);
       }
+      // SUBMISSION
       s.submitted += 1;
       s.totalRequestedAda += toAda(p.requestedAmountAda ?? 0n);
-      if (p.status === ProposalStatus.APPROVED || p.status === ProposalStatus.COMPLETE || p.status === ProposalStatus.FAILED) s.accepted += 1;
-      else if (p.status === ProposalStatus.REJECTED) s.rejected += 1;
-      else s.pending += 1; // PENDING, ACTIVE
       const submitter = p.submitterUserId ?? p.submitterDrepId;
       if (submitter) s._submitters.add(submitter);
-      // Fee collected: public (ACTIVE+) or review-rejected — but NOT a fee-stage
-      // rejection (REJECTED with no stage), where the fee is refunded.
-      const feeCollected =
-        p.status === ProposalStatus.ACTIVE ||
-        p.status === ProposalStatus.APPROVED ||
-        p.status === ProposalStatus.COMPLETE ||
-        p.status === ProposalStatus.FAILED ||
-        (p.status === ProposalStatus.REJECTED && p.stage != null);
-      if (feeCollected) s.feesCollectedAda += toAda(p.submissionFeeAda ?? 0n);
+
+      // Classify by where the proposal currently is / how it ended (see the
+      // proposal state machine: filtering reject = REJECTED@FILTERING; D&V reject
+      // = REJECTED with resultFinalizedAt set; fee reject = REJECTED@null,unfinalized).
+      const isApproved = p.status === ProposalStatus.APPROVED || p.status === ProposalStatus.COMPLETE || p.status === ProposalStatus.FAILED;
+      const isFilteringReject = p.status === ProposalStatus.REJECTED && p.stage === ProposalStage.FILTERING;
+      const isDvReject = p.status === ProposalStatus.REJECTED && p.stage == null && p.resultFinalizedAt != null;
+      const inFiltering = p.status === ProposalStatus.ACTIVE && p.stage === ProposalStage.FILTERING;
+      const inVoting = p.status === ProposalStatus.ACTIVE && p.stage === ProposalStage.DEBATE_VOTE;
+
+      // Fee collected once the proposal went public (ACTIVE+) or was rejected during
+      // review — NOT a fee-stage rejection (REJECTED@null,unfinalized), where it's refunded.
+      if (inFiltering || inVoting || isApproved || isFilteringReject || isDvReject) {
+        s.feesCollectedAda += toAda(p.submissionFeeAda ?? 0n);
+      }
+
+      // FILTERING
+      if (inFiltering) s.inFiltering += 1;
+      if (isFilteringReject) s.rejectedFiltering += 1;
+      // Cleared filtering → reached Debate & Vote (whether still voting, approved, or D&V-rejected).
+      if (inVoting || isApproved || isDvReject) s.passedFiltering += 1;
+
+      // DEBATE & VOTE
+      if (inVoting) s.inVoting += 1;
+      if (isApproved) s.approved += 1;
+      if (isDvReject) s.rejectedVote += 1;
+
+      // FUNDING — milestone delivery for the approved proposals.
+      if (isApproved) {
+        s.fundedAllocatedAda += toAda(p.requestedAmountAda ?? 0n);
+        for (const m of p.milestones) {
+          s.milestonesTotal += 1;
+          if (m.status === 'APPROVED') s.milestonesApproved += 1;
+          if (m.paidAt != null) s.milestonesPaid += 1;
+        }
+      }
     }
     const out = new Map<string, CategoryStats>();
     for (const [id, s] of byCat) {

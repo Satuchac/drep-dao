@@ -852,27 +852,80 @@ function StagesBar({ round }: { round: RoundDetail }) {
   );
 }
 
-/** §6 — per-category proposal activity: submitted + budget asked, the accepted /
- *  rejected / pending split, distinct submitters, and fees collected. */
-function CategoryStatsBar({ stats }: { stats: RoundDetail['categories'][number]['stats'] }) {
+type CategoryStats = RoundDetail['categories'][number]['stats'];
+const ada = (n: number) => `${n.toLocaleString()} ₳`;
+
+/**
+ * §6 — per-category proposal activity, shown as one labelled row per stage the round
+ * has reached. SUBMISSION is always shown; FILTERING / DEBATE & VOTE / FUNDING appear
+ * (and switch from "in progress" to final) as the round advances through its stages.
+ */
+function CategoryStatsBar({ stats, roundStatus, allocatedAda }: { stats: CategoryStats; roundStatus: string; allocatedAda: number }) {
+  // Round stage order → which proposal stages have been reached, and whether each has ended.
+  const order = ['PREPARATION', 'SUBMISSION', 'FILTERING', 'DEBATE', 'VOTE', 'FUNDING', 'CLOSED'];
+  const idx = order.indexOf(roundStatus === 'DV' ? 'VOTE' : roundStatus);
+  const reached = (stage: string) => idx >= order.indexOf(stage);
+  // A stage's results are final once the round has moved past it.
+  const filteringDone = idx > order.indexOf('FILTERING');
+  const voteDone = idx > order.indexOf('VOTE');
+
   const Stat = ({ label, value, tone }: { label: string; value: string; tone?: string }) => (
     <div className="rounded-md border border-neutral-200 px-2 py-1 dark:border-neutral-800">
       <div className={`text-sm font-semibold tabular-nums ${tone ?? 'text-neutral-800 dark:text-neutral-200'}`}>{value}</div>
       <div className="text-[10px] uppercase tracking-wide text-neutral-500">{label}</div>
     </div>
   );
-  if (stats.submitted === 0) {
-    return <div className="mt-2 text-xs text-neutral-400">No proposals submitted in this category yet.</div>;
-  }
+  const Row = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
+    <div>
+      <div className="mb-1 flex items-center gap-2">
+        <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{label}</span>
+        {hint ? <span className="text-[10px] text-neutral-400">{hint}</span> : null}
+      </div>
+      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-5">{children}</div>
+    </div>
+  );
+
+  const reachedFiltering = reached('FILTERING');
+  const reachedVote = reached('DEBATE'); // proposals "reach voting" when Debate & Vote opens (Debate first)
+  const reachedFunding = reached('FUNDING');
+  const unallocated = Math.max(0, allocatedAda - stats.fundedAllocatedAda);
+
   return (
-    <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-7">
-      <Stat label="Submitted" value={stats.submitted.toLocaleString()} />
-      <Stat label="Budget asked" value={`${stats.totalRequestedAda.toLocaleString()} ₳`} />
-      <Stat label="Accepted" value={stats.accepted.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
-      <Stat label="Rejected" value={stats.rejected.toLocaleString()} tone="text-red-600 dark:text-red-400" />
-      <Stat label="Pending" value={stats.pending.toLocaleString()} tone="text-amber-600 dark:text-amber-400" />
-      <Stat label="Submitters" value={stats.submitters.toLocaleString()} />
-      <Stat label="Fees collected" value={`${stats.feesCollectedAda.toLocaleString()} ₳`} />
+    <div className="mt-2 space-y-2">
+      {/* SUBMISSION — always shown (zeros before anything is submitted). */}
+      <Row label="Submission">
+        <Stat label="Submitted" value={stats.submitted.toLocaleString()} />
+        <Stat label="Budget asked" value={ada(stats.totalRequestedAda)} />
+        <Stat label="Submitters" value={stats.submitters.toLocaleString()} />
+        <Stat label="Fees collected" value={ada(stats.feesCollectedAda)} />
+      </Row>
+
+      {reachedFiltering ? (
+        <Row label="Filtering" hint={filteringDone ? 'final' : 'in progress'}>
+          {!filteringDone ? <Stat label="Under review" value={stats.inFiltering.toLocaleString()} tone="text-amber-600 dark:text-amber-400" /> : null}
+          <Stat label={filteringDone ? 'Passed' : 'Passing'} value={stats.passedFiltering.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
+          <Stat label="Rejected" value={stats.rejectedFiltering.toLocaleString()} tone="text-red-600 dark:text-red-400" />
+        </Row>
+      ) : null}
+
+      {reachedVote ? (
+        <Row label="Debate & Vote" hint={voteDone ? 'final' : 'in progress'}>
+          <Stat label="To voting" value={stats.passedFiltering.toLocaleString()} />
+          {!voteDone ? <Stat label="In voting" value={stats.inVoting.toLocaleString()} tone="text-amber-600 dark:text-amber-400" /> : null}
+          <Stat label="Approved" value={stats.approved.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
+          <Stat label="Rejected" value={stats.rejectedVote.toLocaleString()} tone="text-red-600 dark:text-red-400" />
+        </Row>
+      ) : null}
+
+      {reachedFunding ? (
+        <Row label="Funding">
+          <Stat label="Funded" value={stats.approved.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
+          <Stat label="Allocated" value={ada(stats.fundedAllocatedAda)} />
+          <Stat label="Unallocated" value={ada(unallocated)} />
+          <Stat label="Milestones ✓" value={`${stats.milestonesApproved.toLocaleString()} / ${stats.milestonesTotal.toLocaleString()}`} />
+          <Stat label="Paid" value={stats.milestonesPaid.toLocaleString()} />
+        </Row>
+      ) : null}
     </div>
   );
 }
@@ -907,7 +960,7 @@ function RoundCategoriesView({ roundId }: { roundId: string }) {
               ? `${c.minAda != null ? `${c.minAda.toLocaleString()} ₳` : 'no min'} – ${c.maxAda != null ? `${c.maxAda.toLocaleString()} ₳` : 'no max'}`
               : 'any amount'}
           </div>
-          <CategoryStatsBar stats={c.stats} />
+          <CategoryStatsBar stats={c.stats} roundStatus={round.status} allocatedAda={c.allocatedAda} />
           {/* — description / conditions follow — */}
           <div className="mt-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Description</div>
