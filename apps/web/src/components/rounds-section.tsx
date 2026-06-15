@@ -896,6 +896,9 @@ function CategoryStatsBar({ stats, roundStatus, allocatedAda }: { stats: Categor
       <Row label="Submission">
         <Stat label="Submitted" value={stats.submitted.toLocaleString()} />
         <Stat label="Budget asked" value={ada(stats.totalRequestedAda)} />
+        <Stat label="Accepted" value={stats.accepted.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
+        <Stat label="Pending" value={stats.pending.toLocaleString()} tone="text-amber-600 dark:text-amber-400" />
+        <Stat label="Approved" value={stats.approved.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
         <Stat label="Submitters" value={stats.submitters.toLocaleString()} />
         <Stat label="Fees collected" value={ada(stats.feesCollectedAda)} />
       </Row>

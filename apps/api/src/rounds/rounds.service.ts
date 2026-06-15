@@ -68,6 +68,8 @@ interface CategoryStats {
   totalRequestedAda: number; // sum of requested budget across them
   submitters: number; // distinct submitters (may differ from proposal count)
   feesCollectedAda: number; // submission fees actually collected by the DAO
+  pending: number; // PENDING — submitted, awaiting the board's fee confirmation
+  accepted: number; // admitted into the round (fee confirmed → went public)
   // FILTERING — the §7 jury review.
   inFiltering: number; // still under review (ACTIVE @ FILTERING)
   passedFiltering: number; // cleared filtering → reached Debate & Vote (incl. those since decided)
@@ -87,6 +89,8 @@ const EMPTY_CATEGORY_STATS: CategoryStats = {
   totalRequestedAda: 0,
   submitters: 0,
   feesCollectedAda: 0,
+  pending: 0,
+  accepted: 0,
   inFiltering: 0,
   passedFiltering: 0,
   rejectedFiltering: 0,
@@ -363,9 +367,13 @@ export class RoundsService {
       const inFiltering = p.status === ProposalStatus.ACTIVE && p.stage === ProposalStage.FILTERING;
       const inVoting = p.status === ProposalStatus.ACTIVE && p.stage === ProposalStage.DEBATE_VOTE;
 
+      // SUBMISSION status split: still awaiting fee confirmation vs admitted into the round.
+      if (p.status === ProposalStatus.PENDING) s.pending += 1;
+      const wentPublic = inFiltering || inVoting || isApproved || isFilteringReject || isDvReject;
+      if (wentPublic) s.accepted += 1; // fee confirmed → accepted into the round
       // Fee collected once the proposal went public (ACTIVE+) or was rejected during
       // review — NOT a fee-stage rejection (REJECTED@null,unfinalized), where it's refunded.
-      if (inFiltering || inVoting || isApproved || isFilteringReject || isDvReject) {
+      if (wentPublic) {
         s.feesCollectedAda += toAda(p.submissionFeeAda ?? 0n);
       }
 
