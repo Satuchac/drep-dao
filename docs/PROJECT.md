@@ -5,13 +5,17 @@
 > changes, update the relevant section here in the same change. `DESIGN.md` is the
 > full spec (the "what we intend"); this file is the "what is built".
 >
-> **Last updated:** 2026-05-23 — full proposal lifecycle: Filtering & Debate&Vote
-> decisions **anchored on-chain**, proposal **editing during Filtering/D&V with
-> versioned diffs**, **comments** (§20.1), the **milestone fund-distribution flow**
-> (§11, decisions anchored; payout deferred to the on-chain multisig), a dedicated
-> **submission-fee address** with board confirmation, and a **configurable block
-> explorer**. Plus the earlier funding-round lifecycle, Treasury, board actions,
-> and notification badge.
+> **Last updated:** 2026-06-15 — profile & round-control polish (see §14): slimmed
+> on-chain submission anchor, **post-debate content fingerprint**, proposal **title
+> immutability**, **independent submitter vs DAO-member profiles** with **cross-wallet
+> linking**, mandatory member contact, DAO-member **Activity** vote stats, per-stage
+> **category stats**, round-control **schedule validation + Saved/Not-saved + submenu**,
+> larger **auto-resized profile photos**, and a unified to-do badge. Earlier: full
+> proposal lifecycle with Filtering & D&V decisions **anchored on-chain**, proposal
+> **editing with versioned diffs**, **comments** (§20.1), the **milestone
+> fund-distribution flow** (§11), a dedicated **submission-fee address**, and a
+> **configurable block explorer**, plus the funding-round lifecycle, Treasury, board
+> actions, and notification badge.
 
 ---
 
@@ -456,6 +460,12 @@ in `tools/` (`test-all.cjs`, `test-anchor.cjs`, `test-dao.cjs`, …); see
 `tools/TESTS.md`. Automated suites `delete process.env.ANCHOR_MNEMONIC` so they
 don't submit real anchor txs.
 
+**Unit tests (`vitest`):** `pnpm test` (turbo) runs the package suites — currently
+`packages/cardano` (on-chain metadata builders: slim submission anchor + the
+post-debate content-fingerprint anchor) and `apps/api` (cross-wallet profile-link
+resolution; mandatory Telegram/email contact validation). Spec files live next to
+the code as `*.spec.ts` and are excluded from the build/typecheck tsconfigs.
+
 ## 12. Key environment config (`.env`)
 
 `DATABASE_URL`, `REDIS_URL`, `JWT_SECRET`, `CARDANO_NETWORK`, `KOIOS_URL`,
@@ -477,3 +487,55 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   building/signing/submitting the actual multisig payment needs the real on-chain
   multisig set up — see `TREASURY.md`).
 - **Future hardening:** move the hot-wallet key to KMS/HSM + a signing service.
+
+## 14. Recent additions (2026-06-15)
+
+**On-chain anchoring**
+- **Slim accepted-proposal submission anchor** (§3): the `fee` object carries only
+  `{ ada, txHash? }` — the boolean-string `required`/`paid` flags, the generic
+  `subject`, and the redundant `proofHash` are gone; `title` is the proposal's own
+  title. `metadataFromAnchor` + the proofs viewer still read older anchors.
+- **Post-debate content fingerprint** (§8.1): when Debate ends (round enters VOTE),
+  each frozen proposal's canonical textual form is SHA-256 hashed and anchored
+  (`GovSubject.PROPOSAL_DOC`, `buildDocHashMetadata`, `AnchorService.anchorProposalDoc`,
+  idempotent). The proposal detail shows the exact text + hash + hash function + the
+  on-chain tx so anyone can re-hash and verify.
+
+**Proposals**
+- **Title immutability:** once submitted (past DRAFT / fee-reject), the title is locked
+  server-side (`updateDraft`) and in both the submit and post-public edit forms.
+
+**Profiles (§2)**
+- **Independent submitter vs DAO-member/expert profiles:** a submitter sets their own
+  display name (no longer forced from the account profile); the apply/update handler
+  stores `dto.displayName` verbatim.
+- **Cross-wallet linking:** the same entity may register a DAO-member profile on one
+  wallet and a submitter profile on another. Each profile form has an "I'm also a …"
+  checkbox + a picker; one-way self-declaration surfaces the link on both profiles
+  (resolved same-wallet OR explicit). Board can override from each directory detail
+  (`PATCH /admin/submitters/:id/link`, `PATCH /dao/members/:drepId/link`). Columns:
+  `SubmitterApplication.linkedDrepIdOnchain`, `Drep.linkedSubmitterUserId`.
+- **Mandatory contact (§14.3):** Telegram + a valid email are required on the DAO-member
+  (DRep) profile — enforced client-side and in `apply`/`updateMine` (existing rows
+  unchanged until next save).
+- **DAO-member Activity stats:** the public profile groups governance participation
+  across all rounds — admission votes, filtering reviews, funding (D&V) votes,
+  milestone reviews, internal-proposal votes — each with its YES/NO(/Abstain) split.
+  "Votes on funding" (the board opt-in flag) sits with the headline stats.
+- **Larger profile photos:** the picker accepts up to 12 MB and downscales client-side
+  to a 640px standard (WebP/JPEG); DTO caps raised to ~700k chars; the API JSON body
+  limit raised to 2 MB.
+
+**Rounds**
+- **Per-category stats** on the Categories tab, by stage (Submission → Filtering →
+  Debate & Vote → Funding): submitted/accepted/pending/approved, budget asked,
+  submitters, fees collected, pass/reject counts, funded allocation, milestones.
+- **Round control** (My area, board): split into a **submenu** — "Round stage control"
+  (timeline) and "Round setup" (editable parameters). Stage scheduling now validates
+  dates (start in the future, end after start, not before the previous stage's end —
+  shown inline), displays each stage's **length**, shows a **Saved / ● Not saved**
+  indicator per stage, and confirms **Launch … now** via the in-app dialog.
+
+**Notifications**
+- The to-do counts (Actions tab badges, My-area left-nav badge, login-box badge) are
+  unified behind one shared hook (`lib/use-todo-counts.ts`) so they can't diverge.
