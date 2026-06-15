@@ -205,15 +205,16 @@ export class DrepService {
     // (non-superseded) votes per phase, so a re-vote isn't double-counted.
     const phaseVotes = drep
       ? await this.prisma.vote.groupBy({
-          by: ['phase'],
+          by: ['phase', 'choice'],
           where: { drepId: drep.id, supersededBy: null },
           _count: { _all: true },
         })
       : [];
-    const phaseCount = (p: string) => phaseVotes.find((g) => g.phase === p)?._count._all ?? 0;
-    // §10 — internal-proposal participation: count DISTINCT proposals voted on (a multi-select
-    // poll stores one Vote row per chosen option, so a raw row count would over-count).
-    const internalVotes = drep
+    const cnt = (p: string, c: string) => phaseVotes.find((g) => g.phase === p && g.choice === c)?._count._all ?? 0;
+    const sum = (p: string) => phaseVotes.filter((g) => g.phase === p).reduce((a, g) => a + g._count._all, 0);
+    // §10 — internal-proposal participation: the headline counts DISTINCT proposals voted on (a
+    // multi-select poll stores one Vote row per chosen option, so a raw row count would over-count).
+    const internalDistinct = drep
       ? (await this.prisma.vote.findMany({
           where: { drepId: drep.id, phase: 'INTERNAL', supersededBy: null },
           distinct: ['proposalId'],
@@ -229,13 +230,14 @@ export class DrepService {
       subcategoryIds: drep?.subcategoryIds ?? [],
       // Admission votes the member cast as a board reviewer (only board has any).
       admissionVotesCast: { yes, no, total: yes + no },
-      // §13 — governance participation across all rounds: filtering-jury reviews, funding
-      // (Debate & Vote stage) votes, milestone reviews, and internal-proposal votes.
+      // §13 — governance participation across all rounds, with the YES/NO(/ABSTAIN) split:
+      // filtering-jury reviews, funding (Debate & Vote stage) votes, milestone reviews, and
+      // internal-proposal votes. Filtering/milestone are YES/NO; funding/internal add ABSTAIN.
       votingActivity: {
-        filtering: phaseCount('FILTERING'),
-        funding: phaseCount('DEBATE_VOTE'),
-        milestone: phaseCount('MILESTONE'),
-        internal: internalVotes,
+        filtering: { total: sum('FILTERING'), yes: cnt('FILTERING', 'YES'), no: cnt('FILTERING', 'NO') },
+        funding: { total: sum('DEBATE_VOTE'), yes: cnt('DEBATE_VOTE', 'YES'), no: cnt('DEBATE_VOTE', 'NO'), abstain: cnt('DEBATE_VOTE', 'ABSTAIN') },
+        milestone: { total: sum('MILESTONE'), yes: cnt('MILESTONE', 'YES'), no: cnt('MILESTONE', 'NO') },
+        internal: { total: internalDistinct, yes: cnt('INTERNAL', 'YES'), no: cnt('INTERNAL', 'NO'), abstain: cnt('INTERNAL', 'ABSTAIN') },
       },
       // §8.2 — board-only flag: does this board member vote on funding D&V?
       // Null for non-board (the flag doesn't apply to them; they always vote).

@@ -290,10 +290,10 @@ function Activity({ d }: { d: DaoMemberDetail }) {
           label="Admission votes cast"
           value={d.isBoard ? `${d.admissionVotesCast.total} (${d.admissionVotesCast.yes} YES · ${d.admissionVotesCast.no} NO)` : '— (non-board)'}
         />
-        <Stat label="Filtering reviews" value={d.votingActivity.filtering.toLocaleString()} />
-        <Stat label="Funding votes" value={d.votingActivity.funding.toLocaleString()} />
-        <Stat label="Milestone reviews" value={d.votingActivity.milestone.toLocaleString()} />
-        <Stat label="Internal proposal votes" value={d.votingActivity.internal.toLocaleString()} />
+        <Stat label="Filtering reviews" value={`${d.votingActivity.filtering.total} (${d.votingActivity.filtering.yes} YES · ${d.votingActivity.filtering.no} NO)`} />
+        <Stat label="Funding votes" value={`${d.votingActivity.funding.total} (${d.votingActivity.funding.yes} YES · ${d.votingActivity.funding.no} NO · Abstain ${d.votingActivity.funding.abstain})`} />
+        <Stat label="Milestone reviews" value={`${d.votingActivity.milestone.total} (${d.votingActivity.milestone.yes} YES · ${d.votingActivity.milestone.no} NO)`} />
+        <Stat label="Internal proposal votes" value={`${d.votingActivity.internal.total} (${d.votingActivity.internal.yes} YES · ${d.votingActivity.internal.no} NO · Abstain ${d.votingActivity.internal.abstain})`} />
       </dl>
     </div>
   );

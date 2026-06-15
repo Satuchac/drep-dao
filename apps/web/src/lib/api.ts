@@ -152,8 +152,13 @@ export interface DaoMemberDetail extends DaoMember {
   subcategoryIds: string[];
   // Admission votes the member cast as a board reviewer (non-board members are 0).
   admissionVotesCast: { yes: number; no: number; total: number };
-  // §13 — total governance participation across all rounds.
-  votingActivity: { filtering: number; funding: number; milestone: number; internal: number };
+  // §13 — total governance participation across all rounds, with the choice split.
+  votingActivity: {
+    filtering: { total: number; yes: number; no: number };
+    funding: { total: number; yes: number; no: number; abstain: number };
+    milestone: { total: number; yes: number; no: number };
+    internal: { total: number; yes: number; no: number; abstain: number };
+  };
   conflictOfInterest: string;
   noSelfVotePledge: boolean;  country: string;
   /** §2 — this DAO member is also an approved submitter, + the submitter name if different. */
