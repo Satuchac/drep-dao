@@ -17,7 +17,11 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   const { profile } = useAuth();
   // §2.1 — never ask for a name the platform knows: members reuse the profile display name.
   const knownName = profile?.user.displayName?.trim() || '';
-  const isMember = !!profile && (profile.roles.includes('DAO_MEMBER') || profile.roles.includes('BOARD') || profile.roles.includes('DREP'));
+  // Only an actual DAO member / board member has the DRep profile editor on the
+  // same My-area Profile page, so only they set their name there and the submitter
+  // role reuses it. A registered-DRep-only user (not in the DAO) has no such
+  // editor — they type a display name directly in this form, like a viewer.
+  const isMember = !!profile && (profile.roles.includes('DAO_MEMBER') || profile.roles.includes('BOARD'));
   const [mine, setMine] = useState<MySubmitter | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [name, setName] = useState('');
