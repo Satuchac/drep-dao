@@ -115,6 +115,9 @@ export const ROUND_SETTING_DEFAULTS = {
   // submit + on post-submission edits. 0 disables the check entirely — useful
   // for test environments.
   mandatoryWords: 1,
+  // §3 — maximum word count per mandatory text field (same fields as the min).
+  // Validated on submit + post-submission edits. 0 disables the upper bound.
+  mandatoryWordsMax: 2000,
 } as const;
 
 export type RoundSettingKey = keyof typeof ROUND_SETTING_DEFAULTS;
@@ -156,6 +159,8 @@ export const ROUND_SETTING_META: Record<RoundSettingKey, string> = {
     'How many in-filter budget changes the submitter may request while the round is in FILTERING. Each accepted change clears the jury\'s filtering votes — they vote again on the revised budget. Counted separately from resubmissions. 0 disables in-filter budget changes.',
   mandatoryWords:
     'Minimum word count required on each mandatory text field of a proposal: title, pitch, every milestone (name + description + acceptance criteria), ecosystem impact, success metrics, cost breakdown, team info. Checked on submit and on every post-submission edit. 0 disables the check entirely (test mode).',
+  mandatoryWordsMax:
+    'Maximum word count allowed on each mandatory text field (same fields as the minimum). Checked on submit and on every post-submission edit. 0 disables the upper bound.',
 };
 
 /** Known block explorers → tx/address URL templates per network ({hash}/{address} placeholders). */

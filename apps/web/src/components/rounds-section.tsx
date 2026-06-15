@@ -16,6 +16,8 @@ import {
 import { ProposalList } from './proposal-list';
 import { QuickPollsPanel } from './quick-polls-panel';
 import { BackButton, ProposalCounts, StatusBadge, toLocalInput } from './round-ui';
+import { MarkdownEditor } from './markdown';
+import { ClampedMarkdown } from './clamped-markdown';
 
 // §8 — D&V is split into DEBATE (DReps comment + revise) → VOTE (ballots).
 const STAGE_DEFS = [
@@ -86,7 +88,10 @@ const SETTING_GROUPS: { title: string; fields: { key: SettingKey; label: string;
   },
   {
     title: 'Mandatory text fields',
-    fields: [{ key: 'mandatoryWords', label: 'Minimum words per field' }],
+    fields: [
+      { key: 'mandatoryWords', label: 'Minimum words per field' },
+      { key: 'mandatoryWordsMax', label: 'Maximum words per field' },
+    ],
   },
 ];
 
@@ -97,7 +102,7 @@ export function RoundsSection() {
   const [rounds, setRounds] = useState<RoundSummary[]>([]);
   const [creating, setCreating] = useState(false);
   // Round-detail sub-tab: the proposals list vs the read-only round setup.
-  const [roundTab, setRoundTab] = useState<'proposals' | 'setup'>('proposals');
+  const [roundTab, setRoundTab] = useState<'proposals' | 'categories' | 'setup'>('proposals');
   // The drilled-into round lives in the URL (?round=) so it's shareable + survives opening a proposal.
   const open = rounds.find((r) => r.id === get('round')) ?? null;
 
@@ -123,7 +128,7 @@ export function RoundsSection() {
 
         {/* Horizontal menu: Proposals (the list) | Round setup (read-only settings). */}
         <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
-          {([['proposals', 'Proposals'], ['setup', 'Round setup']] as const).map(([key, label]) => (
+          {([['proposals', 'Proposals'], ['categories', 'Categories'], ['setup', 'Round setup']] as const).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setRoundTab(key)}
@@ -138,7 +143,9 @@ export function RoundsSection() {
           ))}
         </div>
 
-        {roundTab === 'setup' ? <RoundSettingsView roundId={open.id} /> : (
+        {roundTab === 'setup' ? <RoundSettingsView roundId={open.id} />
+          : roundTab === 'categories' ? <RoundCategoriesView roundId={open.id} />
+          : (
           <div className="space-y-4">
             {/* §9.2 — tie-break polls at the budget cliff (self-hides when none). */}
             <QuickPollsPanel roundId={open.id} />
@@ -293,7 +300,7 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
       maxAda: c.maxAda ?? undefined,
       conditions: c.conditions ?? '',
       description: c.description ?? '',
-    })) ?? [{ name: '', type: 'GRANT', allocatedAda: 4_000_000, description: '' }],
+    })) ?? [{ name: '', type: 'GRANT', allocatedAda: 0, description: '' }],
   );
   // New round: default the Submission stage's start to today (00:00 local) — the
   // round usually opens now, and the "expected days" helper chains the rest off it.
@@ -471,20 +478,23 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
                 <label>max ask ₳ <input type="number" min={0} className={`${field} ml-1 w-28`} placeholder="no max" value={c.maxAda ?? ''} onChange={(e) => setCat(i, { maxAda: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
                 <span className="text-neutral-400">a proposal&apos;s requested amount must fit this range</span>
               </div>
-              <textarea
-                className={`${field} w-full`}
-                rows={2}
-                placeholder="description — what this category funds"
+              <MarkdownEditor
                 value={c.description ?? ''}
-                onChange={(e) => setCat(i, { description: e.target.value })}
+                onChange={(val) => setCat(i, { description: val })}
+                title="Description"
+                subtitle="What this category funds. Supports bold, italics, headers, lists."
+                placeholder="description — what this category funds"
+                minRows={6}
                 required
               />
-              <textarea
-                className={`${field} w-full`}
-                rows={2}
-                placeholder="conditions / restrictions (optional) — eligibility rules, who can apply, etc."
+              <MarkdownEditor
                 value={c.conditions ?? ''}
-                onChange={(e) => setCat(i, { conditions: e.target.value })}
+                onChange={(val) => setCat(i, { conditions: val })}
+                title="Conditions / restrictions"
+                hint="optional"
+                subtitle="Eligibility rules, who can apply, etc. Supports bold, italics, headers, lists."
+                placeholder="conditions / restrictions — eligibility rules, who can apply, etc."
+                minRows={4}
               />
             </div>
           ))}
@@ -747,6 +757,98 @@ function RewardBar({ pool, expertPct, dvShare, fixed }: { pool: number; expertPc
 }
 
 /** §4 — the round's setup, read-only, shown on the round page (resolved values; null ⇒ default). */
+// §6 — map the round's status to the stage it currently sits in (−1 = PREPARATION,
+// before any stage started; STAGE_DEFS.length = CLOSED, all stages done).
+const STATUS_STAGE_IDX: Record<string, number> = {
+  PREPARATION: -1, SUBMISSION: 0, FILTERING: 1, DEBATE: 2, VOTE: 3, DV: 3, FUNDING: 4, CLOSED: STAGE_DEFS.length,
+};
+const fmtShort = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
+
+/** §6 — horizontal bar of every stage + its dates, with the current stage marked. */
+function StagesBar({ round }: { round: RoundDetail }) {
+  const curIdx = STATUS_STAGE_IDX[round.status] ?? -1;
+  const byKey = new Map(round.schedule.map((e) => [e.stageKey, e]));
+  return (
+    <div>
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">
+        <span>Stages</span>
+        {curIdx === -1 ? (
+          <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-700 dark:text-neutral-200">Preparation — not started yet</span>
+        ) : curIdx >= STAGE_DEFS.length ? (
+          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">Closed</span>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {STAGE_DEFS.map((s, i) => {
+          const e = byKey.get(s.key);
+          const state = curIdx === -1 ? 'upcoming' : i < curIdx ? 'done' : i === curIdx ? 'current' : 'upcoming';
+          const cls =
+            state === 'current'
+              ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-400 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'
+              : state === 'done'
+                ? 'border-emerald-200 bg-emerald-50/50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-300'
+                : 'border-neutral-200 bg-neutral-50 text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400';
+          return (
+            <div key={s.key} className={`min-w-[8.5rem] flex-1 rounded-md border px-2 py-1.5 ${cls}`}>
+              <div className="flex items-center gap-1 text-xs font-semibold">
+                {state === 'current' ? <span className="text-emerald-600">●</span> : state === 'done' ? <span className="text-emerald-500">✓</span> : null}
+                {s.label}
+              </div>
+              <div className="mt-0.5 text-[10px] leading-tight">{fmtShort(e?.startsAt)} → {fmtShort(e?.endsAt)}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** §6 — read-only Categories tab: allocation, min/max ask, and description. */
+function RoundCategoriesView({ roundId }: { roundId: string }) {
+  const [round, setRound] = useState<RoundDetail | null>(null);
+  useEffect(() => {
+    roundsApi.get(roundId).then(setRound).catch(() => setRound(null));
+  }, [roundId]);
+  if (!round) return null;
+  if (round.categories.length === 0) return <p className="text-sm text-neutral-500">No categories defined for this round.</p>;
+  const totalAlloc = round.categories.reduce((s, c) => s + c.allocatedAda, 0);
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-neutral-500">
+        {round.categories.length} categor{round.categories.length === 1 ? 'y' : 'ies'} · allocated{' '}
+        {totalAlloc.toLocaleString()} ₳ of {round.budgetAda.toLocaleString()} ₳ budget.
+      </p>
+      {round.categories.map((c) => (
+        <section key={c.id} className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <span className="font-medium">{c.name}</span>
+              <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{c.type}</span>
+            </span>
+            <span className="text-sm tabular-nums text-neutral-600 dark:text-neutral-300">{c.allocatedAda.toLocaleString()} ₳ allocated</span>
+          </div>
+          <div className="mt-1 text-xs text-neutral-500">
+            Ask range:{' '}
+            {c.minAda != null || c.maxAda != null
+              ? `${c.minAda != null ? `${c.minAda.toLocaleString()} ₳` : 'no min'} – ${c.maxAda != null ? `${c.maxAda.toLocaleString()} ₳` : 'no max'}`
+              : 'any amount'}
+          </div>
+          <div className="mt-2">
+            <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Description</div>
+            <ClampedMarkdown className="mt-0.5 text-sm text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{c.description ?? ''}</ClampedMarkdown>
+          </div>
+          {c.conditions ? (
+            <div className="mt-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Conditions</div>
+              <ClampedMarkdown className="mt-0.5 text-sm text-neutral-700 dark:text-neutral-300" maxLines={15}>{c.conditions}</ClampedMarkdown>
+            </div>
+          ) : null}
+        </section>
+      ))}
+    </div>
+  );
+}
+
 function RoundSettingsView({ roundId }: { roundId: string }) {
   const [round, setRound] = useState<RoundDetail | null>(null);
   useEffect(() => {
@@ -759,7 +861,9 @@ function RoundSettingsView({ roundId }: { roundId: string }) {
 
   return (
     <div className="space-y-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
-      <div className="text-sm font-medium">Round setup</div>
+      {/* §6 — stages bar on top: where the round currently is. */}
+      <StagesBar round={round} />
+      <div className="border-t border-neutral-200 pt-3 text-sm font-medium dark:border-neutral-800">Round setup</div>
       <div className="text-xs text-neutral-500">
         budget {round.budgetAda.toLocaleString()} ₳ · rewards {round.rewardsPoolAda.toLocaleString()} ₳ ·{' '}
         {round.categories.length} categories · {round.eligibleCount} eligible DReps

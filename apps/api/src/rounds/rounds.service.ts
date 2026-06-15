@@ -264,6 +264,7 @@ export class RoundsService {
         filterResubmissionsAllowed: r.filterResubmissionsAllowed,
         filterBudgetChangesAllowed: r.filterBudgetChangesAllowed,
         mandatoryWords: r.mandatoryWords,
+        mandatoryWordsMax: r.mandatoryWordsMax,
       },
       // §8 — what the board must confirm/launch next (null once CLOSED).
       nextStage: this.computeNextStage(r.status, schedule),

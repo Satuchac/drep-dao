@@ -60,6 +60,8 @@ export class RoundSettingsInput {
   // §3 — minimum word count enforced on every mandatory text field at submit
   // and on post-submission edits. 0 disables the check (test mode).
   @IsOptional() @IsInt() @Min(0) mandatoryWords?: number;
+  // §3 — maximum word count per mandatory field. 0 disables the upper bound.
+  @IsOptional() @IsInt() @Min(0) mandatoryWordsMax?: number;
 }
 
 // MVP schedule uses coarse operational windows rather than the 9 fine-grained

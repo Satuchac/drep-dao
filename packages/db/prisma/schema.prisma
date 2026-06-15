@@ -332,6 +332,7 @@ model Round {
   // §3 — minimum word count enforced on every mandatory text field at submit
   // and on post-submission edits. 0 disables the check (test mode).
   mandatoryWords                  Int? @map("mandatory_words")
+  mandatoryWordsMax               Int? @map("mandatory_words_max")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   endedAt         DateTime? @map("ended_at") @db.Timestamptz(6)
 

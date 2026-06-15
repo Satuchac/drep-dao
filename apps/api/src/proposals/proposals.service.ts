@@ -1992,18 +1992,28 @@ export class ProposalsService {
     if (!roundId) return;
     const round = await this.prisma.round.findUnique({
       where: { id: roundId },
-      select: { mandatoryWords: true },
+      select: { mandatoryWords: true, mandatoryWordsMax: true },
     });
     const min = round?.mandatoryWords ?? ROUND_SETTING_DEFAULTS.mandatoryWords;
-    if (min <= 0) return;
-    const short = fields.filter((f) => this.wordCount(f.text) < min);
-    if (short.length === 0) return;
-    const detail = short
-      .map((f) => `${f.label} (${this.wordCount(f.text)}/${min})`)
-      .join(', ');
-    throw new BadRequestException(
-      `Each mandatory field needs at least ${min} word${min === 1 ? '' : 's'}. Too short: ${detail}.`,
-    );
+    const max = round?.mandatoryWordsMax ?? ROUND_SETTING_DEFAULTS.mandatoryWordsMax;
+    if (min > 0) {
+      const short = fields.filter((f) => this.wordCount(f.text) < min);
+      if (short.length > 0) {
+        const detail = short.map((f) => `${f.label} (${this.wordCount(f.text)}/${min})`).join(', ');
+        throw new BadRequestException(
+          `Each mandatory field needs at least ${min} word${min === 1 ? '' : 's'}. Too short: ${detail}.`,
+        );
+      }
+    }
+    if (max > 0) {
+      const long = fields.filter((f) => this.wordCount(f.text) > max);
+      if (long.length > 0) {
+        const detail = long.map((f) => `${f.label} (${this.wordCount(f.text)}/${max})`).join(', ');
+        throw new BadRequestException(
+          `Each mandatory field allows at most ${max} word${max === 1 ? '' : 's'}. Too long: ${detail}.`,
+        );
+      }
+    }
   }
 
   private mandatoryProposalFields(
