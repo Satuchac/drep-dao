@@ -32,19 +32,14 @@ export class SubmitterService {
   }
 
   async apply(userId: string, dto: SubmitterApplicationDto) {
-    // §2.1 — never ask for a name the platform already knows: members (board / DAO / DRep)
-    // use their profile display name; a member WITHOUT one must set it in the profile first.
-    // Only viewers (no profile) provide a name here.
+    // §2 — the submitter profile is INDEPENDENT of the DAO-member / DRep profile: it carries
+    // its own display name. We no longer force the account's profile name onto it, so a member
+    // can present a different name as a submitter (e.g. their company). Required, provided here.
     const me = await this.prisma.appUser.findUnique({
       where: { id: userId },
-      select: { displayName: true, drepKeyHash: true, drep: { select: { id: true } } },
+      select: { displayName: true },
     });
-    const isMember = !!me?.drep || (!!me?.drepKeyHash && !!(await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: me.drepKeyHash } })));
-    let displayName = (me?.displayName ?? '').trim() || (dto.displayName ?? '').trim();
-    if (me?.displayName?.trim()) displayName = me.displayName.trim(); // profile name always wins
-    else if (isMember) {
-      throw new BadRequestException('set your display name in your profile first — the submitter role reuses it');
-    }
+    const displayName = (dto.displayName ?? '').trim();
     const description = (dto.description ?? '').trim();
     const country = (dto.country ?? '').trim();
     if (!displayName) throw new BadRequestException('display name is required');
