@@ -87,6 +87,9 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
     // §14.3 — the bio is mandatory: at least 100 words (also enforced server-side).
     if (bioWords < 100) { setError(`The bio must be at least 100 words (currently ${bioWords}).`); return; }
     if (!country) { setError('Please select a country.'); return; }
+    // §14.3 — Telegram + a valid email are mandatory contact details.
+    if (!telegram.trim()) { setError('A Telegram handle is required.'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError('A valid email is required.'); return; }
     setBusy(true);
     const input: DrepApplicationInput = {
       displayName: displayName.trim() || undefined,
@@ -233,12 +236,12 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
 
       <div className="grid grid-cols-2 gap-3">
         <label className="block space-y-1">
-          <span className="text-xs font-medium">Telegram</span>
-          <input className={field} value={telegram} onChange={(e) => setTelegram(e.target.value)} />
+          <span className="text-xs font-medium">Telegram <span className="text-red-500">*</span></span>
+          <input className={field} value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="@handle" />
         </label>
         <label className="block space-y-1">
-          <span className="text-xs font-medium">Email</span>
-          <input className={field} value={email} onChange={(e) => setEmail(e.target.value)} />
+          <span className="text-xs font-medium">Email <span className="text-red-500">*</span></span>
+          <input type="email" className={field} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.org" />
         </label>
       </div>
 

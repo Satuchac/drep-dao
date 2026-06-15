@@ -572,6 +572,9 @@ export class DrepService {
       throw new ConflictException(`the bio must be at least ${MIN_BIO_WORDS} words`);
     }
     if (!(dto.country ?? '').trim()) throw new ConflictException('please select a country');
+    // §14.3 — Telegram + a valid email are mandatory contact details (the board must be able
+    // to reach every member). Required on every new registration.
+    this.assertContact(dto.contact);
 
     if (dto.displayName !== undefined) {
       await this.prisma.appUser.update({ where: { id: userId }, data: { displayName: dto.displayName } });
@@ -631,6 +634,14 @@ export class DrepService {
     return { status: DRepStatus.REMOVED, resignedBoardSeat: !!seat };
   }
 
+  /** §14.3 — Telegram + a valid email are mandatory member contact details. */
+  private assertContact(contact: Record<string, unknown> | undefined) {
+    const telegram = String(contact?.telegram ?? '').trim();
+    const email = String(contact?.email ?? '').trim();
+    if (!telegram) throw new ConflictException('a Telegram handle is required');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new ConflictException('a valid email is required');
+  }
+
   async updateMine(userId: string, dto: UpdateDrepDto) {
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
     if (!drep) throw new NotFoundException('no DRep profile — apply first');
@@ -639,6 +650,9 @@ export class DrepService {
       throw new ConflictException(`the bio must be at least ${MIN_BIO_WORDS} words`);
     }
     if (dto.country !== undefined && !dto.country.trim()) throw new ConflictException('please select a country');
+    // §14.3 — Telegram + a valid email are mandatory. The profile form always sends `contact`,
+    // so a save can't strip them; partial updates that don't touch contact are left alone.
+    if (dto.contact !== undefined) this.assertContact(dto.contact);
 
     if (dto.displayName !== undefined) {
       await this.prisma.appUser.update({ where: { id: userId }, data: { displayName: dto.displayName } });
