@@ -20,7 +20,7 @@ import { NotificationBell } from './notification-bell';
 import { SubmittersDirectory } from './submitters-directory';
 import { ExpertsDirectory } from './experts-directory';
 import { WalletStatusBanner } from './wallet-status-banner';
-import { useMyAreaTodoCount } from '@/lib/use-my-area-todo';
+import { useTodoCounts, todoTotal } from '@/lib/use-todo-counts';
 import { HealthBadge } from '@/app/health-badge';
 
 type View = 'overview' | 'members' | 'submitters' | 'experts' | 'me' | 'rounds' | 'proposals' | 'internal' | 'proofs' | 'treasury' | 'setup';
@@ -71,8 +71,11 @@ export function HomeShell() {
   // — Rules of Hooks forbid calling a hook only after an early return. The
   // hook itself returns 0 when there's no role/auth, so the badge is hidden.
   const isBoard = profile?.roles.includes('BOARD') ?? false;
-  const canVote = profile?.roles.includes('DREP') || profile?.roles.includes('DAO_MEMBER') || profile?.roles.includes('EXPERT') || false;
-  const myAreaTodo = useMyAreaTodoCount(isBoard, canVote);
+  // Match member-area's definition (EXPERT handled inside the hook via the reward-address nag)
+  // so the left-nav badge, the login-box badge, and the in-area tab badges all agree.
+  const canVote = (profile?.roles.includes('DREP') || profile?.roles.includes('DAO_MEMBER') || profile?.roles.includes('BOARD')) ?? false;
+  const todoCounts = useTodoCounts(isBoard, canVote, !!profile);
+  const myAreaTodo = todoTotal(todoCounts);
 
   // Logged out (or restoring): centered landing with the wallet login.
   if (loading || !profile) {
@@ -172,7 +175,7 @@ export function HomeShell() {
           <ConnectWallet />
           {/* Jump straight to My area → the tab that has work (Actions, then Applications, then Voting). */}
           <div className="flex items-center gap-2">
-            <NotificationBadge isBoard={isBoard} onNavigate={(tab) => setParams({ view: 'me', tab, round: null, proposal: null, ip: null })} />
+            <NotificationBadge counts={todoCounts} onNavigate={(tab) => setParams({ view: 'me', tab, round: null, proposal: null, ip: null })} />
             {/* §20.3 — the jobs feed (payments seen, grace expiry, overdue stages, reminders). */}
             <NotificationBell />
           </div>

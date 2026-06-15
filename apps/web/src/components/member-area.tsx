@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { card } from '@/lib/ui';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { roundsApi, expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardProposalsApi, boardSubmittersApi, boardRoundsApi, submitterApi, boardApi, boardExpertsApi, removalApi, filteringApi, quickPollApi, internalProposalsApi, messagesApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type MySubmitter, type EntryEligibility, type BoardAction } from '@/lib/api';
+import { useTodoCounts } from '@/lib/use-todo-counts';
+import { roundsApi, expertApi, drepApi, submitterApi, messagesApi, type MyExpert, type MySubmitter, type EntryEligibility } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -63,11 +64,8 @@ export function MemberArea() {
 
   const isBoard = !!profile?.roles.includes('BOARD');
   const canVote = !!profile && (profile.roles.includes('DREP') || profile.roles.includes('DAO_MEMBER') || profile.roles.includes('BOARD'));
-  // §15.4 — reward earners (DReps/board/DAO members + approved experts) need a
-  // reward payment address; the badge nags until one is set. Computed before the
-  // role flags below are read by the hook.
-  const isApprovedExpert = !!myExpert?.approvedByBoard;
-  const todo = useTodoCounts(isBoard, canVote, isApprovedExpert); // red-circle counts for Actions / Applications / Voting & reviews
+  // §20 — red-circle to-do counts (shared with the left-nav + login-box badges).
+  const todo = useTodoCounts(isBoard, canVote);
 
   if (loading || !profile) return null;
 
@@ -471,97 +469,6 @@ function ApplicationsTab() {
   );
 }
 
-/**
- * Red-circle counts for the My-area tabs = items still awaiting THIS member: the board's
- * Actions (treasury/fees/payments) + Applications (DRep/Expert apps + removals not yet voted),
- * the voter's "Voting & reviews" tasks (filtering + D&V + milestone), and the §10 "Internal
- * proposals" awaiting this DRep's vote. Light polling.
- */
-function useTodoCounts(isBoard: boolean, canVote: boolean, isApprovedExpert: boolean) {
-  const [counts, setCounts] = useState({ treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0, messages: 0, messagesTotal: 0, rounds: 0 });
-  useEffect(() => {
-    let alive = true;
-    const poll = async () => {
-      const next = { treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0, messages: 0, messagesTotal: 0, rounds: 0 };
-      // §3.5 — submitter's board messages: total (drives the Messages tab) + unread (board spoke
-      // last on an OPEN thread → the submitter still has to respond). Runs for everyone.
-      try {
-        const mineMsgs = await messagesApi.mine();
-        next.messagesTotal = mineMsgs.length;
-        next.messages = mineMsgs.filter((t) => t.status === 'OPEN' && t.lastFromBoard).length;
-      } catch { /* leave at 0 */ }
-      if (isBoard) {
-        const [a, f, p, dapps, eapps, rem, stop, pl, rev, msg, rvw, subs] = await Promise.allSettled([
-          treasuryApi.boardActions(),
-          boardFeeApi.pending(),
-          boardPaymentsApi.pending(),
-          boardApi.listApplications(),
-          boardExpertsApi.applications(),
-          removalApi.list(),
-          milestonesApi.pendingStopFunding(), // §11 — stop-funding awaiting THIS board member's 1p1v vote
-          boardPledgeApi.pending(), // §3 — pledge payments to confirm
-          boardRevenueApi.pending(), // §3.4 — revenue-sharing to verify (gates milestone POAs)
-          messagesApi.boardPending(), // §3.5 — submitter replies awaiting the board
-          boardProposalsApi.pendingReviewerAssignment(), // §11 — proposals needing a review jury
-          boardSubmittersApi.applications(), // §2.1 — submitter applications to review
-        ]);
-        // §15 — multisig sign queue (boardActions) is the Treasury tab; the
-        // remaining review/audit items (fees, pledges, payouts, stop-funding)
-        // stay in Actions.
-        // §12 — reward payouts are signed under Actions, other multisig actions under Treasury.
-        const acts = a.status === 'fulfilled' ? a.value.actions : [];
-        // Only badge an action the current board member still has to act on — once they've
-        // authorized (phase 1) or signed (phase 2), it's waiting on others, not their to-do.
-        const needsMe = (x: BoardAction) => (x.phase === 'AUTHORIZE' ? !x.mineCommitted : !x.mineApproved);
-        next.treasury = acts.filter((x) => x.kind !== 'REWARD_PAYOUT' && needsMe(x)).length;
-        next.actions =
-          acts.filter((x) => x.kind === 'REWARD_PAYOUT' && needsMe(x)).length +
-          (f.status === 'fulfilled' ? f.value.length : 0) +
-          (p.status === 'fulfilled' ? p.value.length : 0) +
-          (stop.status === 'fulfilled' ? stop.value.count : 0) +
-          (pl.status === 'fulfilled' ? pl.value.length : 0) +
-          (rev.status === 'fulfilled' ? rev.value.length : 0) +
-          (msg.status === 'fulfilled' ? msg.value.length : 0) +
-          (rvw.status === 'fulfilled' ? rvw.value.length : 0);
-        next.applications =
-          (dapps.status === 'fulfilled' ? dapps.value.filter((x) => !x.myVote).length : 0) +
-          (eapps.status === 'fulfilled' ? eapps.value.length : 0) +
-          (rem.status === 'fulfilled' ? rem.value.filter((x) => !x.myVote).length : 0) +
-          (subs.status === 'fulfilled' ? subs.value.length : 0);
-        // §6/§8 — rounds whose next stage is overdue to start (board must launch it).
-        try { next.rounds = (await boardRoundsApi.overdueStages()).count; } catch { /* leave 0 */ }
-      }
-      if (canVote) {
-        try { next.voting = (await filteringApi.votingTasks()).total; } catch { /* leave 0 */ }
-        // §9.2 — quick polls awaiting this DRep's tie-break vote.
-        try { next.voting += (await quickPollApi.myPending()).count; } catch { /* leave 0 */ }
-        try { next.internal = (await internalProposalsApi.pendingCount()).count; } catch { /* 0 */ }
-      }
-      // §15.4 — reward earners (DReps/board/DAO members + approved experts) need a
-      // reward payment address; nag on the Profile tab until one is set. This
-      // matches the left-nav badge (which also counts approved experts), so the
-      // badge always points at an actionable panel. Submitters/viewers don't earn.
-      if (canVote || isApprovedExpert) {
-        try { const r = await rewardAddressApi.get(); if (!r.rewardPaymentAddress) next.profile += 1; } catch { /* 0 */ }
-      }
-      // §11.2 — count submitter to-dos: any of my proposals with a REJECTED
-      // milestone needing a fresh POA. Backend tags those rows red with a
-      // "POA rejected" label in the enrichment, so we just count them.
-      try {
-        const mine = await proposalsApi.mine();
-        next.mine = mine.filter((p) => p.progress?.tone === 'red' && p.progress.label.includes('POA rejected')).length;
-      } catch { /* 0 */ }
-      if (alive) setCounts(next);
-    };
-    poll();
-    const id = setInterval(poll, 30_000);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, [isBoard, canVote, isApprovedExpert]);
-  return counts;
-}
 
 function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.ReactNode; badge?: number }[] }) {
   // The active tab lives in the URL (?tab=) so My-area submenu links are shareable.
