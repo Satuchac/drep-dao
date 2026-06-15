@@ -20,6 +20,7 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
   const [subs, setSubs] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
 
   const load = () =>
     expertApi.mine().then((e) => {
@@ -48,6 +49,8 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSaved(null);
+    const wasExisting = !!mine;
     setBusy(true);
     try {
       await expertApi.apply({
@@ -61,6 +64,7 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
       });
       await load();
       onChange?.();
+      setSaved(wasExisting ? 'Application updated — sent to the board for review.' : 'Application sent to the board for review.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
     } finally {
@@ -166,13 +170,17 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
           {!telegram.trim() ? 'A Telegram handle is required. ' : ''}
         </div>
       ) : null}
-      <button
-        type="submit"
-        disabled={!canSubmit}
-        className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-      >
-        {busy ? 'Submitting…' : mine ? 'Update application' : 'Submit expert application'}
-      </button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {busy ? 'Submitting…' : mine ? 'Update application' : 'Submit expert application'}
+        </button>
+        {mine && !saved ? <span className="text-xs text-neutral-500">Your application is under board review — you can update it anytime.</span> : null}
+        {saved ? <span className="text-xs font-medium text-emerald-600">✓ {saved}</span> : null}
+      </div>
     </form>
   );
 }

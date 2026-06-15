@@ -34,6 +34,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   const [country, setCountry] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
   // §2.1 — persistence consent (required to apply) + leave flow.
   const [agreePersist, setAgreePersist] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -73,7 +74,10 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSaved(null);
     if (!canSubmit) { setError(needsFullDesc ? 'Fill the required fields — the description needs at least 100 words.' : 'Fill the required fields.'); return; }
+    const wasApproved = mine?.status === 'APPROVED';
+    const wasExisting = !!mine;
     setBusy(true);
     try {
       await submitterApi.apply({
@@ -92,6 +96,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
       });
       await load();
       onChange?.();
+      setSaved(wasApproved ? 'Profile updated.' : wasExisting ? 'Application updated — sent to the board for review.' : 'Application sent to the board for review.');
     } catch (e2) { setError(e2 instanceof Error ? e2.message : 'failed'); } finally { setBusy(false); }
   };
 
@@ -244,9 +249,12 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
             <span>I agree that the profile will be persisted by the platform <span className="text-red-500">*</span> <span className="text-xs text-neutral-500">(it stays in the history even after leaving)</span></span>
           </label>
         ) : null}
-        <button type="submit" disabled={busy} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-          {busy ? 'Submitting…' : mine && mine.status !== 'REJECTED' ? 'Update application' : mine?.status === 'REJECTED' ? 'Re-apply' : 'Apply'}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="submit" disabled={busy} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+            {busy ? 'Submitting…' : mine && mine.status !== 'REJECTED' ? 'Update application' : mine?.status === 'REJECTED' ? 'Re-apply' : 'Apply'}
+          </button>
+          {saved ? <span className="text-xs font-medium text-emerald-600">✓ {saved}</span> : null}
+        </div>
       </form>
 
       {approved ? (
