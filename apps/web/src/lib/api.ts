@@ -873,6 +873,16 @@ export interface RoundDetail extends RoundSummary {
     maxAda: number | null;
     conditions: string | null;
     description: string | null;
+    // §6 — per-category proposal activity (submitted excludes private DRAFTs).
+    stats: {
+      submitted: number;
+      totalRequestedAda: number;
+      accepted: number;
+      rejected: number;
+      pending: number;
+      submitters: number;
+      feesCollectedAda: number;
+    };
   }[];
   schedule: RoundScheduleEntry[];
   settings: { [K in keyof Required<RoundSettingsInput>]: number | null };

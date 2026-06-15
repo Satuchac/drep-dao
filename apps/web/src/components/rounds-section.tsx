@@ -852,6 +852,31 @@ function StagesBar({ round }: { round: RoundDetail }) {
   );
 }
 
+/** §6 — per-category proposal activity: submitted + budget asked, the accepted /
+ *  rejected / pending split, distinct submitters, and fees collected. */
+function CategoryStatsBar({ stats }: { stats: RoundDetail['categories'][number]['stats'] }) {
+  const Stat = ({ label, value, tone }: { label: string; value: string; tone?: string }) => (
+    <div className="rounded-md border border-neutral-200 px-2 py-1 dark:border-neutral-800">
+      <div className={`text-sm font-semibold tabular-nums ${tone ?? 'text-neutral-800 dark:text-neutral-200'}`}>{value}</div>
+      <div className="text-[10px] uppercase tracking-wide text-neutral-500">{label}</div>
+    </div>
+  );
+  if (stats.submitted === 0) {
+    return <div className="mt-2 text-xs text-neutral-400">No proposals submitted in this category yet.</div>;
+  }
+  return (
+    <div className="mt-2 grid grid-cols-2 gap-1.5 sm:grid-cols-4 lg:grid-cols-7">
+      <Stat label="Submitted" value={stats.submitted.toLocaleString()} />
+      <Stat label="Budget asked" value={`${stats.totalRequestedAda.toLocaleString()} ₳`} />
+      <Stat label="Accepted" value={stats.accepted.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
+      <Stat label="Rejected" value={stats.rejected.toLocaleString()} tone="text-red-600 dark:text-red-400" />
+      <Stat label="Pending" value={stats.pending.toLocaleString()} tone="text-amber-600 dark:text-amber-400" />
+      <Stat label="Submitters" value={stats.submitters.toLocaleString()} />
+      <Stat label="Fees collected" value={`${stats.feesCollectedAda.toLocaleString()} ₳`} />
+    </div>
+  );
+}
+
 /** §6 — read-only Categories tab: allocation, min/max ask, and description. */
 function RoundCategoriesView({ roundId }: { roundId: string }) {
   const [round, setRound] = useState<RoundDetail | null>(null);
@@ -882,6 +907,8 @@ function RoundCategoriesView({ roundId }: { roundId: string }) {
               ? `${c.minAda != null ? `${c.minAda.toLocaleString()} ₳` : 'no min'} – ${c.maxAda != null ? `${c.maxAda.toLocaleString()} ₳` : 'no max'}`
               : 'any amount'}
           </div>
+          <CategoryStatsBar stats={c.stats} />
+          {/* — description / conditions follow — */}
           <div className="mt-2">
             <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Description</div>
             <ClampedMarkdown className="mt-0.5 text-sm text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{c.description ?? ''}</ClampedMarkdown>

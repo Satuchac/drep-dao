@@ -59,6 +59,26 @@ const ACTIVE_ROUND_STATUSES: string[] = [
   RoundStatus.FUNDING,
 ];
 
+// §6 — per-category proposal activity shown on the round's Categories tab.
+interface CategoryStats {
+  submitted: number; // non-DRAFT proposals in the category
+  totalRequestedAda: number; // sum of requested budget across them
+  accepted: number; // APPROVED / COMPLETE / FAILED (admitted to funding)
+  rejected: number; // REJECTED
+  pending: number; // PENDING / ACTIVE (still in flight)
+  submitters: number; // distinct submitters (may differ from proposal count)
+  feesCollectedAda: number; // submission fees actually collected by the DAO
+}
+const EMPTY_CATEGORY_STATS: CategoryStats = {
+  submitted: 0,
+  totalRequestedAda: 0,
+  accepted: 0,
+  rejected: 0,
+  pending: 0,
+  submitters: 0,
+  feesCollectedAda: 0,
+};
+
 @Injectable()
 export class RoundsService {
   constructor(
@@ -211,6 +231,7 @@ export class RoundsService {
       confirmedAt: s.confirmedAt,
       prolongedFrom: s.prolongedFrom,
     }));
+    const statsByCategory = await this.categoryStats(id);
     return {
       id: r.id,
       number: r.number,
@@ -234,6 +255,8 @@ export class RoundsService {
         allocatedAda: toAda(c.allocatedAda),
         minAda: c.minAda == null ? null : toAda(c.minAda),
         maxAda: c.maxAda == null ? null : toAda(c.maxAda),
+        // §6 — per-category proposal activity (submitted excludes private DRAFTs).
+        stats: statsByCategory.get(c.id) ?? EMPTY_CATEGORY_STATS,
       })),
       schedule,
       // §6/§12 — per-round settings (null = the ROUND_SETTING_DEFAULTS value).
@@ -271,6 +294,61 @@ export class RoundsService {
       createdAt: r.createdAt,
       endedAt: r.endedAt,
     };
+  }
+
+  /**
+   * §6 — per-category proposal activity for the round detail's Categories tab. A
+   * DRAFT is a private, never-submitted proposal, so it's excluded from every count.
+   * Buckets: accepted = APPROVED/COMPLETE/FAILED (admitted to funding), rejected =
+   * REJECTED, pending = PENDING/ACTIVE (still in flight). Fees are counted as
+   * collected once the fee was confirmed (the proposal went public / was rejected
+   * during review — not a fee-stage rejection, where the fee is refunded).
+   */
+  private async categoryStats(roundId: string): Promise<Map<string, CategoryStats>> {
+    const proposals = await this.prisma.proposal.findMany({
+      where: { roundId, categoryId: { not: null } },
+      select: {
+        categoryId: true,
+        status: true,
+        stage: true,
+        requestedAmountAda: true,
+        submissionFeeAda: true,
+        submitterUserId: true,
+        submitterDrepId: true,
+      },
+    });
+    const byCat = new Map<string, CategoryStats & { _submitters: Set<string> }>();
+    for (const p of proposals) {
+      if (!p.categoryId) continue;
+      if (p.status === ProposalStatus.DRAFT) continue; // private draft — not submitted
+      let s = byCat.get(p.categoryId);
+      if (!s) {
+        s = { ...EMPTY_CATEGORY_STATS, _submitters: new Set<string>() };
+        byCat.set(p.categoryId, s);
+      }
+      s.submitted += 1;
+      s.totalRequestedAda += toAda(p.requestedAmountAda ?? 0n);
+      if (p.status === ProposalStatus.APPROVED || p.status === ProposalStatus.COMPLETE || p.status === ProposalStatus.FAILED) s.accepted += 1;
+      else if (p.status === ProposalStatus.REJECTED) s.rejected += 1;
+      else s.pending += 1; // PENDING, ACTIVE
+      const submitter = p.submitterUserId ?? p.submitterDrepId;
+      if (submitter) s._submitters.add(submitter);
+      // Fee collected: public (ACTIVE+) or review-rejected — but NOT a fee-stage
+      // rejection (REJECTED with no stage), where the fee is refunded.
+      const feeCollected =
+        p.status === ProposalStatus.ACTIVE ||
+        p.status === ProposalStatus.APPROVED ||
+        p.status === ProposalStatus.COMPLETE ||
+        p.status === ProposalStatus.FAILED ||
+        (p.status === ProposalStatus.REJECTED && p.stage != null);
+      if (feeCollected) s.feesCollectedAda += toAda(p.submissionFeeAda ?? 0n);
+    }
+    const out = new Map<string, CategoryStats>();
+    for (const [id, s] of byCat) {
+      const { _submitters, ...rest } = s;
+      out.set(id, { ...rest, submitters: _submitters.size });
+    }
+    return out;
   }
 
   /** Editable while still pre-review — PREPARATION or SUBMISSION (once Filtering/D&V start, the
