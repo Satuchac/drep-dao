@@ -153,7 +153,7 @@ export interface DaoMemberDetail extends DaoMember {
   // Admission votes the member cast as a board reviewer (non-board members are 0).
   admissionVotesCast: { yes: number; no: number; total: number };
   // §13 — total governance participation across all rounds.
-  votingActivity: { filtering: number; debateVote: number; milestone: number };
+  votingActivity: { filtering: number; funding: number; milestone: number; internal: number };
   conflictOfInterest: string;
   noSelfVotePledge: boolean;  country: string;
   /** §2 — this DAO member is also an approved submitter, + the submitter name if different. */

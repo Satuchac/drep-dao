@@ -211,6 +211,15 @@ export class DrepService {
         })
       : [];
     const phaseCount = (p: string) => phaseVotes.find((g) => g.phase === p)?._count._all ?? 0;
+    // §10 — internal-proposal participation: count DISTINCT proposals voted on (a multi-select
+    // poll stores one Vote row per chosen option, so a raw row count would over-count).
+    const internalVotes = drep
+      ? (await this.prisma.vote.findMany({
+          where: { drepId: drep.id, phase: 'INTERNAL', supersededBy: null },
+          distinct: ['proposalId'],
+          select: { proposalId: true },
+        })).length
+      : 0;
 
     return {
       ...summary,
@@ -220,11 +229,13 @@ export class DrepService {
       subcategoryIds: drep?.subcategoryIds ?? [],
       // Admission votes the member cast as a board reviewer (only board has any).
       admissionVotesCast: { yes, no, total: yes + no },
-      // §13 — governance participation across all rounds (filtering / D&V / milestone reviews).
+      // §13 — governance participation across all rounds: filtering-jury reviews, funding
+      // (Debate & Vote stage) votes, milestone reviews, and internal-proposal votes.
       votingActivity: {
         filtering: phaseCount('FILTERING'),
-        debateVote: phaseCount('DEBATE_VOTE'),
+        funding: phaseCount('DEBATE_VOTE'),
         milestone: phaseCount('MILESTONE'),
+        internal: internalVotes,
       },
       // §8.2 — board-only flag: does this board member vote on funding D&V?
       // Null for non-board (the flag doesn't apply to them; they always vote).
