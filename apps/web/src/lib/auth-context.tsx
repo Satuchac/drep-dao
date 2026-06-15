@@ -56,11 +56,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refreshWallets();
     // Restore which wallet was used, so signing works after a reload (session is cookie-based).
     if (typeof window !== 'undefined') walletKeyRef.current = window.localStorage.getItem(WALLET_KEY_STORAGE);
     void refresh().finally(() => setLoading(false));
-  }, [refreshWallets, refresh]);
+
+    // Wallet extensions inject window.cardano.* ASYNCHRONOUSLY, often after the
+    // first paint and at different speeds (Eternl is fast; Lace/VESPR lag). A
+    // single scan at mount finds none, or only the fastest one. So poll for a
+    // few seconds and ACCUMULATE — once a wallet has been seen it stays in the
+    // list — and also react to the `cardano#initialized` event some wallets fire.
+    if (typeof window === 'undefined') return;
+    const seen = new Map<string, Cip30WalletEntry>();
+    const scan = () => {
+      let changed = false;
+      for (const w of listInjectedWallets()) {
+        if (!seen.has(w.key)) changed = true;
+        seen.set(w.key, w); // always refresh the reference
+      }
+      if (changed) setWallets([...seen.values()]);
+    };
+    scan();
+    let tries = 0;
+    const id = window.setInterval(() => { scan(); if (++tries >= 20) window.clearInterval(id); }, 300); // ~6s
+    window.addEventListener('cardano#initialized', scan);
+    return () => { window.clearInterval(id); window.removeEventListener('cardano#initialized', scan); };
+  }, [refresh]);
 
   const login = useCallback(async (entry: Cip30WalletEntry) => {
     const { api, stakeHex, stakeAddress } = await getStakeAddress(entry);
