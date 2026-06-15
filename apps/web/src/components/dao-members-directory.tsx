@@ -272,6 +272,9 @@ function Stats({ d }: { d: DaoMemberDetail }) {
       <Stat label="Merit" value={d.merit.toLocaleString()} />
       <Stat label="Adjusted power" value={d.adjustedPower.toFixed(2)} />
       <Stat label="Member since" value={d.since ? new Date(d.since).toLocaleDateString() : '—'} />
+      {/* §8.2 — board-only opt-in flag (non-board always vote, so hidden for them). It's a
+          flag, not an activity count, so it sits with the headline stats. */}
+      {d.isBoard ? <Stat label="Votes on funding" value={d.votesOnFundingProposals ? '✓ yes' : '✗ opted out'} /> : null}
     </dl>
   );
 }
@@ -282,13 +285,11 @@ function Activity({ d }: { d: DaoMemberDetail }) {
   return (
     <div>
       <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Activity</div>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm md:grid-cols-3 lg:grid-cols-6">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm md:grid-cols-3 lg:grid-cols-5">
         <Stat
           label="Admission votes cast"
           value={d.isBoard ? `${d.admissionVotesCast.total} (${d.admissionVotesCast.yes} YES · ${d.admissionVotesCast.no} NO)` : '— (non-board)'}
         />
-        {/* §8.2 — board-only opt-in to funding D&V; non-board always vote, so hide the flag for them. */}
-        {d.isBoard ? <Stat label="Votes on funding" value={d.votesOnFundingProposals ? '✓ yes' : '✗ opted out'} /> : null}
         <Stat label="Filtering reviews" value={d.votingActivity.filtering.toLocaleString()} />
         <Stat label="Funding votes" value={d.votingActivity.funding.toLocaleString()} />
         <Stat label="Milestone reviews" value={d.votingActivity.milestone.toLocaleString()} />
