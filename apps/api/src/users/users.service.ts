@@ -126,7 +126,7 @@ export class UsersService {
   async getProfile(userId: string): Promise<UserProfile | null> {
     const user = await this.prisma.appUser.findUnique({
       where: { id: userId },
-      include: { drep: { include: { boardMemberships: true } }, experts: true, submitterApplication: { select: { status: true } } },
+      include: { drep: { include: { boardMemberships: true } }, experts: true, submitterApplication: { select: { status: true, displayName: true } } },
     });
     if (!user) return null;
 
@@ -143,6 +143,18 @@ export class UsersService {
     if (seat && !displayName) {
       displayName = seat.displayName;
       await this.prisma.appUser.update({ where: { id: user.id }, data: { displayName } });
+    }
+    // §2 — a viewer/expert/submitter who never set a DAO-member name still has a
+    // name from their expert or submitter profile. Adopt it as the account name
+    // (persisted) so it shows in the login card, vote lists, directories, etc.
+    if (!displayName) {
+      const expertName = user.experts.find((e) => e.displayName?.trim())?.displayName?.trim();
+      const submitterName = user.submitterApplication?.displayName?.trim();
+      const fallback = expertName || submitterName || null;
+      if (fallback) {
+        displayName = fallback;
+        await this.prisma.appUser.update({ where: { id: user.id }, data: { displayName } });
+      }
     }
 
     // §22.4 — DREP is an on-chain role: the wallet IS a registered+active DRep
