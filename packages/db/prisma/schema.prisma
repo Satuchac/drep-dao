@@ -228,6 +228,8 @@ model Expert {
   bio             String?
   // §2 — conflict-of-interest disclosure (markdown), same as DRep/submitter profiles.
   conflictOfInterest String? @map("conflict_of_interest")
+  // §2 — the expert's motivation + where they want to help (filtering / debate & vote / milestones).
+  motivation         String? @map("motivation")
   // §2 — contact + social, mirroring the submitter profile. email/telegram are
   // mandatory at apply time (enforced in the service); socialLinks is optional.
   email           String?  @default("")

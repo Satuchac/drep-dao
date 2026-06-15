@@ -52,6 +52,12 @@ export function ExpertReviewPanel({ history = false }: { history?: boolean }) {
               </div>
               <div className="font-mono text-xs text-neutral-500 break-all">{a.stakeAddress}</div>
               {a.bio ? <div className="mt-1 text-neutral-600 dark:text-neutral-400"><ClampedMarkdown maxLines={15}>{a.bio}</ClampedMarkdown></div> : null}
+              {a.motivation ? (
+                <div className="mt-1 text-xs">
+                  <span className="font-medium text-neutral-500">Motivation / area of help:</span>
+                  <ClampedMarkdown className="text-neutral-600 dark:text-neutral-400" maxLines={15}>{a.motivation}</ClampedMarkdown>
+                </div>
+              ) : null}
               {a.conflictOfInterest ? (
                 <div className="mt-1 text-xs">
                   <span className="font-medium text-neutral-500">Conflict of interest:</span>

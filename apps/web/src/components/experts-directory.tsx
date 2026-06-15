@@ -66,6 +66,10 @@ export function ExpertsDirectory() {
                       <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{x.bio ?? ''}</ClampedMarkdown>
                     </div>
                     <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Motivation / area of help</div>
+                      <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{x.motivation ?? ''}</ClampedMarkdown>
+                    </div>
+                    <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Conflict of interest</div>
                       <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{x.conflictOfInterest ?? ''}</ClampedMarkdown>
                     </div>

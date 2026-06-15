@@ -15,6 +15,7 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
   const [mine, setMine] = useState<MyExpert | null>(null);
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
+  const [motivation, setMotivation] = useState('');
   const [conflict, setConflict] = useState('');
   const [email, setEmail] = useState('');
   const [telegram, setTelegram] = useState('');
@@ -32,6 +33,7 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
       if (e) {
         setName(e.displayName);
         setBio(e.bio ?? '');
+        setMotivation(e.motivation ?? '');
         setConflict(e.conflictOfInterest ?? '');
         setEmail(e.email ?? '');
         setTelegram(e.telegram ?? '');
@@ -61,6 +63,7 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
       await expertApi.apply({
         displayName: name.trim(),
         bio: bio.trim() || undefined,
+        motivation: motivation.trim() || undefined,
         conflictOfInterest: conflict.trim() || undefined,
         email: email.trim() || undefined,
         telegram: telegram.trim() || undefined,
@@ -113,6 +116,14 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
         placeholder="Your experience reviewing / building in these areas…"
         minRows={5}
         required
+      />
+      <MarkdownEditor
+        value={motivation}
+        onChange={setMotivation}
+        title="Motivation / area of help"
+        subtitle="Why you want to be an expert and where you'd like to help — e.g. giving feedback in the Filtering stage, advising in the Debate & Vote stage, and/or reviewing milestone deliveries. Supports bold, italics, headers, lists."
+        placeholder="e.g. I'd like to help in Filtering and milestone reviews for Tooling / Infrastructure proposals…"
+        minRows={4}
       />
       <MarkdownEditor
         value={conflict}

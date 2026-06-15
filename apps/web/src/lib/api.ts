@@ -596,6 +596,7 @@ export interface ExpertApplicationInput {
   displayName: string;
   bio?: string;
   conflictOfInterest?: string;
+  motivation?: string;
   email?: string;
   telegram?: string;
   socialLinks?: string[];
@@ -607,6 +608,7 @@ export interface MyExpert {
   displayName: string;
   bio: string | null;
   conflictOfInterest: string | null;
+  motivation: string | null;
   email: string;
   telegram: string;
   socialLinks: string[];
@@ -619,6 +621,7 @@ export interface ExpertApplication {
   displayName: string;
   bio: string | null;
   conflictOfInterest: string | null;
+  motivation: string | null;
   email: string;
   telegram: string;
   socialLinks: string[];
@@ -633,6 +636,7 @@ export interface DaoExpert {
   displayName: string;
   bio: string | null;
   conflictOfInterest: string | null;
+  motivation: string | null;
   email: string;
   telegram: string;
   socialLinks: string[];

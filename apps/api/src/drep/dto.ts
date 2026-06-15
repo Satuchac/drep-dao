@@ -14,6 +14,7 @@ export class ExpertApplicationDto {
   @IsString() @IsNotEmpty() @MaxLength(100) displayName!: string;
   @IsOptional() @IsString() @MaxLength(20000) bio?: string;
   @IsOptional() @IsString() @MaxLength(20000) conflictOfInterest?: string;
+  @IsOptional() @IsString() @MaxLength(20000) motivation?: string;
   @IsOptional() @IsString() @MaxLength(200) email?: string;
   @IsOptional() @IsString() @MaxLength(120) telegram?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) @MaxLength(500, { each: true }) socialLinks?: string[];
