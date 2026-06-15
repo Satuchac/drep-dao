@@ -46,10 +46,20 @@ export function ConnectWallet() {
     ].join(' | ');
     return (
       <div className="space-y-1.5 text-sm">
-        {/* §2 — name on top, role/status beneath. */}
+        {/* §2 — name on top, role/status beneath. The DAO-member name leads; if
+            the account is also a submitter with a DIFFERENT submitter name, it's
+            shown in brackets (no single name is enforced across roles). */}
         <div className="flex items-center gap-2">
           <span className="text-emerald-600 dark:text-emerald-400">●</span>
-          <span className="font-medium">{profile.user.displayName ?? 'Signed in'}</span>
+          <span className="font-medium">
+            {profile.user.displayName ?? 'Signed in'}
+            {(profile.roles.includes('DAO_MEMBER') || profile.roles.includes('BOARD')) &&
+            profile.roles.includes('SUBMITTER') &&
+            profile.submitterName &&
+            profile.submitterName !== profile.user.displayName
+              ? <span className="font-normal text-neutral-500"> ({profile.submitterName})</span>
+              : null}
+          </span>
         </div>
         <div className="text-xs text-neutral-500">{status}</div>
         {/* Show the DRep ID only when the wallet is actually a registered on-chain DRep. A

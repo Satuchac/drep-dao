@@ -186,11 +186,17 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
               </AspectSquare>
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-lg font-semibold">{d.displayName}</h3>
                 {d.isBoard ? (
                   <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:bg-blue-950 dark:text-blue-300">
                     Board member
+                  </span>
+                ) : null}
+                {/* §2 — also a submitter? show the (possibly different) submitter name. */}
+                {d.isSubmitter ? (
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title="Also an approved submitter — can submit funding proposals">
+                    also a submitter{d.submitterName ? ` (${d.submitterName})` : ''}
                   </span>
                 ) : null}
               </div>

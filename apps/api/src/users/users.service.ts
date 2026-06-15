@@ -12,6 +12,8 @@ export interface UserProfile {
     displayName: string | null;
     createdAt: Date;
   };
+  /** §2 — the submitter profile's own name (may differ from the DAO-member name). */
+  submitterName: string | null;
   roles: Role[];
   /** On-chain DRep identity — the source of truth for the DREP role (§22.4). */
   onchainDrep: { registered: boolean; drepId: string | null };
@@ -195,6 +197,10 @@ export class UsersService {
         displayName,
         createdAt: user.createdAt,
       },
+      // §2 — the submitter's own profile name (may differ from the DAO-member
+      // name). Lets the login card show "Member name (Submitter name)" without
+      // enforcing a single name across roles.
+      submitterName: user.submitterApplication?.displayName ?? null,
       roles,
       onchainDrep: {
         registered: isRegisteredDRep,

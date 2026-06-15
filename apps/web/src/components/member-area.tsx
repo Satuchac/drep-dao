@@ -631,7 +631,11 @@ function ApplyOptions({ registeredDRep, onExpertChange, onSubmitterChange, showS
     return (
       <div className="space-y-2">
         <BackButton onBack={() => setMode('choose')} />
-        <SubmitterApplyForm onChange={onSubmitterChange} />
+        {/* After applying, close this inline form and fall back to the choose
+            cards — the standalone Submitter profile editor (rendered by the
+            parent once an application exists) takes over, so the form isn't
+            shown twice. */}
+        <SubmitterApplyForm onChange={() => { onSubmitterChange(); setMode('choose'); }} />
       </div>
     );
   }

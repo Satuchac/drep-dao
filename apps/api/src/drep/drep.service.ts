@@ -171,8 +171,14 @@ export class DrepService {
     // bio and no votes to count yet.
     const drep = await this.prisma.drep.findUnique({
       where: { drepIdOnchain },
-      select: { id: true, bio: true, socials: true, contact: true, subcategoryIds: true, votesOnFundingProposals: true, conflictOfInterest: true, noSelfVotePledge: true, country: true },
+      select: { id: true, userId: true, bio: true, socials: true, contact: true, subcategoryIds: true, votesOnFundingProposals: true, conflictOfInterest: true, noSelfVotePledge: true, country: true },
     });
+
+    // §2 — is this DAO member ALSO an approved submitter? If so, surface that +
+    // their (possibly different) submitter name.
+    const submitter = drep
+      ? await this.prisma.submitterApplication.findFirst({ where: { userId: drep.userId, status: 'APPROVED' }, select: { displayName: true } })
+      : null;
 
     const admissionVotes = drep
       ? await this.prisma.admissionVote.groupBy({
@@ -202,6 +208,9 @@ export class DrepService {
       conflictOfInterest: drep?.conflictOfInterest ?? '',
       noSelfVotePledge: drep?.noSelfVotePledge ?? false,
       country: drep?.country ?? '',
+      // §2 — also a submitter? + the submitter name when it differs.
+      isSubmitter: !!submitter,
+      submitterName: submitter?.displayName && submitter.displayName !== summary.displayName ? submitter.displayName : null,
     };
   }
 

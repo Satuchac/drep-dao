@@ -197,9 +197,15 @@ export class SubmitterService {
     const boardKeys = new Set(
       (await this.prisma.boardSeat.findMany({ where: { removedAt: null }, select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
     );
-    return rows.map((a) => ({
+    return rows.map((a) => {
+      const isDaoMember = a.user.drep?.status === 'ADMITTED' || (!!a.user.drepKeyHash && boardKeys.has(a.user.drepKeyHash));
+      return {
       id: a.id,
-      displayName: a.user.displayName ?? a.displayName,
+      // §2 — the submitter's OWN profile name is primary here; the DAO-member
+      // name (if they're also a member) is surfaced separately as context.
+      displayName: a.displayName?.trim() || a.user.displayName || '',
+      // The DAO-member name, when this submitter is also a DAO member and it differs.
+      daoMemberName: isDaoMember && a.user.displayName && a.user.displayName !== (a.displayName?.trim() || '') ? a.user.displayName : null,
       description: a.description,
       country: a.country,
       githubUrls: a.githubUrls,
@@ -214,11 +220,12 @@ export class SubmitterService {
       stakeAddress: a.user.stakeAddress,
       drepIdOnchain: a.user.drep?.drepIdOnchain ?? null,
       // §2.1 — important context: this submitter also votes (DAO member / board).
-      isDaoMember: a.user.drep?.status === 'ADMITTED' || (!!a.user.drepKeyHash && boardKeys.has(a.user.drepKeyHash)),
+      isDaoMember,
       status: a.status as 'APPROVED' | 'LEFT',
       leftAt: a.leftAt,
       since: a.reviewedAt,
-    }));
+      };
+    });
   }
 
   /**

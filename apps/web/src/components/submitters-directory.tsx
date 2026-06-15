@@ -61,7 +61,7 @@ export function SubmittersDirectory() {
                   ) : null}
                   {s.isDaoMember ? (
                     <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200" title="This submitter also votes on funding proposals">
-                      ⚠ also a DAO member
+                      ⚠ also a DAO member{s.daoMemberName ? ` (${s.daoMemberName})` : ''}
                     </span>
                   ) : null}
                   {s.noSelfVotePledge ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">✓ no self-vote pledge</span> : null}

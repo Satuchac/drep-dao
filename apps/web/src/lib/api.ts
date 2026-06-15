@@ -10,6 +10,8 @@ export interface UserProfile {
     displayName: string | null;
     createdAt: string;
   };
+  /** §2 — the submitter profile's own name (may differ from the DAO-member name). */
+  submitterName: string | null;
   roles: string[];
   /** On-chain DRep identity — source of truth for the DREP role (verified at login). */
   onchainDrep: { registered: boolean; drepId: string | null };
@@ -146,6 +148,9 @@ export interface DaoMemberDetail extends DaoMember {
   // Admission votes the member cast as a board reviewer (non-board members are 0).
   admissionVotesCast: { yes: number; no: number; total: number };  conflictOfInterest: string;
   noSelfVotePledge: boolean;  country: string;
+  /** §2 — this DAO member is also an approved submitter, + the submitter name if different. */
+  isSubmitter: boolean;
+  submitterName: string | null;
 }
 
 export const daoApi = {
@@ -715,6 +720,8 @@ export interface SubmitterApplication extends MySubmitter {
 export interface ApprovedSubmitter {
   id: string;
   displayName: string;
+  /** §2 — when this submitter is also a DAO member with a different name, that name. */
+  daoMemberName: string | null;
   description: string;
   country: string;
   githubUrls: string[];
