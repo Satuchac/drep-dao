@@ -76,6 +76,9 @@ export function MarkdownEditor({
   minRows = 3,
   required,
   defaultCollapsed = false,
+  minWords,
+  maxWords,
+  showShortfall = false,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -89,6 +92,11 @@ export function MarkdownEditor({
   minRows?: number;
   required?: boolean;
   defaultCollapsed?: boolean;
+  /** §3 — round word-count rules. When set, a live count is shown and the field
+   *  turns red (and force-expands once `showShortfall` is on) until it's met. */
+  minWords?: number;
+  maxWords?: number;
+  showShortfall?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [open, setOpen] = useState(!defaultCollapsed);
@@ -96,10 +104,26 @@ export function MarkdownEditor({
   const [preview, setPreview] = useState(false);
   const filled = value.trim().length > 0;
 
+  const words = value.trim() ? value.trim().split(/\s+/).filter(Boolean).length : 0;
+  const short = !!minWords && minWords > 0 && words < minWords;
+  const over = !!maxWords && maxWords > 0 && words > maxWords;
+  // After a failed submit, a short/over field must be visible + flagged.
+  const needsFix = showShortfall && (short || over);
+  // Word-count badge: "needs N more words" / "N over the M-word max" / "X words".
+  const wordBadge = minWords || maxWords ? (
+    <span className={`text-[11px] ${short || over ? 'font-semibold text-red-600 dark:text-red-400' : 'text-neutral-400'}`}>
+      {short ? `needs ${minWords! - words} more word${minWords! - words === 1 ? '' : 's'}`
+        : over ? `${words - maxWords!} over the ${maxWords}-word max`
+          : `${words} word${words === 1 ? '' : 's'}`}
+    </span>
+  ) : null;
+  const borderCls = needsFix ? 'border-red-400 dark:border-red-700' : 'border-neutral-300 dark:border-neutral-700';
+
   // Collapsed: show only the field name (+ a "filled" hint) and an Expand button.
-  if (!open) {
+  // A short/over field force-expands after a submit attempt so it can't be hidden.
+  if (!open && !needsFix) {
     return (
-      <div className="rounded-md border border-neutral-300 px-2 py-1.5 dark:border-neutral-700">
+      <div className={`rounded-md border px-2 py-1.5 ${borderCls}`}>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -111,6 +135,7 @@ export function MarkdownEditor({
             {hint ? <span className="font-normal text-neutral-400"> — {hint}</span> : null}
             {required && !filled ? <span className="text-red-500">*</span> : null}
           </button>
+          {wordBadge}
           <span className="text-xs text-neutral-400">{filled ? '✓ filled' : 'empty'}</span>
           <button type="button" onClick={() => setOpen(true)} className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700">
             ⤢ Expand
@@ -145,7 +170,7 @@ export function MarkdownEditor({
     'rounded px-1.5 py-0.5 text-xs hover:bg-neutral-200 dark:hover:bg-neutral-700';
 
   return (
-    <div className="rounded-md border border-neutral-300 dark:border-neutral-700">
+    <div className={`rounded-md border ${borderCls}`}>
       {/* Field name + optional subtitle + the collapse ("Shrink to name") control. */}
       {title ? (
         <div className="border-b border-neutral-200 px-2 py-1 dark:border-neutral-700">
@@ -156,6 +181,7 @@ export function MarkdownEditor({
               {hint ? <span className="font-normal text-neutral-400"> — {hint}</span> : null}
               {required && !filled ? <span className="text-red-500">*</span> : null}
             </button>
+            {wordBadge}
             <button type="button" onClick={() => setOpen(false)} className={btn} title="Collapse to just the field name">
               ▣ Shrink
             </button>

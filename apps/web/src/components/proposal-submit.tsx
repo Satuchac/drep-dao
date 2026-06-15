@@ -67,6 +67,20 @@ export function ProposalSubmit() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  // §3 — after a submit attempt, mandatory fields below the round's word minimum
+  // are flagged red, force-expanded, and show how many words are still needed.
+  const [triedSubmit, setTriedSubmit] = useState(false);
+  const minWords = roundSettings?.mandatoryWords ?? ROUND_SETTING_DEFAULTS.mandatoryWords;
+  const maxWords = roundSettings?.mandatoryWordsMax ?? ROUND_SETTING_DEFAULTS.mandatoryWordsMax;
+  const wc = (s: string) => (s.trim() ? s.trim().split(/\s+/).filter(Boolean).length : 0);
+  // Inline red "needs N more words" hint for the plain-input mandatory fields
+  // (proposal + milestone titles), shown once a submit was attempted.
+  const wordHint = (text: string) => {
+    if (!triedSubmit || minWords <= 0) return null;
+    const n = wc(text);
+    if (n >= minWords) return null;
+    return <span className="ml-2 text-[11px] font-semibold text-red-600 dark:text-red-400">needs {minWords - n} more word{minWords - n === 1 ? '' : 's'}</span>;
+  };
   // §12 — on-chain submission-fee verification result. Set when the submitter
   // clicks Verify next to the fee tx input; cumulative across all saved hashes.
   const [verifying, setVerifying] = useState(false);
@@ -275,6 +289,7 @@ export function ProposalSubmit() {
     if (editingStatus === 'PENDING') return saveDraft();
     setError(null);
     setMsg(null);
+    setTriedSubmit(true); // flag/expand any too-short mandatory fields
     if (!inputsOk()) return;
     if (feeRequired && !fee.trim()) {
       setError('Paste the submission-fee transaction hash to submit (or use Save Draft).');
@@ -405,8 +420,8 @@ export function ProposalSubmit() {
             ) : null}
           </div>
           <label className="block">
-            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title</span>
-            <input className={`${field} mt-0.5 w-full`} placeholder="Proposal title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title{wordHint(title)}</span>
+            <input className={`${field} mt-0.5 w-full ${triedSubmit && wc(title) < minWords ? 'border-red-400 dark:border-red-700' : ''}`} placeholder="Proposal title" value={title} onChange={(e) => setTitle(e.target.value)} required />
           </label>
           {/* Requested amount + commercial flag sit right under the title (they set the
               fee + cap the proposal's category fit) so the submitter sees the cost of
@@ -443,6 +458,9 @@ export function ProposalSubmit() {
             placeholder="What you'll build and why (markdown)"
             minRows={5}
             required
+            minWords={minWords}
+            maxWords={maxWords}
+            showShortfall={triedSubmit}
           />
           {/* §3.4 — additional optional context, collapsed by default to keep the form short. */}
           <MarkdownEditor
@@ -453,6 +471,9 @@ export function ProposalSubmit() {
             placeholder="Who benefits, what changes — short-term and longer-term."
             minRows={3}
             defaultCollapsed={!ecosystemImpact.trim()}
+            minWords={minWords}
+            maxWords={maxWords}
+            showShortfall={triedSubmit}
           />
           <MarkdownEditor
             value={successMetrics}
@@ -462,6 +483,9 @@ export function ProposalSubmit() {
             placeholder="e.g. number of users, txs, integrations, on-chain volume — with targets where you can."
             minRows={3}
             defaultCollapsed={!successMetrics.trim()}
+            minWords={minWords}
+            maxWords={maxWords}
+            showShortfall={triedSubmit}
           />
           {/* §5.2 — the selected category's per-proposal ask range + conditions. */}
           {selectedCat && (selectedCat.minAda != null || selectedCat.maxAda != null || selectedCat.conditions) ? (
@@ -491,8 +515,8 @@ export function ProposalSubmit() {
                     {/* 1. Title · 2. Requested budget (right below the title) · 3. Description · 4. Acceptance criteria */}
                     <div className="mt-1 flex flex-wrap items-end gap-2">
                       <label className="flex-1">
-                        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title</span>
-                        <input className={`${field} mt-0.5 w-full`} placeholder="Milestone title" value={m.title ?? ''} onChange={(e) => set({ title: e.target.value })} />
+                        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title{wordHint(m.title ?? '')}</span>
+                        <input className={`${field} mt-0.5 w-full ${triedSubmit && wc(m.title ?? '') < minWords ? 'border-red-400 dark:border-red-700' : ''}`} placeholder="Milestone title" value={m.title ?? ''} onChange={(e) => set({ title: e.target.value })} />
                       </label>
                       <label>
                         <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Requested budget (₳)</span>
@@ -500,10 +524,10 @@ export function ProposalSubmit() {
                       </label>
                     </div>
                     <div className="mt-2">
-                      <MarkdownEditor value={m.description} onChange={(v) => set({ description: v })} title="Description" placeholder="What is delivered in this milestone" minRows={3} required />
+                      <MarkdownEditor value={m.description} onChange={(v) => set({ description: v })} title="Description" placeholder="What is delivered in this milestone" minRows={3} required minWords={minWords} maxWords={maxWords} showShortfall={triedSubmit} />
                     </div>
                     <div className="mt-2">
-                      <MarkdownEditor value={m.acceptanceCriteria ?? ''} onChange={(v) => set({ acceptanceCriteria: v })} title="Acceptance criteria" hint="how completion is judged" placeholder="How completion will be verified" minRows={3} defaultCollapsed={!(m.acceptanceCriteria ?? '').trim()} />
+                      <MarkdownEditor value={m.acceptanceCriteria ?? ''} onChange={(v) => set({ acceptanceCriteria: v })} title="Acceptance criteria" hint="how completion is judged" placeholder="How completion will be verified" minRows={3} defaultCollapsed={!(m.acceptanceCriteria ?? '').trim()} minWords={minWords} maxWords={maxWords} showShortfall={triedSubmit} />
                     </div>
                   </div>
                 );
@@ -518,8 +542,8 @@ export function ProposalSubmit() {
             </div>
           </div>
           {/* §3.4 — funding-specific detail (all optional, collapsed by default to keep the form short). */}
-          <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title="Cost breakdown" hint="optional — how the budget is spent" placeholder="How the budget is spent" minRows={3} defaultCollapsed={!costBreakdown.trim()} />
-          <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title="Team info" hint="optional — who is delivering this" placeholder="Who is delivering this, and why you're best suited" minRows={3} defaultCollapsed={!teamInfo.trim()} />
+          <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title="Cost breakdown" hint="how the budget is spent" placeholder="How the budget is spent" minRows={3} defaultCollapsed={!costBreakdown.trim()} minWords={minWords} maxWords={maxWords} showShortfall={triedSubmit} />
+          <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title="Team info" hint="who is delivering this" placeholder="Who is delivering this, and why you're best suited" minRows={3} defaultCollapsed={!teamInfo.trim()} minWords={minWords} maxWords={maxWords} showShortfall={triedSubmit} />
           <RevenueSharingBlock
             required={revenueSharingRequired}
             onRequiredChange={setRevenueSharingRequired}
