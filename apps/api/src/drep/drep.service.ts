@@ -366,8 +366,15 @@ export class DrepService {
     const experts = await this.prisma.expert.findMany({
       where: { approvedByBoard: true },
       orderBy: { displayName: 'asc' },
-      include: { user: { select: { stakeAddress: true, drep: { select: { drepIdOnchain: true } } } } },
+      include: { user: { select: { id: true, stakeAddress: true, drep: { select: { drepIdOnchain: true } } } } },
     });
+    // §2.1 — flag experts who are ALSO approved submitters (they can submit funding proposals).
+    const submitterUserIds = new Set(
+      (await this.prisma.submitterApplication.findMany({
+        where: { status: 'APPROVED', userId: { in: experts.map((e) => e.user.id) } },
+        select: { userId: true },
+      })).map((s) => s.userId),
+    );
     return experts.map((e) => ({
       id: e.id,
       displayName: e.displayName,
@@ -382,6 +389,7 @@ export class DrepService {
       // The platform knows the wallet — expose it (DRep ID if they're a DRep).
       stakeAddress: e.user.stakeAddress,
       drepIdOnchain: e.user.drep?.drepIdOnchain ?? null,
+      isSubmitter: submitterUserIds.has(e.user.id),
     }));
   }
 

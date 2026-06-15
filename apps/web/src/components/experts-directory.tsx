@@ -51,6 +51,11 @@ export function ExpertsDirectory() {
                     : <FallbackAvatar name={x.displayName} className="h-9 w-9 rounded" />}
                   <span className="font-medium">{x.displayName}</span>
                   <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">Expert</span>
+                  {x.isSubmitter ? (
+                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title="Also an approved submitter — can submit funding proposals">
+                      also a submitter
+                    </span>
+                  ) : null}
                 </span>
                 <span className="text-xs text-neutral-400">{open ? '▴' : '▾'}</span>
               </button>
@@ -61,6 +66,11 @@ export function ExpertsDirectory() {
                     ? <img src={x.logoDataUrl} alt="" className="h-24 w-24 rounded-lg object-cover" />
                     : <FallbackAvatar name={x.displayName} className="h-24 w-24 rounded-lg" />}
                   <div className="min-w-0 flex-1 space-y-2 text-sm">
+                    {x.isSubmitter ? (
+                      <div className="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+                        ✓ Also a submitter — this expert can submit funding proposals.
+                      </div>
+                    ) : null}
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Experience / skills</div>
                       <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{x.bio ?? ''}</ClampedMarkdown>

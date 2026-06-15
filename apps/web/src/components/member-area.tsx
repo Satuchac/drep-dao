@@ -92,6 +92,7 @@ export function MemberArea() {
         daoPending={daoPending}
         expertApproved={expertApproved}
         expertPending={expertPending}
+        isSubmitter={isSubmitter}
         showApply={showApply}
         isRegisteredDRep={isRegisteredDRep}
         hasSubmitterApp={hasSubmitterApp}
@@ -172,33 +173,87 @@ export function MemberArea() {
  * a sub-item switches to it. A member without one sees an "Apply to become a submitter"
  * button instead. Non-members (viewer / expert / submitter-only) see their single profile.
  */
-function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPending, showApply, isRegisteredDRep, hasSubmitterApp, loadExpert, onSubmitterChange }: {
+function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPending, isSubmitter, showApply, isRegisteredDRep, hasSubmitterApp, loadExpert, onSubmitterChange }: {
   isMember: boolean;
   isBoard: boolean;
   daoPending: boolean;
   expertApproved: boolean;
   expertPending: boolean;
+  isSubmitter: boolean;
   showApply: boolean;
   isRegisteredDRep: boolean;
   hasSubmitterApp: boolean;
   loadExpert: () => void;
   onSubmitterChange: () => void;
 }) {
-  // 'dao' = the member profile (default); 'submitter' = the submitter sub-profile.
+  // 'dao' = the member/expert primary profile (default); 'submitter' = the submitter sub-profile.
   const [sub, setSub] = useState<'dao' | 'submitter'>('dao');
-  // A member without an application clicks "Apply…" → the submitter sub-profile opens with the form.
+  // Clicking "Apply to become a submitter" opens the submitter sub-profile with the form.
   const [applying, setApplying] = useState(false);
   const showSubmitterSub = hasSubmitterApp || applying;
+  const subTab = (primaryLabel: string) => (
+    <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
+      {([['dao', primaryLabel], ['submitter', 'Submitter profile']] as const).map(([k, l]) => (
+        <button key={k} onClick={() => setSub(k)} className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${sub === k ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}>
+          {l}
+        </button>
+      ))}
+    </div>
+  );
+  // §2.1 — shown on the primary profile when the account is ALSO an approved submitter.
+  const alsoSubmitterFlag = isSubmitter ? (
+    <div className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+      ✓ Also a <strong>submitter</strong> — this account can submit funding proposals. See the Submitter profile tab.
+    </div>
+  ) : null;
+  // §2.1 — the "apply for the separate submitter role" card (button + explanation, never the
+  // form stacked on this page). Hidden once a submitter profile exists.
+  const submitterRoleCard = !showSubmitterSub ? (
+    <section className={card}>
+      <h3 className="text-base font-semibold">Submitter role</h3>
+      <p className="mt-1 text-sm text-neutral-500">Want to submit funding proposals too? Apply for the separate, board-approved <strong>submitter</strong> role. Your submitter profile then lives on its own tab here.</p>
+      <button onClick={() => { setApplying(true); setSub('submitter'); }} className="mt-2 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">
+        Apply to become a submitter
+      </button>
+    </section>
+  ) : null;
 
   if (!isMember) {
-    // Non-members: a single profile, as before (viewer chooser / expert / submitter-only).
+    // DAO admission pending → just the status.
+    if (daoPending) {
+      return (
+        <div className="space-y-6">
+          <section className={card}><MyDrepStatus /></section>
+          <section className={card}><PreferencesPanel /></section>
+        </div>
+      );
+    }
+
+    // §2 — an Expert gets a dedicated Expert profile. The submitter is a SEPARATE
+    // sub-profile: until they apply, only a button + explanation (never the form
+    // stacked here); once applied, the two profiles live on their own tabs.
+    if (expertApproved || expertPending) {
+      return (
+        <div className="space-y-4">
+          {showSubmitterSub ? subTab('Expert profile') : null}
+          {sub === 'submitter' && showSubmitterSub ? (
+            <section className={card}><SubmitterApplyForm onChange={onSubmitterChange} /></section>
+          ) : (
+            <div className="space-y-6">
+              {alsoSubmitterFlag}
+              <section className={card}><ExpertApplyForm onChange={loadExpert} /></section>
+              {submitterRoleCard}
+              <section className={card}><PreferencesPanel /></section>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Non-member, non-expert: choose a path (viewer/expert/submitter) or edit the submitter profile.
     return (
       <div className="space-y-6">
-        {daoPending ? (
-          <section className={card}><MyDrepStatus /></section>
-        ) : expertPending || expertApproved ? (
-          <section className={card}><ExpertApplyForm onChange={loadExpert} /></section>
-        ) : showApply ? (
+        {showApply ? (
           <section className={card}><ApplyOptions registeredDRep={isRegisteredDRep} onExpertChange={loadExpert} onSubmitterChange={onSubmitterChange} showSubmitterCard={!hasSubmitterApp} /></section>
         ) : null}
         {hasSubmitterApp || !showApply ? <section className={card}><SubmitterApplyForm onChange={onSubmitterChange} /></section> : null}

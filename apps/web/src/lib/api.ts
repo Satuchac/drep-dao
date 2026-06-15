@@ -644,6 +644,8 @@ export interface DaoExpert {
   stakeAddress: string;
   drepIdOnchain: string | null;
   subcategoryIds: string[];
+  /** §2.1 — this expert is also an approved submitter (can submit funding proposals). */
+  isSubmitter: boolean;
 }
 
 export const expertApi = {
