@@ -7,6 +7,18 @@ import { CreateRoundForm } from './rounds-section';
 import { ConfirmDialog } from './confirm-dialog';
 import { useAuth } from '@/lib/auth-context';
 
+/** "1 day and 5 hours" / "5 hours and 12 minutes" / "8 minutes" from a ms delta. */
+function untilLabel(ms: number): string {
+  const totalMin = Math.max(0, Math.floor(ms / 60_000));
+  const days = Math.floor(totalMin / 1440);
+  const hours = Math.floor((totalMin % 1440) / 60);
+  const mins = totalMin % 60;
+  const u = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  if (days > 0) return `${u(days, 'day')} and ${u(hours, 'hour')}`;
+  if (hours > 0) return `${u(hours, 'hour')} and ${u(mins, 'minute')}`;
+  return u(mins, 'minute');
+}
+
 const STAGE_LABEL: Record<string, string> = {
   SUBMISSION: 'Submission',
   FILTERING: 'Filtering',
@@ -261,6 +273,9 @@ function StageRow({
   const [startsAt, setStartsAt] = useState(toLocalInput(row?.startsAt));
   const [endsAt, setEndsAt] = useState(toLocalInput(row?.endsAt));
   const [autoStart, setAutoStart] = useState(row?.autoStart ?? false);
+  // Live clock for the next-stage countdown (minute granularity → days/hours).
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
   if (kind === 'past') {
     if (!row) {
       return <PastRow label={label} note="no schedule row" />;
@@ -303,7 +318,8 @@ function StageRow({
   if (kind === 'next') {
     const confirmed = !!nextStage?.confirmed;
     // §6/§8 — overdue: the planned start is in the past but the stage hasn't begun.
-    const overdue = !!nextStage?.planned?.startsAt && new Date(nextStage.planned.startsAt).getTime() < Date.now();
+    const plannedStartMs = nextStage?.planned?.startsAt ? new Date(nextStage.planned.startsAt).getTime() : null;
+    const overdue = plannedStartMs != null && plannedStartMs < now;
     return (
       <div className={`rounded border p-2 ${overdue ? 'border-red-300 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20' : 'border-amber-300 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20'}`}>
         <div className="text-xs">
@@ -324,6 +340,10 @@ function StageRow({
         {overdue ? (
           <div className="mt-1.5 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
             ⚠ The planned start ({fmtDateTime(nextStage?.planned?.startsAt)}) is in the past. Launch {label} now, or move the start date into the future and confirm.
+          </div>
+        ) : plannedStartMs != null ? (
+          <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-300">
+            Starts in: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(plannedStartMs - now)}</span>
           </div>
         ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-2">
