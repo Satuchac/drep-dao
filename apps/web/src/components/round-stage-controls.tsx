@@ -302,8 +302,10 @@ function StageRow({
   }
   if (kind === 'next') {
     const confirmed = !!nextStage?.confirmed;
+    // §6/§8 — overdue: the planned start is in the past but the stage hasn't begun.
+    const overdue = !!nextStage?.planned?.startsAt && new Date(nextStage.planned.startsAt).getTime() < Date.now();
     return (
-      <div className="rounded border border-amber-300 bg-amber-50/40 p-2 dark:border-amber-900 dark:bg-amber-950/20">
+      <div className={`rounded border p-2 ${overdue ? 'border-red-300 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20' : 'border-amber-300 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20'}`}>
         <div className="text-xs">
           <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:bg-amber-900 dark:text-amber-100">
             next
@@ -318,6 +320,12 @@ function StageRow({
             <span className="text-amber-700 dark:text-amber-300">not yet confirmed</span>
           )}
         </div>
+        {/* §6/§8 — loud red warning when the planned start has already passed. */}
+        {overdue ? (
+          <div className="mt-1.5 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+            ⚠ The planned start ({fmtDateTime(nextStage?.planned?.startsAt)}) is in the past. Launch {label} now, or move the start date into the future and confirm.
+          </div>
+        ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 text-xs text-neutral-500">
             starts
