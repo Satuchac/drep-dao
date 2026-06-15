@@ -5,7 +5,7 @@ import { SUBCAT_LABEL } from '@/lib/ui';
 import { daoApi, type DaoMember, type DaoExpert } from '@/lib/api';
 import { fmtDate } from './round-ui';
 import { MeritSystemTable } from './merit-system-table';
-import { ClampedMarkdown } from './clamped-markdown';
+import { useUrlNav } from '@/lib/use-url-nav';
 
 
 
@@ -38,6 +38,7 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
 
 /** §4 — all DAO members with balanced voting power: log10(stake) × (1 + merit/200). */
 export function DaoOverview() {
+  const { setParams } = useUrlNav();
   const [members, setMembers] = useState<DaoMember[] | null>(null);
   const [experts, setExperts] = useState<DaoExpert[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -208,38 +209,32 @@ export function DaoOverview() {
         {experts.length === 0 ? (
           <p className="mt-1 text-sm text-neutral-500">No approved experts yet.</p>
         ) : (
-          <ul className="mt-2 grid gap-2 sm:grid-cols-2">
+          <ul className="mt-2 space-y-1.5">
             {experts.map((x) => (
               <li
                 key={x.id}
-                className="rounded-lg border border-amber-300 bg-amber-50/40 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/20"
+                className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-amber-300 bg-amber-50/40 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/20"
               >
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{x.displayName}</span>
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">Expert</span>
-                </div>
-                {x.bio ? (
-                  <div className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">
-                    <ClampedMarkdown maxLines={15}>{x.bio}</ClampedMarkdown>
-                  </div>
-                ) : null}
-                {x.conflictOfInterest ? (
-                  <div className="mt-1 text-xs">
-                    <span className="font-medium text-neutral-500">Conflict of interest:</span>
-                    <ClampedMarkdown className="text-neutral-600 dark:text-neutral-400" maxLines={15}>{x.conflictOfInterest}</ClampedMarkdown>
-                  </div>
-                ) : null}
+                <span className="font-medium">{x.displayName}</span>
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">Expert</span>
                 {x.subcategoryIds.length ? (
-                  <div className="mt-1 flex flex-wrap gap-1">
+                  <span className="flex flex-wrap gap-1">
                     {x.subcategoryIds.map((id) => (
                       <span key={id} className="rounded-full border border-neutral-300 px-2 py-0.5 text-[11px] text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
                         {SUBCAT_LABEL[id] ?? id}
                       </span>
                     ))}
-                  </div>
+                  </span>
                 ) : (
-                  <div className="mt-0.5 text-xs text-neutral-400">no expertise areas listed</div>
+                  <span className="text-[11px] text-neutral-400">no expertise areas listed</span>
                 )}
+                {/* §2 — the full profile (experience, conflict, contact, wallet) lives in the Experts directory. */}
+                <button
+                  onClick={() => setParams({ view: 'experts', expert: x.id })}
+                  className="ml-auto text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
+                >
+                  View profile →
+                </button>
               </li>
             ))}
           </ul>

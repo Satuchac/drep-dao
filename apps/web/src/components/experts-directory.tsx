@@ -7,6 +7,7 @@ import { card } from '@/lib/ui';
 import { FallbackAvatar } from './fallback-avatar';
 import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
+import { useUrlNav } from '@/lib/use-url-nav';
 import { ClampedMarkdown } from './clamped-markdown';
 
 /**
@@ -17,8 +18,12 @@ import { ClampedMarkdown } from './clamped-markdown';
  */
 export function ExpertsDirectory() {
   const { drepUrl } = useExplorer();
+  const { get, setParams } = useUrlNav();
   const [rows, setRows] = useState<DaoExpert[] | null>(null);
-  const [openId, setOpenId] = useState<string | null>(null);
+  // Deep-link: ?expert=<id> opens that profile (e.g. from the DAO overview's
+  // "View profile →" link). The chevron toggles it locally + in the URL.
+  const openId = get('expert');
+  const setOpenId = (id: string | null) => setParams({ expert: id });
   useEffect(() => {
     daoApi.experts().then(setRows).catch(() => setRows([]));
   }, []);
