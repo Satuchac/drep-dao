@@ -310,14 +310,45 @@ export class DrepService {
       // §2 — an already-approved Expert may edit their profile WITHOUT losing
       // approval; a still-pending application stays pending.
       approvedByBoard: existing?.approvedByBoard ?? false,
+      // Re-applying after leaving clears the left flag (back to a live application).
+      leftAt: null,
     };
     if (existing) return this.prisma.expert.update({ where: { id: existing.id }, data });
     return this.prisma.expert.create({ data: { userId, ...data } });
   }
 
-  /** The user's own Expert record (application or approval), if any. */
+  /** The user's own Expert record (application or approval), if any. A row the
+   *  user has LEFT is treated as gone (returns null → the apply form shows). */
   async getMyExpert(userId: string) {
-    return this.prisma.expert.findFirst({ where: { userId } });
+    return this.prisma.expert.findFirst({ where: { userId, leftAt: null } });
+  }
+
+  /** §2 — an expert voluntarily leaves the platform; their profile is removed.
+   *  Blocked while a milestone review is in progress. A fresh expert (no review/
+   *  reward history) is hard-deleted; one with audit history is soft-left so the
+   *  FK chain stays intact — either way they vanish from listings + lose the role. */
+  async leaveExpert(userId: string) {
+    const e = await this.prisma.expert.findFirst({ where: { userId, leftAt: null } });
+    if (!e) throw new NotFoundException('no active expert profile');
+    const activeReview = await this.prisma.milestoneAssignment.count({
+      where: { reviewerExpertId: e.id, releasedAt: null, milestone: { status: 'POA_SUBMITTED' } },
+    });
+    if (activeReview > 0) {
+      throw new ConflictException(
+        `you have ${activeReview} milestone review${activeReview === 1 ? '' : 's'} in progress — finish ${activeReview === 1 ? 'it' : 'them'} or ask the board to reassign before leaving`,
+      );
+    }
+    const deps =
+      (await this.prisma.milestoneAssignment.count({ where: { reviewerExpertId: e.id } })) +
+      (await this.prisma.milestoneExpertVote.count({ where: { expertId: e.id } })) +
+      (await this.prisma.rewardEntry.count({ where: { expertId: e.id } })) +
+      (await this.prisma.expertReward.count({ where: { expertId: e.id } }));
+    if (deps === 0) {
+      await this.prisma.expert.delete({ where: { id: e.id } });
+    } else {
+      await this.prisma.expert.update({ where: { id: e.id }, data: { approvedByBoard: false, leftAt: new Date() } });
+    }
+    return { ok: true };
   }
 
   /**
@@ -327,7 +358,7 @@ export class DrepService {
    */
   async listExpertApplications(history = false) {
     const experts = await this.prisma.expert.findMany({
-      where: history ? {} : { approvedByBoard: false },
+      where: history ? { leftAt: null } : { approvedByBoard: false, leftAt: null },
       include: { user: { select: { stakeAddress: true, displayName: true, drep: { select: { drepIdOnchain: true } } } } },
       orderBy: [{ approvedByBoard: 'asc' }, { displayName: 'asc' }],
     });
@@ -364,7 +395,7 @@ export class DrepService {
   /** Approved Experts — listed in the DAO dashboard (§2). */
   async listApprovedExperts() {
     const experts = await this.prisma.expert.findMany({
-      where: { approvedByBoard: true },
+      where: { approvedByBoard: true, leftAt: null },
       orderBy: { displayName: 'asc' },
       include: { user: { select: { id: true, stakeAddress: true, drep: { select: { drepIdOnchain: true } } } } },
     });

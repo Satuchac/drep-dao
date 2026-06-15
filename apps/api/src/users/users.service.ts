@@ -148,7 +148,7 @@ export class UsersService {
     // name from their expert or submitter profile. Adopt it as the account name
     // (persisted) so it shows in the login card, vote lists, directories, etc.
     if (!displayName) {
-      const expertName = user.experts.find((e) => e.displayName?.trim())?.displayName?.trim();
+      const expertName = user.experts.find((e) => !e.leftAt && e.displayName?.trim())?.displayName?.trim();
       const submitterName = user.submitterApplication?.displayName?.trim();
       const fallback = expertName || submitterName || null;
       if (fallback) {
@@ -178,8 +178,8 @@ export class UsersService {
     if (isRegisteredDRep || isBoard) roles.push(Role.DREP);
     if (isDaoMember) roles.push(Role.DAO_MEMBER);
     if (isBoard) roles.push(Role.BOARD);
-    // §2 Expert — a non-DRep approved by the board for milestone review.
-    if (user.experts.some((e) => e.approvedByBoard)) {
+    // §2 Expert — a non-DRep approved by the board (and who hasn't left).
+    if (user.experts.some((e) => e.approvedByBoard && !e.leftAt)) {
       roles.push(Role.EXPERT);
     }
     // §2.1 Submitter — granted only once the board approves the submitter application.

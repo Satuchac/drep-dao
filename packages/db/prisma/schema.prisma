@@ -239,6 +239,10 @@ model Expert {
   logoDataUrl     String?  @map("logo_data_url")
   subcategoryIds  String[] @map("subcategory_ids")
   approvedByBoard Boolean  @default(false) @map("approved_by_board")
+  // §2 — set when the expert voluntarily leaves. A fresh expert (no review/reward
+  // history) is hard-deleted; one with audit history is soft-left here so the FK
+  // chain stays intact. Either way they vanish from every listing + lose the role.
+  leftAt          DateTime? @map("left_at") @db.Timestamptz(6)
 
   user                 AppUser               @relation(fields: [userId], references: [id])
   milestoneAssignments MilestoneAssignment[]

@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react';
 import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { expertApi, type MyExpert } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { MarkdownEditor } from './markdown';
 import { PhotoUpload } from './photo-upload';
+import { ConfirmDialog } from './confirm-dialog';
 
 const field =
   'w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900';
@@ -12,7 +14,10 @@ const field =
 /** §2 — a non-DRep ADA holder applies to be an Expert (advises in Filtering, advises in
  *  Debate & Vote, and reviews milestones); board approves. Approved experts can edit. */
 export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
+  const { refresh } = useAuth();
   const [mine, setMine] = useState<MyExpert | null>(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
   const [motivation, setMotivation] = useState('');
@@ -201,6 +206,45 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
         {mine && !approved && !saved ? <span className="text-xs text-neutral-500">Your application is under board review — you can update it anytime.</span> : null}
         {saved ? <span className="text-xs font-medium text-emerald-600">✓ {saved}</span> : null}
       </div>
+
+      {/* §2 — voluntarily leave: deletes the expert profile (and removes the role). */}
+      {mine ? (
+        <div className="mt-3 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+          <button
+            type="button"
+            onClick={() => { setLeaveError(null); setConfirmLeave(true); }}
+            className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950"
+          >
+            Leave the platform
+          </button>
+          <p className="mt-1 text-xs text-neutral-500">Removes your expert profile entirely. You can apply again later.</p>
+          {leaveError ? <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">⚠ {leaveError}</div> : null}
+        </div>
+      ) : null}
+
+      <ConfirmDialog
+        open={confirmLeave}
+        title="Leave the platform as an Expert?"
+        tone="danger"
+        confirmLabel="Leave & delete profile"
+        cancelLabel="Stay"
+        onCancel={() => setConfirmLeave(false)}
+        onConfirm={() => {
+          void (async () => {
+            try {
+              await expertApi.leave();
+              setConfirmLeave(false);
+              await load();
+              await refresh();
+              onChange?.();
+            } catch (e) {
+              setConfirmLeave(false);
+              setLeaveError(e instanceof Error ? e.message : 'failed to leave');
+            }
+          })();
+        }}
+        message={<p>This <strong>deletes your expert profile</strong> and removes the Expert role from your account. Any past review/reward history is preserved for the platform&apos;s records. You can apply again any time.</p>}
+      />
     </form>
   );
 }

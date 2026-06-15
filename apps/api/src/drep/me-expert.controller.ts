@@ -19,4 +19,10 @@ export class MeExpertController {
   mine(@CurrentUser() ctx: AuthContext) {
     return this.drep.getMyExpert(ctx.userId);
   }
+
+  // §2 — the expert voluntarily leaves; their profile is removed.
+  @Post('expert/leave')
+  leave(@CurrentUser() ctx: AuthContext) {
+    return this.drep.leaveExpert(ctx.userId);
+  }
 }

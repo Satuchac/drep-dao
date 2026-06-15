@@ -652,6 +652,7 @@ export const expertApi = {
   mine: () => request<MyExpert | null>('/me/expert'),
   apply: (input: ExpertApplicationInput) =>
     request<MyExpert>('/me/expert-application', { method: 'POST', body: JSON.stringify(input) }),
+  leave: () => request<{ ok: boolean }>('/me/expert/leave', { method: 'POST' }),
 };
 
 export const boardExpertsApi = {
