@@ -111,7 +111,7 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
         photo={photo}
         onChange={(next, err) => { setPhoto(next); setPhotoError(err ?? null); }}
         error={photoError}
-        hint="PNG, JPEG, WebP or GIF · max 256 KB · shown in the experts list (a generated avatar is used if you don't add one)"
+        hint="PNG, JPEG, WebP or GIF · up to 12 MB (resized to 640px) · shown in the experts list (a generated avatar is used if you don't add one)"
       />
       <MarkdownEditor
         value={bio}

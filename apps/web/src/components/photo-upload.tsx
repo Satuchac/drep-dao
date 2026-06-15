@@ -1,38 +1,80 @@
 'use client';
 
-/** Shared profile-photo picker — reads an image file into a data URL (≤256 KB).
- *  Used by the DRep, submitter and expert profile forms. */
-export const MAX_PHOTO_BYTES = 256 * 1024;
+/**
+ * Shared profile-photo picker + resizer. Users can pick a normal, large photo (we accept up to
+ * MAX_SOURCE_BYTES); the image is downscaled client-side to a STANDARD square-ish size before it
+ * is stored as a data URL. That one standard image is sharp enough for the full profile view and
+ * is simply CSS-scaled down for the small overview thumbnails — no need to keep two copies.
+ * Used by the DRep, submitter and expert profile forms.
+ */
 export const ALLOWED_PHOTO_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+/** Source files up to this size are accepted (we resize, so a big original is fine). */
+export const MAX_SOURCE_BYTES = 12 * 1024 * 1024;
+/** Longest edge of the stored image — large enough for the profile, small in bytes. */
+export const STANDARD_MAX_DIM = 640;
+/** Stored data-URL length budget (chars). Stays under the API's photo column cap (700k). */
+const MAX_OUTPUT_CHARS = 650_000;
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Could not read the image.'));
+    img.src = src;
+  });
+}
+
+/**
+ * Validate, downscale to STANDARD_MAX_DIM (never upscale), and encode to a compact data URL.
+ * Prefers WebP (keeps transparency + compresses well), backing off quality / falling back to
+ * JPEG if needed to fit the storage budget. Throws a user-facing Error on any failure.
+ */
+export async function resizeImageFile(file: File): Promise<string> {
+  if (!ALLOWED_PHOTO_TYPES.has(file.type)) {
+    throw new Error('Only PNG, JPEG, WebP or GIF images are accepted.');
+  }
+  if (file.size > MAX_SOURCE_BYTES) {
+    throw new Error(`Image is ${(file.size / (1024 * 1024)).toFixed(1)} MB — keep it under ${MAX_SOURCE_BYTES / (1024 * 1024)} MB.`);
+  }
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await loadImage(url);
+    const scale = Math.min(1, STANDARD_MAX_DIM / Math.max(img.width, img.height));
+    const w = Math.max(1, Math.round(img.width * scale));
+    const h = Math.max(1, Math.round(img.height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Could not process the image.');
+    ctx.drawImage(img, 0, 0, w, h);
+    let out = canvas.toDataURL('image/webp', 0.85);
+    if (out.length > MAX_OUTPUT_CHARS) out = canvas.toDataURL('image/webp', 0.7);
+    if (out.length > MAX_OUTPUT_CHARS) out = canvas.toDataURL('image/jpeg', 0.7);
+    if (out.length > MAX_OUTPUT_CHARS) throw new Error('Could not compress the image enough — try a simpler photo.');
+    return out;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
 
 export function PhotoUpload({
   photo,
   onChange,
   error,
-  hint = 'PNG, JPEG, WebP or GIF · max 256 KB',
+  hint = 'PNG, JPEG, WebP or GIF · up to 12 MB (resized to 640px)',
 }: {
   photo: string | null;
   onChange: (next: string | null, error?: string) => void;
   error: string | null;
   hint?: string;
 }) {
-  const onFile = (file: File) => {
-    if (!ALLOWED_PHOTO_TYPES.has(file.type)) {
-      onChange(photo, 'Only PNG, JPEG, WebP or GIF images are accepted.');
-      return;
+  const onFile = async (file: File) => {
+    try {
+      onChange(await resizeImageFile(file));
+    } catch (e) {
+      onChange(photo, e instanceof Error ? e.message : 'Could not process the image.');
     }
-    if (file.size > MAX_PHOTO_BYTES) {
-      onChange(photo, `Image is ${(file.size / 1024).toFixed(0)} KB — keep it under 256 KB.`);
-      return;
-    }
-    const reader = new FileReader();
-    reader.onerror = () => onChange(photo, 'Could not read the image.');
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result !== 'string') { onChange(photo, 'Could not read the image.'); return; }
-      onChange(result);
-    };
-    reader.readAsDataURL(file);
   };
   return (
     <div className="space-y-1">
@@ -48,7 +90,7 @@ export function PhotoUpload({
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp,image/gif"
-            onChange={(e) => { const file = e.target.files?.[0]; if (file) onFile(file); e.target.value = ''; }}
+            onChange={(e) => { const file = e.target.files?.[0]; if (file) void onFile(file); e.target.value = ''; }}
             className="text-xs file:mr-2 file:rounded-md file:border-0 file:bg-neutral-200 file:px-2 file:py-1 file:text-xs file:font-medium hover:file:bg-neutral-300 dark:file:bg-neutral-800 dark:hover:file:bg-neutral-700"
           />
           {photo ? (

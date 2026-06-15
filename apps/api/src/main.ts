@@ -3,6 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { Logger, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 // JSON.stringify can't serialize BigInt natively — endpoints returning raw
@@ -20,9 +21,13 @@ if (!('toJSON' in BigInt.prototype)) {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // Disable Nest's default body parser (≈100 KB JSON limit) and register our own
+  // with a higher cap — profile photos are sent inline as ~512 KB data URLs.
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
   const config = app.get(ConfigService);
 
+  app.use(json({ limit: '2mb' }));
+  app.use(urlencoded({ extended: true, limit: '2mb' }));
   app.use(cookieParser());
   app.useGlobalPipes(
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }),

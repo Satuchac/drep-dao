@@ -5,7 +5,7 @@ export class SubmitterApplicationDto {
   @IsString() @IsNotEmpty() @MaxLength(20000) description!: string;
   @IsOptional() @IsArray() @IsString({ each: true }) @MaxLength(500, { each: true }) githubUrls?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) @MaxLength(500, { each: true }) socialLinks?: string[];
-  @IsOptional() @IsString() @MaxLength(400000) logoDataUrl?: string; // base64 data URL
+  @IsOptional() @IsString() @MaxLength(700_000) logoDataUrl?: string; // base64 data URL (client-resized to 640px ≈ ≤512 KB)
   @IsString() @IsNotEmpty() @MaxLength(100) country!: string;
   // §2.1 — disclosure + contact.
   @IsString() @IsNotEmpty() @MaxLength(20000) conflictOfInterest!: string;

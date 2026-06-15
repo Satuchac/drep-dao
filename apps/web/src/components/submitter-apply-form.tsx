@@ -6,9 +6,9 @@ import { useAuth } from '@/lib/auth-context';
 import { COUNTRIES } from '@/lib/countries';
 import { ConfirmDialog } from './confirm-dialog';
 import { MarkdownEditor } from './markdown';
+import { resizeImageFile } from './photo-upload';
 
 const MIN_WORDS = 100;
-const MAX_LOGO_BYTES = 256 * 1024;
 const wordCount = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 const inputCls = 'w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
 
@@ -57,12 +57,13 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
     }).catch(() => setLoaded(true));
   useEffect(() => { load(); }, []);
 
-  const onFile = (file: File) => {
-    if (file.size > MAX_LOGO_BYTES) { setError(`Image is ${(file.size / 1024).toFixed(0)} KB — keep it under 256 KB.`); return; }
-    const reader = new FileReader();
-    reader.onerror = () => setError('Could not read the image.');
-    reader.onload = () => { if (typeof reader.result === 'string') { setLogo(reader.result); setError(null); } };
-    reader.readAsDataURL(file);
+  const onFile = async (file: File) => {
+    try {
+      setLogo(await resizeImageFile(file));
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not process the image.');
+    }
   };
 
   const words = wordCount(desc);
@@ -237,10 +238,10 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         </div>
 
         <div>
-          <span className="text-sm font-medium">Photo / project logo <span className="text-xs font-normal text-neutral-500">(optional, ≤256 KB)</span></span>
+          <span className="text-sm font-medium">Photo / project logo <span className="text-xs font-normal text-neutral-500">(optional · up to 12 MB, resized to 640px)</span></span>
           <div className="mt-1 flex items-center gap-3">
             {logo ? <img src={logo} alt="logo" className="h-12 w-12 rounded object-cover" /> : null}
-            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); e.target.value = ''; }} className="text-xs" />
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ''; }} className="text-xs" />
             {logo ? <button type="button" onClick={() => setLogo('')} className="rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700">Remove</button> : null}
           </div>
         </div>
