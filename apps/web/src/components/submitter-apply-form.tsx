@@ -5,6 +5,7 @@ import { submitterApi, type MySubmitter } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { COUNTRIES } from '@/lib/countries';
 import { ConfirmDialog } from './confirm-dialog';
+import { MarkdownEditor } from './markdown';
 
 const MIN_WORDS = 100;
 const MAX_LOGO_BYTES = 256 * 1024;
@@ -139,10 +140,16 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
           </label>
         )}
 
-        <label className="block">
-          <span className="text-sm font-medium">Description <span className="text-red-500">*</span> <span className="text-xs font-normal text-neutral-500">{needsFullDesc ? `(min 100 words — ${words}/100)` : `(${words} words)`}</span></span>
-          <textarea value={desc} onChange={(e) => setDesc(e.target.value)} rows={5} maxLength={20000} className={`mt-1 ${inputCls}`} placeholder="Who you are, what you build, your track record…" />
-        </label>
+        <MarkdownEditor
+          value={desc}
+          onChange={setDesc}
+          title="Description"
+          hint={needsFullDesc ? `min 100 words — ${words}/100` : `${words} words`}
+          subtitle="Who you are, what you build, your track record. Supports bold, italics, headers, lists."
+          placeholder="Who you are, what you build, your track record…"
+          minRows={6}
+          required
+        />
 
         <label className="block">
           <span className="text-sm font-medium">Country <span className="text-red-500">*</span></span>
@@ -168,22 +175,30 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         </div>
 
         {/* §2.1 — disclosure + contact (board may need to reach the team). */}
-        <label className="block">
-          <span className="text-sm font-medium">Conflict of interest <span className="text-red-500">*</span></span>
-          <p className="text-xs text-neutral-500">Disclose everything related to a conflict of interest around approving funding (write &quot;none&quot; if you have none).</p>
-          <textarea value={conflict} onChange={(e) => setConflict(e.target.value)} rows={3} maxLength={20000} className={`mt-1 ${inputCls}`} placeholder="e.g. I am affiliated with project X which competes for the same category…" />
-        </label>
+        <MarkdownEditor
+          value={conflict}
+          onChange={setConflict}
+          title="Conflict of interest"
+          subtitle={'Disclose everything related to a conflict of interest around approving funding (write "none" if you have none). Supports bold, italics, headers, lists.'}
+          placeholder="e.g. I am affiliated with project X which competes for the same category…"
+          minRows={3}
+          required
+        />
 
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" checked={noSelfVote} onChange={(e) => setNoSelfVote(e.target.checked)} className="mt-0.5" />
           <span>I will not vote for my own proposal <span className="text-xs text-neutral-500">(informative — optional)</span></span>
         </label>
 
-        <label className="block">
-          <span className="text-sm font-medium">Previous funding <span className="text-xs font-normal text-neutral-500">(optional — please keep it updated)</span></span>
-          <p className="text-xs text-neutral-500">List ALL previous funding you received in the Cardano ecosystem — Catalyst, Treasury Withdrawals, Builder DAO, or other funding vehicles. Update this regularly as you receive new funding.</p>
-          <textarea value={prevFunding} onChange={(e) => setPrevFunding(e.target.value)} rows={3} maxLength={20000} className={`mt-1 ${inputCls}`} placeholder="e.g. Catalyst F11 — Project X, 50k ₳ (2024); Builder DAO grant — 10k ₳ (2025)…" />
-        </label>
+        <MarkdownEditor
+          value={prevFunding}
+          onChange={setPrevFunding}
+          title="Previous funding"
+          hint="optional — please keep it updated"
+          subtitle="List ALL previous funding you received in the Cardano ecosystem — Catalyst, Treasury Withdrawals, Builder DAO, or other funding vehicles. Update this regularly. Supports bold, italics, headers, lists."
+          placeholder="e.g. Catalyst F11 — Project X, 50k ₳ (2024); Builder DAO grant — 10k ₳ (2025)…"
+          minRows={3}
+        />
 
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">

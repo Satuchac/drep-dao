@@ -5,6 +5,7 @@ import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { useAuth } from '@/lib/auth-context';
 import { COUNTRIES } from '@/lib/countries';
 import { drepApi, type DrepApplicationInput } from '@/lib/api';
+import { MarkdownEditor } from './markdown';
 
 const field =
   'w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900';
@@ -136,10 +137,17 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
         error={photoError}
       />
 
-      <label className="block space-y-1">
-        <span className="text-sm font-medium">Bio — motivation / experience <span className="text-red-500">*</span> <span className="text-xs font-normal text-neutral-500">(min 100 words — {bioWords}/100)</span></span>
-        <textarea className={field} rows={5} value={bio} onChange={(e) => setBio(e.target.value)} placeholder="Who you are, your experience, why you participate in the DAO…" />
-      </label>
+      <MarkdownEditor
+        value={bio}
+        onChange={setBio}
+        title="Bio — motivation / experience"
+        hint={`min 100 words — ${bioWords}/100`}
+        subtitle="Who you are, your experience, why you participate in the DAO. Supports bold, italics, headers, lists."
+        placeholder="Who you are, your experience, why you participate in the DAO…"
+        minRows={6}
+        required
+      />
+      {bioWords < 100 ? <p className="text-xs text-amber-600">The bio must be at least 100 words ({bioWords}/100).</p> : null}
 
       <label className="block">
         <span className="text-sm font-medium">Country <span className="text-red-500">*</span></span>
@@ -150,11 +158,14 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       </label>
 
       {/* §2.1 — same disclosure as the submitter profile. */}
-      <label className="block">
-        <span className="text-sm font-medium">Conflict of interest</span>
-        <p className="text-xs text-neutral-500">Disclose everything related to a conflict of interest around approving funding (write &quot;none&quot; if you have none).</p>
-        <textarea className={field} rows={3} maxLength={20000} value={conflict} onChange={(e) => setConflict(e.target.value)} placeholder="e.g. I am affiliated with project X which competes for the same category…" />
-      </label>
+      <MarkdownEditor
+        value={conflict}
+        onChange={setConflict}
+        title="Conflict of interest"
+        subtitle={'Disclose everything related to a conflict of interest around approving funding (write "none" if you have none). Supports bold, italics, headers, lists.'}
+        placeholder="e.g. I am affiliated with project X which competes for the same category…"
+        minRows={3}
+      />
       <label className="flex items-start gap-2 text-sm">
         <input type="checkbox" checked={noSelfVote} onChange={(e) => setNoSelfVote(e.target.checked)} className="mt-0.5" />
         <span>I will not vote for my own proposal <span className="text-xs text-neutral-500">(informative — optional)</span></span>

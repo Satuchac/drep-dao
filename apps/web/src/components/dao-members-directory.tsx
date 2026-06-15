@@ -5,6 +5,7 @@ import { daoApi, type DaoMember, type DaoMemberDetail } from '@/lib/api';
 import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
 import { FallbackAvatar } from './fallback-avatar';
+import { ClampedMarkdown } from './clamped-markdown';
 
 /**
  * "DAO members" left-nav view: a directory of every current DAO member as a card grid.
@@ -200,18 +201,16 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
             <Stats d={d} />
             <div>
               <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Bio</div>
-              {d.bio ? (
-                <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-800 dark:text-neutral-200">{d.bio}</p>
-              ) : (
-                <p className="mt-1 text-xs italic text-neutral-400">No bio provided.</p>
-              )}
+              <ClampedMarkdown className="mt-1 text-sm text-neutral-800 dark:text-neutral-200" empty="No bio provided." maxLines={15}>
+                {d.bio}
+              </ClampedMarkdown>
               <div className="mt-2 text-xs text-neutral-500">Country: {d.country ? <span className="font-medium text-neutral-700 dark:text-neutral-300">{d.country}</span> : <span className="italic text-neutral-400">not provided</span>}</div>
               {/* §2.1 — conflict-of-interest disclosure + pledge (transparency). */}
               <div className="mt-2 text-xs">
-                <span className="font-medium">Conflict of interest:</span>{' '}
-                {d.conflictOfInterest
-                  ? <span className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{d.conflictOfInterest}</span>
-                  : <span className="italic text-neutral-400">not provided</span>}
+                <span className="font-medium">Conflict of interest:</span>
+                <ClampedMarkdown className="mt-0.5 text-neutral-600 dark:text-neutral-300" empty="not provided" maxLines={15}>
+                  {d.conflictOfInterest}
+                </ClampedMarkdown>
               </div>
               <div className="mt-1 text-xs">
                 {d.noSelfVotePledge

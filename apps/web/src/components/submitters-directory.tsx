@@ -8,6 +8,7 @@ import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { StatusBadge, PROPOSAL_STATUS_CLS } from './round-ui';
+import { ClampedMarkdown } from './clamped-markdown';
 
 /**
  * §2.1 — public directory of APPROVED submitters (mirrors the DAO members overview).
@@ -79,15 +80,15 @@ export function SubmittersDirectory() {
                   <div className="min-w-0 flex-1 space-y-2 text-sm">
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Description</div>
-                      <p className="mt-0.5 whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">{s.description}</p>
+                      <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{s.description}</ClampedMarkdown>
                     </div>
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Previous funding</div>
-                      <p className="mt-0.5 whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">{s.previousFunding || '— none declared —'}</p>
+                      <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty="— none declared —" maxLines={15}>{s.previousFunding}</ClampedMarkdown>
                     </div>
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Conflict of interest</div>
-                      <p className="mt-0.5 whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">{s.conflictOfInterest || '—'}</p>
+                      <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{s.conflictOfInterest}</ClampedMarkdown>
                     </div>
                     <div className="text-xs text-neutral-600 dark:text-neutral-300">
                       <span className="font-medium">Pledge:</span> {s.noSelfVotePledge ? '✓ will not vote for own proposals' : 'no self-vote pledge given (informative)'}

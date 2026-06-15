@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { boardSubmittersApi, type SubmitterApplication } from '@/lib/api';
+import { ClampedMarkdown } from './clamped-markdown';
 
 /** §2.1 — board to-do: approve/reject submitter applications. Reject requires a reason (shown to the applicant). */
 export function SubmitterReviewPanel({ onChange, history = false }: { onChange?: () => void; history?: boolean }) {
@@ -50,19 +51,19 @@ export function SubmitterReviewPanel({ onChange, history = false }: { onChange?:
               ) : null}
             </div>
             <div className="mt-1 break-all font-mono text-[11px] text-neutral-400">{a.stakeAddress}</div>
-            <div className="mt-1 whitespace-pre-wrap text-xs text-neutral-600 dark:text-neutral-300">{a.description}</div>
+            <ClampedMarkdown className="mt-1 text-xs text-neutral-600 dark:text-neutral-300" empty="—" maxLines={15}>{a.description}</ClampedMarkdown>
             <div className="mt-1 text-xs"><span className="font-medium">GitHub:</span>{' '}
               {a.githubUrls.length ? a.githubUrls.map((g, i) => <a key={i} href={g} target="_blank" rel="noreferrer" className="mr-2 break-all text-emerald-700 underline dark:text-emerald-400">{g}</a>) : <span className="text-neutral-400">not provided</span>}
             </div>
             {a.previousFunding ? (
-              <div className="mt-1 text-xs"><span className="font-medium">Previous funding:</span>{' '}
-                <span className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{a.previousFunding}</span>
+              <div className="mt-1 text-xs"><span className="font-medium">Previous funding:</span>
+                <ClampedMarkdown className="text-neutral-600 dark:text-neutral-300" empty="—" maxLines={15}>{a.previousFunding}</ClampedMarkdown>
               </div>
             ) : null}
             {/* §2.1 — disclosure + contact for the board's review. */}
             <div className="mt-1 text-xs">
-              <span className="font-medium">Conflict of interest:</span>{' '}
-              <span className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{a.conflictOfInterest || '—'}</span>
+              <span className="font-medium">Conflict of interest:</span>
+              <ClampedMarkdown className="text-neutral-600 dark:text-neutral-300" empty="—" maxLines={15}>{a.conflictOfInterest}</ClampedMarkdown>
             </div>
             <div className="mt-0.5 text-xs text-neutral-500">
               {a.noSelfVotePledge ? '✓ pledges not to vote for own proposals' : 'no self-vote pledge given (informative)'}

@@ -6,6 +6,7 @@ import { boardApi, type PendingApplication } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
 import { VotingStyleBadge } from './voting-style-badge';
+import { ClampedMarkdown } from './clamped-markdown';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -153,7 +154,7 @@ export function BoardReviewPanel({ history = false }: { history?: boolean }) {
                   <Row label="DRep ID">
                     <span className="break-all font-mono text-neutral-500">{a.drepIdOnchain}</span>
                   </Row>
-                  {a.bio ? <Row label="Motivation">{a.bio}</Row> : null}
+                  {a.bio ? <Row label="Motivation"><ClampedMarkdown maxLines={15}>{a.bio}</ClampedMarkdown></Row> : null}
                   {a.subcategoryIds.length ? (
                     <Row label="Categories">
                       <span className="flex flex-wrap gap-1">
