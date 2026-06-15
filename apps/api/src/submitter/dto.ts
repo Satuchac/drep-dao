@@ -16,8 +16,16 @@ export class SubmitterApplicationDto {
   @IsOptional() @IsString() @MaxLength(20000) previousFunding?: string;
   // §2.1 — consent that the profile is persisted by the platform (kept even after leaving).
   @IsOptional() agreePersist?: boolean;
+  // §2 — cross-wallet link: the on-chain DRep id of the DAO-member profile this submitter
+  // declares as the same entity (empty string clears the link). Self-declared.
+  @IsOptional() @IsString() @MaxLength(120) linkedDrepIdOnchain?: string;
 }
 
 export class RejectSubmitterDto {
   @IsString() @IsNotEmpty() @MaxLength(2000) reason!: string;
+}
+
+/** §2 — board override of a submitter↔DAO-member link (set or clear). */
+export class SetSubmitterLinkDto {
+  @IsOptional() @IsString() @MaxLength(120) linkedDrepIdOnchain?: string | null;
 }

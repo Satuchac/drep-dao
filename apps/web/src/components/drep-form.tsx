@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { useAuth } from '@/lib/auth-context';
 import { COUNTRIES } from '@/lib/countries';
-import { drepApi, type DrepApplicationInput } from '@/lib/api';
+import { drepApi, submitterApi, type DrepApplicationInput, type ApprovedSubmitter } from '@/lib/api';
 import { MarkdownEditor } from './markdown';
 import { PhotoUpload } from './photo-upload';
 
@@ -37,6 +37,10 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
   const [conflict, setConflict] = useState('');
   const [country, setCountry] = useState('');
   const [noSelfVote, setNoSelfVote] = useState(false); // §8.2 board-only toggle (default on)
+  // §2 — cross-wallet link to a submitter profile (the same entity on a different wallet).
+  const [linkSubmitter, setLinkSubmitter] = useState(false);
+  const [linkedSubmitterUserId, setLinkedSubmitterUserId] = useState('');
+  const [submitters, setSubmitters] = useState<ApprovedSubmitter[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -64,8 +68,12 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       setConflict(d.conflictOfInterest ?? '');
       setCountry(d.country ?? '');
       setNoSelfVote(!!d.noSelfVotePledge);
+      setLinkedSubmitterUserId(d.linkedSubmitterUserId ?? '');
+      setLinkSubmitter(!!d.linkedSubmitterUserId);
     });
   }, []);
+  // §2 — submitters to choose from when declaring "I'm also a submitter (different wallet)".
+  useEffect(() => { submitterApi.directory().then(setSubmitters).catch(() => setSubmitters([])); }, []);
 
   const toggleSub = (id: string) =>
     setSubs((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -105,6 +113,8 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       conflictOfInterest: conflict.trim(),
       noSelfVotePledge: noSelfVote,
       country,
+      // §2 — link to a submitter profile (empty string clears it).
+      linkedSubmitterUserId: linkSubmitter ? linkedSubmitterUserId : '',
     };
     try {
       if (mode === 'join') await drepApi.apply(input);
@@ -171,6 +181,20 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
         <input type="checkbox" checked={noSelfVote} onChange={(e) => setNoSelfVote(e.target.checked)} className="mt-0.5" />
         <span>I will not vote for my own proposal <span className="text-xs text-neutral-500">(informative — optional)</span></span>
       </label>
+
+      {/* §2 — declare a submitter profile that is the SAME entity (possibly a different wallet). */}
+      <div className="rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" checked={linkSubmitter} onChange={(e) => setLinkSubmitter(e.target.checked)} className="mt-0.5" />
+          <span>I&apos;m also a <strong>submitter</strong> <span className="text-xs text-neutral-500">(link my submitter profile — it may be on a different wallet)</span></span>
+        </label>
+        {linkSubmitter ? (
+          <select value={linkedSubmitterUserId} onChange={(e) => setLinkedSubmitterUserId(e.target.value)} className={`mt-2 ${field}`}>
+            <option value="">— select your submitter profile —</option>
+            {submitters.map((s) => <option key={s.userId} value={s.userId}>{s.displayName}{s.country ? ` — ${s.country}` : ''}</option>)}
+          </select>
+        ) : null}
+      </div>
 
       <div className="space-y-1">
         <span className="text-sm font-medium">Expertise (subcategories)</span>

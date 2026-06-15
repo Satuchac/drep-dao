@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { submitterApi, type ApprovedSubmitter, type SubmitterPortfolio } from '@/lib/api';
+import { submitterApi, daoApi, boardSubmittersApi, type ApprovedSubmitter, type SubmitterPortfolio, type DaoMember } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { card } from '@/lib/ui';
 import { FallbackAvatar } from './fallback-avatar';
 import { CopyButton } from './copy-button';
@@ -22,6 +23,7 @@ export function SubmittersDirectory() {
   const [openId, setOpenId] = useState<string | null>(null);
   // §2.1 — deregistered profiles stay in the history; show them on demand.
   const [showLeft, setShowLeft] = useState(false);
+  const reload = () => { submitterApi.directory(showLeft).then(setRows).catch(() => setRows([])); };
   useEffect(() => {
     setRows(null);
     submitterApi.directory(showLeft).then(setRows).catch(() => setRows([]));
@@ -94,6 +96,8 @@ export function SubmittersDirectory() {
                       <span className="font-medium">Pledge:</span> {s.noSelfVotePledge ? '✓ will not vote for own proposals' : 'no self-vote pledge given (informative)'}
                       {s.isDaoMember ? <span className="ml-2 font-medium text-amber-700 dark:text-amber-300">⚠ this submitter is also a DAO member and votes on funding</span> : null}
                     </div>
+                    {/* §2 (board) — override this submitter's cross-wallet link to a DAO member. */}
+                    <SubmitterLinkEditor s={s} onSaved={reload} />
                     <div className="text-xs">
                       <span className="font-medium">Contact:</span>{' '}
                       {s.telegram ? <span className="font-mono">{s.telegram}</span> : '—'}
@@ -234,6 +238,34 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
     <div className="rounded-md border border-neutral-200 px-2.5 py-1.5 dark:border-neutral-800" title={hint}>
       <div className="text-[10px] uppercase tracking-wide text-neutral-500">{label}</div>
       <div className="font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+/** §2 (board) — set/clear this submitter's cross-wallet link to a DAO-member profile. Board-only. */
+function SubmitterLinkEditor({ s, onSaved }: { s: ApprovedSubmitter; onSaved: () => void }) {
+  const { profile } = useAuth();
+  const isBoard = profile?.roles.includes('BOARD') ?? false;
+  const [members, setMembers] = useState<DaoMember[]>([]);
+  const [sel, setSel] = useState(s.daoMemberDrepId ?? '');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (isBoard) daoApi.members().then(setMembers).catch(() => setMembers([])); }, [isBoard]);
+  useEffect(() => { setSel(s.daoMemberDrepId ?? ''); }, [s.daoMemberDrepId]);
+  if (!isBoard) return null;
+  const save = async () => {
+    setBusy(true);
+    try { await boardSubmittersApi.setLink(s.id, sel || null); onSaved(); } finally { setBusy(false); }
+  };
+  return (
+    <div className="mt-1 rounded border border-dashed border-neutral-300 p-2 text-xs dark:border-neutral-700">
+      <div className="font-medium text-neutral-500">Board override: link to a DAO-member profile</div>
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <select value={sel} onChange={(e) => setSel(e.target.value)} disabled={busy} className="rounded border border-neutral-300 px-1.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900">
+          <option value="">— none —</option>
+          {members.map((m) => <option key={m.drepId} value={m.drepId}>{m.displayName}</option>)}
+        </select>
+        <button type="button" disabled={busy || sel === (s.daoMemberDrepId ?? '')} onClick={save} className="rounded bg-emerald-600 px-2 py-1 font-medium text-white disabled:opacity-50">Save</button>
+      </div>
     </div>
   );
 }

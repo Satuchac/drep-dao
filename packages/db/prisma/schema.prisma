@@ -76,6 +76,10 @@ model SubmitterApplication {
   // §2.1 — all previous Cardano-ecosystem funding (Catalyst, Treasury Withdrawals, Builder
   // DAO, …). Optional, expected to be kept up to date.
   previousFunding    String  @default("") @map("previous_funding")
+  // §2 — the same entity may register a DAO-member profile on a DIFFERENT wallet. When this
+  // submitter declares "I'm also a DAO member", we store that member's on-chain DRep id here so
+  // the two profiles cross-link. Self-declared (board may override). Null = no link.
+  linkedDrepIdOnchain String? @map("linked_drep_id_onchain")
   rejectionReason String?   @map("rejection_reason")
   leftAt          DateTime? @map("left_at") @db.Timestamptz(6) // §2.1 — deregistered (profile kept)
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -131,6 +135,10 @@ model Drep {
   // (their snapshot entry is skipped at tally time). Toggling it on adds them
   // back live. Non-board admitted DReps are always voters and ignore this flag.
   votesOnFundingProposals Boolean @default(true) @map("votes_on_funding_proposals")
+  // §2 — cross-wallet link: when this DAO member declares "I'm also a submitter", we store that
+  // submitter's account id (SubmitterApplication.userId) so the two profiles cross-link. Self-
+  // declared (board may override). Null = no link.
+  linkedSubmitterUserId String? @map("linked_submitter_user_id") @db.Uuid
   admittedAt         DateTime? @map("admitted_at") @db.Timestamptz(6)
   removedAt          DateTime? @map("removed_at") @db.Timestamptz(6)
 

@@ -102,7 +102,9 @@ export class SubmitterService {
         },
       });
     }
-    const data = { status, displayName, description, githubUrls, socialLinks, logoDataUrl, country, conflictOfInterest, noSelfVotePledge: !!dto.noSelfVotePledge, telegram, email, previousFunding, rejectionReason: null };
+    // §2 — cross-wallet link to a DAO-member profile (empty string clears it).
+    const linkedDrepIdOnchain = dto.linkedDrepIdOnchain?.trim() || null;
+    const data = { status, displayName, description, githubUrls, socialLinks, logoDataUrl, country, conflictOfInterest, noSelfVotePledge: !!dto.noSelfVotePledge, telegram, email, previousFunding, linkedDrepIdOnchain, rejectionReason: null };
     await this.prisma.submitterApplication.upsert({
       where: { userId },
       update: data,
@@ -137,10 +139,15 @@ export class SubmitterService {
   async mine(userId: string) {
     const a = await this.prisma.submitterApplication.findUnique({ where: { userId } });
     if (!a) return null;
+    const linkedMember = await this.resolveLinkedMember(userId, a.linkedDrepIdOnchain);
     return {
       id: a.id,
       status: a.status as 'PENDING' | 'APPROVED' | 'REJECTED' | 'LEFT',
       displayName: a.displayName,
+      // §2 — the DAO-member profile this submitter declared (own selection) + the resolved
+      // linked member (which also reflects a link declared from the DAO-member side).
+      linkedDrepIdOnchain: a.linkedDrepIdOnchain,
+      linkedDaoMember: linkedMember,
       description: a.description,
       githubUrls: a.githubUrls,
       socialLinks: a.socialLinks,
@@ -182,6 +189,36 @@ export class SubmitterService {
     return a?.status === 'APPROVED';
   }
 
+  /**
+   * §2 — resolve the DAO-member profile linked to a submitter, by SAME wallet (the submitter's
+   * own account is an admitted DRep) OR by an explicit cross-wallet link declared from either
+   * side. Returns the member's on-chain DRep id + name so the profile can cross-link.
+   */
+  private async resolveLinkedMember(userId: string, linkedDrepIdOnchain: string | null) {
+    const explicit = await this.prisma.drep.findFirst({
+      where: {
+        status: 'ADMITTED',
+        OR: [
+          ...(linkedDrepIdOnchain ? [{ drepIdOnchain: linkedDrepIdOnchain }] : []),
+          { linkedSubmitterUserId: userId },
+        ],
+      },
+      select: { drepIdOnchain: true, userId: true, user: { select: { displayName: true } } },
+    });
+    if (explicit) return { drepIdOnchain: explicit.drepIdOnchain, name: explicit.user.displayName ?? '', crossWallet: explicit.userId !== userId };
+    const same = await this.prisma.drep.findFirst({ where: { userId, status: 'ADMITTED' }, select: { drepIdOnchain: true, user: { select: { displayName: true } } } });
+    if (same) return { drepIdOnchain: same.drepIdOnchain, name: same.user.displayName ?? '', crossWallet: false };
+    return null;
+  }
+
+  /** §2 (board) — override a submitter's cross-wallet link to a DAO member (set or clear). */
+  async setLink(appId: string, linkedDrepIdOnchain: string | null) {
+    const a = await this.prisma.submitterApplication.findUnique({ where: { id: appId }, select: { userId: true } });
+    if (!a) throw new NotFoundException('submitter profile not found');
+    await this.prisma.submitterApplication.update({ where: { id: appId }, data: { linkedDrepIdOnchain: linkedDrepIdOnchain?.trim() || null } });
+    return this.mine(a.userId);
+  }
+
   /** §2.1 — public directory of APPROVED submitters; flags those who are also DAO members. */
   async listApproved(includeLeft = false) {
     const rows = await this.prisma.submitterApplication.findMany({
@@ -192,15 +229,20 @@ export class SubmitterService {
     const boardKeys = new Set(
       (await this.prisma.boardSeat.findMany({ where: { removedAt: null }, select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
     );
-    return rows.map((a) => {
-      const isDaoMember = a.user.drep?.status === 'ADMITTED' || (!!a.user.drepKeyHash && boardKeys.has(a.user.drepKeyHash));
+    return Promise.all(rows.map(async (a) => {
+      const linkedMember = await this.resolveLinkedMember(a.user.id, a.linkedDrepIdOnchain);
+      const isDaoMember = !!linkedMember || a.user.drep?.status === 'ADMITTED' || (!!a.user.drepKeyHash && boardKeys.has(a.user.drepKeyHash));
+      const ownName = a.displayName?.trim() || '';
       return {
       id: a.id,
+      // The submitter's account id — the value a DAO member selects to link to this profile.
+      userId: a.user.id,
       // §2 — the submitter's OWN profile name is primary here; the DAO-member
       // name (if they're also a member) is surfaced separately as context.
-      displayName: a.displayName?.trim() || a.user.displayName || '',
-      // The DAO-member name, when this submitter is also a DAO member and it differs.
-      daoMemberName: isDaoMember && a.user.displayName && a.user.displayName !== (a.displayName?.trim() || '') ? a.user.displayName : null,
+      displayName: ownName || a.user.displayName || '',
+      // The DAO-member name + on-chain id, when this submitter is also a DAO member.
+      daoMemberName: linkedMember && linkedMember.name && linkedMember.name !== ownName ? linkedMember.name : null,
+      daoMemberDrepId: linkedMember?.drepIdOnchain ?? null,
       description: a.description,
       country: a.country,
       githubUrls: a.githubUrls,
@@ -220,7 +262,7 @@ export class SubmitterService {
       leftAt: a.leftAt,
       since: a.reviewedAt,
       };
-    });
+    }));
   }
 
   /**

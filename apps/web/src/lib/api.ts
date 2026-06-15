@@ -83,6 +83,9 @@ export interface DrepApplicationInput {
   admissionCallOptin?: boolean;
   // §8.2 — board-only self-toggle for "I'll vote on funding proposals".
   votesOnFundingProposals?: boolean;
+  // §2 — cross-wallet link: the submitter account id this DAO member declares as the same
+  // entity (empty string clears the link).
+  linkedSubmitterUserId?: string;
 }
 
 export interface MyDrep {
@@ -104,6 +107,8 @@ export interface MyDrep {
   conflictOfInterest: string;
   noSelfVotePledge: boolean;
   country: string;
+  // §2 — the submitter profile this member linked (own selection).
+  linkedSubmitterUserId: string | null;
   yes: number;
   no: number;
   threshold: number;
@@ -146,11 +151,17 @@ export interface DaoMemberDetail extends DaoMember {
   contact: Record<string, string> | null;
   subcategoryIds: string[];
   // Admission votes the member cast as a board reviewer (non-board members are 0).
-  admissionVotesCast: { yes: number; no: number; total: number };  conflictOfInterest: string;
+  admissionVotesCast: { yes: number; no: number; total: number };
+  // §13 — total governance participation across all rounds.
+  votingActivity: { filtering: number; debateVote: number; milestone: number };
+  conflictOfInterest: string;
   noSelfVotePledge: boolean;  country: string;
   /** §2 — this DAO member is also an approved submitter, + the submitter name if different. */
   isSubmitter: boolean;
   submitterName: string | null;
+  /** §2 — the linked submitter profile id (for cross-linking) + the board-editable pointer. */
+  submitterId: string | null;
+  linkedSubmitterUserId: string | null;
 }
 
 export const daoApi = {
@@ -158,6 +169,9 @@ export const daoApi = {
   member: (drepId: string) => request<DaoMemberDetail>(`/dao/members/${encodeURIComponent(drepId)}`),
   experts: () => request<DaoExpert[]>('/dao/experts'),
   proofs: () => request<OnChainProof[]>('/dao/proofs'),
+  // §2 (board) — override a DAO member's cross-wallet link to a submitter (null clears it).
+  setMemberLink: (drepId: string, linkedSubmitterUserId: string | null) =>
+    request<DaoMemberDetail>(`/dao/members/${encodeURIComponent(drepId)}/link`, { method: 'PATCH', body: JSON.stringify({ linkedSubmitterUserId }) }),
 };
 
 // §12 — submitter's pending budget-change request (board approves or rejects).
@@ -681,6 +695,8 @@ export interface SubmitterApplicationInput {
   email: string;
   previousFunding?: string;
   agreePersist?: boolean;
+  // §2 — cross-wallet link to a DAO-member profile (DRep id; empty string clears it).
+  linkedDrepIdOnchain?: string;
 }
 export interface SubmitterHistoryItem {
   displayName: string;
@@ -713,15 +729,23 @@ export interface MySubmitter {
   rejectionReason: string | null;
   leftAt: string | null;
   history: SubmitterHistoryItem[];
+  // §2 — cross-wallet link: the DAO-member DRep id this submitter declared (own selection),
+  // and the resolved linked DAO member (reflects a link set from either side).
+  linkedDrepIdOnchain: string | null;
+  linkedDaoMember: { drepIdOnchain: string; name: string; crossWallet: boolean } | null;
 }
 export interface SubmitterApplication extends MySubmitter {
   stakeAddress: string;
 }
 export interface ApprovedSubmitter {
   id: string;
+  /** §2 — the submitter's account id (the value a DAO member selects to link to this profile). */
+  userId: string;
   displayName: string;
   /** §2 — when this submitter is also a DAO member with a different name, that name. */
   daoMemberName: string | null;
+  /** §2 — the linked DAO member's on-chain DRep id, for cross-linking to their profile. */
+  daoMemberDrepId: string | null;
   description: string;
   country: string;
   githubUrls: string[];
@@ -778,6 +802,9 @@ export const boardSubmittersApi = {
   approve: (id: string) => request<{ ok: boolean }>(`/admin/submitters/${id}/approve`, { method: 'POST' }),
   reject: (id: string, reason: string) =>
     request<{ ok: boolean }>(`/admin/submitters/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  // §2 (board) — override a submitter's cross-wallet link to a DAO member (null clears it).
+  setLink: (id: string, linkedDrepIdOnchain: string | null) =>
+    request<MySubmitter>(`/admin/submitters/${id}/link`, { method: 'PATCH', body: JSON.stringify({ linkedDrepIdOnchain }) }),
 };
 
 export interface RoundCategoryInput {

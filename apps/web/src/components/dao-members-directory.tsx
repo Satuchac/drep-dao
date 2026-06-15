@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { daoApi, type DaoMember, type DaoMemberDetail } from '@/lib/api';
+import { daoApi, submitterApi, type DaoMember, type DaoMemberDetail, type ApprovedSubmitter } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
 import { FallbackAvatar } from './fallback-avatar';
@@ -200,7 +201,8 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
                   </span>
                 ) : null}
               </div>
-
+              {/* §2 (board) — override this member's cross-wallet link to a submitter profile. */}
+              <MemberLinkEditor d={d} onSaved={setD} />
             </div>
           </div>
           <div className="space-y-4">
@@ -233,6 +235,34 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
   );
 }
 
+/** §2 (board) — set/clear this DAO member's cross-wallet link to a submitter profile. Board-only. */
+function MemberLinkEditor({ d, onSaved }: { d: DaoMemberDetail; onSaved: (d: DaoMemberDetail) => void }) {
+  const { profile } = useAuth();
+  const isBoard = profile?.roles.includes('BOARD') ?? false;
+  const [submitters, setSubmitters] = useState<ApprovedSubmitter[]>([]);
+  const [sel, setSel] = useState(d.linkedSubmitterUserId ?? '');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { if (isBoard) submitterApi.directory().then(setSubmitters).catch(() => setSubmitters([])); }, [isBoard]);
+  useEffect(() => { setSel(d.linkedSubmitterUserId ?? ''); }, [d.linkedSubmitterUserId]);
+  if (!isBoard) return null;
+  const save = async () => {
+    setBusy(true);
+    try { onSaved(await daoApi.setMemberLink(d.drepId, sel || null)); } finally { setBusy(false); }
+  };
+  return (
+    <div className="mt-2 rounded border border-dashed border-neutral-300 p-2 text-xs dark:border-neutral-700">
+      <div className="font-medium text-neutral-500">Board override: link to a submitter profile</div>
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <select value={sel} onChange={(e) => setSel(e.target.value)} disabled={busy} className="rounded border border-neutral-300 px-1.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900">
+          <option value="">— none —</option>
+          {submitters.map((s) => <option key={s.userId} value={s.userId}>{s.displayName}</option>)}
+        </select>
+        <button type="button" disabled={busy || sel === (d.linkedSubmitterUserId ?? '')} onClick={save} className="rounded bg-emerald-600 px-2 py-1 font-medium text-white disabled:opacity-50">Save</button>
+      </div>
+    </div>
+  );
+}
+
 function Stats({ d }: { d: DaoMemberDetail }) {
   return (
     <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm md:grid-cols-3 lg:grid-cols-4">
@@ -257,6 +287,10 @@ function Stats({ d }: { d: DaoMemberDetail }) {
           value={d.votesOnFundingProposals ? '✓ yes' : '✗ opted out'}
         />
       ) : null}
+      {/* §13 — governance participation across all rounds. */}
+      <Stat label="Filtering reviews" value={d.votingActivity.filtering.toLocaleString()} />
+      <Stat label="Debate & Vote ballots" value={d.votingActivity.debateVote.toLocaleString()} />
+      <Stat label="Milestone reviews" value={d.votingActivity.milestone.toLocaleString()} />
     </dl>
   );
 }

@@ -64,6 +64,14 @@ export class UpdateDrepDto {
   // Default true. Toggling off mid-VOTE zeroes the member's weight at the
   // next tally read (their snapshot entry is skipped — no snapshot mutation).
   @IsOptional() @IsBoolean() votesOnFundingProposals?: boolean;
+  // §2 — cross-wallet link: the account id (SubmitterApplication.userId) of the submitter profile
+  // this DAO member declares as the same entity (empty string clears the link). Self-declared.
+  @IsOptional() @IsString() @MaxLength(64) linkedSubmitterUserId?: string;
+}
+
+/** §2 — board override of a DAO-member↔submitter link (set or clear). */
+export class SetMemberLinkDto {
+  @IsOptional() @IsString() @MaxLength(64) linkedSubmitterUserId?: string | null;
 }
 
 export class AdmissionVoteDto {

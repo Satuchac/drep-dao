@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { submitterApi, type MySubmitter } from '@/lib/api';
+import { submitterApi, daoApi, type MySubmitter, type DaoMember } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { COUNTRIES } from '@/lib/countries';
 import { ConfirmDialog } from './confirm-dialog';
@@ -32,6 +32,11 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   const [email, setEmail] = useState('');
   const [logo, setLogo] = useState('');
   const [country, setCountry] = useState('');
+  // §2 — cross-wallet link to a DAO-member profile (the same entity on a different wallet).
+  const [linkMember, setLinkMember] = useState(false);
+  const [linkedDrepId, setLinkedDrepId] = useState('');
+  const [daoMembers, setDaoMembers] = useState<DaoMember[]>([]);
+  const [linkedDaoMember, setLinkedDaoMember] = useState<MySubmitter['linkedDaoMember']>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
@@ -49,12 +54,17 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         setConflict(m.conflictOfInterest ?? ''); setNoSelfVote(!!m.noSelfVotePledge);
         setTelegram(m.telegram ?? ''); setEmail(m.email ?? '');
         setPrevFunding(m.previousFunding ?? '');
+        setLinkedDrepId(m.linkedDrepIdOnchain ?? '');
+        setLinkMember(!!m.linkedDrepIdOnchain);
+        setLinkedDaoMember(m.linkedDaoMember ?? null);
       } else if (profile?.user.displayName) {
         // Convenience prefill for a NEW application — editable, fully independent.
         setName(profile.user.displayName);
       }
     }).catch(() => setLoaded(true));
   useEffect(() => { load(); }, []);
+  // §2 — DAO members to choose from when declaring "I'm also a DAO member (different wallet)".
+  useEffect(() => { daoApi.members().then(setDaoMembers).catch(() => setDaoMembers([])); }, []);
 
   const onFile = async (file: File) => {
     try {
@@ -96,6 +106,8 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         logoDataUrl: logo || undefined,
         country,
         agreePersist,
+        // §2 — link to a DAO-member profile (empty string clears it).
+        linkedDrepIdOnchain: linkMember ? linkedDrepId : '',
       });
       await load();
       onChange?.();
@@ -152,6 +164,23 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
             {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         </label>
+
+        {/* §2 — declare a DAO-member profile that is the SAME entity (possibly a different wallet). */}
+        <div className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={linkMember} onChange={(e) => setLinkMember(e.target.checked)} className="mt-0.5" />
+            <span>I&apos;m also a <strong>DAO member</strong> <span className="text-xs text-neutral-500">(link my DAO-member profile — it may be on a different wallet)</span></span>
+          </label>
+          {linkMember ? (
+            <select value={linkedDrepId} onChange={(e) => setLinkedDrepId(e.target.value)} className={`mt-2 ${inputCls}`}>
+              <option value="">— select your DAO-member profile —</option>
+              {daoMembers.map((m) => <option key={m.drepId} value={m.drepId}>{m.displayName} — {m.drepId.slice(0, 16)}…</option>)}
+            </select>
+          ) : null}
+          {linkedDaoMember ? (
+            <p className="mt-1 text-[11px] text-emerald-600 dark:text-emerald-400">✓ Linked to DAO member <strong>{linkedDaoMember.name}</strong>{linkedDaoMember.crossWallet ? ' (different wallet)' : ''}.</p>
+          ) : null}
+        </div>
 
         <div>
           <span className="text-sm font-medium">GitHub links <span className="text-xs font-normal text-neutral-500">(optional)</span></span>

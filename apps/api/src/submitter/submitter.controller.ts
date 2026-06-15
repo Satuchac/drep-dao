@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { CurrentUser, type AuthContext } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { SubmitterService } from './submitter.service';
-import { RejectSubmitterDto, SubmitterApplicationDto } from './dto';
+import { RejectSubmitterDto, SetSubmitterLinkDto, SubmitterApplicationDto } from './dto';
 
 @Controller('me')
 @UseGuards(JwtAuthGuard)
@@ -63,5 +63,11 @@ export class BoardSubmittersController {
   @Post(':id/reject')
   reject(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: RejectSubmitterDto) {
     return this.svc.reject(id, dto.reason, ctx.userId);
+  }
+
+  // §2 — board override of a submitter's cross-wallet link to a DAO member (set or clear).
+  @Patch(':id/link')
+  setLink(@Param('id', ParseUUIDPipe) id: string, @Body() dto: SetSubmitterLinkDto) {
+    return this.svc.setLink(id, dto.linkedDrepIdOnchain ?? null);
   }
 }

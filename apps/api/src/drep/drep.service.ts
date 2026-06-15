@@ -171,13 +171,23 @@ export class DrepService {
     // bio and no votes to count yet.
     const drep = await this.prisma.drep.findUnique({
       where: { drepIdOnchain },
-      select: { id: true, userId: true, bio: true, socials: true, contact: true, subcategoryIds: true, votesOnFundingProposals: true, conflictOfInterest: true, noSelfVotePledge: true, country: true },
+      select: { id: true, userId: true, bio: true, socials: true, contact: true, subcategoryIds: true, votesOnFundingProposals: true, conflictOfInterest: true, noSelfVotePledge: true, country: true, linkedSubmitterUserId: true },
     });
 
-    // §2 — is this DAO member ALSO an approved submitter? If so, surface that +
-    // their (possibly different) submitter name.
+    // §2 — is this DAO member ALSO a submitter? By the SAME wallet (their own account has an
+    // approved submitter profile) OR by an explicit cross-wallet link declared from either side.
     const submitter = drep
-      ? await this.prisma.submitterApplication.findFirst({ where: { userId: drep.userId, status: 'APPROVED' }, select: { displayName: true } })
+      ? await this.prisma.submitterApplication.findFirst({
+          where: {
+            status: 'APPROVED',
+            OR: [
+              { userId: drep.userId },
+              ...(drep.linkedSubmitterUserId ? [{ userId: drep.linkedSubmitterUserId }] : []),
+              { linkedDrepIdOnchain: drepIdOnchain },
+            ],
+          },
+          select: { id: true, displayName: true },
+        })
       : null;
 
     const admissionVotes = drep
@@ -190,6 +200,18 @@ export class DrepService {
     const yes = admissionVotes.find((g) => g.choice === 'YES')?._count._all ?? 0;
     const no = admissionVotes.find((g) => g.choice === 'NO')?._count._all ?? 0;
 
+    // §13 — total governance participation across ALL rounds: filtering-jury reviews,
+    // Debate & Vote ballots, and milestone-review votes. Counts the member's CURRENT
+    // (non-superseded) votes per phase, so a re-vote isn't double-counted.
+    const phaseVotes = drep
+      ? await this.prisma.vote.groupBy({
+          by: ['phase'],
+          where: { drepId: drep.id, supersededBy: null },
+          _count: { _all: true },
+        })
+      : [];
+    const phaseCount = (p: string) => phaseVotes.find((g) => g.phase === p)?._count._all ?? 0;
+
     return {
       ...summary,
       bio: drep?.bio ?? null,
@@ -198,6 +220,12 @@ export class DrepService {
       subcategoryIds: drep?.subcategoryIds ?? [],
       // Admission votes the member cast as a board reviewer (only board has any).
       admissionVotesCast: { yes, no, total: yes + no },
+      // §13 — governance participation across all rounds (filtering / D&V / milestone reviews).
+      votingActivity: {
+        filtering: phaseCount('FILTERING'),
+        debateVote: phaseCount('DEBATE_VOTE'),
+        milestone: phaseCount('MILESTONE'),
+      },
       // §8.2 — board-only flag: does this board member vote on funding D&V?
       // Null for non-board (the flag doesn't apply to them; they always vote).
       // Non-board members always vote on funding (the flag is a board-only opt-out).
@@ -208,10 +236,21 @@ export class DrepService {
       conflictOfInterest: drep?.conflictOfInterest ?? '',
       noSelfVotePledge: drep?.noSelfVotePledge ?? false,
       country: drep?.country ?? '',
-      // §2 — also a submitter? + the submitter name when it differs.
+      // §2 — also a submitter? + the submitter name when it differs + the submitter
+      // profile id (for cross-linking) and the board-editable link pointer.
       isSubmitter: !!submitter,
       submitterName: submitter?.displayName && submitter.displayName !== summary.displayName ? submitter.displayName : null,
+      submitterId: submitter?.id ?? null,
+      linkedSubmitterUserId: drep?.linkedSubmitterUserId ?? null,
     };
+  }
+
+  /** §2 (board) — override a DAO member's cross-wallet link to a submitter (set or clear). */
+  async setSubmitterLink(drepIdOnchain: string, linkedSubmitterUserId: string | null) {
+    const drep = await this.prisma.drep.findUnique({ where: { drepIdOnchain }, select: { id: true } });
+    if (!drep) throw new NotFoundException('DAO member not found');
+    await this.prisma.drep.update({ where: { id: drep.id }, data: { linkedSubmitterUserId: linkedSubmitterUserId?.trim() || null } });
+    return this.getDaoMemberDetail(drepIdOnchain);
   }
 
   /** Everything the platform has anchored on-chain, newest first, human-readable. */
@@ -481,6 +520,8 @@ export class DrepService {
       conflictOfInterest: drep.conflictOfInterest,
       noSelfVotePledge: drep.noSelfVotePledge,
       country: drep.country,
+      // §2 — the submitter profile this member linked (own selection, for the form).
+      linkedSubmitterUserId: drep.linkedSubmitterUserId,
       yes: votes.filter((v) => v.choice === 'YES').length,
       no: votes.filter((v) => v.choice === 'NO').length,
       threshold,
@@ -622,6 +663,8 @@ export class DrepService {
         ...(dto.conflictOfInterest !== undefined ? { conflictOfInterest: dto.conflictOfInterest } : {}),
         ...(dto.noSelfVotePledge !== undefined ? { noSelfVotePledge: dto.noSelfVotePledge } : {}),
         ...(dto.country !== undefined ? { country: dto.country } : {}),
+        // §2 — cross-wallet link to a submitter profile (empty string clears it).
+        ...(dto.linkedSubmitterUserId !== undefined ? { linkedSubmitterUserId: dto.linkedSubmitterUserId?.trim() || null } : {}),
       },
     });
   }
