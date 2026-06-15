@@ -287,10 +287,24 @@ export class DrepService {
   async applyExpert(userId: string, dto: ExpertApplicationDto) {
     const existing = await this.prisma.expert.findFirst({ where: { userId } });
     if (existing?.approvedByBoard) throw new ConflictException('you are already an approved Expert');
+    // §2 — mandatory: display name, experience, conflict-of-interest, email, telegram.
+    const displayName = dto.displayName?.trim() ?? '';
+    const bio = dto.bio?.trim() ?? '';
+    const conflictOfInterest = dto.conflictOfInterest?.trim() ?? '';
+    const email = dto.email?.trim() ?? '';
+    const telegram = dto.telegram?.trim() ?? '';
+    if (!displayName) throw new ConflictException('display name is required');
+    if (!bio) throw new ConflictException('experience / skills is required');
+    if (!conflictOfInterest) throw new ConflictException('conflict-of-interest disclosure is required');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new ConflictException('a valid email is required');
+    if (!telegram) throw new ConflictException('a Telegram handle is required');
     const data = {
-      displayName: dto.displayName,
-      bio: dto.bio ?? null,
-      conflictOfInterest: dto.conflictOfInterest ?? null,
+      displayName,
+      bio,
+      conflictOfInterest,
+      email,
+      telegram,
+      socialLinks: (dto.socialLinks ?? []).map((s) => s.trim()).filter(Boolean),
       subcategoryIds: dto.subcategoryIds ?? [],
       approvedByBoard: false,
     };
@@ -311,7 +325,7 @@ export class DrepService {
   async listExpertApplications(history = false) {
     const experts = await this.prisma.expert.findMany({
       where: history ? {} : { approvedByBoard: false },
-      include: { user: { select: { stakeAddress: true, displayName: true } } },
+      include: { user: { select: { stakeAddress: true, displayName: true, drep: { select: { drepIdOnchain: true } } } } },
       orderBy: [{ approvedByBoard: 'asc' }, { displayName: 'asc' }],
     });
     return experts.map((e) => ({
@@ -319,7 +333,11 @@ export class DrepService {
       displayName: e.displayName,
       bio: e.bio,
       conflictOfInterest: e.conflictOfInterest,
+      email: e.email ?? '',
+      telegram: e.telegram ?? '',
+      socialLinks: e.socialLinks ?? [],
       stakeAddress: e.user.stakeAddress,
+      drepIdOnchain: e.user.drep?.drepIdOnchain ?? null,
       subcategoryIds: e.subcategoryIds,
       approved: e.approvedByBoard,
     }));
@@ -343,13 +361,20 @@ export class DrepService {
     const experts = await this.prisma.expert.findMany({
       where: { approvedByBoard: true },
       orderBy: { displayName: 'asc' },
+      include: { user: { select: { stakeAddress: true, drep: { select: { drepIdOnchain: true } } } } },
     });
     return experts.map((e) => ({
       id: e.id,
       displayName: e.displayName,
       bio: e.bio,
       conflictOfInterest: e.conflictOfInterest,
+      email: e.email ?? '',
+      telegram: e.telegram ?? '',
+      socialLinks: e.socialLinks ?? [],
       subcategoryIds: e.subcategoryIds,
+      // The platform knows the wallet — expose it (DRep ID if they're a DRep).
+      stakeAddress: e.user.stakeAddress,
+      drepIdOnchain: e.user.drep?.drepIdOnchain ?? null,
     }));
   }
 

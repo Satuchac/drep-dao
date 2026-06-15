@@ -67,6 +67,19 @@ export function ExpertReviewPanel({ history = false }: { history?: boolean }) {
                   ))}
                 </div>
               ) : null}
+              {/* §2 — contact + social + wallet identity for the board's review. */}
+              <div className="mt-1 text-xs text-neutral-500">
+                Telegram: <span className="font-mono">{a.telegram || '—'}</span>
+                {' · '}Email: {a.email ? <a href={`mailto:${a.email}`} className="text-emerald-700 underline dark:text-emerald-400">{a.email}</a> : '—'}
+              </div>
+              {a.socialLinks.length ? (
+                <div className="mt-0.5 text-xs"><span className="font-medium text-neutral-500">Social media:</span>{' '}
+                  {a.socialLinks.map((l, i) => <a key={i} href={l} target="_blank" rel="noreferrer" className="mr-2 break-all text-emerald-700 underline dark:text-emerald-400">{l}</a>)}
+                </div>
+              ) : null}
+              {a.drepIdOnchain ? (
+                <div className="mt-0.5 break-all font-mono text-[11px] text-neutral-400">DRep ID: {a.drepIdOnchain}</div>
+              ) : null}
               {/* Approved experts are read-only history — no action buttons. */}
               {a.approved ? null : (
                 <div className="mt-2 flex gap-3">

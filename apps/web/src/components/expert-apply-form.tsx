@@ -14,6 +14,9 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
   const [conflict, setConflict] = useState('');
+  const [email, setEmail] = useState('');
+  const [telegram, setTelegram] = useState('');
+  const [socials, setSocials] = useState<string[]>([]);
   const [subs, setSubs] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +28,9 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
         setName(e.displayName);
         setBio(e.bio ?? '');
         setConflict(e.conflictOfInterest ?? '');
+        setEmail(e.email ?? '');
+        setTelegram(e.telegram ?? '');
+        setSocials(e.socialLinks ?? []);
         setSubs(e.subcategoryIds ?? []);
       }
     });
@@ -35,12 +41,24 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
   const toggleSub = (id: string) =>
     setSubs((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
+  // §2 — mandatory: display name, experience, conflict-of-interest, email, telegram.
+  const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
+  const canSubmit = !!name.trim() && !!bio.trim() && !!conflict.trim() && emailOk && !!telegram.trim() && !busy;
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setBusy(true);
     try {
-      await expertApi.apply({ displayName: name.trim(), bio: bio.trim() || undefined, conflictOfInterest: conflict.trim() || undefined, subcategoryIds: subs });
+      await expertApi.apply({
+        displayName: name.trim(),
+        bio: bio.trim() || undefined,
+        conflictOfInterest: conflict.trim() || undefined,
+        email: email.trim() || undefined,
+        telegram: telegram.trim() || undefined,
+        socialLinks: socials.map((s) => s.trim()).filter(Boolean),
+        subcategoryIds: subs,
+      });
       await load();
       onChange?.();
     } catch (err) {
@@ -71,7 +89,7 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
         {mine ? ' Your application is under board review — you can update it below.' : ''}
       </p>
       <label className="block space-y-1">
-        <span className="text-sm font-medium">Display name</span>
+        <span className="text-sm font-medium">Display name <span className="text-red-500">*</span></span>
         <input className={field} value={name} onChange={(e) => setName(e.target.value)} required />
       </label>
       <MarkdownEditor
@@ -81,6 +99,7 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
         subtitle="Your background and relevant expertise. Supports bold, italics, headers, lists."
         placeholder="Your experience reviewing / building in these areas…"
         minRows={5}
+        required
       />
       <MarkdownEditor
         value={conflict}
@@ -89,7 +108,35 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
         subtitle={'Disclose anything that could bias your milestone reviews or feedback (write "none" if you have none). Supports bold, italics, headers, lists.'}
         placeholder="e.g. I advise project X which submits in the Tooling category…"
         minRows={3}
+        required
       />
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">Email <span className="text-red-500">*</span></span>
+          <input type="email" className={field} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">Telegram handle <span className="text-red-500">*</span></span>
+          <input className={field} value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="@yourhandle" />
+        </label>
+      </div>
+
+      <div className="space-y-1">
+        <span className="text-sm font-medium">Social media links <span className="text-xs font-normal text-neutral-500">(optional)</span></span>
+        <div className="space-y-1">
+          {socials.map((s, i) => (
+            <div key={i} className="flex gap-2">
+              <input value={s} onChange={(e) => setSocials((arr) => arr.map((v, idx) => (idx === i ? e.target.value : v)))} maxLength={500} className={field} placeholder="https://x.com/… , https://linkedin.com/in/…" />
+              <button type="button" onClick={() => setSocials((arr) => arr.filter((_, idx) => idx !== i))} className="rounded border border-neutral-300 px-2 text-sm dark:border-neutral-700">✕</button>
+            </div>
+          ))}
+          <button type="button" onClick={() => setSocials((arr) => [...arr, ''])} className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">
+            + Add {socials.length === 0 ? 'a social link' : 'another link'}
+          </button>
+        </div>
+      </div>
+
       <div className="space-y-1">
         <span className="text-sm font-medium">Expertise</span>
         <div className="flex flex-wrap gap-1.5">
@@ -110,9 +157,18 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
         </div>
       </div>
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
+      {!canSubmit && !busy ? (
+        <div className="text-xs text-amber-600">
+          {!name.trim() ? 'Display name is required. ' : ''}
+          {!bio.trim() ? 'Experience / skills is required. ' : ''}
+          {!conflict.trim() ? 'Conflict-of-interest disclosure is required. ' : ''}
+          {!emailOk ? 'A valid email is required. ' : ''}
+          {!telegram.trim() ? 'A Telegram handle is required. ' : ''}
+        </div>
+      ) : null}
       <button
         type="submit"
-        disabled={busy || !name.trim()}
+        disabled={!canSubmit}
         className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
       >
         {busy ? 'Submitting…' : mine ? 'Update application' : 'Submit expert application'}
