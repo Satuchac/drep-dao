@@ -196,30 +196,37 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
       {/* §6/§8 — full schedule for the round: every stage in execution order with
           the controls that make sense for its kind (past / current / next / future). */}
       <div className="mt-3 space-y-2">
-        {ALL_STAGES.map((stage, idx) => {
-          // Resolve the schedule row — fall back to legacy 'debate_vote' for the Vote slot
-          // (the Vote sub-stage inherited from the pre-split design when nothing was migrated).
-          const row = scheduleByKey.get(stage.key)
-            ?? (stage.key === 'vote' && legacyDv ? legacyDv : undefined);
-          const kind: 'past' | 'current' | 'next' | 'future' =
-            idx < currentIdx ? 'past'
-            : idx === currentIdx ? 'current'
-            : stage.status === nextStatus ? 'next'
-            : 'future';
-          return (
-            <StageRow
-              key={stage.key}
-              kind={kind}
-              label={stage.label}
-              stageKey={stage.key}
-              row={row}
-              nextStage={kind === 'next' ? next : null}
-              roundId={round.id}
-              busy={busy}
-              onRun={run}
-            />
-          );
-        })}
+        {(() => {
+          // Track the previous stage's stored end so each row can flag a start set before it.
+          let prevEndsAt: string | undefined;
+          return ALL_STAGES.map((stage, idx) => {
+            // Resolve the schedule row — fall back to legacy 'debate_vote' for the Vote slot
+            // (the Vote sub-stage inherited from the pre-split design when nothing was migrated).
+            const row = scheduleByKey.get(stage.key)
+              ?? (stage.key === 'vote' && legacyDv ? legacyDv : undefined);
+            const kind: 'past' | 'current' | 'next' | 'future' =
+              idx < currentIdx ? 'past'
+              : idx === currentIdx ? 'current'
+              : stage.status === nextStatus ? 'next'
+              : 'future';
+            const prev = prevEndsAt;
+            if (row) prevEndsAt = row.endsAt; // becomes the lower bound for the next stage
+            return (
+              <StageRow
+                key={stage.key}
+                kind={kind}
+                label={stage.label}
+                stageKey={stage.key}
+                row={row}
+                nextStage={kind === 'next' ? next : null}
+                prevEndsAt={prev}
+                roundId={round.id}
+                busy={busy}
+                onRun={run}
+              />
+            );
+          });
+        })()}
         {/* §8 — Funding → CLOSED is always manual; surface a dedicated control once we're there. */}
         {round.status === 'FUNDING' ? (
           <div className="rounded border border-red-200 p-2 text-xs dark:border-red-900">
@@ -267,6 +274,7 @@ function StageRow({
   stageKey,
   row,
   nextStage,
+  prevEndsAt,
   roundId,
   busy,
   onRun,
@@ -276,6 +284,8 @@ function StageRow({
   stageKey: string;
   row: { stageKey: string; startsAt: string; endsAt: string; autoStart?: boolean; confirmedAt?: string | null } | undefined;
   nextStage: RoundDetail['nextStage'];
+  // §6 — the end of the previous stage (stored); a stage may not start before it.
+  prevEndsAt: string | undefined;
   roundId: string;
   busy: string | null;
   onRun: (action: () => Promise<unknown>, tag: string) => Promise<void>;
@@ -290,6 +300,9 @@ function StageRow({
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
   const startMs = startsAt ? new Date(startsAt).getTime() : NaN;
   const endMs = endsAt ? new Date(endsAt).getTime() : NaN;
+  // §6 — a stage can't start before the previous stage's (stored) end. Flags the start red.
+  const prevEndMs = prevEndsAt ? new Date(prevEndsAt).getTime() : NaN;
+  const startsBeforePrev = !Number.isNaN(startMs) && !Number.isNaN(prevEndMs) && startMs < prevEndMs;
   // Live stage-length label from the (editable) start→end, recomputed as the inputs change.
   const editDuration = durationLabel(startMs, endMs);
   // Small reusable validation-problem list renderer.
@@ -355,15 +368,20 @@ function StageRow({
     // §6/§8 — overdue: the planned start is in the past but the stage hasn't begun.
     const plannedStartMs = nextStage?.planned?.startsAt ? new Date(nextStage.planned.startsAt).getTime() : null;
     const overdue = plannedStartMs != null && plannedStartMs < now;
-    // "Confirm date" needs valid dates: a start in the future and an end after the start.
-    // (To start a stage right now, use "Launch … now" instead.)
-    const confirmProblems: string[] = [];
-    if (!startsAt) confirmProblems.push('Set a start date.');
-    else if (Number.isNaN(startMs)) confirmProblems.push('The start date is invalid.');
-    else if (startMs <= now) confirmProblems.push('The start date must be in the future (or use “Launch now” to start immediately).');
-    if (!endsAt) confirmProblems.push('Set an end date.');
-    else if (Number.isNaN(endMs)) confirmProblems.push('The end date is invalid.');
-    else if (!Number.isNaN(startMs) && endMs <= startMs) confirmProblems.push('The end date must be after the start date.');
+    // Relational/format problems — a broken state for BOTH buttons (Launch keeps the stage's
+    // planned length, so an end-before-start is nonsensical for it too).
+    const relProblems: string[] = [];
+    if (!startsAt) relProblems.push('Set a start date.');
+    else if (Number.isNaN(startMs)) relProblems.push('The start date is invalid.');
+    if (!endsAt) relProblems.push('Set an end date.');
+    else if (Number.isNaN(endMs)) relProblems.push('The end date is invalid.');
+    if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs <= startMs) relProblems.push('The end date must be after the start date.');
+    if (startsBeforePrev) relProblems.push(`${label} can't start before the previous stage ends (${fmtDateTime(prevEndsAt)}).`);
+    // "Confirm date" additionally needs the start in the future (auto/planned start). To start a
+    // stage right now regardless of the planned start, use "Launch … now".
+    const confirmProblems = [...relProblems];
+    if (!Number.isNaN(startMs) && startMs <= now) confirmProblems.push('The start date must be in the future (or use “Launch now” to start immediately).');
+    const launchValid = relProblems.length === 0;
     const confirmValid = confirmProblems.length === 0;
     return (
       <div className={`rounded border p-2 ${overdue ? 'border-red-300 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20' : 'border-amber-300 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20'}`}>
@@ -394,7 +412,9 @@ function StageRow({
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 text-xs text-neutral-500">
             starts
-            <DateField value={startsAt} onChange={setStartsAt} />
+            <span className={startsBeforePrev ? 'rounded ring-1 ring-red-400 dark:ring-red-700' : ''}>
+              <DateField value={startsAt} onChange={setStartsAt} />
+            </span>
           </div>
           <div className="flex items-center gap-1 text-xs text-neutral-500">
             ends
@@ -425,7 +445,7 @@ function StageRow({
           </button>
           <button
             onClick={() => setConfirmLaunch(true)}
-            disabled={busy !== null}
+            disabled={busy !== null || !launchValid}
             className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
           >
             {busy === `${tag}-launch` ? 'Launching…' : `Launch ${label} now`}
@@ -452,6 +472,7 @@ function StageRow({
   if (!endsAt) planProblems.push('Set an end date.');
   else if (Number.isNaN(endMs)) planProblems.push('The end date is invalid.');
   else if (!Number.isNaN(startMs) && endMs <= startMs) planProblems.push('The end date must be after the start date.');
+  if (startsBeforePrev) planProblems.push(`${label} can't start before the previous stage ends (${fmtDateTime(prevEndsAt)}).`);
   const planValid = planProblems.length === 0;
   return (
     <div className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
@@ -467,7 +488,9 @@ function StageRow({
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1 text-xs text-neutral-500">
           starts
-          <DateField value={startsAt} onChange={setStartsAt} />
+          <span className={startsBeforePrev ? 'rounded ring-1 ring-red-400 dark:ring-red-700' : ''}>
+            <DateField value={startsAt} onChange={setStartsAt} />
+          </span>
         </div>
         <div className="flex items-center gap-1 text-xs text-neutral-500">
           ends
