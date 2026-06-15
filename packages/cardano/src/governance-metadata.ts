@@ -37,6 +37,7 @@ export const GovSubject = {
   SUBMITTER_ADMISSION: 'submitter_admission', // §2.1 — a submitter application approved by the board
   DAILY_VOTES: 'daily_votes', // §24.1 — daily digest: hash of yesterday's vote rows
   DAILY_MERIT: 'daily_merit', // §24.1 — daily digest: hash of yesterday's merit deltas
+  PROPOSAL_DOC: 'proposal_doc', // §8.1 — content fingerprint taken when Debate ends (proposal frozen)
 } as const;
 export type GovSubject = (typeof GovSubject)[keyof typeof GovSubject];
 
@@ -94,6 +95,7 @@ export const SUBJECT_TITLE: Record<GovSubject, string> = {
   submitter_admission: 'New submitter admitted',
   daily_votes: 'Daily vote-tally digest',
   daily_merit: 'Daily merit-ledger digest',
+  proposal_doc: 'Proposal content fingerprint (post-debate)',
 };
 export const STYLE_LABEL: Record<VotingStyle, string> = {
   '1P1V': '1 member, 1 vote',
@@ -181,38 +183,33 @@ export function buildResultMetadata(p: {
  * fee facts (paid? amount? which tx paid it). `proofHash` commits to the off-chain preimage.
  */
 export interface AnchorSubmissionMetadata {
-  title: string;
-  subject: 'submission';
+  title: string; // the proposal's own title (e.g. "Dave's great tool")
   proposalId: string; // structured public id, e.g. "R6-P3"
   round?: number;
   submitter: string; // DRep id (CIP-129) or stake/wallet address
   submitterType: 'DRep' | 'Wallet';
   outcome: 'accepted' | 'rejected'; // the board's fee-review decision
   reason?: string; // why it was rejected (set only when outcome === 'rejected')
-  // Cardano tx metadata has no boolean type, so these flags are 'yes'/'no' strings.
-  fee: { required: 'yes' | 'no'; paid: 'yes' | 'no'; ada: number; txHash?: string };
+  // The fee paid for the submission — the amount + tx hash are self-evident proof.
+  fee: { ada: number; txHash?: string };
   decidedAt: string;
-  proofHash?: string;
 }
 
 export function buildSubmissionMetadata(p: {
+  title: string;
   proposalId: string;
   round?: number | null;
   submitter: string;
   submitterType: 'DRep' | 'Wallet';
-  feeRequired: boolean;
-  feePaid: boolean;
   feeAda: number;
   feeTxHash?: string | null;
   outcome?: 'accepted' | 'rejected';
   reason?: string | null;
   decidedAt?: string;
-  proofHash?: string;
 }): Record<string, AnchorSubmissionMetadata> {
   const outcome = p.outcome ?? 'accepted';
   const meta: AnchorSubmissionMetadata = {
-    title: outcome === 'rejected' ? 'Funding proposal rejected (fee review)' : SUBJECT_TITLE.submission,
-    subject: 'submission',
+    title: p.title,
     proposalId: p.proposalId,
     ...(p.round != null ? { round: p.round } : {}),
     submitter: p.submitter,
@@ -220,13 +217,10 @@ export function buildSubmissionMetadata(p: {
     outcome,
     ...(outcome === 'rejected' && p.reason ? { reason: p.reason } : {}),
     fee: {
-      required: p.feeRequired ? 'yes' : 'no',
-      paid: p.feePaid ? 'yes' : 'no',
       ada: Math.round(p.feeAda),
       ...(p.feeTxHash ? { txHash: p.feeTxHash } : {}),
     },
     decidedAt: p.decidedAt ?? new Date().toISOString(),
-    ...(p.proofHash ? { proofHash: p.proofHash } : {}),
   };
   return { [GOVERNANCE_METADATA_LABEL]: meta };
 }
@@ -270,6 +264,43 @@ export function buildPayoutMetadata(p: {
     signers: p.signers,
     paidAt: new Date().toISOString(),
     ...(p.proofHash ? { proofHash: p.proofHash } : {}),
+  };
+  return { [GOVERNANCE_METADATA_LABEL]: meta };
+}
+
+/**
+ * §8.1 — the self-describing on-chain anchor written when the **Debate stage ends** and the
+ * proposal is frozen (it can no longer be edited). It commits to a canonical textual form of
+ * the proposal by hash: the full text stays off-chain (it's far larger than the 64-byte
+ * metadata limit), and `contentHash` is its SHA-256 — anyone can fetch the text from the
+ * platform, hash it with the named algorithm, and confirm it matches what was anchored.
+ */
+export interface AnchorDocHashMetadata {
+  title: string; // the proposal's own title
+  subject: GovSubject; // 'proposal_doc'
+  proposalId: string; // structured public id, e.g. "R6-P3"
+  round?: number;
+  hashAlgo: string; // the hash function used, e.g. "SHA-256"
+  contentHash: string; // hex digest of the canonical textual form
+  frozenAt: string; // when Debate ended and the content was frozen (ISO-8601 UTC)
+}
+
+export function buildDocHashMetadata(p: {
+  title: string;
+  proposalId: string;
+  round?: number | null;
+  hashAlgo: string;
+  contentHash: string;
+  frozenAt: string;
+}): Record<string, AnchorDocHashMetadata> {
+  const meta: AnchorDocHashMetadata = {
+    title: p.title,
+    subject: GovSubject.PROPOSAL_DOC,
+    proposalId: p.proposalId,
+    ...(p.round != null ? { round: p.round } : {}),
+    hashAlgo: p.hashAlgo,
+    contentHash: p.contentHash,
+    frozenAt: p.frozenAt,
   };
   return { [GOVERNANCE_METADATA_LABEL]: meta };
 }

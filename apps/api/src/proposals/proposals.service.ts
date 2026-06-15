@@ -17,6 +17,7 @@ import {
 } from '@drep-dao/shared';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@drep-dao/db';
+import { GovSubject } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { AnchorService } from '../cardano/anchor.service';
@@ -194,6 +195,14 @@ export class ProposalsService {
     // Exception §7.4: during the resubmit cycle the proposal hasn't passed Filtering yet,
     // so the team is allowed to rework the budget shape with the rest of the proposal.
     const feeRejected = p.status === ProposalStatus.REJECTED && p.stage == null;
+    // §3 — the title is locked once the proposal is submitted (anything past
+    // DRAFT / a fee-rejected draft, which has no live submission). Even during
+    // the debate/resubmit revision phases the title stays fixed — it's the
+    // identity of the proposal on-chain and in every list.
+    const titleLocked = !(p.status === ProposalStatus.DRAFT || feeRejected);
+    if (titleLocked && dto.title != null && dto.title.trim() !== p.title) {
+      throw new BadRequestException('the title is locked after submission — it cannot be changed');
+    }
     const amountLocked = !(p.status === ProposalStatus.DRAFT || feeRejected || fullRevisionPhase);
     if (amountLocked) {
       if (dto.requestedAmountAda != null && dto.requestedAmountAda !== toAda(p.requestedAmountAda)) {
@@ -1644,7 +1653,25 @@ export class ProposalsService {
     const milestoneBar = p.stage === ProposalStage.FUNDING
       ? (await this.milestoneBars([{ id: p.id, status: p.status, milestoneThreshold: p.round?.milestoneApprovalVotes ?? ROUND_SETTING_DEFAULTS.milestoneApprovalVotes }])).get(p.id) ?? null
       : null;
+    // §8.1 — the post-debate content fingerprint (if the proposal has been frozen).
+    // Exposes the exact canonical text + its SHA-256 + the on-chain tx so anyone
+    // can re-hash the text and confirm it matches what was anchored.
+    const docAnchor = await this.prisma.anchor.findFirst({
+      where: { kind: GovSubject.PROPOSAL_DOC, proposalId: p.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    const dp = (docAnchor?.preimage ?? null) as { text?: string; hashAlgo?: string; contentHash?: string; frozenAt?: string } | null;
+    const contentFingerprint = docAnchor
+      ? {
+          text: dp?.text ?? '',
+          hash: dp?.contentHash ?? docAnchor.hash,
+          hashAlgo: dp?.hashAlgo ?? 'SHA-256',
+          frozenAt: dp?.frozenAt ?? docAnchor.createdAt.toISOString(),
+          txHash: docAnchor.txHash,
+        }
+      : null;
     return {
+      contentFingerprint,
       ...this.summary(p),
       milestoneBar,
       categoryId: p.categoryId,
@@ -1854,12 +1881,11 @@ export class ProposalsService {
       await this.anchor.anchorSubmission({
         proposalRowId: p.id,
         publicId: p.publicId ?? p.id,
+        title: p.title,
         roundId: p.roundId,
         roundNumber: p.round?.number ?? null,
         submitter: drepId ?? p.submitterUser?.stakeAddress ?? 'unknown',
         submitterType: drepId ? 'DRep' : 'Wallet',
-        feeRequired: fee.required,
-        feePaid: fee.paid,
         feeAda: fee.ada,
         feeTxHash: fee.txHash ?? null,
         outcome: opts?.outcome ?? 'accepted',

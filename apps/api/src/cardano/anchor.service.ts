@@ -11,9 +11,11 @@ import {
   buildResultMetadata,
   buildSubmissionMetadata,
   buildPayoutMetadata,
+  buildDocHashMetadata,
   type AnchorResultMetadata,
   type AnchorSubmissionMetadata,
   type AnchorPayoutMetadata,
+  type AnchorDocHashMetadata,
   type GovVoteEvent,
 } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
@@ -284,12 +286,11 @@ export class AnchorService implements OnModuleInit {
   async anchorSubmission(params: {
     proposalRowId: string;
     publicId: string;
+    title: string;
     roundId?: string | null;
     roundNumber?: number | null;
     submitter: string;
     submitterType: 'DRep' | 'Wallet';
-    feeRequired: boolean;
-    feePaid: boolean;
     feeAda: number;
     feeTxHash?: string | null;
     outcome?: 'accepted' | 'rejected';
@@ -297,30 +298,28 @@ export class AnchorService implements OnModuleInit {
   }): Promise<AnchorResult> {
     const outcome = params.outcome ?? 'accepted';
     const preimage = {
-      subject: GovSubject.SUBMISSION,
       proposalId: params.publicId,
+      title: params.title,
       round: params.roundNumber ?? null,
       submitter: params.submitter,
       submitterType: params.submitterType,
       outcome,
       reason: outcome === 'rejected' ? params.reason ?? null : null,
-      fee: { required: params.feeRequired, paid: params.feePaid, ada: params.feeAda, txHash: params.feeTxHash ?? null },
+      fee: { ada: params.feeAda, txHash: params.feeTxHash ?? null },
       decidedAt: new Date().toISOString(),
     };
     const hash = sha256hex(JSON.stringify(preimage));
     const metadata = buildSubmissionMetadata({
+      title: params.title,
       proposalId: params.publicId,
       round: params.roundNumber ?? null,
       submitter: params.submitter,
       submitterType: params.submitterType,
-      feeRequired: params.feeRequired,
-      feePaid: params.feePaid,
       feeAda: params.feeAda,
       feeTxHash: params.feeTxHash ?? null,
       outcome,
       reason: preimage.reason,
       decidedAt: preimage.decidedAt,
-      proofHash: hash,
     })[GOVERNANCE_METADATA_LABEL];
 
     let txHash: string | null = null;
@@ -342,6 +341,69 @@ export class AnchorService implements OnModuleInit {
       },
     });
     return { hash, txHash, submitted: !!txHash };
+  }
+
+  /**
+   * §8.1 — anchor a proposal's **content fingerprint** when the Debate stage ends and the
+   * proposal is frozen. We hash a canonical textual form of the proposal (SHA-256) and post
+   * that hash + the algorithm on-chain; the full text is kept in the anchor preimage so the
+   * UI can show it and anyone can re-hash it to verify. Idempotent per proposal — a second
+   * call (e.g. if voting is re-opened) returns the existing anchor instead of duplicating it.
+   */
+  async anchorProposalDoc(params: {
+    proposalRowId: string;
+    publicId: string;
+    title: string;
+    roundId?: string | null;
+    roundNumber?: number | null;
+    text: string; // the canonical textual form of the frozen proposal
+  }): Promise<AnchorResult> {
+    const existing = await this.prisma.anchor.findFirst({
+      where: { kind: GovSubject.PROPOSAL_DOC, proposalId: params.proposalRowId },
+    });
+    if (existing) return { hash: existing.hash, txHash: existing.txHash, submitted: !!existing.txHash };
+
+    const hashAlgo = 'SHA-256';
+    const contentHash = sha256hex(params.text); // the on-chain hash IS the hash of the text
+    const frozenAt = new Date().toISOString();
+    const preimage = {
+      subject: GovSubject.PROPOSAL_DOC,
+      proposalId: params.publicId,
+      title: params.title,
+      round: params.roundNumber ?? null,
+      hashAlgo,
+      text: params.text,
+      contentHash,
+      frozenAt,
+    };
+    const metadata = buildDocHashMetadata({
+      title: params.title,
+      proposalId: params.publicId,
+      round: params.roundNumber ?? null,
+      hashAlgo,
+      contentHash,
+      frozenAt,
+    })[GOVERNANCE_METADATA_LABEL];
+
+    let txHash: string | null = null;
+    try {
+      txHash = await this.submitMetadataTx(metadata);
+    } catch (e) {
+      this.logger.warn(`proposal-doc anchor submit skipped/failed: ${e instanceof Error ? e.message : e}`);
+    }
+    await this.prisma.anchor.create({
+      data: {
+        kind: GovSubject.PROPOSAL_DOC,
+        proposalId: params.proposalRowId,
+        roundId: params.roundId ?? null,
+        hash: contentHash,
+        preimage: preimage as unknown as object,
+        metadataLabel: GOVERNANCE_METADATA_LABEL,
+        txHash,
+        submittedAt: txHash ? new Date() : null,
+      },
+    });
+    return { hash: contentHash, txHash, submitted: !!txHash };
   }
 
   /**
@@ -580,7 +642,7 @@ export class AnchorService implements OnModuleInit {
   }
 
   /** Rebuild the on-chain metadata for an anchor from its stored preimage. */
-  private metadataFromAnchor(a: { kind: string; hash: string; preimage: unknown }): AnchorResultMetadata | AnchorSubmissionMetadata | AnchorPayoutMetadata {
+  private metadataFromAnchor(a: { kind: string; hash: string; preimage: unknown }): AnchorResultMetadata | AnchorSubmissionMetadata | AnchorPayoutMetadata | AnchorDocHashMetadata {
     const p = (a.preimage ?? {}) as {
       subject?: GovSubject;
       style?: VotingStyle;
@@ -592,6 +654,7 @@ export class AnchorService implements OnModuleInit {
       result?: { outcome?: string; yes?: number; no?: number; threshold?: number; totalPower?: number };
       // submission-anchor preimage fields
       proposalId?: string;
+      title?: string;
       round?: number | string | null; // submission: round number; payout: round name
       submitter?: string;
       submitterType?: 'DRep' | 'Wallet';
@@ -605,7 +668,21 @@ export class AnchorService implements OnModuleInit {
       payoutTx?: string;
       recipients?: { to: string; lovelace: number }[];
       signers?: string[];
+      // proposal-doc preimage fields (§8.1)
+      hashAlgo?: string;
+      contentHash?: string;
+      frozenAt?: string;
     };
+    if ((p.subject ?? a.kind) === GovSubject.PROPOSAL_DOC) {
+      return buildDocHashMetadata({
+        title: p.title ?? p.proposalId ?? '',
+        proposalId: p.proposalId ?? '',
+        round: typeof p.round === 'number' ? p.round : null,
+        hashAlgo: p.hashAlgo ?? 'SHA-256',
+        contentHash: p.contentHash ?? a.hash,
+        frozenAt: p.frozenAt ?? p.decidedAt ?? new Date().toISOString(),
+      })[GOVERNANCE_METADATA_LABEL];
+    }
     if ((p.subject ?? a.kind) === GovSubject.REWARD_PAYOUT) {
       return buildPayoutMetadata({
         stage: p.stage ?? '',
@@ -618,18 +695,16 @@ export class AnchorService implements OnModuleInit {
     }
     if ((p.subject ?? a.kind) === GovSubject.SUBMISSION) {
       return buildSubmissionMetadata({
+        title: p.title ?? p.proposalId ?? '',
         proposalId: p.proposalId ?? '',
         round: typeof p.round === 'number' ? p.round : null,
         submitter: p.submitter ?? '',
         submitterType: p.submitterType ?? 'Wallet',
-        feeRequired: p.fee?.required ?? false,
-        feePaid: p.fee?.paid ?? false,
         feeAda: p.fee?.ada ?? 0,
         feeTxHash: p.fee?.txHash ?? null,
         outcome: p.outcome ?? 'accepted',
         reason: p.reason ?? null,
         decidedAt: p.decidedAt ?? p.acceptedAt,
-        proofHash: a.hash,
       })[GOVERNANCE_METADATA_LABEL];
     }
     const votes = (p.votes ?? []).map((v) => ({
@@ -683,7 +758,7 @@ export class AnchorService implements OnModuleInit {
   }
 
   /** Build + sign + submit a single tx carrying `event` as metadata, from the anchor wallet. */
-  private async submitMetadataTx(event: AnchorResultMetadata | AnchorSubmissionMetadata | AnchorPayoutMetadata | Record<string, unknown>): Promise<string> {
+  private async submitMetadataTx(event: AnchorResultMetadata | AnchorSubmissionMetadata | AnchorPayoutMetadata | AnchorDocHashMetadata | Record<string, unknown>): Promise<string> {
     if (!this.mnemonic) throw new Error('ANCHOR_MNEMONIC not configured (anchor recorded, not submitted)');
     const { prv, addr } = this.anchorKeys(this.mnemonic);
     const pp = await this.cardano.epochParams();
@@ -700,7 +775,7 @@ export class AnchorService implements OnModuleInit {
    * hash, and the change output (so a batch can chain txs without re-querying Koios).
    */
   private buildMetadataTx(
-    event: AnchorResultMetadata | AnchorSubmissionMetadata | AnchorPayoutMetadata | Record<string, unknown>,
+    event: AnchorResultMetadata | AnchorSubmissionMetadata | AnchorPayoutMetadata | AnchorDocHashMetadata | Record<string, unknown>,
     utxos: Utxo[],
     pp: Record<string, string | number>,
     prv: CSL.PrivateKey,

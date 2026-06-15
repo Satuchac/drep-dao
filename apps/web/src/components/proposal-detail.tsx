@@ -221,6 +221,8 @@ export function ProposalDetail({
                 <div className="mt-0.5 text-xs text-neutral-400">Not provided.</div>
               )}
             </div>
+            {/* §8.1 — content fingerprint, once the proposal has been frozen (round reached VOTE). */}
+            {p.contentFingerprint ? <ContentFingerprintView fp={p.contentFingerprint} /> : null}
             {mine ? <FeeBlock proposal={p} /> : null}
             {/* §12 — once ACTIVE, the budget can change but the fee delta is settled by the board. */}
             {mine && p.status === 'ACTIVE' ? <BudgetChangeSection id={id} proposal={p} onChange={load} /> : null}
@@ -762,6 +764,43 @@ function AnchorLink({ txHash }: { txHash: string | null | undefined }) {
     <a href={txUrl(txHash)} target="_blank" rel="noreferrer" className="text-xs text-emerald-700 underline dark:text-emerald-400">
       on-chain proof ↗
     </a>
+  );
+}
+
+/**
+ * §8.1 — the post-debate content fingerprint. When Debate ends the proposal is frozen and a
+ * canonical textual form is hashed (SHA-256) and anchored on-chain. This shows that exact
+ * text, the hash, the hash function, and the on-chain tx — so anyone can copy the text, hash
+ * it themselves with the named function, and confirm it matches what was committed on-chain.
+ */
+function ContentFingerprintView({ fp }: { fp: NonNullable<PDetail['contentFingerprint']> }) {
+  return (
+    <CollapsibleView label="Content fingerprint" hint="frozen when Debate ended — verifiable on-chain" empty>
+      <div className="space-y-2">
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          When the Debate stage ended the proposal was frozen and can no longer be changed. The exact
+          text below was committed on-chain by its {fp.hashAlgo} hash. To verify, copy the text and hash
+          it with {fp.hashAlgo} — it must equal the hash shown.
+        </p>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-medium dark:bg-neutral-800">Hash function: {fp.hashAlgo}</span>
+          <span className="text-neutral-500">Frozen: {new Date(fp.frozenAt).toLocaleString()}</span>
+          <AnchorLink txHash={fp.txHash} />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{fp.hashAlgo}:</span>
+          <span className="break-all font-mono text-xs text-emerald-700 dark:text-emerald-400">{fp.hash}</span>
+          <CopyButton text={fp.hash} />
+        </div>
+        <div>
+          <div className="mb-1 flex items-center gap-2">
+            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Canonical text (the hashed bytes):</span>
+            <CopyButton text={fp.text} />
+          </div>
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded border border-neutral-200 bg-neutral-50 p-2 font-mono text-[11px] leading-relaxed text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">{fp.text}</pre>
+        </div>
+      </div>
+    </CollapsibleView>
   );
 }
 
@@ -1619,7 +1658,7 @@ function EditSection({
   onOpenChange: (v: boolean) => void;
 }) {
   const { cfg } = useExplorer();
-  const [title, setTitle] = useState(proposal.title);
+  const [title] = useState(proposal.title);
   const [content, setContent] = useState(proposal.contentMd);
   const [costBreakdown, setCostBreakdown] = useState(proposal.costBreakdownMd ?? '');
   const [teamInfo, setTeamInfo] = useState(proposal.teamInfoMd ?? '');
@@ -1682,7 +1721,6 @@ function EditSection({
     setBusy(true);
     try {
       await proposalEditApi.update(id, {
-        title,
         contentMd: content,
         costBreakdownMd: costBreakdown,
         teamInfoMd: teamInfo,
@@ -1735,7 +1773,8 @@ function EditSection({
       </div>
       <label className="block">
         <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title</span>
-        <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm opacity-60 dark:border-neutral-700 dark:bg-neutral-900" value={title} disabled readOnly />
+        <span className="mt-0.5 block text-[11px] italic text-neutral-500 dark:text-neutral-400">The title is locked — it cannot be changed once the proposal is submitted.</span>
       </label>
       {budgetEditable ? (
         <div className="flex flex-wrap items-center gap-3">

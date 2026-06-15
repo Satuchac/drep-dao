@@ -225,6 +225,7 @@ export class DrepService {
         result?: { outcome?: string; yes?: number; no?: number; threshold?: number };
         // submission-anchor preimage
         proposalId?: string;
+        title?: string;
         submitter?: string;
         submitterType?: string;
         outcome?: 'accepted' | 'rejected';
@@ -251,8 +252,12 @@ export class DrepService {
       // A submission anchor records acceptance facts, not a vote tally.
       if (subject === 'submission') {
         const rejected = p.outcome === 'rejected';
-        const subTitle = rejected ? 'Funding proposal rejected (fee review)' : title;
-        const feeStr = p.fee?.required ? (p.fee.paid ? `fee ${p.fee.ada ?? 0} ₳ paid` : 'fee unpaid') : 'no fee required';
+        // Show the proposal's own title (new anchors); fall back to the generic label.
+        const subTitle = p.title ?? (rejected ? 'Funding proposal rejected (fee review)' : title);
+        const feeAda = p.fee?.ada ?? 0;
+        const feeStr = p.fee?.required !== undefined
+          ? (p.fee.required ? (p.fee.paid ? `fee ${feeAda} ₳ paid` : 'fee unpaid') : 'no fee required') // old anchors
+          : (p.fee?.txHash || feeAda > 0 ? `fee ${feeAda} ₳ paid` : 'no fee');
         const who = `${(p.submitter ?? '').slice(0, 24)}${(p.submitter ?? '').length > 24 ? '…' : ''}`;
         const detail = `${p.proposalId ?? ''} · by ${who} (${p.submitterType ?? 'Wallet'}) · ${feeStr}${rejected && p.reason ? ` · reason: ${p.reason}` : ''}`;
         return { id: a.id, title: subTitle, detail, kind: a.kind, label: a.metadataLabel, hash: a.hash, txHash: a.txHash, createdAt: a.createdAt };

@@ -1054,6 +1054,10 @@ export interface ProposalDetail extends ProposalSummary {
   revenueSharingVerifiedAt: string | null;
   categoryAsk: { minAda: number | null; maxAda: number | null; conditions: string | null };
   milestones: { id: string; idx: number; title: string | null; description: string; acceptanceCriteria: string | null; amountAda: number; status: string }[];
+  // §8.1 — the post-debate content fingerprint: the exact canonical text that was
+  // frozen when Debate ended, its hash, the hash function used, and the on-chain tx.
+  // Null until the proposal is frozen (round reaches VOTE).
+  contentFingerprint: { text: string; hash: string; hashAlgo: string; frozenAt: string; txHash: string | null } | null;
 }
 
 export const proposalsApi = {

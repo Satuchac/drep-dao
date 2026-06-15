@@ -116,6 +116,115 @@ export class DvService {
       await this.prisma.vote.deleteMany({ where: { proposalId: p.id, phase: VotePhase.DEBATE_VOTE } });
       await this.openVoting(p.id);
     }
+    // §8.1 — Debate has ended (round entered VOTE): the proposal can no longer be
+    // edited, so freeze a content fingerprint on-chain (canonical text → SHA-256).
+    await this.anchorProposalDocs(roundId);
+  }
+
+  /**
+   * §8.1 — for every just-frozen proposal in the round, build a canonical textual
+   * form and anchor its SHA-256 on-chain. Idempotent (the anchor service skips a
+   * proposal that already has a content-fingerprint anchor); best-effort so a
+   * hiccup never blocks the round advancing.
+   */
+  private async anchorProposalDocs(roundId: string) {
+    const proposals = await this.prisma.proposal.findMany({
+      where: { roundId, stage: ProposalStage.DEBATE_VOTE, status: ProposalStatus.ACTIVE },
+      include: {
+        milestones: { orderBy: { idx: 'asc' } },
+        category: { select: { name: true } },
+        round: { select: { number: true } },
+        submitterUser: { select: { displayName: true } },
+        submitterDrep: { select: { drepIdOnchain: true } },
+      },
+    });
+    for (const p of proposals) {
+      try {
+        await this.anchor.anchorProposalDoc({
+          proposalRowId: p.id,
+          publicId: p.publicId ?? p.id,
+          title: p.title,
+          roundId,
+          roundNumber: p.round?.number ?? null,
+          text: this.buildProposalDocText(p),
+        });
+      } catch {
+        /* re-anchored on the next openVoting / board force-submit */
+      }
+    }
+  }
+
+  /**
+   * §8.1 — the canonical, human-readable textual form of a frozen proposal. This exact
+   * string is what gets hashed (SHA-256) and stored alongside the hash, so anyone can
+   * re-hash it to verify the on-chain fingerprint. Field order is fixed; empty optional
+   * sections are omitted so the text reads cleanly.
+   */
+  private buildProposalDocText(p: {
+    publicId: string | null;
+    title: string;
+    type: string;
+    isCommercial: boolean | null;
+    requestedAmountAda: bigint | null;
+    contentMd: string;
+    ecosystemImpactMd: string | null;
+    successMetricsMd: string | null;
+    costBreakdownMd: string | null;
+    teamInfo: unknown;
+    revenueSharing: unknown;
+    pledgeAmountAda: bigint | null;
+    pledgeReturnMethod: string | null;
+    category: { name: string } | null;
+    round: { number: number } | null;
+    submitterUser: { displayName: string | null } | null;
+    submitterDrep: { drepIdOnchain: string | null } | null;
+    milestones: { idx: number; title: string | null; description: string | null; acceptanceCriteria: string | null; amountAda: bigint }[];
+  }): string {
+    const ada = (x: bigint | null) => (x == null ? '0' : (Number(x) / 1_000_000).toLocaleString('en-US'));
+    const str = (v: unknown) => (typeof v === 'string' ? v : '');
+    const submitter = p.submitterUser?.displayName ?? p.submitterDrep?.drepIdOnchain ?? 'unknown';
+    const lines: string[] = [];
+    lines.push('DRep DAO — frozen proposal content (v1)');
+    lines.push(`Proposal: ${p.publicId ?? '(unassigned)'}`);
+    if (p.round) lines.push(`Round: ${p.round.number}`);
+    lines.push(`Title: ${p.title}`);
+    lines.push(`Type: ${p.type}`);
+    if (p.category) lines.push(`Category: ${p.category.name}`);
+    lines.push(`Submitter: ${submitter}`);
+    lines.push(`Requested: ${ada(p.requestedAmountAda)} ADA`);
+    lines.push(`Commercial: ${p.isCommercial ? 'yes' : 'no'}`);
+    lines.push('');
+    lines.push('## Pitch / summary');
+    lines.push(p.contentMd.trim());
+    const section = (heading: string, body: string) => {
+      const t = body.trim();
+      if (!t) return;
+      lines.push('');
+      lines.push(`## ${heading}`);
+      lines.push(t);
+    };
+    section('Expected ecosystem impact', str(p.ecosystemImpactMd));
+    section('Success metrics / KPIs', str(p.successMetricsMd));
+    section('Cost breakdown', str(p.costBreakdownMd));
+    section('Team info', str(p.teamInfo));
+    section('Revenue sharing', str(p.revenueSharing));
+    if (p.pledgeAmountAda && p.pledgeAmountAda > 0n) {
+      section('Pledge (skin in the game)', `${ada(p.pledgeAmountAda)} ADA — return method: ${p.pledgeReturnMethod ?? 'n/a'}`);
+    }
+    if (p.milestones.length) {
+      lines.push('');
+      lines.push('## Milestones');
+      for (const m of p.milestones) {
+        lines.push('');
+        lines.push(`### Milestone ${m.idx + 1}: ${m.title ?? '(untitled)'} — ${ada(m.amountAda)} ADA`);
+        if (m.description?.trim()) lines.push(m.description.trim());
+        if (m.acceptanceCriteria?.trim()) {
+          lines.push('Acceptance criteria:');
+          lines.push(m.acceptanceCriteria.trim());
+        }
+      }
+    }
+    return lines.join('\n');
   }
 
   /**

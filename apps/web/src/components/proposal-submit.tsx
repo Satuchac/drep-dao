@@ -441,7 +441,10 @@ export function ProposalSubmit() {
           </div>
           <label className="block">
             <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title{wordHint(title)}</span>
-            <input className={`${field} mt-0.5 w-full ${triedSubmit && wc(title) < minWords ? 'border-red-400 dark:border-red-700' : ''}`} placeholder="Proposal title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+            <input className={`${field} mt-0.5 w-full disabled:opacity-60 ${triedSubmit && wc(title) < minWords ? 'border-red-400 dark:border-red-700' : ''}`} placeholder="Proposal title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={amountLocked} required />
+            <span className="mt-0.5 block text-[11px] italic text-neutral-500 dark:text-neutral-400">
+              {amountLocked ? 'The title is locked — it cannot be changed once the proposal is submitted.' : 'Title cannot be changed once the proposal is submitted.'}
+            </span>
           </label>
           {/* Requested amount + commercial flag sit right under the title (they set the
               fee + cap the proposal's category fit) so the submitter sees the cost of
