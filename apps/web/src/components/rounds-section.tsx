@@ -129,7 +129,7 @@ export function RoundsSection() {
 
         {/* Horizontal menu: Proposals (the list) | Round setup (read-only settings). */}
         <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
-          {([['proposals', 'Proposals'], ['categories', 'Categories'], ['setup', 'Round setup']] as const).map(([key, label]) => (
+          {([['proposals', 'Proposals'], ['categories', 'Categories'], ['setup', 'Schedule and Round Setup']] as const).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setRoundTab(key)}
