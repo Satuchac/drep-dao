@@ -40,6 +40,8 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
 /** §4 — all DAO members with balanced voting power: log10(stake) × (1 + merit/200). */
 export function DaoOverview() {
   const { setParams } = useUrlNav();
+  // Linear submenu: the members table (default) vs the experts list.
+  const [sub, setSub] = useState<'members' | 'experts'>('members');
   const [members, setMembers] = useState<DaoMember[] | null>(null);
   const [experts, setExperts] = useState<DaoExpert[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -81,6 +83,27 @@ export function DaoOverview() {
             </span>
           ) : null}
         </div>
+      </div>
+
+      {/* Linear submenu: DAO members | Experts. */}
+      <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
+        {([['members', 'DAO members'], ['experts', 'Experts']] as const).map(([k, l]) => (
+          <button
+            key={k}
+            onClick={() => setSub(k)}
+            className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${
+              sub === k ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+            }`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {sub === 'experts' ? (
+        <ExpertsSection experts={experts} onOpen={(id) => setParams({ view: 'experts', expert: id })} />
+      ) : (
+      <div className="space-y-3">
         <p className="text-sm text-neutral-500">
           Adjusted power (§4) = log₁₀(on-chain DRep voting power in ADA) × (1 + merit/200). Voting power is
           ADA delegated to the DRep (CIP-1694 vote delegation — not stake-pool delegation).
@@ -88,7 +111,6 @@ export function DaoOverview() {
         {members && members.length > 1 ? (
           <p className="mt-1 text-xs text-neutral-400">Tip: click any column header to sort (click again to reverse).</p>
         ) : null}
-      </div>
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {!members ? (
@@ -204,13 +226,24 @@ export function DaoOverview() {
         </p>
       ) : null}
 
-      <div className="pt-2">
-        <h3 className="text-base font-semibold">Experts</h3>
-        <p className="text-sm text-neutral-500">Non-DRep ADA holders approved by the board to advise on proposals — feedback in Filtering, advice in Debate &amp; Vote, and milestone reviews.</p>
-        {experts.length === 0 ? (
-          <p className="mt-1 text-sm text-neutral-500">No approved experts yet.</p>
-        ) : (
-          <ul className="mt-2 space-y-1.5">
+      {/* §13 — what earns / costs merit points, per DAO members and board. */}
+      <MeritSystemTable />
+      </div>
+      )}
+    </div>
+  );
+}
+
+/** §2 — the Experts list on its own sub-tab of the DAO overview: name, photo,
+ *  expertise tags, and a link to the full profile in the Experts directory. */
+function ExpertsSection({ experts, onOpen }: { experts: DaoExpert[]; onOpen: (id: string) => void }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-neutral-500">Non-DRep ADA holders approved by the board to advise on proposals — feedback in Filtering, advice in Debate &amp; Vote, and milestone reviews.</p>
+      {experts.length === 0 ? (
+        <p className="text-sm text-neutral-500">No approved experts yet.</p>
+      ) : (
+        <ul className="space-y-1.5">
             {experts.map((x) => (
               <li
                 key={x.id}
@@ -234,7 +267,7 @@ export function DaoOverview() {
                 )}
                 {/* §2 — the full profile (experience, conflict, contact, wallet) lives in the Experts directory. */}
                 <button
-                  onClick={() => setParams({ view: 'experts', expert: x.id })}
+                  onClick={() => onOpen(x.id)}
                   className="ml-auto text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
                 >
                   View profile →
@@ -243,10 +276,6 @@ export function DaoOverview() {
             ))}
           </ul>
         )}
-      </div>
-
-      {/* §13 — what earns / costs merit points, per DAO members and board. */}
-      <MeritSystemTable />
     </div>
   );
 }
