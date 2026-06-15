@@ -63,7 +63,11 @@ export function MemberArea() {
 
   const isBoard = !!profile?.roles.includes('BOARD');
   const canVote = !!profile && (profile.roles.includes('DREP') || profile.roles.includes('DAO_MEMBER') || profile.roles.includes('BOARD'));
-  const todo = useTodoCounts(isBoard, canVote); // red-circle counts for Actions / Applications / Voting & reviews
+  // §15.4 — reward earners (DReps/board/DAO members + approved experts) need a
+  // reward payment address; the badge nags until one is set. Computed before the
+  // role flags below are read by the hook.
+  const isApprovedExpert = !!myExpert?.approvedByBoard;
+  const todo = useTodoCounts(isBoard, canVote, isApprovedExpert); // red-circle counts for Actions / Applications / Voting & reviews
 
   if (loading || !profile) return null;
 
@@ -242,6 +246,10 @@ function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPendi
             <div className="space-y-6">
               {alsoSubmitterFlag}
               <section className={card}><ExpertApplyForm onChange={loadExpert} /></section>
+              {/* §15.4 — approved experts earn ADA rewards, so they need a reward
+                  payment address. This is what the My-area to-do badge points at
+                  (the panel amber-nags until it's set). */}
+              {expertApproved ? <RewardAddressPanel /> : null}
               {submitterRoleCard}
               <section className={card}><PreferencesPanel /></section>
             </div>
@@ -469,7 +477,7 @@ function ApplicationsTab() {
  * the voter's "Voting & reviews" tasks (filtering + D&V + milestone), and the §10 "Internal
  * proposals" awaiting this DRep's vote. Light polling.
  */
-function useTodoCounts(isBoard: boolean, canVote: boolean) {
+function useTodoCounts(isBoard: boolean, canVote: boolean, isApprovedExpert: boolean) {
   const [counts, setCounts] = useState({ treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0, messages: 0, messagesTotal: 0 });
   useEffect(() => {
     let alive = true;
@@ -526,8 +534,12 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
         // §9.2 — quick polls awaiting this DRep's tie-break vote.
         try { next.voting += (await quickPollApi.myPending()).count; } catch { /* leave 0 */ }
         try { next.internal = (await internalProposalsApi.pendingCount()).count; } catch { /* 0 */ }
-        // §15.4 — reward earners need a reward payment address; nag on the Profile
-        // tab until one is set. Submitters/viewers don't earn rewards → no nag.
+      }
+      // §15.4 — reward earners (DReps/board/DAO members + approved experts) need a
+      // reward payment address; nag on the Profile tab until one is set. This
+      // matches the left-nav badge (which also counts approved experts), so the
+      // badge always points at an actionable panel. Submitters/viewers don't earn.
+      if (canVote || isApprovedExpert) {
         try { const r = await rewardAddressApi.get(); if (!r.rewardPaymentAddress) next.profile += 1; } catch { /* 0 */ }
       }
       // §11.2 — count submitter to-dos: any of my proposals with a REJECTED
@@ -545,7 +557,7 @@ function useTodoCounts(isBoard: boolean, canVote: boolean) {
       alive = false;
       clearInterval(id);
     };
-  }, [isBoard, canVote]);
+  }, [isBoard, canVote, isApprovedExpert]);
   return counts;
 }
 
