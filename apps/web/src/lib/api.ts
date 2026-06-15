@@ -893,6 +893,8 @@ export interface ConfirmStageInput {
 export const boardRoundsApi = {
   create: (input: CreateRoundInput) =>
     request<RoundDetail>('/admin/rounds', { method: 'POST', body: JSON.stringify(input) }),
+  /** §6/§8 — count of overdue stage starts (board badge). */
+  overdueStages: () => request<{ count: number }>('/admin/rounds/overdue-stages'),
   update: (id: string, input: Partial<CreateRoundInput>) =>
     request<RoundDetail>(`/admin/rounds/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   startStage: (id: string, stage: string) =>

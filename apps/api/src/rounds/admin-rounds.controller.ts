@@ -1,4 +1,4 @@
-import { Body, Controller, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoardGuard } from '../auth/board.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
@@ -14,6 +14,12 @@ export class AdminRoundsController {
   @Post()
   create(@Body() dto: CreateRoundDto) {
     return this.rounds.create(dto);
+  }
+
+  // §6/§8 — count of overdue stage starts (board to-do badge).
+  @Get('overdue-stages')
+  async overdueStages() {
+    return { count: await this.rounds.countOverdueStages() };
   }
 
   @Patch(':id')

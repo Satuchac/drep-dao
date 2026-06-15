@@ -10,6 +10,7 @@ import {
   type CreateRoundInput,
   type RoundCategoryInput,
   type RoundDetail,
+  type RoundScheduleEntry,
   type RoundSettingsInput,
   type RoundSummary,
 } from '@/lib/api';
@@ -764,37 +765,54 @@ const STATUS_STAGE_IDX: Record<string, number> = {
 };
 const fmtShort = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
 
-/** §6 — horizontal bar of every stage + its dates, with the current stage marked. */
+/** §6 — horizontal bar of every stage + its dates, with the current stage marked.
+ *  A stage whose planned START has passed but which hasn't been started yet is
+ *  OVERDUE — its date turns red and a banner tells the board to start it. */
 function StagesBar({ round }: { round: RoundDetail }) {
   const curIdx = STATUS_STAGE_IDX[round.status] ?? -1;
   const byKey = new Map(round.schedule.map((e) => [e.stageKey, e]));
+  const now = Date.now();
+  const isOverdue = (i: number, e?: RoundScheduleEntry) =>
+    // not started (upcoming) AND its planned start is in the past
+    (curIdx === -1 || i > curIdx) && !!e?.startsAt && new Date(e.startsAt).getTime() < now;
+  const overdueLabels = STAGE_DEFS.filter((s, i) => isOverdue(i, byKey.get(s.key))).map((s) => s.label);
   return (
     <div>
       <div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">
         <span>Stages</span>
         {curIdx === -1 ? (
-          <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-700 dark:text-neutral-200">Preparation — not started yet</span>
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${overdueLabels.length ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' : 'bg-neutral-200 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-200'}`}>Preparation — not started yet</span>
         ) : curIdx >= STAGE_DEFS.length ? (
           <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">Closed</span>
         ) : null}
       </div>
+      {/* §6 — board alert: a stage is past its planned start but hasn't begun. */}
+      {overdueLabels.length ? (
+        <div className="mb-1.5 rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
+          ⚠ {overdueLabels.join(', ')} {overdueLabels.length === 1 ? 'was' : 'were'} due to start by the planned date but {overdueLabels.length === 1 ? 'hasn\'t' : 'haven\'t'} begun — the board should start {overdueLabels.length === 1 ? 'it' : 'them'} in Round control.
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-1.5">
         {STAGE_DEFS.map((s, i) => {
           const e = byKey.get(s.key);
           const state = curIdx === -1 ? 'upcoming' : i < curIdx ? 'done' : i === curIdx ? 'current' : 'upcoming';
+          const overdue = state === 'upcoming' && isOverdue(i, e);
           const cls =
-            state === 'current'
-              ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-400 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'
-              : state === 'done'
-                ? 'border-emerald-200 bg-emerald-50/50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-300'
-                : 'border-neutral-200 bg-neutral-50 text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400';
+            overdue
+              ? 'border-red-300 bg-red-50/60 text-red-700 dark:border-red-900 dark:bg-red-950/20 dark:text-red-300'
+              : state === 'current'
+                ? 'border-emerald-500 bg-emerald-50 ring-1 ring-emerald-400 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'
+                : state === 'done'
+                  ? 'border-emerald-200 bg-emerald-50/50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/20 dark:text-emerald-300'
+                  : 'border-neutral-200 bg-neutral-50 text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400';
           return (
             <div key={s.key} className={`min-w-[8.5rem] flex-1 rounded-md border px-2 py-1.5 ${cls}`}>
               <div className="flex items-center gap-1 text-xs font-semibold">
-                {state === 'current' ? <span className="text-emerald-600">●</span> : state === 'done' ? <span className="text-emerald-500">✓</span> : null}
+                {state === 'current' ? <span className="text-emerald-600">●</span> : state === 'done' ? <span className="text-emerald-500">✓</span> : overdue ? <span className="text-red-600">⚠</span> : null}
                 {s.label}
               </div>
-              <div className="mt-0.5 text-[10px] leading-tight">{fmtShort(e?.startsAt)} → {fmtShort(e?.endsAt)}</div>
+              {/* §6 — the date is red when the stage is overdue (should have started). */}
+              <div className={`mt-0.5 text-[10px] leading-tight ${overdue ? 'font-semibold text-red-600 dark:text-red-400' : ''}`}>{fmtShort(e?.startsAt)} → {fmtShort(e?.endsAt)}</div>
             </div>
           );
         })}

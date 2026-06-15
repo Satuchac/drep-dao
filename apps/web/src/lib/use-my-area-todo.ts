@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, filteringApi, internalProposalsApi, milestonesApi, proposalsApi, removalApi, rewardAddressApi, treasuryApi } from './api';
+import { boardApi, boardExpertsApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRoundsApi, filteringApi, internalProposalsApi, milestonesApi, proposalsApi, removalApi, rewardAddressApi, treasuryApi } from './api';
 
 /**
  * §20 — total to-do count for the My-area left-nav badge. Sums the same
@@ -39,6 +39,8 @@ export function useMyAreaTodoCount(isBoard: boolean, canVote: boolean): number {
         n += (dapps.status === 'fulfilled' ? dapps.value.filter((x) => !x.myVote).length : 0); // Applications
         n += (eapps.status === 'fulfilled' ? eapps.value.length : 0);
         n += (rem.status === 'fulfilled' ? rem.value.filter((x) => !x.myVote).length : 0);
+        // §6/§8 — overdue stage starts (board must launch them).
+        try { n += (await boardRoundsApi.overdueStages()).count; } catch { /* */ }
       }
       if (canVote) {
         try { n += (await filteringApi.votingTasks()).total; } catch { /* leave */ }

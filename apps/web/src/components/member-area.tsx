@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { card } from '@/lib/ui';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { roundsApi, expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardProposalsApi, boardSubmittersApi, submitterApi, boardApi, boardExpertsApi, removalApi, filteringApi, quickPollApi, internalProposalsApi, messagesApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type MySubmitter, type EntryEligibility, type BoardAction } from '@/lib/api';
+import { roundsApi, expertApi, drepApi, treasuryApi, boardFeeApi, boardPaymentsApi, boardPledgeApi, boardRevenueApi, boardProposalsApi, boardSubmittersApi, boardRoundsApi, submitterApi, boardApi, boardExpertsApi, removalApi, filteringApi, quickPollApi, internalProposalsApi, messagesApi, milestonesApi, proposalsApi, rewardAddressApi, type MyExpert, type MySubmitter, type EntryEligibility, type BoardAction } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -158,7 +158,7 @@ export function MemberArea() {
     // all live here; Actions stays for the non-treasury board to-dos.
     tabs.push({ key: 'treasury', label: 'Treasury', badge: todo.treasury, node: <TreasuryTab /> });
     tabs.push({ key: 'sign', label: 'Actions', badge: todo.actions, node: <ActionsTab /> });
-    tabs.push({ key: 'rounds', label: 'Round control', node: <RoundStageControls /> });
+    tabs.push({ key: 'rounds', label: 'Round control', badge: todo.rounds, node: <RoundStageControls /> });
     tabs.push({ key: 'rewards', label: 'Rewards', node: <RewardsTab /> });
     tabs.push({ key: 'apps', label: 'Applications', badge: todo.applications, node: <ApplicationsTab /> });
   }
@@ -478,11 +478,11 @@ function ApplicationsTab() {
  * proposals" awaiting this DRep's vote. Light polling.
  */
 function useTodoCounts(isBoard: boolean, canVote: boolean, isApprovedExpert: boolean) {
-  const [counts, setCounts] = useState({ treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0, messages: 0, messagesTotal: 0 });
+  const [counts, setCounts] = useState({ treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0, messages: 0, messagesTotal: 0, rounds: 0 });
   useEffect(() => {
     let alive = true;
     const poll = async () => {
-      const next = { treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0, messages: 0, messagesTotal: 0 };
+      const next = { treasury: 0, actions: 0, applications: 0, voting: 0, internal: 0, mine: 0, profile: 0, messages: 0, messagesTotal: 0, rounds: 0 };
       // §3.5 — submitter's board messages: total (drives the Messages tab) + unread (board spoke
       // last on an OPEN thread → the submitter still has to respond). Runs for everyone.
       try {
@@ -528,6 +528,8 @@ function useTodoCounts(isBoard: boolean, canVote: boolean, isApprovedExpert: boo
           (eapps.status === 'fulfilled' ? eapps.value.length : 0) +
           (rem.status === 'fulfilled' ? rem.value.filter((x) => !x.myVote).length : 0) +
           (subs.status === 'fulfilled' ? subs.value.length : 0);
+        // §6/§8 — rounds whose next stage is overdue to start (board must launch it).
+        try { next.rounds = (await boardRoundsApi.overdueStages()).count; } catch { /* leave 0 */ }
       }
       if (canVote) {
         try { next.voting = (await filteringApi.votingTasks()).total; } catch { /* leave 0 */ }
