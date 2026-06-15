@@ -836,8 +836,40 @@ function MineRow({
   const [fee, setFee] = useState(p.submissionFeeTxHash ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // §3 — on-chain fee status for this draft (checked when the panel opens / on Verify).
+  const [fv, setFv] = useState<FeeVerification | null>(null);
+  const [verifying, setVerifying] = useState(false);
   const field = 'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
   const isDraft = p.status === 'DRAFT';
+  const feeHexOk = /^[0-9a-f]{64}$/i.test(fee.trim());
+  const feePaid = fv?.fullyPaid === true;
+  const noFee = fv != null && fv.requiredAda === 0;
+
+  // When the submit panel opens with a saved hash, auto-check the chain so the
+  // user sees "already paid" instead of being asked to pay again.
+  useEffect(() => {
+    if (!submitting || !feeHexOk) { return; }
+    let alive = true;
+    setVerifying(true);
+    proposalsApi.verifyFee(p.id).then((v) => { if (alive) setFv(v); }).catch(() => {}).finally(() => { if (alive) setVerifying(false); });
+    return () => { alive = false; };
+    // Only on open (not on every keystroke); the Verify button re-checks after edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitting]);
+
+  const verify = async () => {
+    const trimmed = fee.trim();
+    if (!/^[0-9a-f]{64}$/i.test(trimmed)) return;
+    setVerifying(true); setError(null);
+    try {
+      await proposalsApi.update(p.id, { submissionFeeTxHash: trimmed });
+      setFv(await proposalsApi.verifyFee(p.id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'verification failed');
+    } finally {
+      setVerifying(false);
+    }
+  };
   const feeRejected = p.status === 'REJECTED' && !p.stage;
   // Pre-public (DRAFT/PENDING/fee-rejected) → edit ALL fields in the full form.
   const fullFormEdit = isDraft || p.status === 'PENDING' || feeRejected;
@@ -908,22 +940,61 @@ function MineRow({
         </span>
       </div>
       {isDraft && submitting ? (
-        <div className="space-y-1 border-t border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
-          <div className="text-neutral-500">
-            Pay the submission fee on-chain, then paste the tx hash. The platform verifies it and a board member confirms.
-          </div>
-          {feeAddress ? (
-            <div className="flex items-start gap-2">
-              <div className="flex-1 break-all font-mono text-[11px] text-neutral-500">{feeAddress}</div>
-              <CopyButton text={feeAddress} label="Copy address" />
-            </div>
-          ) : null}
-          <div className="flex flex-wrap items-center gap-2">
-            <input className={`${field} flex-1`} placeholder="Submission fee TX hash" value={fee} onChange={(e) => setFee(e.target.value)} />
-            <button onClick={submit} disabled={busy} className="rounded bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-              {busy ? 'Submitting…' : 'Submit'}
-            </button>
-          </div>
+        <div className="space-y-1.5 border-t border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
+          {feePaid || noFee ? (
+            // §3 — fee already settled: confirm it (green), lock the hash, submit.
+            <>
+              <div className="rounded border border-emerald-300 bg-emerald-50 p-2 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
+                {noFee ? (
+                  <span><strong>✓ No submission fee</strong> for this proposal — you can submit it directly.</span>
+                ) : (
+                  <span><strong>✓ Submission fee paid</strong> — {fv!.paidAda.toLocaleString()} ₳ received at the fee address (required {fv!.requiredAda.toLocaleString()} ₳). You can submit.</span>
+                )}
+              </div>
+              {!noFee ? (
+                <label className="block">
+                  <span className="text-neutral-500">Submission fee transaction hash <span className="text-neutral-400">(verified — locked)</span></span>
+                  <input className={`${field} mt-0.5 w-full cursor-not-allowed bg-neutral-100 font-mono text-[11px] dark:bg-neutral-800`} value={fee} readOnly />
+                </label>
+              ) : null}
+              <button onClick={submit} disabled={busy} className="rounded bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+                {busy ? 'Submitting…' : 'Submit'}
+              </button>
+            </>
+          ) : (
+            // §3 — fee not paid yet: pay → paste hash → verify on-chain → submit.
+            <>
+              <div className="text-neutral-500">
+                Pay the submission fee on-chain to the address below, paste the transaction hash, and verify it. A board member then confirms.
+              </div>
+              {feeAddress ? (
+                <div className="flex items-start gap-2">
+                  <div className="flex-1 break-all font-mono text-[11px] text-neutral-500">{feeAddress}</div>
+                  <CopyButton text={feeAddress} label="Copy address" />
+                </div>
+              ) : null}
+              <label className="block">
+                <span className="text-neutral-500">Submission fee transaction hash</span>
+                <input className={`${field} mt-0.5 w-full`} placeholder="64-character on-chain tx hash" value={fee} onChange={(e) => { setFee(e.target.value); setFv(null); }} />
+              </label>
+              {/* Verify result (partial / not found / chain unreachable). */}
+              {fv && !fv.fullyPaid ? (
+                <div className={`rounded border p-1.5 ${!fv.koiosAvailable ? 'border-neutral-300 bg-neutral-50 text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300' : fv.paidAda > 0 ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200' : 'border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300'}`}>
+                  {!fv.koiosAvailable ? 'Couldn’t reach the chain — the platform keeps retrying; check back shortly.'
+                    : fv.paidAda > 0 ? `Partial: ${fv.paidAda.toLocaleString()} ₳ received, ${fv.missingAda.toLocaleString()} ₳ still missing (required ${fv.requiredAda.toLocaleString()} ₳).`
+                      : 'Not found / didn’t pay the fee address yet — re-checks every ~10 s.'}
+                </div>
+              ) : null}
+              <div className="flex flex-wrap items-center gap-2">
+                <button onClick={verify} disabled={verifying || !feeHexOk} className="rounded border border-emerald-500 px-2.5 py-1 font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950">
+                  {verifying ? 'Verifying…' : 'Verify on-chain'}
+                </button>
+                <button onClick={submit} disabled={busy} className="rounded bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+                  {busy ? 'Submitting…' : 'Submit'}
+                </button>
+              </div>
+            </>
+          )}
           {error ? <div className="text-red-600">{error}</div> : null}
         </div>
       ) : null}
