@@ -15,7 +15,7 @@ import {
 } from '@/lib/api';
 import { ProposalList } from './proposal-list';
 import { QuickPollsPanel } from './quick-polls-panel';
-import { BackButton, ProposalCounts, StatusBadge } from './round-ui';
+import { BackButton, ProposalCounts, StatusBadge, toLocalInput } from './round-ui';
 
 // §8 — D&V is split into DEBATE (DReps comment + revise) → VOTE (ballots).
 const STAGE_DEFS = [
@@ -240,6 +240,14 @@ function DateTimeField({ value, onChange }: { value: string; onChange: (v: strin
   // Default the time to midnight — DReps usually just pick a date (and may change it).
   const [time, setTime] = useState(m ? `${m[4]}:${m[5]}` : '00:00');
 
+  // Sync the selects when the parent sets a complete value externally (the
+  // "expected days" helper / overlap-cascade computes dates programmatically).
+  // A blank value (mid-selection) is left alone so partial picks aren't wiped.
+  useEffect(() => {
+    const mm = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value || '');
+    if (mm) { setYear(mm[1]); setMonth(mm[2]); setDay(mm[3]); setTime(`${mm[4]}:${mm[5]}`); }
+  }, [value]);
+
   const thisYear = new Date().getFullYear();
   const years = Array.from({ length: 5 }, (_, i) => String(thisYear + i));
 
@@ -288,6 +296,9 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
     })) ?? [{ name: '', type: 'GRANT', allocatedAda: 4_000_000, description: '' }],
   );
   const [sched, setSched] = useState<Record<string, { startsAt: string; endsAt: string }>>({});
+  // §6 — per-stage "expected days" helper: set N days → compute start (from the
+  // previous stage's end if this stage has no start yet) + end = start + N days.
+  const [days, setDays] = useState<Record<string, string>>({});
   // §6/§12 — per-round settings (blank = use the default). Reward splits are sliders.
   const [settings, setSettings] = useState<Record<string, string>>(() =>
     s0 ? Object.fromEntries(Object.entries(s0).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])) : {},
@@ -618,6 +629,34 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
               }
               return next;
             });
+          // §6 — "expected days" → compute this stage's dates. Start = this
+          // stage's start if already set (so editing the start then re-clicking
+          // Set only recomputes the end), else the previous stage's end, else
+          // today at 00:00. End = start + N days. Only this stage is changed.
+          const applyDays = () => {
+            const n = Math.floor(Number(days[s.key]));
+            if (!Number.isFinite(n) || n <= 0) return;
+            setSched((p) => {
+              const next = { ...p };
+              let startStr = next[s.key]?.startsAt ?? '';
+              if (!startStr) {
+                for (let j = idx - 1; j >= 0; j--) {
+                  const pv = next[STAGE_DEFS[j].key];
+                  if (pv?.endsAt) { startStr = pv.endsAt; break; }
+                }
+              }
+              if (!startStr) { const d = new Date(); d.setHours(0, 0, 0, 0); startStr = toLocalInput(d.toISOString()); }
+              const startMs = new Date(startStr).getTime();
+              const endMs = startMs + n * 86_400_000;
+              next[s.key] = {
+                startsAt: toLocalInput(new Date(startMs).toISOString()),
+                endsAt: toLocalInput(new Date(endMs).toISOString()),
+              };
+              return next;
+            });
+          };
+          // Prefill the days box from the current dates so it reflects what's set.
+          const daysFromDates = startMs != null && endMs != null && endMs > startMs ? String(Math.round((endMs - startMs) / 86_400_000)) : '';
           return (
             <div key={s.key} className="mb-2 text-sm">
               <div className="flex flex-wrap items-center gap-2">
@@ -626,6 +665,23 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
                 <span className="text-neutral-400">→</span>
                 <DateTimeField value={v?.endsAt ?? ''} onChange={(val) => setPart('endsAt', val)} />
                 {dur ? <span className="text-xs font-medium text-emerald-600">· {dur}</span> : null}
+              </div>
+              {/* §6 — expected-days quick-set. */}
+              <div className="ml-28 mt-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                <span>Expected days</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={days[s.key] ?? daysFromDates}
+                  onChange={(e) => setDays((d) => ({ ...d, [s.key]: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyDays(); } }}
+                  className="w-20 rounded border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
+                  placeholder="days"
+                />
+                <button type="button" onClick={applyDays} className="rounded border border-emerald-500 px-2.5 py-1 font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950">
+                  Set
+                </button>
+                <span className="text-neutral-400">start = this stage&apos;s start (or the previous stage&apos;s end), end = start + days</span>
               </div>
               {warn ? <div className="ml-28 mt-0.5 text-xs font-medium text-red-600">{warn}</div> : null}
             </div>
