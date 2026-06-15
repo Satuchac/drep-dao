@@ -17,6 +17,7 @@ export class ExpertApplicationDto {
   @IsOptional() @IsString() @MaxLength(200) email?: string;
   @IsOptional() @IsString() @MaxLength(120) telegram?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) @MaxLength(500, { each: true }) socialLinks?: string[];
+  @IsOptional() @IsString() @MaxLength(700000) logoDataUrl?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) subcategoryIds?: string[];
 }
 

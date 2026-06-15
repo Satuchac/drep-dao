@@ -233,6 +233,8 @@ model Expert {
   email           String?  @default("")
   telegram        String?  @default("")
   socialLinks     String[] @default([]) @map("social_links")
+  // §2 — optional profile photo (data URL); falls back to the generated avatar.
+  logoDataUrl     String?  @map("logo_data_url")
   subcategoryIds  String[] @map("subcategory_ids")
   approvedByBoard Boolean  @default(false) @map("approved_by_board")
 

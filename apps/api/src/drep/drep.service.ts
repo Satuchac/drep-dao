@@ -286,7 +286,6 @@ export class DrepService {
   /** §2/§14 — an ADA holder applies to become an Expert (board then approves). */
   async applyExpert(userId: string, dto: ExpertApplicationDto) {
     const existing = await this.prisma.expert.findFirst({ where: { userId } });
-    if (existing?.approvedByBoard) throw new ConflictException('you are already an approved Expert');
     // §2 — mandatory: display name, experience, conflict-of-interest, email, telegram.
     const displayName = dto.displayName?.trim() ?? '';
     const bio = dto.bio?.trim() ?? '';
@@ -305,8 +304,11 @@ export class DrepService {
       email,
       telegram,
       socialLinks: (dto.socialLinks ?? []).map((s) => s.trim()).filter(Boolean),
+      logoDataUrl: dto.logoDataUrl?.trim() || null,
       subcategoryIds: dto.subcategoryIds ?? [],
-      approvedByBoard: false,
+      // §2 — an already-approved Expert may edit their profile WITHOUT losing
+      // approval; a still-pending application stays pending.
+      approvedByBoard: existing?.approvedByBoard ?? false,
     };
     if (existing) return this.prisma.expert.update({ where: { id: existing.id }, data });
     return this.prisma.expert.create({ data: { userId, ...data } });
@@ -336,6 +338,7 @@ export class DrepService {
       email: e.email ?? '',
       telegram: e.telegram ?? '',
       socialLinks: e.socialLinks ?? [],
+      logoDataUrl: e.logoDataUrl ?? null,
       stakeAddress: e.user.stakeAddress,
       drepIdOnchain: e.user.drep?.drepIdOnchain ?? null,
       subcategoryIds: e.subcategoryIds,
@@ -371,6 +374,7 @@ export class DrepService {
       email: e.email ?? '',
       telegram: e.telegram ?? '',
       socialLinks: e.socialLinks ?? [],
+      logoDataUrl: e.logoDataUrl ?? null,
       subcategoryIds: e.subcategoryIds,
       // The platform knows the wallet — expose it (DRep ID if they're a DRep).
       stakeAddress: e.user.stakeAddress,

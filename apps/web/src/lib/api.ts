@@ -599,6 +599,7 @@ export interface ExpertApplicationInput {
   email?: string;
   telegram?: string;
   socialLinks?: string[];
+  logoDataUrl?: string;
   subcategoryIds?: string[];
 }
 export interface MyExpert {
@@ -609,6 +610,7 @@ export interface MyExpert {
   email: string;
   telegram: string;
   socialLinks: string[];
+  logoDataUrl: string | null;
   subcategoryIds: string[];
   approvedByBoard: boolean;
 }
@@ -620,6 +622,7 @@ export interface ExpertApplication {
   email: string;
   telegram: string;
   socialLinks: string[];
+  logoDataUrl: string | null;
   stakeAddress: string;
   drepIdOnchain: string | null;
   subcategoryIds: string[];
@@ -633,6 +636,7 @@ export interface DaoExpert {
   email: string;
   telegram: string;
   socialLinks: string[];
+  logoDataUrl: string | null;
   stakeAddress: string;
   drepIdOnchain: string | null;
   subcategoryIds: string[];

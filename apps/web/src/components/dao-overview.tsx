@@ -6,6 +6,7 @@ import { daoApi, type DaoMember, type DaoExpert } from '@/lib/api';
 import { fmtDate } from './round-ui';
 import { MeritSystemTable } from './merit-system-table';
 import { useUrlNav } from '@/lib/use-url-nav';
+import { FallbackAvatar } from './fallback-avatar';
 
 
 
@@ -205,7 +206,7 @@ export function DaoOverview() {
 
       <div className="pt-2">
         <h3 className="text-base font-semibold">Experts</h3>
-        <p className="text-sm text-neutral-500">Non-DRep ADA holders approved by the board for milestone review.</p>
+        <p className="text-sm text-neutral-500">Non-DRep ADA holders approved by the board to advise on proposals — feedback in Filtering, advice in Debate &amp; Vote, and milestone reviews.</p>
         {experts.length === 0 ? (
           <p className="mt-1 text-sm text-neutral-500">No approved experts yet.</p>
         ) : (
@@ -215,6 +216,9 @@ export function DaoOverview() {
                 key={x.id}
                 className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-amber-300 bg-amber-50/40 px-3 py-2 text-sm dark:border-amber-900 dark:bg-amber-950/20"
               >
+                {x.logoDataUrl
+                  ? <img src={x.logoDataUrl} alt="" className="h-6 w-6 rounded-full object-cover" />
+                  : <FallbackAvatar name={x.displayName} className="h-6 w-6 rounded-full" />}
                 <span className="font-medium">{x.displayName}</span>
                 <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">Expert</span>
                 {x.subcategoryIds.length ? (

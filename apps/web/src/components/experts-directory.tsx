@@ -33,8 +33,8 @@ export function ExpertsDirectory() {
       <div>
         <h2 className="text-lg font-semibold">Experts</h2>
         <p className="text-sm text-neutral-500">
-          Non-DRep ADA holders approved by the board to provide their expertise — milestone reviews and
-          feedback in the Debate &amp; Vote stage. Click a row for the full profile.
+          Non-DRep ADA holders approved by the board to advise on proposals — feedback in the Filtering
+          stage, advice in the Debate &amp; Vote stage, and milestone reviews. Click a row for the full profile.
         </p>
       </div>
       {rows === null ? <p className="text-sm text-neutral-500">Loading…</p> : null}
@@ -46,7 +46,9 @@ export function ExpertsDirectory() {
             <section key={x.id} className={card}>
               <button onClick={() => setOpenId(open ? null : x.id)} className="flex w-full flex-wrap items-center justify-between gap-2 text-left">
                 <span className="flex items-center gap-2">
-                  <FallbackAvatar name={x.displayName} className="h-9 w-9 rounded" />
+                  {x.logoDataUrl
+                    ? <img src={x.logoDataUrl} alt="" className="h-9 w-9 rounded object-cover" />
+                    : <FallbackAvatar name={x.displayName} className="h-9 w-9 rounded" />}
                   <span className="font-medium">{x.displayName}</span>
                   <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">Expert</span>
                 </span>
@@ -55,7 +57,9 @@ export function ExpertsDirectory() {
 
               {open ? (
                 <div className="mt-3 flex flex-wrap gap-4 border-t border-neutral-200 pt-3 dark:border-neutral-800">
-                  <FallbackAvatar name={x.displayName} className="h-24 w-24 rounded-lg" />
+                  {x.logoDataUrl
+                    ? <img src={x.logoDataUrl} alt="" className="h-24 w-24 rounded-lg object-cover" />
+                    : <FallbackAvatar name={x.displayName} className="h-24 w-24 rounded-lg" />}
                   <div className="min-w-0 flex-1 space-y-2 text-sm">
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Experience / skills</div>

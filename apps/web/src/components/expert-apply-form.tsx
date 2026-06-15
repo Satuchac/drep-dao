@@ -4,11 +4,13 @@ import { useEffect, useState } from 'react';
 import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { expertApi, type MyExpert } from '@/lib/api';
 import { MarkdownEditor } from './markdown';
+import { PhotoUpload } from './photo-upload';
 
 const field =
   'w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900';
 
-/** §2 — a non-DRep ADA holder applies to be an Expert (milestone reviewer); board approves. */
+/** §2 — a non-DRep ADA holder applies to be an Expert (advises in Filtering, advises in
+ *  Debate & Vote, and reviews milestones); board approves. Approved experts can edit. */
 export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
   const [mine, setMine] = useState<MyExpert | null>(null);
   const [name, setName] = useState('');
@@ -17,6 +19,8 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
   const [email, setEmail] = useState('');
   const [telegram, setTelegram] = useState('');
   const [socials, setSocials] = useState<string[]>([]);
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const [subs, setSubs] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,6 +36,7 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
         setEmail(e.email ?? '');
         setTelegram(e.telegram ?? '');
         setSocials(e.socialLinks ?? []);
+        setPhoto(e.logoDataUrl ?? null);
         setSubs(e.subcategoryIds ?? []);
       }
     });
@@ -60,11 +65,13 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
         email: email.trim() || undefined,
         telegram: telegram.trim() || undefined,
         socialLinks: socials.map((s) => s.trim()).filter(Boolean),
+        logoDataUrl: photo || undefined,
         subcategoryIds: subs,
       });
+      const wasApproved = mine?.approvedByBoard;
       await load();
       onChange?.();
-      setSaved(wasExisting ? 'Application updated — sent to the board for review.' : 'Application sent to the board for review.');
+      setSaved(wasApproved ? 'Profile updated.' : wasExisting ? 'Application updated — sent to the board for review.' : 'Application sent to the board for review.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
     } finally {
@@ -72,30 +79,32 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
     }
   };
 
-  if (mine?.approvedByBoard) {
-    return (
-      <div className="space-y-1 text-sm">
-        <h3 className="text-base font-semibold">Expert</h3>
-        <div className="text-emerald-600">You are an approved Expert ✅</div>
-        <p className="text-neutral-500">
-          You can provide your expertise — milestone reviews and feedback in the Debate &amp; Vote stage.
-        </p>
-      </div>
-    );
-  }
+  const approved = !!mine?.approvedByBoard;
 
   return (
     <form onSubmit={submit} className="space-y-3">
-      <h3 className="text-base font-semibold">Apply to be an Expert</h3>
+      <h3 className="text-base font-semibold">{approved ? 'Expert profile' : 'Apply to be an Expert'}</h3>
+      {approved ? (
+        <div className="rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+          You are an approved Expert ✅ — you can keep your profile up to date below (it stays approved).
+        </div>
+      ) : null}
       <p className="text-sm text-neutral-500">
-        Experts are non-DRep ADA holders approved by the board to provide their expertise — milestone
-        reviews and feedback in the Debate &amp; Vote stage.
-        {mine ? ' Your application is under board review — you can update it below.' : ''}
+        Experts are non-DRep ADA holders approved by the board to advise on proposals — they can give
+        feedback in the Filtering stage, advise in the Debate &amp; Vote stage, and review milestone
+        deliveries.
+        {mine && !approved ? ' Your application is under board review — you can update it below.' : ''}
       </p>
       <label className="block space-y-1">
         <span className="text-sm font-medium">Display name <span className="text-red-500">*</span></span>
         <input className={field} value={name} onChange={(e) => setName(e.target.value)} required />
       </label>
+      <PhotoUpload
+        photo={photo}
+        onChange={(next, err) => { setPhoto(next); setPhotoError(err ?? null); }}
+        error={photoError}
+        hint="PNG, JPEG, WebP or GIF · max 256 KB · shown in the experts list (a generated avatar is used if you don't add one)"
+      />
       <MarkdownEditor
         value={bio}
         onChange={setBio}
@@ -176,9 +185,9 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
           disabled={!canSubmit}
           className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          {busy ? 'Submitting…' : mine ? 'Update application' : 'Submit expert application'}
+          {busy ? 'Submitting…' : approved ? 'Save profile' : mine ? 'Update application' : 'Submit expert application'}
         </button>
-        {mine && !saved ? <span className="text-xs text-neutral-500">Your application is under board review — you can update it anytime.</span> : null}
+        {mine && !approved && !saved ? <span className="text-xs text-neutral-500">Your application is under board review — you can update it anytime.</span> : null}
         {saved ? <span className="text-xs font-medium text-emerald-600">✓ {saved}</span> : null}
       </div>
     </form>
