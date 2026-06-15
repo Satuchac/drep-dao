@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { renderMarkdown } from '@/lib/markdown';
 
 /** Render a trusted-after-sanitization markdown string as formatted HTML. */
@@ -109,6 +109,10 @@ export function MarkdownEditor({
   const over = !!maxWords && maxWords > 0 && words > maxWords;
   // After a failed submit, a short/over field must be visible + flagged.
   const needsFix = showShortfall && (short || over);
+  // Force-EXPAND such a field (once), but never auto-collapse it again — so the
+  // textarea doesn't disappear (stealing focus to the next control) the instant
+  // the user types enough to meet the minimum. They collapse it manually.
+  useEffect(() => { if (needsFix) setOpen(true); }, [needsFix]);
   // Word-count badge: "needs N more words" / "N over the M-word max" / "X words".
   const wordBadge = minWords || maxWords ? (
     <span className={`text-[11px] ${short || over ? 'font-semibold text-red-600 dark:text-red-400' : 'text-neutral-400'}`}>
@@ -120,8 +124,7 @@ export function MarkdownEditor({
   const borderCls = needsFix ? 'border-red-400 dark:border-red-700' : 'border-neutral-300 dark:border-neutral-700';
 
   // Collapsed: show only the field name (+ a "filled" hint) and an Expand button.
-  // A short/over field force-expands after a submit attempt so it can't be hidden.
-  if (!open && !needsFix) {
+  if (!open) {
     return (
       <div className={`rounded-md border px-2 py-1.5 ${borderCls}`}>
         <div className="flex items-center gap-2">

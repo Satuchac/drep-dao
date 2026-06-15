@@ -81,6 +81,23 @@ export function ProposalSubmit() {
     if (n >= minWords) return null;
     return <span className="ml-2 text-[11px] font-semibold text-red-600 dark:text-red-400">needs {minWords - n} more word{minWords - n === 1 ? '' : 's'}</span>;
   };
+  // §3 — every mandatory text field (same set the server checks). Recomputed each
+  // render, so the "still too short/long" summary updates live as the user edits.
+  const mandatoryFields: [string, string][] = [
+    ['Title', title],
+    ['Pitch / summary', content],
+    ['Expected ecosystem impact', ecosystemImpact],
+    ['Success metrics / KPIs', successMetrics],
+    ['Cost breakdown', costBreakdown],
+    ['Team info', teamInfo],
+    ...ms.flatMap((m, i): [string, string][] => [
+      [`Milestone ${i + 1} title`, m.title ?? ''],
+      [`Milestone ${i + 1} description`, m.description ?? ''],
+      [`Milestone ${i + 1} acceptance criteria`, m.acceptanceCriteria ?? ''],
+    ]),
+  ];
+  const shortFields = minWords > 0 ? mandatoryFields.filter(([, t]) => wc(t) < minWords) : [];
+  const overFields = maxWords > 0 ? mandatoryFields.filter(([, t]) => wc(t) > maxWords) : [];
   // §12 — on-chain submission-fee verification result. Set when the submitter
   // clicks Verify next to the fee tx input; cumulative across all saved hashes.
   const [verifying, setVerifying] = useState(false);
@@ -291,6 +308,9 @@ export function ProposalSubmit() {
     setMsg(null);
     setTriedSubmit(true); // flag/expand any too-short mandatory fields
     if (!inputsOk()) return;
+    // §3 — block here (not at the server) so the per-field flags + the live
+    // word-count summary below the form drive the fix, updating as they edit.
+    if (shortFields.length > 0 || overFields.length > 0) return;
     if (feeRequired && !fee.trim()) {
       setError('Paste the submission-fee transaction hash to submit (or use Save Draft).');
       return;
@@ -706,6 +726,18 @@ export function ProposalSubmit() {
             </div>
           )}
           {error ? <div className="text-sm text-red-600">{error}</div> : null}
+          {/* §3 — live word-count summary (recomputed each render, so it shrinks as
+              the user fills fields). Shown only after a submit attempt. */}
+          {triedSubmit && (shortFields.length > 0 || overFields.length > 0) ? (
+            <div className="text-sm text-red-600">
+              {shortFields.length > 0 ? (
+                <div>Each mandatory field needs at least {minWords} word{minWords === 1 ? '' : 's'}. Still too short: {shortFields.map(([l, t]) => `${l} (${wc(t)}/${minWords})`).join(', ')}.</div>
+              ) : null}
+              {overFields.length > 0 ? (
+                <div>Each mandatory field allows at most {maxWords} words. Too long: {overFields.map(([l, t]) => `${l} (${wc(t)}/${maxWords})`).join(', ')}.</div>
+              ) : null}
+            </div>
+          ) : null}
           {/* What's still missing before this can be saved/submitted (so a disabled button is never a mystery). */}
           {!draftReady ? (
             <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
