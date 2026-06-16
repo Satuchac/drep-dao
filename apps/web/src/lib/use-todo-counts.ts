@@ -48,7 +48,18 @@ export function todoTotal(c: TodoCounts): number {
   return c.treasury + c.actions + c.applications + c.voting + c.internal + c.mine + c.profile + c.messages + c.rounds;
 }
 
-export function useTodoCounts(isBoard: boolean, canVote: boolean, enabled = true): TodoCounts {
+/** Fire after an action that may change the to-do counts (e.g. signing/clearing a board action)
+ *  so every to-do badge re-checks immediately instead of waiting for the next 30 s poll. */
+export const TODO_CHANGED_EVENT = 'drepdao:todo-changed';
+export function notifyTodoChanged() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(TODO_CHANGED_EVENT));
+}
+
+/**
+ * @param refreshKey bump this (e.g. from a "refresh" button) to force an immediate re-poll;
+ *   the counts also refresh every 30 s and whenever the tab regains focus.
+ */
+export function useTodoCounts(isBoard: boolean, canVote: boolean, enabled = true, refreshKey = 0): TodoCounts {
   const [counts, setCounts] = useState<TodoCounts>(EMPTY_TODO_COUNTS);
   useEffect(() => {
     // Logged-out / role-less viewers have nothing to do and every call would 401.
@@ -126,8 +137,18 @@ export function useTodoCounts(isBoard: boolean, canVote: boolean, enabled = true
     };
     poll();
     const id = setInterval(poll, 30_000);
-    return () => { alive = false; clearInterval(id); };
-  }, [isBoard, canVote, enabled]);
+    // Re-check when the user returns to the tab, or when something signals a to-do change
+    // (e.g. a board action was just signed/cleared) — so the badges update without a 30 s wait.
+    const onFocus = () => { void poll(); };
+    window.addEventListener('focus', onFocus);
+    window.addEventListener(TODO_CHANGED_EVENT, onFocus);
+    return () => {
+      alive = false;
+      clearInterval(id);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener(TODO_CHANGED_EVENT, onFocus);
+    };
+  }, [isBoard, canVote, enabled, refreshKey]);
   return counts;
 }
 

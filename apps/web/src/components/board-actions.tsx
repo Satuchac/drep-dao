@@ -7,6 +7,7 @@ import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
 import { ConfirmDialog } from './confirm-dialog';
 import { notifyTreasuryChanged } from '@/lib/treasury-refresh';
+import { notifyTodoChanged } from '@/lib/use-todo-counts';
 
 /** §15.3 — pending board/treasury actions the platform prepared, awaiting 3-of-5 approval.
  *  `refreshKey` is a parent-controlled counter — bumping it triggers an
@@ -90,6 +91,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
       await treasuryApi.commitToAction(a.id, { signature: s.signature, key: s.key, ts });
       load();
       onChange?.();
+      notifyTodoChanged();
     } catch (e) {
       setErr(a.id, e instanceof Error ? e.message : 'Authorization cancelled.');
     } finally {
@@ -125,6 +127,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
       }
       load();
       onChange?.();
+      notifyTodoChanged();
     } catch (e) {
       setErr(a.id, e instanceof Error ? e.message : 'Sign cancelled — nothing was recorded.');
     } finally {
@@ -394,6 +397,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
             await treasuryApi.cancelAction(id, reason);
             load();
             onChange?.();
+            notifyTodoChanged();
           } catch (e) {
             setErr(id, e instanceof Error ? e.message : 'cancel failed');
           } finally {
@@ -450,7 +454,7 @@ function PayoutTxVerify({ action, onChange }: { action: BoardAction; onChange: (
     try {
       const r = await treasuryApi.submitPayoutTx(action.id, trimmed);
       setResult(r);
-      if (r.status === 'CONFIRMED') { onChange(); notifyTreasuryChanged(); }
+      if (r.status === 'CONFIRMED') { onChange(); notifyTreasuryChanged(); notifyTodoChanged(); }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'failed');
     } finally {

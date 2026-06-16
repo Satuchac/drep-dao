@@ -74,7 +74,9 @@ export function HomeShell() {
   // Match member-area's definition (EXPERT handled inside the hook via the reward-address nag)
   // so the left-nav badge, the login-box badge, and the in-area tab badges all agree.
   const canVote = (profile?.roles.includes('DREP') || profile?.roles.includes('DAO_MEMBER') || profile?.roles.includes('BOARD')) ?? false;
-  const todoCounts = useTodoCounts(isBoard, canVote, !!profile);
+  // Bumped by the login-box "refresh" button to force an immediate re-check of the to-dos.
+  const [todoRefresh, setTodoRefresh] = useState(0);
+  const todoCounts = useTodoCounts(isBoard, canVote, !!profile, todoRefresh);
   const myAreaTodo = todoTotal(todoCounts);
 
   // Logged out (or restoring): centered landing with the wallet login.
@@ -178,6 +180,16 @@ export function HomeShell() {
             <NotificationBadge counts={todoCounts} onNavigate={(tab) => setParams({ view: 'me', tab, round: null, proposal: null, ip: null })} />
             {/* §20.3 — the jobs feed (payments seen, grace expiry, overdue stages, reminders). */}
             <NotificationBell />
+            {/* §20 — re-check the to-do counts now (e.g. right after clearing an action). */}
+            <button
+              type="button"
+              onClick={() => setTodoRefresh((n) => n + 1)}
+              title="Refresh notifications / to-do counts"
+              aria-label="Refresh notifications"
+              className="rounded border border-neutral-300 px-2 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+            >
+              ↻
+            </button>
           </div>
           <button
             onClick={() => setView('me')}
