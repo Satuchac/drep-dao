@@ -2122,8 +2122,9 @@ export class ProposalsService {
     milestones: { idx?: number; title: string | null; description: string | null; acceptanceCriteria: string | null }[],
   ): { label: string; text: string | null | undefined }[] {
     const teamText = typeof p.teamInfo === 'string' ? p.teamInfo : null;
+    // §3 — the proposal title is governed by minimumTitleLen (chars, see assertTitleLength),
+    // not the generic mandatoryWords min/max — so it's intentionally NOT in this list.
     const out: { label: string; text: string | null | undefined }[] = [
-      { label: 'Title', text: p.title },
       { label: 'Pitch / summary', text: p.contentMd },
       { label: 'Expected ecosystem impact', text: p.ecosystemImpactMd },
       { label: 'Success metrics / KPIs', text: p.successMetricsMd },

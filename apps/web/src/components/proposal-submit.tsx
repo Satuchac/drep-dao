@@ -80,26 +80,34 @@ export function ProposalSubmit() {
   const [triedSubmit, setTriedSubmit] = useState(false);
   const minWords = roundSettings?.mandatoryWords ?? ROUND_SETTING_DEFAULTS.mandatoryWords;
   const maxWords = roundSettings?.mandatoryWordsMax ?? ROUND_SETTING_DEFAULTS.mandatoryWordsMax;
+  // §3 — the proposal title is measured in CHARACTERS; each milestone title in WORDS — separate
+  // round settings from the generic mandatoryWords that governs the longer fields.
+  const minTitleChars = roundSettings?.minimumTitleLen ?? ROUND_SETTING_DEFAULTS.minimumTitleLen;
+  const minMsTitleWords = roundSettings?.minimumMilestoneTitleLen ?? ROUND_SETTING_DEFAULTS.minimumMilestoneTitleLen;
   const wc = (s: string) => (s.trim() ? s.trim().split(/\s+/).filter(Boolean).length : 0);
-  // Inline red "needs N more words" hint for the plain-input mandatory fields
-  // (proposal + milestone titles), shown once a submit was attempted.
-  const wordHint = (text: string) => {
-    if (!triedSubmit || minWords <= 0) return null;
-    const n = wc(text);
-    if (n >= minWords) return null;
-    return <span className="ml-2 text-[11px] font-semibold text-red-600 dark:text-red-400">needs {minWords - n} more word{minWords - n === 1 ? '' : 's'}</span>;
+  // Inline red shortfall hints (shown once a submit was attempted): the proposal title by
+  // characters, milestone titles by words.
+  const titleCharHint = (text: string) => {
+    if (!triedSubmit || minTitleChars <= 0) return null;
+    const n = text.trim().length;
+    if (n >= minTitleChars) return null;
+    return <span className="ml-2 text-[11px] font-semibold text-red-600 dark:text-red-400">needs {minTitleChars - n} more character{minTitleChars - n === 1 ? '' : 's'}</span>;
   };
-  // §3 — every mandatory text field (same set the server checks). Recomputed each
-  // render, so the "still too short/long" summary updates live as the user edits.
+  const msTitleHint = (text: string) => {
+    if (!triedSubmit || minMsTitleWords <= 0) return null;
+    const n = wc(text);
+    if (n >= minMsTitleWords) return null;
+    return <span className="ml-2 text-[11px] font-semibold text-red-600 dark:text-red-400">needs {minMsTitleWords - n} more word{minMsTitleWords - n === 1 ? '' : 's'}</span>;
+  };
+  // §3 — mandatory text fields governed by the word min/max (titles are checked separately:
+  // proposal title by chars, milestone titles by minimumMilestoneTitleLen words).
   const mandatoryFields: [string, string][] = [
-    ['Title', title],
     ['Pitch / summary', content],
     ['Expected ecosystem impact', ecosystemImpact],
     ['Success metrics / KPIs', successMetrics],
     ['Cost breakdown', costBreakdown],
     ['Team info', teamInfo],
     ...ms.flatMap((m, i): [string, string][] => [
-      [`Milestone ${i + 1} title`, m.title ?? ''],
       [`Milestone ${i + 1} description`, m.description ?? ''],
       [`Milestone ${i + 1} acceptance criteria`, m.acceptanceCriteria ?? ''],
     ]),
@@ -487,8 +495,8 @@ export function ProposalSubmit() {
             ) : null}
           </div>
           <label className="block">
-            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title{wordHint(title)}</span>
-            <input className={`${field} mt-0.5 w-full disabled:opacity-60 ${triedSubmit && wc(title) < minWords ? 'border-red-400 dark:border-red-700' : ''}`} placeholder="Proposal title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={amountLocked} required />
+            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title{titleCharHint(title)}</span>
+            <input className={`${field} mt-0.5 w-full disabled:opacity-60 ${triedSubmit && title.trim().length < minTitleChars ? 'border-red-400 dark:border-red-700' : ''}`} placeholder="Proposal title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={amountLocked} required />
             <span className="mt-0.5 block text-[11px] italic text-neutral-500 dark:text-neutral-400">
               {amountLocked ? 'The title is locked — it cannot be changed once the proposal is submitted.' : 'Title cannot be changed once the proposal is submitted.'}
             </span>
@@ -586,8 +594,8 @@ export function ProposalSubmit() {
                     {/* 1. Title · 2. Requested budget (right below the title) · 3. Description · 4. Acceptance criteria */}
                     <div className="mt-1 flex flex-wrap items-end gap-2">
                       <label className="flex-1">
-                        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title{wordHint(m.title ?? '')}</span>
-                        <input className={`${field} mt-0.5 w-full ${triedSubmit && wc(m.title ?? '') < minWords ? 'border-red-400 dark:border-red-700' : ''}`} placeholder="Milestone title" value={m.title ?? ''} onChange={(e) => set({ title: e.target.value })} />
+                        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title{msTitleHint(m.title ?? '')}</span>
+                        <input className={`${field} mt-0.5 w-full ${triedSubmit && wc(m.title ?? '') < minMsTitleWords ? 'border-red-400 dark:border-red-700' : ''}`} placeholder="Milestone title" value={m.title ?? ''} onChange={(e) => set({ title: e.target.value })} />
                       </label>
                       <label>
                         <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Requested budget (₳)</span>
