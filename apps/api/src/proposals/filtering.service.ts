@@ -111,19 +111,22 @@ export class FilteringService {
   async myAssignments(userId: string, mode: 'pending' | 'recent' | 'history' = 'pending') {
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
     if (!drep) return [];
+    // Recent/pending = rounds still in the filtering stage (SUBMISSION pre-open + FILTERING),
+    // across every active round. History = rounds that have moved PAST filtering (Debate/Vote/
+    // Funding/Closed) — so Recent and History are disjoint. Note recent/history gate on the ROUND,
+    // not the proposal's own status, so a proposal rejected this round (a NO vote) still shows
+    // under Recent (it was filtered in the active stage) and only moves to History when the round
+    // advances. Pending additionally needs the proposal still votable (ACTIVE @ FILTERING).
+    const activeFilteringRound = { status: { in: [RoundStatus.SUBMISSION, RoundStatus.FILTERING] } };
     const where = mode === 'history'
-      ? { drepId: drep.id }
-      : {
-          drepId: drep.id,
-          releasedAt: null,
-          // §3 — include round.SUBMISSION too so the reviewer SEES pre-assignments with a QUEUED
-          // badge ("you'll be asked to vote once the round opens"). Spans all active rounds.
-          proposal: {
-            stage: ProposalStage.FILTERING,
-            status: ProposalStatus.ACTIVE,
-            round: { status: { in: [RoundStatus.SUBMISSION, RoundStatus.FILTERING] } },
-          },
-        };
+      ? { drepId: drep.id, proposal: { round: { status: { notIn: [RoundStatus.SUBMISSION, RoundStatus.FILTERING] } } } }
+      : mode === 'recent'
+        ? { drepId: drep.id, proposal: { round: activeFilteringRound } }
+        : {
+            drepId: drep.id,
+            releasedAt: null,
+            proposal: { stage: ProposalStage.FILTERING, status: ProposalStatus.ACTIVE, round: activeFilteringRound },
+          };
     const assignments = await this.prisma.filterAssignment.findMany({
       where,
       include: {
@@ -132,10 +135,14 @@ export class FilteringService {
       // Stable order (assignedAt can tie) so the list doesn't reshuffle between loads.
       orderBy: [{ assignedAt: 'desc' }, { proposalId: 'asc' }],
     });
+    // A reviewer can hold several assignment rows for the SAME proposal (re-draws / replacements);
+    // collapse to one row per proposal (the newest, kept by the sort above).
+    const seen = new Set<string>();
+    const unique = assignments.filter((a) => (seen.has(a.proposalId) ? false : (seen.add(a.proposalId), true)));
     const myVotes = await this.prisma.vote.findMany({
-      where: { drepId: drep.id, phase: VotePhase.FILTERING, proposalId: { in: assignments.map((a) => a.proposalId) } },
+      where: { drepId: drep.id, phase: VotePhase.FILTERING, proposalId: { in: unique.map((a) => a.proposalId) } },
     });
-    const rows = assignments.map((a) => ({
+    const rows = unique.map((a) => ({
       proposalId: a.proposalId,
       title: a.proposal.title,
       myVote: myVotes.find((v) => v.proposalId === a.proposalId)?.choice ?? null,
