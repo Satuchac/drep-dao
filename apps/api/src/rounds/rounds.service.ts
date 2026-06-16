@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DvService } from '../proposals/dv.service';
 import { ProposalsService } from '../proposals/proposals.service';
 import { isFeeStageReject } from '../proposals/proposal-state';
+import { isStageDueToAutoStart } from './stage-schedule';
 import { MeritService } from '../merit/merit.service';
 import { MeritSweepService } from '../merit/merit-sweep.service';
 import { CreateRoundDto, UpdateRoundDto, CategoryInput, ScheduleInput, ConfirmStageDto, RoundSettingsInput } from './dto';
@@ -773,8 +774,7 @@ export class RoundsService {
       if (!nextStatus || nextStatus === RoundStatus.CLOSED) continue;
       const keys = SCHEDULE_KEY_FOR_STATUS[nextStatus] ?? [];
       const row = round.schedule.find((s) => keys.includes(s.stageKey));
-      if (!row || !row.autoStart || !row.confirmedAt) continue;
-      if (row.startsAt.getTime() > now.getTime()) continue; // not due yet
+      if (!row || !isStageDueToAutoStart(row, now)) continue; // not confirmed / not auto-start / not due yet
       try {
         await this.transitionTo(round.id, nextStatus, row.confirmedBy ?? null);
         advanced.push(round.id);
@@ -808,7 +808,7 @@ export class RoundsService {
       const nextStatus = this.nextStatusOf(cur);
       const nextKeys = nextStatus ? SCHEDULE_KEY_FOR_STATUS[nextStatus] ?? [] : [];
       const nextRow = round.schedule.find((s) => nextKeys.includes(s.stageKey));
-      const willAutoAdvance = !!nextRow?.autoStart && !!nextRow?.confirmedAt && nextRow.startsAt.getTime() <= now.getTime();
+      const willAutoAdvance = !!nextRow && isStageDueToAutoStart(nextRow, now);
       if (!willAutoAdvance) out.push({ roundId: round.id, name: round.name ?? `Round #${round.number}`, status: round.status, endsAt: row.endsAt });
     }
     return out;

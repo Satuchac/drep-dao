@@ -587,6 +587,15 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   dates (start in the future, end after start, not before the previous stage's end —
   shown inline), displays each stage's **length**, shows a **Saved / ● Not saved**
   indicator per stage, and confirms **Launch … now** via the in-app dialog.
+- **Auto-start & overdue UX (§8).** A background ticker (`RoundsSchedulerService`, every 60 s)
+  auto-advances a round into its next stage when that stage is **confirmed + auto-start** and its
+  planned start has arrived — the trigger is the pure, unit-tested `isStageDueToAutoStart`. The
+  Round-control UI no longer shows contradictory warnings around this: the **current** stage doesn't
+  red-flag an *unedited* end date that has merely passed (calm note instead — it only errors when the
+  board actually edits the end into the past to extend it), and an **overdue next stage that's already
+  confirmed with auto-start** shows a calm "auto-start advances it on the next check (≤1 min); Launch
+  now to start immediately" instead of demanding the board move the date. Manual/unconfirmed overdue
+  stages still get the loud red call-to-action.
 
 **Notifications**
 - The to-do counts (Actions tab badges, My-area left-nav badge, login-box badge) are

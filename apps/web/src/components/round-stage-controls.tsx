@@ -362,10 +362,15 @@ function StageRow({
     const curDuration = durationLabel(frozenStartMs, endMs);
     const problems: string[] = [];
     if (!endsAt) problems.push('Set an end date.');
-    else if (Number.isNaN(endMs) ) problems.push('The end date is invalid.');
-    else if (endMs <= now) problems.push('The end date must be in the future.');
+    else if (Number.isNaN(endMs)) problems.push('The end date is invalid.');
+    // Only a real error when the board is actively EXTENDING the end (edited it to a past time).
+    // An UNCHANGED end date that has simply passed isn't a mistake to fix — the stage is just
+    // overdue to hand off, which the next stage / auto-start handles. So don't nag in red then.
+    else if (endMs <= now && endDirty) problems.push('The end date must be in the future.');
     else if (endMs <= frozenStartMs) problems.push('The end date must be after the start date.');
     const valid = problems.length === 0;
+    // Calm note (not an error) when the planned end has passed and the board hasn't touched it.
+    const endOverdue = !Number.isNaN(endMs) && endMs <= now && !endDirty;
     return (
       <div className="rounded border border-emerald-300 bg-emerald-50/40 p-2 dark:border-emerald-900 dark:bg-emerald-950/20">
         <div className="text-xs">
@@ -391,6 +396,11 @@ function StageRow({
           </button>
           <SavedBadge dirty={endDirty} />
         </div>
+        {endOverdue ? (
+          <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+            This stage&apos;s planned end has passed — the next stage starts at its own planned time (auto-start handles it), or launch it below. Set a later end above only to extend this stage.
+          </div>
+        ) : null}
         <Problems items={problems} />
       </div>
     );
@@ -409,17 +419,21 @@ function StageRow({
     else if (Number.isNaN(endMs)) relProblems.push('The end date is invalid.');
     if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs <= startMs) relProblems.push('The end date must be after the start date.');
     if (startsBeforePrev) relProblems.push(`${label} can't start before the previous stage ends (${fmtDateTime(prevEndsAt)}).`);
-    // "Confirm date" additionally needs the start in the future (auto/planned start). To start a
-    // stage right now regardless of the planned start, use "Launch … now".
-    const confirmProblems = [...relProblems];
-    if (!Number.isNaN(startMs) && startMs <= now) confirmProblems.push('The start date must be in the future (or use “Launch now” to start immediately).');
-    const launchValid = relProblems.length === 0;
-    const confirmValid = confirmProblems.length === 0;
     // "Dirty" for the next stage = either the dates/auto-start were edited, or the stage isn't
     // confirmed yet. When it's already confirmed AND unchanged, there's nothing to confirm.
     const nextDirty = planDirty || !confirmed;
+    // An overdue stage that's already confirmed with auto-start needs NO board action — the
+    // scheduler advances it on its next check. So only nag "the start must be in the future" when
+    // there's actually something to confirm (the board edited the plan, or it isn't confirmed yet).
+    const autoStartHandlesIt = confirmed && autoStart && !planDirty;
+    // "Confirm date" additionally needs the start in the future (auto/planned start). To start a
+    // stage right now regardless of the planned start, use "Launch … now".
+    const confirmProblems = [...relProblems];
+    if (nextDirty && !Number.isNaN(startMs) && startMs <= now) confirmProblems.push('The start date must be in the future (or use “Launch now” to start immediately).');
+    const launchValid = relProblems.length === 0;
+    const confirmValid = confirmProblems.length === 0;
     return (
-      <div className={`rounded border p-2 ${overdue ? 'border-red-300 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20' : 'border-amber-300 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20'}`}>
+      <div className={`rounded border p-2 ${overdue && !autoStartHandlesIt ? 'border-red-300 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20' : 'border-amber-300 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20'}`}>
         <div className="text-xs">
           <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:bg-amber-900 dark:text-amber-100">
             next
@@ -434,8 +448,14 @@ function StageRow({
             <span className="text-amber-700 dark:text-amber-300">not yet confirmed</span>
           )}
         </div>
-        {/* §6/§8 — loud red warning when the planned start has already passed. */}
-        {overdue ? (
+        {/* §6/§8 — overdue handling. Auto-start + confirmed: NO board action needed — the scheduler
+            advances it on its next check (≤1 min); offer "Launch now" only as a shortcut. Manual /
+            unconfirmed: a loud red call to action (pick a future date or launch now). */}
+        {overdue && autoStartHandlesIt ? (
+          <div className="mt-1.5 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            Planned start ({fmtDateTime(nextStage?.planned?.startsAt)}) has passed — <strong>auto-start</strong> advances it on the next scheduled check (within a minute). No action needed; use <strong>Launch {label} now</strong> to start immediately.
+          </div>
+        ) : overdue ? (
           <div className="mt-1.5 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
             ⚠ The planned start ({fmtDateTime(nextStage?.planned?.startsAt)}) is in the past. Launch {label} now, or move the start date into the future and confirm.
           </div>
