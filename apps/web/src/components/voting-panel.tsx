@@ -9,6 +9,7 @@ import {
   roundsApi,
   type DvResult,
   type ProposalSummary,
+  type ReviewMode,
 } from '@/lib/api';
 import { ProposalDetail } from './proposal-detail';
 
@@ -20,7 +21,7 @@ const VOTE_FLAG: Record<string, string> = {
   PENDING: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
 };
 
-export function VotingPanel({ history = false }: { history?: boolean }) {
+export function VotingPanel({ mode = 'pending' }: { mode?: ReviewMode }) {
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
   const isDrep = profile?.roles.includes('DREP') ?? false;
@@ -29,28 +30,33 @@ export function VotingPanel({ history = false }: { history?: boolean }) {
   const load = useCallback(async () => {
     const rounds = await roundsApi.list().catch(() => []);
     const lists = await Promise.all(rounds.map((r) => proposalsApi.byRound(r.id).catch(() => [])));
-    // Default: only proposals currently in DEBATE_VOTE AND whose round has actually
-    // advanced to VOTE (the proposal stage flips to DEBATE_VOTE the moment filtering
-    // passes — ballots themselves aren't accepted until the round moves to VOTE).
-    // History also includes proposals that passed through D&V — APPROVED / REJECTED /
-    // COMPLETE / FAILED — so the voter can recall past decisions (the row still
-    // links to detail). DV is the deprecated alias for VOTE.
+    // The proposal stage flips to DEBATE_VOTE the moment filtering passes, but ballots aren't
+    // accepted until the round itself reaches VOTE. Modes (round-based, so active items never
+    // sit in History):
+    //   To do   — votable now: in DEBATE_VOTE and the round is in VOTE.
+    //   Recent  — in DEBATE_VOTE in any ACTIVE (non-closed) round (incl. "waiting for VOTE").
+    //   History — only FINISHED proposals (a D&V decision was published / the round closed).
     const voteRoundIds = new Set(rounds.filter((r) => r.status === 'VOTE' || r.status === 'DV').map((r) => r.id));
+    const closedRoundIds = new Set(rounds.filter((r) => r.status === 'CLOSED').map((r) => r.id));
     const all = lists.flat();
-    const pred = history
-      ? (p: ProposalSummary) => p.stage === 'DEBATE_VOTE' || ['APPROVED', 'REJECTED', 'COMPLETE', 'FAILED'].includes(p.status)
-      : (p: ProposalSummary) => p.stage === 'DEBATE_VOTE' && !!p.roundId && voteRoundIds.has(p.roundId);
+    const finished = (p: ProposalSummary) => ['APPROVED', 'REJECTED', 'COMPLETE', 'FAILED'].includes(p.status) || (!!p.roundId && closedRoundIds.has(p.roundId));
+    const pred = mode === 'history'
+      ? finished
+      : mode === 'recent'
+        ? (p: ProposalSummary) => p.stage === 'DEBATE_VOTE' && !finished(p)
+        : (p: ProposalSummary) => p.stage === 'DEBATE_VOTE' && !!p.roundId && voteRoundIds.has(p.roundId) && !finished(p);
     setItems(all.filter(pred));
-  }, [history]);
+  }, [mode]);
   useEffect(() => {
     void load();
   }, [load]);
 
   if (items.length === 0) return null;
+  const heading = mode === 'history' ? ' — past decisions' : mode === 'recent' ? ' — all in active rounds' : '';
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-      <h3 className="text-base font-semibold">Debate &amp; Vote ({items.length}){history ? ' — with history' : ''}</h3>
+      <h3 className="text-base font-semibold">Debate &amp; Vote ({items.length}){heading}</h3>
       <p className="text-xs text-neutral-500">Balanced voting power (§4); rationale ≥ 200 chars.</p>
       <ul className="mt-2 space-y-3">
         {items.map((p) => (

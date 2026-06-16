@@ -326,7 +326,7 @@ function VotingReviewsTab() {
         <ReviewModeToggle mode={mode} onChange={setMode} />
       </div>
       <FilteringPanel mode={mode} />
-      <VotingPanel history={mode === 'history'} />
+      <VotingPanel mode={mode} />
       {/* §9.2 — tie-break quick polls of the active round (self-hides when none). */}
       <ActiveRoundQuickPolls />
       <MilestoneReviewsPanel history={mode === 'history'} />
@@ -419,7 +419,10 @@ function ActiveRoundQuickPolls() {
  *  submission-fee confirmations, pledge confirmations, stop-funding votes,
  *  budget-change settlements. */
 function ActionsTab() {
-  const [showHistory, setShowHistory] = useState(false);
+  // §15 — To do (pending), Recent (active rounds), History (done/past). The board-action panels
+  // are pending/done, so Recent currently mirrors To do; History shows the resolved items.
+  const [mode, setMode] = useState<ReviewMode>('pending');
+  const showHistory = mode === 'history';
   const [viewMessages, setViewMessages] = useState(false);
   // §3.5 — board-wide message tallies for the header info + the "go to messages" history link.
   const [msgs, setMsgs] = useState<{ active: number; done: number }>({ active: 0, done: 0 });
@@ -443,10 +446,7 @@ function ActionsTab() {
           {msgs.done > 0 ? (
             <button onClick={() => setViewMessages(true)} className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">Go to messages</button>
           ) : null}
-          <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
-            <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
-            Show history
-          </label>
+          <ReviewModeToggle mode={mode} onChange={setMode} />
         </div>
       </div>
       <BoardActions history={showHistory} filter="rewards" />
