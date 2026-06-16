@@ -473,6 +473,18 @@ export function ProposalSubmit() {
               the budget, use <strong>Request a budget change</strong> on the proposal once it&apos;s active.
             </div>
           ) : null}
+          {/* §5.2 — the selected category's per-proposal ask range + conditions, right below the
+              requested amount so the submitter sees the allowed bounds as they type the ask. */}
+          {selectedCat && (selectedCat.minAda != null || selectedCat.maxAda != null || selectedCat.conditions) ? (
+            <div className="rounded border border-neutral-200 p-2 text-xs dark:border-neutral-800">
+              {selectedCat.minAda != null || selectedCat.maxAda != null ? (
+                <div className={(selectedCat.minAda != null && Number(amount) < selectedCat.minAda) || (selectedCat.maxAda != null && Number(amount) > selectedCat.maxAda) ? 'font-medium text-red-600' : 'text-neutral-600 dark:text-neutral-400'}>
+                  Allowed ask for “{selectedCat.name}”: {selectedCat.minAda != null ? `min ${selectedCat.minAda.toLocaleString()} ₳` : 'no min'} · {selectedCat.maxAda != null ? `max ${selectedCat.maxAda.toLocaleString()} ₳` : 'no max'}
+                </div>
+              ) : null}
+              {selectedCat.conditions ? <div className="mt-0.5 whitespace-pre-wrap text-neutral-500">Conditions: {selectedCat.conditions}</div> : null}
+            </div>
+          ) : null}
           <MarkdownEditor
             value={content}
             onChange={setContent}
@@ -510,17 +522,6 @@ export function ProposalSubmit() {
             maxWords={maxWords}
             showShortfall={triedSubmit}
           />
-          {/* §5.2 — the selected category's per-proposal ask range + conditions. */}
-          {selectedCat && (selectedCat.minAda != null || selectedCat.maxAda != null || selectedCat.conditions) ? (
-            <div className="rounded border border-neutral-200 p-2 text-xs dark:border-neutral-800">
-              {selectedCat.minAda != null || selectedCat.maxAda != null ? (
-                <div className={(selectedCat.minAda != null && Number(amount) < selectedCat.minAda) || (selectedCat.maxAda != null && Number(amount) > selectedCat.maxAda) ? 'font-medium text-red-600' : 'text-neutral-600 dark:text-neutral-400'}>
-                  Allowed ask for “{selectedCat.name}”: {selectedCat.minAda != null ? `min ${selectedCat.minAda.toLocaleString()} ₳` : 'no min'} · {selectedCat.maxAda != null ? `max ${selectedCat.maxAda.toLocaleString()} ₳` : 'no max'}
-                </div>
-              ) : null}
-              {selectedCat.conditions ? <div className="mt-0.5 whitespace-pre-wrap text-neutral-500">Conditions: {selectedCat.conditions}</div> : null}
-            </div>
-          ) : null}
           <div>
             <div className="text-sm font-medium">Milestones (budgets must sum to requested)</div>
             <div className="mt-1 space-y-2">
