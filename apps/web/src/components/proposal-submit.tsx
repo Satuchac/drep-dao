@@ -599,7 +599,7 @@ export function ProposalSubmit() {
             onRequiredChange={setRevenueSharingRequired}
             text={revenueSharing}
             onTextChange={setRevenueSharing}
-            submissionFeeAddress={cfg?.submissionFeeAddress ?? null}
+            pledgeAddress={cfg?.pledgeAddress ?? null}
           />
           {/* §3 — optional refundable pledge. Only shown when the round's threshold > 0.
               Team opts in; amount must be ≥ threshold; return-method description is required.
@@ -1296,13 +1296,13 @@ export function RevenueSharingBlock({
   onRequiredChange,
   text,
   onTextChange,
-  submissionFeeAddress,
+  pledgeAddress,
 }: {
   required: boolean;
   onRequiredChange: (v: boolean) => void;
   text: string;
   onTextChange: (v: string) => void;
-  submissionFeeAddress: string | null;
+  pledgeAddress: string | null;
 }) {
   return (
     <div className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
@@ -1323,14 +1323,16 @@ export function RevenueSharingBlock({
             placeholder="Describe the action and any verification details (tx hash, on-chain address, etc.)"
             minRows={3}
           />
-          {submissionFeeAddress ? (
-            <div className="rounded border border-neutral-200 bg-neutral-50/60 p-2 text-xs dark:border-neutral-800 dark:bg-neutral-900/40">
-              <div className="text-neutral-600 dark:text-neutral-400">
-                If you&apos;ll send tokens to the Treasury, use the platform&apos;s submission-fee address (also the canonical platform-receive address):
+          {pledgeAddress ? (
+            <div className="rounded border border-amber-200 bg-amber-50/60 p-2 text-xs dark:border-amber-900 dark:bg-amber-950/30">
+              <div className="text-amber-800 dark:text-amber-200">
+                <strong>Do not send anything now.</strong> If this proposal is <strong>approved</strong> and you committed to
+                sharing tokens, the team will be asked — <strong>only after approval</strong>, before funding starts — to send
+                the tokens to the platform&apos;s <strong>Pledge</strong> address below. Sending earlier won&apos;t count.
               </div>
               <div className="mt-1 flex items-center gap-2">
-                <div className="flex-1 break-all font-mono text-[11px] text-neutral-500">{submissionFeeAddress}</div>
-                <CopyButton text={submissionFeeAddress} label="Copy address" />
+                <div className="flex-1 break-all font-mono text-[11px] text-amber-700/90 dark:text-amber-300/90">{pledgeAddress}</div>
+                <CopyButton text={pledgeAddress} label="Copy address" />
               </div>
             </div>
           ) : null}

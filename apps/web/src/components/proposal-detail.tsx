@@ -1863,7 +1863,7 @@ function EditSection({
         onRequiredChange={setRevenueSharingRequired}
         text={revenueSharing}
         onTextChange={setRevenueSharing}
-        submissionFeeAddress={cfg?.submissionFeeAddress ?? null}
+        pledgeAddress={cfg?.pledgeAddress ?? null}
       />
       <label className="block">
         <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Payout / refund address (Cardano)</span>
