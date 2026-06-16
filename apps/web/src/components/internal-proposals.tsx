@@ -7,6 +7,7 @@ import {
   daoApi,
   configApi,
   treasuryBucketsApi,
+  matchesProposalSearch,
   type TreasuryBucket,
   type InternalProposalSummary,
   type InternalProposalDetail,
@@ -73,12 +74,11 @@ export function InternalProposals() {
   }
 
   const all = items ?? [];
-  // Sub-tab filter (regular vs election) → status tab → ID/title search → pager.
+  // Sub-tab filter (regular vs election) → status tab → ID/title/proposer search → pager.
   const inTab = all.filter((p) => (subTab === 'election' ? p.isBoardElection : !p.isBoardElection));
-  const q = search.trim().toLowerCase();
   const filtered = inTab
     .filter((p) => (statusTab ? p.status === statusTab : true))
-    .filter((p) => !q || p.title.toLowerCase().includes(q) || (p.publicId ?? '').toLowerCase().includes(q));
+    .filter((p) => matchesProposalSearch(search, { title: p.title, proposer: p.submitter, publicId: p.publicId }));
   const pages = Math.max(1, Math.ceil(filtered.length / LIST_PAGE_SIZE));
   const safePage = Math.min(page, pages);
   const visible = filtered.slice((safePage - 1) * LIST_PAGE_SIZE, safePage * LIST_PAGE_SIZE);
@@ -136,7 +136,7 @@ export function InternalProposals() {
         <input
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          placeholder="Search by proposal ID or title…"
+          placeholder="Search by proposal ID, title, or proposer…"
           className="min-w-64 flex-1 rounded-md border border-neutral-300 px-2.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
         />
         <span className="text-xs text-neutral-500">{filtered.length} proposal{filtered.length === 1 ? '' : 's'}</span>
@@ -151,7 +151,7 @@ export function InternalProposals() {
       {items === null ? (
         <p className="text-sm text-neutral-500">Loading…</p>
       ) : visible.length === 0 ? (
-        <p className="text-sm text-neutral-500">{q || statusTab
+        <p className="text-sm text-neutral-500">{search.trim() || statusTab
           ? 'No proposals match the filter.'
           : (isElection ? 'No board-member elections yet.' : 'No internal proposals yet.')}</p>
       ) : (

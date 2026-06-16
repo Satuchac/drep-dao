@@ -790,6 +790,7 @@ export interface SubmitterPortfolio {
     paidAda: number;
     completed: number;
     inProgress: number;
+    rejected: number;
     missingMilestones: number;
   };
 }
@@ -1042,8 +1043,11 @@ export function matchesProposalSearch(
 ): boolean {
   const q = (query ?? '').trim().toLowerCase();
   if (!q) return true;
-  return [fields.title, fields.proposer, fields.publicId, ...(fields.extra ?? [])]
-    .some((f) => (f ?? '').toLowerCase().includes(q));
+  const haystacks = [fields.title, fields.proposer, fields.publicId, ...(fields.extra ?? [])]
+    .map((f) => (f ?? '').toLowerCase());
+  // Each whitespace-separated term must match at least one field (so "tool great" finds
+  // "Dave's great tool"); a single term stays a plain substring match.
+  return q.split(/\s+/).every((term) => haystacks.some((f) => f.includes(term)));
 }
 
 export interface ProposalSummary {

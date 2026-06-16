@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { proposalsApi, type ProposalSummary, type ProposalProgress } from '@/lib/api';
+import { proposalsApi, matchesProposalSearch, type ProposalSummary, type ProposalProgress } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { StatusBadge, PROPOSAL_STATUS_CLS } from './round-ui';
@@ -66,15 +66,14 @@ export function ProposalList({ roundId }: { roundId: string }) {
     };
   }, [roundId]);
 
-  // Filter (bucket + ID/title search) → group-sort (pending/approved/rejected) → paginate.
+  // Filter (bucket + ID/title/proposer search) → group-sort (pending/approved/rejected) → paginate.
   const filtered = useMemo(() => {
     if (!proposals) return [];
-    const q = search.trim().toLowerCase();
     return proposals
       // "All" hides private DRAFTs (board only sees them under the dedicated Drafts tab); a
       // specific bucket matches exactly.
       .filter((p) => (bucket ? bucketOf(p) === bucket : bucketOf(p) !== 'draft'))
-      .filter((p) => !q || p.title.toLowerCase().includes(q) || (p.publicId ?? '').toLowerCase().includes(q))
+      .filter((p) => matchesProposalSearch(search, { title: p.title, proposer: p.submitter, publicId: p.publicId }))
       .sort((a, b) => BUCKET_ORDER[bucketOf(a)] - BUCKET_ORDER[bucketOf(b)]);
   }, [proposals, bucket, search]);
 
@@ -111,7 +110,7 @@ export function ProposalList({ roundId }: { roundId: string }) {
         <input
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          placeholder="Search by proposal ID (R1-P2) or title…"
+          placeholder="Search by proposal ID (R1-P2), title, or proposer…"
           className="min-w-64 flex-1 rounded-md border border-neutral-300 px-2.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
         />
         <span className="text-xs text-neutral-500">{filtered.length} proposal{filtered.length === 1 ? '' : 's'}</span>
