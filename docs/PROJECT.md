@@ -251,9 +251,10 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   proposal id** (`publicId`, e.g. `R6-P3`, frozen on the row + shown in the UI) and an
   **on-chain anchor** is written (label 80808081, subject `submission`,
   `AnchorService.anchorSubmission` → `buildSubmissionMetadata`) recording the **proposal id**,
-  the **submitter** (their DRep id, or stake/wallet address if not a DRep), and the **fee
-  facts** `{required, paid, ada, txHash}` (the tx that paid the fee). Shows in *On-chain
-  proofs* as "Funding proposal accepted"; best-effort + re-submittable like every anchor.
+  the **submitter** (their DRep id, or stake/wallet address if not a DRep), the **requested**
+  funding amount (ADA, rounded), and the **fee facts** `{ada, txHash}` (the tx that paid the
+  fee). Shows in *On-chain proofs* as "Funding proposal accepted"; best-effort + re-submittable
+  like every anchor. The proposal detail also shows the **submission date** (`submittedAt`).
   From *My proposals* a draft row has
   **Edit** (reopens the full form pre-filled — all fields incl. milestones, via
   `PATCH /proposals/:id`) and **Submit** (submit later), alongside its "DRAFT · private"

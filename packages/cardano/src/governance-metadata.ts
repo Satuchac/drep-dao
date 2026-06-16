@@ -190,6 +190,7 @@ export interface AnchorSubmissionMetadata {
   submitterType: 'DRep' | 'Wallet';
   outcome: 'accepted' | 'rejected'; // the board's fee-review decision
   reason?: string; // why it was rejected (set only when outcome === 'rejected')
+  requested?: number; // the funding amount the proposer asked for, in ADA
   // The fee paid for the submission — the amount + tx hash are self-evident proof.
   fee: { ada: number; txHash?: string };
   decidedAt: string;
@@ -203,6 +204,7 @@ export function buildSubmissionMetadata(p: {
   submitterType: 'DRep' | 'Wallet';
   feeAda: number;
   feeTxHash?: string | null;
+  requestedAda?: number | null;
   outcome?: 'accepted' | 'rejected';
   reason?: string | null;
   decidedAt?: string;
@@ -216,6 +218,7 @@ export function buildSubmissionMetadata(p: {
     submitterType: p.submitterType,
     outcome,
     ...(outcome === 'rejected' && p.reason ? { reason: p.reason } : {}),
+    ...(p.requestedAda != null ? { requested: Math.round(p.requestedAda) } : {}),
     fee: {
       ada: Math.round(p.feeAda),
       ...(p.feeTxHash ? { txHash: p.feeTxHash } : {}),

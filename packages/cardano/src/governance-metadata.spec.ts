@@ -56,6 +56,15 @@ describe('buildSubmissionMetadata (§3 — slimmed accepted-proposal anchor)', (
     const meta = buildSubmissionMetadata({ ...base, round: null })[GOVERNANCE_METADATA_LABEL];
     expect('round' in meta).toBe(false);
   });
+
+  it('carries the requested funding amount (rounded) when provided, omits it otherwise', () => {
+    const withReq = buildSubmissionMetadata({ ...base, requestedAda: 1500.4 })[GOVERNANCE_METADATA_LABEL];
+    expect(withReq.requested).toBe(1500);
+    expect(Number.isInteger(withReq.requested as number)).toBe(true);
+
+    const noReq = buildSubmissionMetadata(base)[GOVERNANCE_METADATA_LABEL];
+    expect('requested' in noReq).toBe(false);
+  });
 });
 
 describe('buildDocHashMetadata (§8.1 — post-debate content fingerprint)', () => {

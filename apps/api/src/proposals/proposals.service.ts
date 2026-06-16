@@ -1945,6 +1945,7 @@ export class ProposalsService {
         submitterType: drepId ? 'DRep' : 'Wallet',
         feeAda: fee.ada,
         feeTxHash: fee.txHash ?? null,
+        requestedAda: toAda(p.requestedAmountAda),
         outcome: opts?.outcome ?? 'accepted',
         reason: opts?.reason ?? null,
       });

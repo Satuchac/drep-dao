@@ -293,6 +293,7 @@ export class AnchorService implements OnModuleInit {
     submitterType: 'DRep' | 'Wallet';
     feeAda: number;
     feeTxHash?: string | null;
+    requestedAda?: number | null;
     outcome?: 'accepted' | 'rejected';
     reason?: string | null;
   }): Promise<AnchorResult> {
@@ -305,6 +306,7 @@ export class AnchorService implements OnModuleInit {
       submitterType: params.submitterType,
       outcome,
       reason: outcome === 'rejected' ? params.reason ?? null : null,
+      requested: params.requestedAda ?? null,
       fee: { ada: params.feeAda, txHash: params.feeTxHash ?? null },
       decidedAt: new Date().toISOString(),
     };
@@ -317,6 +319,7 @@ export class AnchorService implements OnModuleInit {
       submitterType: params.submitterType,
       feeAda: params.feeAda,
       feeTxHash: params.feeTxHash ?? null,
+      requestedAda: params.requestedAda ?? null,
       outcome,
       reason: preimage.reason,
       decidedAt: preimage.decidedAt,
@@ -660,6 +663,7 @@ export class AnchorService implements OnModuleInit {
       submitterType?: 'DRep' | 'Wallet';
       outcome?: 'accepted' | 'rejected';
       reason?: string | null;
+      requested?: number | null; // requested funding (ADA) — added to newer submission anchors
       decidedAt?: string;
       acceptedAt?: string; // older anchors used this name
       fee?: { required?: boolean; paid?: boolean; ada?: number; txHash?: string | null };
@@ -702,6 +706,7 @@ export class AnchorService implements OnModuleInit {
         submitterType: p.submitterType ?? 'Wallet',
         feeAda: p.fee?.ada ?? 0,
         feeTxHash: p.fee?.txHash ?? null,
+        requestedAda: p.requested ?? null,
         outcome: p.outcome ?? 'accepted',
         reason: p.reason ?? null,
         decidedAt: p.decidedAt ?? p.acceptedAt,

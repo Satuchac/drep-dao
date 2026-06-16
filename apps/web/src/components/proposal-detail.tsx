@@ -135,6 +135,8 @@ export function ProposalDetail({
           {p.categoryAsk && (p.categoryAsk.minAda != null || p.categoryAsk.maxAda != null) ? (
             <> · category ask {p.categoryAsk.minAda != null ? `${p.categoryAsk.minAda.toLocaleString()}` : '0'}–{p.categoryAsk.maxAda != null ? `${p.categoryAsk.maxAda.toLocaleString()}` : '∞'} ₳</>
           ) : null}
+          {/* §3 — when the proposer submitted it (set on submit; null while still a private draft). */}
+          {p.submittedAt ? <> · submitted {fmtDateTime(p.submittedAt)}</> : null}
         </div>
         {/* §3.5 — board can message the submitter at any stage (jumps to the thread list below). */}
         {isBoard ? (
