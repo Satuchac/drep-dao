@@ -349,6 +349,7 @@ export class RoundsService {
         mandatoryWords: r.mandatoryWords,
         mandatoryWordsMax: r.mandatoryWordsMax,
         minimumTitleLen: r.minimumTitleLen,
+        minimumMilestoneTitleLen: r.minimumMilestoneTitleLen,
       },
       // §8 — what the board must confirm/launch next (null once CLOSED).
       nextStage: this.computeNextStage(r.status, schedule),

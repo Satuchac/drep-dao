@@ -266,6 +266,7 @@ export class ProposalsService {
         },
         finalMilestones,
       ));
+      await this.assertMilestoneTitleWords(p.roundId, finalMilestones);
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -444,6 +445,7 @@ export class ProposalsService {
     });
     await this.assertMandatoryWords(p.roundId, this.mandatoryProposalFields(p, milestonesAtSubmit));
     await this.assertTitleLength(p.roundId, p.title);
+    await this.assertMilestoneTitleWords(p.roundId, milestonesAtSubmit);
     const fee = await this.computeFee(toAda(p.requestedAmountAda), p.isCommercial ?? false, p.roundId);
     if (fee <= 0) {
       // No fee for this proposal type → admit immediately, no board fee confirmation.
@@ -2130,11 +2132,32 @@ export class ProposalsService {
     ];
     milestones.forEach((m, i) => {
       const n = (m.idx != null ? m.idx : i) + 1;
-      out.push({ label: `Milestone ${n} title`, text: m.title });
+      // §3 — milestone TITLE is a "short" field governed by minimumMilestoneTitleLen
+      // (see assertMilestoneTitleWords), not the generic mandatoryWords min/max.
       out.push({ label: `Milestone ${n} description`, text: m.description });
       out.push({ label: `Milestone ${n} acceptance criteria`, text: m.acceptanceCriteria });
     });
     return out;
+  }
+
+  /** §3 — each milestone title must meet the round's `minimumMilestoneTitleLen` (words; 0 disables). */
+  private async assertMilestoneTitleWords(
+    roundId: string | null,
+    milestones: { idx?: number; title: string | null }[],
+  ) {
+    if (!roundId) return;
+    const round = await this.prisma.round.findUnique({ where: { id: roundId }, select: { minimumMilestoneTitleLen: true } });
+    const min = round?.minimumMilestoneTitleLen ?? ROUND_SETTING_DEFAULTS.minimumMilestoneTitleLen;
+    if (min <= 0) return;
+    const short = milestones
+      .map((m, i) => ({ n: (m.idx != null ? m.idx : i) + 1, words: this.wordCount(m.title) }))
+      .filter((m) => m.words < min);
+    if (short.length > 0) {
+      const detail = short.map((m) => `Milestone ${m.n} title (${m.words}/${min})`).join(', ');
+      throw new BadRequestException(
+        `Each milestone title needs at least ${min} word${min === 1 ? '' : 's'}. Too short: ${detail}.`,
+      );
+    }
   }
 
   private assertMilestonesSum(milestones: MilestoneInput[], requestedAda: number) {

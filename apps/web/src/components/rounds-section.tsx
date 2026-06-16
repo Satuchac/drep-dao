@@ -93,6 +93,7 @@ const SETTING_GROUPS: { title: string; fields: { key: SettingKey; label: string;
       { key: 'mandatoryWords', label: 'Minimum words per field' },
       { key: 'mandatoryWordsMax', label: 'Maximum words per field' },
       { key: 'minimumTitleLen', label: 'Minimum title length (chars)' },
+      { key: 'minimumMilestoneTitleLen', label: 'Minimum milestone title (words)' },
     ],
   },
 ];

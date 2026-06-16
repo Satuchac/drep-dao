@@ -121,6 +121,10 @@ export const ROUND_SETTING_DEFAULTS = {
   // §3 — minimum number of characters a proposal title must have. Checked on every
   // proposal save/edit. 0 disables the check.
   minimumTitleLen: 4,
+  // §3 — minimum word count for SHORT text fields (each milestone's title). Separate from
+  // mandatoryWords (which governs the longer fields). Checked at submit + post-submission
+  // edits. 0 disables the check.
+  minimumMilestoneTitleLen: 1,
 } as const;
 
 export type RoundSettingKey = keyof typeof ROUND_SETTING_DEFAULTS;
@@ -166,6 +170,8 @@ export const ROUND_SETTING_META: Record<RoundSettingKey, string> = {
     'Maximum word count allowed on each mandatory text field (same fields as the minimum). Checked on submit and on every post-submission edit. 0 disables the upper bound.',
   minimumTitleLen:
     'Minimum number of characters a proposal title must have. Checked on every proposal save/edit. 0 disables the check.',
+  minimumMilestoneTitleLen:
+    'Minimum word count for short text fields (each milestone title). Checked at submit and on post-submission edits. 0 disables the check.',
 };
 
 /** Known block explorers → tx/address URL templates per network ({hash}/{address} placeholders). */

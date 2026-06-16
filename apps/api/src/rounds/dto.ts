@@ -64,6 +64,8 @@ export class RoundSettingsInput {
   @IsOptional() @IsInt() @Min(0) mandatoryWordsMax?: number;
   // §3 — minimum number of characters a proposal title must have. 0 disables.
   @IsOptional() @IsInt() @Min(0) minimumTitleLen?: number;
+  // §3 — minimum word count for short text fields (milestone titles). 0 disables.
+  @IsOptional() @IsInt() @Min(0) minimumMilestoneTitleLen?: number;
 }
 
 // MVP schedule uses coarse operational windows rather than the 9 fine-grained

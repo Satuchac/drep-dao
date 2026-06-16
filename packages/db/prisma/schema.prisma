@@ -343,6 +343,8 @@ model Round {
   mandatoryWordsMax               Int? @map("mandatory_words_max")
   // §3 — minimum number of characters a proposal title must have (0 disables).
   minimumTitleLen                 Int? @map("minimum_title_len")
+  // §3 — minimum word count for short text fields (milestone titles); 0 disables.
+  minimumMilestoneTitleLen        Int? @map("minimum_milestone_title_len")
   createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   endedAt         DateTime? @map("ended_at") @db.Timestamptz(6)
 
