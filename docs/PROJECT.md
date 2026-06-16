@@ -516,8 +516,13 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   single proposer/public-id, so they match on title + description + recipient names; the paged
   fee history filters the rows currently loaded.
 - **To do / Recent / History** also applies to **Debate & Vote** (round-based: *To do* = votable
-  now, *Recent* = any active round incl. waiting-for-VOTE, *History* = finished/closed only) and
-  the **Actions** tab (replaces its old "Show history" checkbox).
+  now, *Recent* = any active round incl. waiting-for-VOTE, *History* = finished **and** actually
+  reached D&V) and the **Actions** tab (replaces its old "Show history" checkbox). The bucketing
+  is the pure `matchesDvMode` (`@drep-dao/shared/proposal-lifecycle`, unit-tested). D&V *History*
+  excludes proposals **rejected at the filtering stage** (`stage==='FILTERING'`, status
+  `REJECTED`): those are still changeable in the Filtering panel, so they stay in Filtering
+  *Recent* — only proposals that reached Debate & Vote (rejected in the vote → `stage` null;
+  approved → `FUNDING`; or a closed round) appear in D&V *History*.
 - **Submitter profile portfolio** gains a **Rejected** headline stat (count of the submitter's
   `REJECTED` proposals — turned down at filtering / Debate & Vote), alongside Submitted /
   Requested / Granted budget / Paid so far / Completed / In progress (`submitterPortfolio`).

@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
   boardProposalsApi,
   dvApi,
+  matchesDvMode,
   matchesProposalSearch,
   proposalsApi,
   roundsApi,
@@ -31,22 +32,14 @@ export function VotingPanel({ mode = 'pending', query }: { mode?: ReviewMode; qu
   const load = useCallback(async () => {
     const rounds = await roundsApi.list().catch(() => []);
     const lists = await Promise.all(rounds.map((r) => proposalsApi.byRound(r.id).catch(() => [])));
-    // The proposal stage flips to DEBATE_VOTE the moment filtering passes, but ballots aren't
-    // accepted until the round itself reaches VOTE. Modes (round-based, so active items never
-    // sit in History):
-    //   To do   — votable now: in DEBATE_VOTE and the round is in VOTE.
-    //   Recent  — in DEBATE_VOTE in any ACTIVE (non-closed) round (incl. "waiting for VOTE").
-    //   History — only FINISHED proposals (a D&V decision was published / the round closed).
+    // Bucketing rules (To do / Recent / History, round-based) live in matchesDvMode — see
+    // @drep-dao/shared/proposal-lifecycle. History excludes filtering-rejected proposals.
     const voteRoundIds = new Set(rounds.filter((r) => r.status === 'VOTE' || r.status === 'DV').map((r) => r.id));
     const closedRoundIds = new Set(rounds.filter((r) => r.status === 'CLOSED').map((r) => r.id));
     const all = lists.flat();
-    const finished = (p: ProposalSummary) => ['APPROVED', 'REJECTED', 'COMPLETE', 'FAILED'].includes(p.status) || (!!p.roundId && closedRoundIds.has(p.roundId));
-    const pred = mode === 'history'
-      ? finished
-      : mode === 'recent'
-        ? (p: ProposalSummary) => p.stage === 'DEBATE_VOTE' && !finished(p)
-        : (p: ProposalSummary) => p.stage === 'DEBATE_VOTE' && !!p.roundId && voteRoundIds.has(p.roundId) && !finished(p);
-    setItems(all.filter((p) => pred(p) && matchesProposalSearch(query, { title: p.title, proposer: p.submitter, publicId: p.publicId })));
+    setItems(all.filter((p) =>
+      matchesDvMode(p, mode, { voteRoundIds, closedRoundIds })
+      && matchesProposalSearch(query, { title: p.title, proposer: p.submitter, publicId: p.publicId })));
   }, [mode, query]);
   useEffect(() => {
     void load();

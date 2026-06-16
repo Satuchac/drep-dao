@@ -1035,7 +1035,7 @@ export interface ProposalRejectionReason {
 // §UI — proposal search helper (Title / Proposer / public ID, multi-term). Lives in the
 // shared package (so it can be unit-tested without a web runner); re-exported here so
 // components keep importing it from '@/lib/api'.
-export { matchesProposalSearch } from '@drep-dao/shared';
+export { matchesProposalSearch, matchesDvMode } from '@drep-dao/shared';
 
 export interface ProposalSummary {
   id: string;
