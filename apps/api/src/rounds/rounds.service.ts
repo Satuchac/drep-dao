@@ -807,9 +807,10 @@ export class RoundsService {
     return out;
   }
 
-  /** §6/§8 — count of open rounds whose NEXT stage is overdue: its planned start
-   *  has passed but the stage hasn't begun (the board must start it). Drives the
-   *  board's Round-control to-do badge so they notice and fix it first. */
+  /** §6/§8 — count of open rounds whose NEXT stage needs the board's attention: it's either
+   *  NOT yet confirmed (a board member must confirm/launch it — e.g. right after launching the
+   *  current stage), or its planned start has already passed (overdue). Excludes the manual
+   *  round-close step. Drives the board's Round-control to-do badge until each stage is confirmed. */
   async countOverdueStages(): Promise<number> {
     const rounds = await this.prisma.round.findMany({
       where: { status: { not: RoundStatus.CLOSED } },
@@ -819,7 +820,9 @@ export class RoundsService {
     let count = 0;
     for (const r of rounds) {
       const next = this.computeNextStage(r.status, r.schedule);
-      if (next?.planned && next.planned.startsAt.getTime() < now) count += 1;
+      if (!next || next.manualOnly) continue; // CLOSED is a manual board action, not a "confirm" to-do
+      const overdue = !!next.planned && next.planned.startsAt.getTime() < now;
+      if (!next.confirmed || overdue) count += 1;
     }
     return count;
   }

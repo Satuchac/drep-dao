@@ -6,6 +6,7 @@ import { ProposalCounts, StatusBadge, fmtDateTime, toLocalInput, DateField } fro
 import { CreateRoundForm } from './rounds-section';
 import { ConfirmDialog } from './confirm-dialog';
 import { useAuth } from '@/lib/auth-context';
+import { notifyTodoChanged } from '@/lib/use-todo-counts';
 
 /** "1 day and 5 hours" / "5 hours and 12 minutes" / "8 minutes" from a ms delta. */
 function untilLabel(ms: number): string {
@@ -156,6 +157,9 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
     try {
       await action();
       onChange();
+      // §8 — confirming/launching/saving a stage changes the Round-control to-do count;
+      // refresh the badges right away (a now-confirmed next stage drops off the count).
+      notifyTodoChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'action failed');
     } finally {
