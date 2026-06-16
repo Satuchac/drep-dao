@@ -118,6 +118,9 @@ export const ROUND_SETTING_DEFAULTS = {
   // §3 — maximum word count per mandatory text field (same fields as the min).
   // Validated on submit + post-submission edits. 0 disables the upper bound.
   mandatoryWordsMax: 2000,
+  // §3 — minimum number of characters a proposal title must have. Checked on every
+  // proposal save/edit. 0 disables the check.
+  minimumTitleLen: 4,
 } as const;
 
 export type RoundSettingKey = keyof typeof ROUND_SETTING_DEFAULTS;
@@ -161,6 +164,8 @@ export const ROUND_SETTING_META: Record<RoundSettingKey, string> = {
     'Minimum word count required on each mandatory text field of a proposal: title, pitch, every milestone (name + description + acceptance criteria), ecosystem impact, success metrics, cost breakdown, team info. Checked on submit and on every post-submission edit. 0 disables the check entirely (test mode).',
   mandatoryWordsMax:
     'Maximum word count allowed on each mandatory text field (same fields as the minimum). Checked on submit and on every post-submission edit. 0 disables the upper bound.',
+  minimumTitleLen:
+    'Minimum number of characters a proposal title must have. Checked on every proposal save/edit. 0 disables the check.',
 };
 
 /** Known block explorers → tx/address URL templates per network ({hash}/{address} placeholders). */

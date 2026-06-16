@@ -114,6 +114,8 @@ export class ProposalsService {
     }
     this.assertMilestonesSum(dto.milestones, dto.requestedAmountAda);
     this.assertPledge(round, dto.pledgeAmountAda, dto.pledgeReturnMethod);
+    // §3 — title must meet the round's minimum length.
+    await this.assertTitleLength(dto.roundId, dto.title);
 
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
 
@@ -206,6 +208,8 @@ export class ProposalsService {
     if (titleLocked && dto.title != null && dto.title.trim() !== p.title) {
       throw new BadRequestException('the title is locked after submission — it cannot be changed');
     }
+    // §3 — a (re)named title must still meet the round's minimum length.
+    if (dto.title !== undefined) await this.assertTitleLength(p.roundId, dto.title);
     const amountLocked = !(p.status === ProposalStatus.DRAFT || feeRejected || fullRevisionPhase);
     if (amountLocked) {
       if (dto.requestedAmountAda != null && dto.requestedAmountAda !== toAda(p.requestedAmountAda)) {
@@ -439,6 +443,7 @@ export class ProposalsService {
       select: { idx: true, title: true, description: true, acceptanceCriteria: true },
     });
     await this.assertMandatoryWords(p.roundId, this.mandatoryProposalFields(p, milestonesAtSubmit));
+    await this.assertTitleLength(p.roundId, p.title);
     const fee = await this.computeFee(toAda(p.requestedAmountAda), p.isCommercial ?? false, p.roundId);
     if (fee <= 0) {
       // No fee for this proposal type → admit immediately, no board fee confirmation.
@@ -2061,6 +2066,17 @@ export class ProposalsService {
    * count. 0 disables the check (test mode). Validates on submit and on every
    * post-submission edit; pre-public drafts can stay partial.
    */
+  /** §3 — the title must be at least the round's `minimumTitleLen` characters (0 disables). */
+  private async assertTitleLength(roundId: string | null, title: string | null | undefined) {
+    if (!roundId || title == null) return;
+    const round = await this.prisma.round.findUnique({ where: { id: roundId }, select: { minimumTitleLen: true } });
+    const min = round?.minimumTitleLen ?? ROUND_SETTING_DEFAULTS.minimumTitleLen;
+    const len = title.trim().length;
+    if (min > 0 && len < min) {
+      throw new BadRequestException(`The title must be at least ${min} character${min === 1 ? '' : 's'} (currently ${len}).`);
+    }
+  }
+
   private async assertMandatoryWords(
     roundId: string | null,
     fields: { label: string; text: string | null | undefined }[],

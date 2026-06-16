@@ -858,6 +858,7 @@ export interface RoundSettingsInput {
   filterBudgetChangesAllowed?: number;
   mandatoryWords?: number;
   mandatoryWordsMax?: number;
+  minimumTitleLen?: number;
 }
 export interface CreateRoundInput extends RoundSettingsInput {
   name?: string;

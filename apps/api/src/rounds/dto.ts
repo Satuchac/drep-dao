@@ -62,6 +62,8 @@ export class RoundSettingsInput {
   @IsOptional() @IsInt() @Min(0) mandatoryWords?: number;
   // §3 — maximum word count per mandatory field. 0 disables the upper bound.
   @IsOptional() @IsInt() @Min(0) mandatoryWordsMax?: number;
+  // §3 — minimum number of characters a proposal title must have. 0 disables.
+  @IsOptional() @IsInt() @Min(0) minimumTitleLen?: number;
 }
 
 // MVP schedule uses coarse operational windows rather than the 9 fine-grained
