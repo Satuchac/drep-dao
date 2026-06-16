@@ -130,14 +130,18 @@ export function ProposalList({ roundId }: { roundId: string }) {
 
     <ul className="space-y-2">
       {visible.map((p) => {
-        // Row colour per the user's spec:
-        //   yellow → status PENDING (waiting for the platform/board)
+        // Colour + status by READINESS, not raw status:
+        //   yellow → not ready (PENDING, or ACTIVE still awaiting board/submitter action)
         //   red    → REJECTED / FAILED (submitter may need to fix something)
-        //   white  → everything else (ACTIVE / APPROVED / COMPLETE — ready or in-flight)
+        //   white  → ready / progressing (ACTIVE-green, APPROVED, COMPLETE)
+        const b = bucketOf(p);
+        // An ACTIVE proposal that isn't ready yet (e.g. board must assign reviewers) reads as
+        // PENDING — it can't enter the next stage until the action is done.
+        const displayStatus = b === 'pending' ? 'PENDING' : p.status;
         const tint =
-          p.status === 'PENDING'
+          b === 'pending'
             ? 'border-amber-300 bg-amber-50/70 hover:border-amber-500 dark:border-amber-900 dark:bg-amber-950/30'
-            : p.status === 'REJECTED' || p.status === 'FAILED'
+            : b === 'rejected'
               ? 'border-red-300 bg-red-50/60 hover:border-red-500 dark:border-red-900 dark:bg-red-950/30'
               : 'border-neutral-200 hover:border-emerald-400 dark:border-neutral-800';
         return (
@@ -154,7 +158,7 @@ export function ProposalList({ roundId }: { roundId: string }) {
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
                 {p.publicId ? <span>ID: <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{p.publicId}</span></span> : null}
                 {p.stage ? <span>Stage: <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.stage}</span></span> : null}
-                <span className="flex items-center gap-1">Status: <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} /></span>
+                <span className="flex items-center gap-1">Status: <StatusBadge status={displayStatus} cls={PROPOSAL_STATUS_CLS} /></span>
                 {p.progress ? <ProgressChip p={p.progress} /> : null}
                 {/* §11 — milestone reviewer assignment flag for FUNDING proposals. */}
                 {p.milestoneReviewers === 'not_assigned' ? (
