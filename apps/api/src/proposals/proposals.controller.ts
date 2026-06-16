@@ -20,15 +20,18 @@ export class ProposalsController {
   constructor(private readonly proposals: ProposalsService) {}
 
   // ---- public read (§26.2) ----
+  // Optional auth: board members additionally see private DRAFTs (§16).
+  @UseGuards(OptionalJwtAuthGuard)
   @Get('rounds/:roundId/proposals')
-  byRound(@Param('roundId', ParseUUIDPipe) roundId: string, @Query('status') status?: string) {
-    return this.proposals.listByRound(roundId, status);
+  byRound(@Param('roundId', ParseUUIDPipe) roundId: string, @Query('status') status?: string, @CurrentUser() ctx?: AuthContext) {
+    return this.proposals.listByRound(roundId, status, ctx?.userId);
   }
 
   /** §26.2 — every proposal across ALL rounds (the "All rounds" picker option). */
+  @UseGuards(OptionalJwtAuthGuard)
   @Get('proposals')
-  allRounds(@Query('status') status?: string) {
-    return this.proposals.listAllRounds(status);
+  allRounds(@Query('status') status?: string, @CurrentUser() ctx?: AuthContext) {
+    return this.proposals.listAllRounds(status, ctx?.userId);
   }
 
   // Public, but the owner may read their own private DRAFT/PENDING (optional auth).

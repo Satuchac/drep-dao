@@ -21,6 +21,7 @@ import { GovSubject } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { AnchorService } from '../cardano/anchor.service';
+import { BoardService } from '../auth/board.service';
 import { BudgetChangeDto, CreateProposalDto, MilestoneInput, ReviewFeeDto, ReviewPledgeDto, SubmitProposalDto, UpdateProposalDto } from './dto';
 
 const LOVELACE = 1_000_000;
@@ -74,6 +75,8 @@ export class ProposalsService {
     // Optional so service-level test scripts can `new ProposalsService(prisma, config, cardano)`
     // without an anchor wallet — anchoring is then simply skipped.
     @Optional() private readonly anchor?: AnchorService,
+    // §16 — board members may see private DRAFTs (to contact authors); Optional for the same reason.
+    @Optional() private readonly board?: BoardService,
   ) {}
 
   async createDraft(userId: string, dto: CreateProposalDto) {
@@ -1078,11 +1081,18 @@ export class ProposalsService {
   /** @deprecated kept for backwards-compatibility in the detail-access check. */
   private static readonly PRIVATE_STATUSES = ProposalsService.PRIVATE_DETAIL_STATUSES;
 
-  async listByRound(roundId: string, status?: string) {
+  /** §16 — board members may see private DRAFTs (to reach out to authors); everyone else can't. */
+  private async isBoardViewer(viewerUserId?: string): Promise<boolean> {
+    return !!viewerUserId && !!this.board && (await this.board.isBoardMember(viewerUserId));
+  }
+
+  async listByRound(roundId: string, status?: string, viewerUserId?: string) {
+    // Board members see DRAFTs too; for everyone else they stay hidden.
+    const hidden = (await this.isBoardViewer(viewerUserId)) ? [] : ProposalsService.LIST_HIDDEN_STATUSES;
     const statusFilter =
-      status && !ProposalsService.LIST_HIDDEN_STATUSES.includes(status as ProposalStatus)
+      status && !hidden.includes(status as ProposalStatus)
         ? status
-        : { notIn: ProposalsService.LIST_HIDDEN_STATUSES };
+        : { notIn: hidden };
     const proposals = await this.prisma.proposal.findMany({
       where: { roundId, status: statusFilter },
       orderBy: { createdAt: 'asc' },
@@ -1099,11 +1109,12 @@ export class ProposalsService {
   /** §26.2 — every proposal ever processed, across ALL rounds ("All rounds"
    *  picker option). Same row shape as listByRound; newest first, capped at
    *  1000; DRAFTs stay hidden. */
-  async listAllRounds(status?: string) {
+  async listAllRounds(status?: string, viewerUserId?: string) {
+    const hidden = (await this.isBoardViewer(viewerUserId)) ? [] : ProposalsService.LIST_HIDDEN_STATUSES;
     const statusFilter =
-      status && !ProposalsService.LIST_HIDDEN_STATUSES.includes(status as ProposalStatus)
+      status && !hidden.includes(status as ProposalStatus)
         ? status
-        : { notIn: ProposalsService.LIST_HIDDEN_STATUSES };
+        : { notIn: hidden };
     const proposals = await this.prisma.proposal.findMany({
       where: { status: statusFilter },
       orderBy: { createdAt: 'desc' },
@@ -1644,8 +1655,13 @@ export class ProposalsService {
       }),
     ]);
     if (!p) throw new NotFoundException('proposal not found');
-    // DRAFT + PENDING (fee not yet confirmed) are visible only to their submitter.
-    if (ProposalsService.PRIVATE_STATUSES.includes(p.status as ProposalStatus) && p.submitterUserId !== viewerUserId) {
+    // DRAFT + PENDING (fee not yet confirmed) are visible only to their submitter — and to board
+    // members (§16: they may read drafts to reach out to the author).
+    if (
+      ProposalsService.PRIVATE_STATUSES.includes(p.status as ProposalStatus) &&
+      p.submitterUserId !== viewerUserId &&
+      !(await this.isBoardViewer(viewerUserId))
+    ) {
       throw new NotFoundException('proposal not found');
     }
     // §11 — milestone progress bar, only once the proposal reached the FUNDING

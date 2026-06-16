@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { proposalsApi, type ProposalSummary, type ProposalProgress } from '@/lib/api';
+import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { StatusBadge, PROPOSAL_STATUS_CLS } from './round-ui';
 import { MilestoneBar } from './milestone-bar';
@@ -12,14 +13,15 @@ import { MilestoneBar } from './milestone-bar';
  *    approved — cleared / funded (APPROVED, COMPLETE)
  *    rejected — explicitly rejected or failed (REJECTED, FAILED)
  */
-type Bucket = 'pending' | 'active' | 'approved' | 'rejected';
+type Bucket = 'draft' | 'pending' | 'active' | 'approved' | 'rejected';
 const bucketOf = (status: string): Bucket =>
   status === 'APPROVED' || status === 'COMPLETE' ? 'approved'
     : status === 'REJECTED' || status === 'FAILED' ? 'rejected'
       : status === 'ACTIVE' ? 'active'
-        : 'pending';
-// Pending first (needs board action), then active (in flight), then approved, then rejected.
-const BUCKET_ORDER: Record<Bucket, number> = { pending: 0, active: 1, approved: 2, rejected: 3 };
+        : status === 'DRAFT' ? 'draft'
+          : 'pending';
+// Draft (board-only) first, then pending (needs board action), active, approved, rejected.
+const BUCKET_ORDER: Record<Bucket, number> = { draft: 0, pending: 1, active: 2, approved: 3, rejected: 4 };
 const BUCKET_TABS = [
   { key: '', label: 'All' },
   { key: 'active', label: 'Active' },
@@ -27,13 +29,20 @@ const BUCKET_TABS = [
   { key: 'approved', label: 'Approved' },
   { key: 'rejected', label: 'Rejected' },
 ] as const;
+// §16 — board members alone can browse private DRAFTs (to contact authors).
+const DRAFT_TAB = { key: 'draft', label: 'Drafts' } as const;
 const PAGE_SIZE = 50;
 
-/** §26.2 — public list of a round's proposals (DRAFTs are never returned). Click → shareable
- *  detail URL. `roundId='all'` shows every proposal ever processed, across all rounds. */
+/** §26.2 — public list of a round's proposals (private DRAFTs are returned only to board members,
+ *  who get a dedicated "Drafts" tab). Click → shareable detail URL. `roundId='all'` shows every
+ *  proposal ever processed, across all rounds. */
 export function ProposalList({ roundId }: { roundId: string }) {
   // Opening a proposal sets ?proposal=<id>; the shell renders the detail (shareable link).
   const { setParams } = useUrlNav();
+  const { profile } = useAuth();
+  const isBoard = profile?.roles.includes('BOARD') ?? false;
+  // §16 — board members get an extra "Drafts" tab; the backend only returns drafts to them.
+  const tabs = isBoard ? [...BUCKET_TABS, DRAFT_TAB] : BUCKET_TABS;
   const [proposals, setProposals] = useState<ProposalSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [bucket, setBucket] = useState<'' | Bucket>('');
@@ -57,7 +66,9 @@ export function ProposalList({ roundId }: { roundId: string }) {
     if (!proposals) return [];
     const q = search.trim().toLowerCase();
     return proposals
-      .filter((p) => (bucket ? bucketOf(p.status) === bucket : true))
+      // "All" hides private DRAFTs (board only sees them under the dedicated Drafts tab); a
+      // specific bucket matches exactly.
+      .filter((p) => (bucket ? bucketOf(p.status) === bucket : bucketOf(p.status) !== 'draft'))
       .filter((p) => !q || p.title.toLowerCase().includes(q) || (p.publicId ?? '').toLowerCase().includes(q))
       .sort((a, b) => BUCKET_ORDER[bucketOf(a.status)] - BUCKET_ORDER[bucketOf(b.status)]);
   }, [proposals, bucket, search]);
@@ -75,7 +86,7 @@ export function ProposalList({ roundId }: { roundId: string }) {
       {/* Bucket filter + ID/title search. */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex overflow-hidden rounded-md border border-neutral-300 dark:border-neutral-700">
-          {BUCKET_TABS.map((t) => (
+          {tabs.map((t) => (
             <button
               key={t.key}
               onClick={() => { setBucket(t.key as '' | Bucket); setPage(1); }}
