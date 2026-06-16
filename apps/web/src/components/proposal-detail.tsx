@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { SUBCAT_LABEL } from '@/lib/ui';
 import { card } from '@/lib/ui';
 import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
@@ -35,7 +35,7 @@ import {
   type FeeVerification,
 } from '@/lib/api';
 import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, RationaleText } from './round-ui';
-import { Markdown, MarkdownEditor } from './markdown';
+import { Markdown, MarkdownEditor, MarkdownCollapseContext } from './markdown';
 import { CopyButton } from './copy-button';
 import { ConfirmDialog } from './confirm-dialog';
 import { RevenueSharingBlock } from './proposal-submit';
@@ -77,6 +77,15 @@ export function ProposalDetail({
   // Lifted so the read-only proposal content can hide while the submitter is editing
   // (otherwise the same fields would appear twice — once in the form, once below).
   const [editingOpen, setEditingOpen] = useState(!!initialEditing);
+  // §3.4 — page-level "Open all / Shrink all" for the read-only collapsible boxes (parity with the
+  // edit form). Bumping a signal opens/shrinks every CollapsibleView via MarkdownCollapseContext.
+  const [allOpen, setAllOpen] = useState(true);
+  const [expandSig, setExpandSig] = useState(0);
+  const [collapseSig, setCollapseSig] = useState(0);
+  const toggleAll = () => {
+    if (allOpen) { setCollapseSig((n) => n + 1); setAllOpen(false); }
+    else { setExpandSig((n) => n + 1); setAllOpen(true); }
+  };
 
   const load = useCallback(() => {
     proposalsApi.get(id).then(setP).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
@@ -173,7 +182,17 @@ export function ProposalDetail({
         {/* When editing is open, every field below is duplicated by the form above —
             hide the read-only blocks so the submitter sees one canonical copy. */}
         {editingOpen ? null : (
-          <>
+          <MarkdownCollapseContext.Provider value={{ expandSignal: expandSig, collapseSignal: collapseSig }}>
+            <div className="mt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={toggleAll}
+                className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                title={allOpen ? 'Collapse every section' : 'Expand every section'}
+              >
+                {allOpen ? '▣ Shrink all' : '▾ Open all'}
+              </button>
+            </div>
             <CollapsibleView label="Pitch / summary">
               <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</Markdown>
             </CollapsibleView>
@@ -235,7 +254,7 @@ export function ProposalDetail({
                 {p.status === 'REJECTED' ? 'Edit & re-submit (all fields)' : 'Edit all fields'}
               </button>
             ) : null}
-          </>
+          </MarkdownCollapseContext.Provider>
         )}
         {/* EditSection lives OUTSIDE the read-only block so it stays mounted
             when editingOpen flips true (in which case the read-only blocks
@@ -414,6 +433,11 @@ function CollapsibleView({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen ?? !empty);
+  // §3.4 — obey the page-level "Open all / Shrink all" toggle (same MarkdownCollapseContext the
+  // form's editors use), while still allowing individual toggling between global clicks.
+  const collapseCtx = useContext(MarkdownCollapseContext);
+  useEffect(() => { if (collapseCtx.expandSignal) setOpen(true); }, [collapseCtx.expandSignal]);
+  useEffect(() => { if (collapseCtx.collapseSignal) setOpen(false); }, [collapseCtx.collapseSignal]);
   // Mirror the form's collapsible field: a bordered card with a ▸/▾ label + hint, an "empty"
   // marker, and an Expand/Shrink button; content sits below a divider when open.
   return (

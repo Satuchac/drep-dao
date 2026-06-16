@@ -505,6 +505,11 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   on-chain tx so anyone can re-hash and verify.
 
 **Member area (My Area)**
+- **Open all / Shrink all when viewing a proposal:** the read-only proposal detail now has a page-
+  level "▣ Shrink all / ▾ Open all" toggle (parity with the edit form), so a DRep/viewer can collapse
+  or expand every section (Pitch, Milestones, KPIs, …) at once. `CollapsibleView` listens to the same
+  `MarkdownCollapseContext` expand/collapse signals the form's editors use; individual section
+  toggles still work between global clicks.
 - **Submitter rejection notice (§7.4/§16):** when a proposal is **rejected** in a way the submitter
   can act on — rejected by the filtering jury (while the round is still in FILTERING) or at the fee
   review (during SUBMISSION) — its My-proposals row shows a **red "…revise & resubmit" chip** and the
