@@ -32,6 +32,7 @@ import {
   type DvResult,
   type PledgeVerification,
   type RoundDetail,
+  type FeeVerification,
 } from '@/lib/api';
 import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, RationaleText } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
@@ -672,6 +673,16 @@ function FeeBlock({ proposal }: { proposal: PDetail }) {
     : proposal.submissionFeeTxHash
       ? [proposal.submissionFeeTxHash]
       : [];
+  // §12 — on-chain breakdown so each hash shows how much ADA it actually paid.
+  const [fv, setFv] = useState<FeeVerification | null>(null);
+  useEffect(() => {
+    if (hashes.length === 0) { setFv(null); return; }
+    let alive = true;
+    proposalsApi.verifyFee(proposal.id).then((v) => { if (alive) setFv(v); }).catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proposal.id, hashes.length]);
+  const paidFor = (h: string) => fv?.txs.find((t) => t.hash.toLowerCase() === h.toLowerCase());
   const rejected = proposal.status === 'REJECTED' && proposal.stage == null;
   // A rejection whose reason is the fee itself: the proposal had been submitted
   // (submittedAt set), so the failure was at fee review or fee non-confirmation.
@@ -686,9 +697,10 @@ function FeeBlock({ proposal }: { proposal: PDetail }) {
   return (
     <>
       {showBox ? (
-        <div className="mt-3 rounded border border-neutral-200 p-2 dark:border-neutral-800">
-          <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-            Submission fee{proposal.submissionFeeAda ? ` · ${proposal.submissionFeeAda.toLocaleString()} ₳` : ''}
+        <div className="mt-3 rounded border border-blue-200 bg-blue-50 p-2 dark:border-blue-900 dark:bg-blue-950/30">
+          <div className="text-xs font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300">
+            Submission fee{proposal.submissionFeeAda ? ` · required ${proposal.submissionFeeAda.toLocaleString()} ₳` : ''}
+            {fv && fv.txs.length > 0 ? <span className="ml-1 font-normal normal-case text-blue-700/80 dark:text-blue-300/80">· paid {fv.paidAda.toLocaleString()} ₳{fv.fullyPaid ? ' ✓' : ` (${fv.missingAda.toLocaleString()} ₳ missing)`}</span> : null}
           </div>
           {/* §16 — submitter has paid (tx hash entered) but the board hasn't reviewed yet. */}
           {awaitingFeeConfirmation ? (
@@ -701,14 +713,22 @@ function FeeBlock({ proposal }: { proposal: PDetail }) {
           ) : null}
           {hashes.length > 0 ? (
             <div className="mt-1 space-y-0.5">
-              {hashes.map((h, i) => (
-                <div key={h} className="text-xs">
-                  <a href={txUrl(h)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">
-                    {h} ↗
-                  </a>
-                  {hashes.length > 1 && i === hashes.length - 1 ? <span className="ml-1 text-[10px] uppercase text-neutral-400">latest</span> : null}
-                </div>
-              ))}
+              {hashes.map((h, i) => {
+                const t = paidFor(h);
+                return (
+                  <div key={h} className="flex flex-wrap items-center gap-2 text-xs">
+                    <a href={txUrl(h)} target="_blank" rel="noreferrer" className="flex-1 break-all font-mono text-emerald-700 underline dark:text-emerald-400">
+                      {h} ↗
+                    </a>
+                    {t ? (
+                      <span className={t.paidAda > 0 ? 'whitespace-nowrap font-medium text-emerald-700 dark:text-emerald-400' : 'whitespace-nowrap text-neutral-500'}>
+                        {!t.koiosAvailable ? 'chain check failed' : t.paidAda > 0 ? `${t.paidAda.toLocaleString()} ₳ paid` : t.found ? '0 ₳ to fee address' : 'not found yet'}
+                      </span>
+                    ) : null}
+                    {hashes.length > 1 && i === hashes.length - 1 ? <span className="text-[10px] uppercase text-neutral-400">latest</span> : null}
+                  </div>
+                );
+              })}
             </div>
           ) : null}
           {feedbackInBox ? (

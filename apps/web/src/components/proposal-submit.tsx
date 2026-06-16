@@ -637,23 +637,7 @@ export function ProposalSubmit() {
               {/* §12 — every fee-payment tx already submitted, locked + with its on-chain amount.
                   A partial payment leaves the earlier hashes here and clears the input below for
                   the next tx, so several hashes accumulate. */}
-              {feeVerification && feeVerification.txs.length > 0 ? (
-                <div className="space-y-1">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300">Submitted fee payments</div>
-                  {feeVerification.txs.map((t) => (
-                    <div key={t.hash} className="flex flex-wrap items-center gap-2 rounded border border-blue-200 bg-white/70 px-2 py-1 text-[11px] dark:border-blue-900 dark:bg-neutral-900/50">
-                      <span className="flex-1 break-all font-mono text-neutral-600 dark:text-neutral-400">{t.hash}</span>
-                      <span className={t.paidAda > 0 ? 'whitespace-nowrap font-medium text-emerald-700 dark:text-emerald-400' : 'whitespace-nowrap text-neutral-500'}>
-                        {!t.koiosAvailable ? 'chain check failed' : t.paidAda > 0 ? `${t.paidAda.toLocaleString()} ₳ paid` : t.found ? '0 ₳ to fee address' : 'not found yet'}
-                      </span>
-                    </div>
-                  ))}
-                  <div className="text-[11px] text-blue-900 dark:text-blue-200">
-                    Total: <strong>{feeVerification.paidAda.toLocaleString()} ₳</strong> of {feeVerification.requiredAda.toLocaleString()} ₳
-                    {feeVerification.fullyPaid ? ' — fully paid ✓' : ` · ${feeVerification.missingAda.toLocaleString()} ₳ still missing`}
-                  </div>
-                </div>
-              ) : null}
+              {feeVerification && feeVerification.txs.length > 0 ? <FeePaymentsList fv={feeVerification} /> : null}
 
               {/* TX hash input + Verify button. Cardano tx hashes are 32-byte
                   blake2b → 64 hex chars; we validate the format inline (whitespace
@@ -836,6 +820,30 @@ export function ProposalSubmit() {
   );
 }
 
+/**
+ * §12 — every submission-fee tx already submitted, locked + with its on-chain amount, plus the
+ * running total vs. the required fee. Shared by the create form and the inline submit panel.
+ */
+function FeePaymentsList({ fv }: { fv: FeeVerification }) {
+  return (
+    <div className="space-y-1">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300">Submitted fee payments</div>
+      {fv.txs.map((t) => (
+        <div key={t.hash} className="flex flex-wrap items-center gap-2 rounded border border-blue-200 bg-white/70 px-2 py-1 text-[11px] dark:border-blue-900 dark:bg-neutral-900/50">
+          <span className="flex-1 break-all font-mono text-neutral-600 dark:text-neutral-400">{t.hash}</span>
+          <span className={t.paidAda > 0 ? 'whitespace-nowrap font-medium text-emerald-700 dark:text-emerald-400' : 'whitespace-nowrap text-neutral-500'}>
+            {!t.koiosAvailable ? 'chain check failed' : t.paidAda > 0 ? `${t.paidAda.toLocaleString()} ₳ paid` : t.found ? '0 ₳ to fee address' : 'not found yet'}
+          </span>
+        </div>
+      ))}
+      <div className="text-[11px] text-blue-900 dark:text-blue-200">
+        Total: <strong>{fv.paidAda.toLocaleString()} ₳</strong> of {fv.requiredAda.toLocaleString()} ₳
+        {fv.fullyPaid ? ' — fully paid ✓' : ` · ${fv.missingAda.toLocaleString()} ₳ still missing`}
+      </div>
+    </div>
+  );
+}
+
 /** A row in "My proposals": open it, plus an inline Submit for DRAFTs (submit later). */
 function MineRow({
   p,
@@ -887,7 +895,12 @@ function MineRow({
     setVerifying(true); setError(null);
     try {
       await proposalsApi.update(p.id, { submissionFeeTxHash: trimmed });
-      setFv(await proposalsApi.verifyFee(p.id));
+      const v = await proposalsApi.verifyFee(p.id);
+      setFv(v);
+      // §12 — this tx was recorded + counted but the fee isn't covered yet → clear the box so the
+      // submitter pastes the NEXT tx's hash (the earlier ones stay in the list above).
+      const thisTx = v.txs.find((t) => t.hash.toLowerCase() === trimmed.toLowerCase());
+      if (!v.fullyPaid && thisTx?.found && thisTx.koiosAvailable && thisTx.paidAda > 0) setFee('');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'verification failed');
     } finally {
@@ -964,9 +977,9 @@ function MineRow({
         </span>
       </div>
       {isDraft && submitting ? (
-        <div className="space-y-1.5 border-t border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
+        <div className="space-y-1.5 border-t border-blue-200 bg-blue-50 px-3 py-2 text-xs dark:border-blue-900 dark:bg-blue-950/30">
           {feePaid || noFee ? (
-            // §3 — fee already settled: confirm it (green), lock the hash, submit.
+            // §3 — fee already settled: confirm it (green) + show the payments, submit.
             <>
               <div className="rounded border border-emerald-300 bg-emerald-50 p-2 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
                 {noFee ? (
@@ -975,37 +988,34 @@ function MineRow({
                   <span><strong>✓ Submission fee paid</strong> — {fv!.paidAda.toLocaleString()} ₳ received at the fee address (required {fv!.requiredAda.toLocaleString()} ₳). You can submit.</span>
                 )}
               </div>
-              {!noFee ? (
-                <label className="block">
-                  <span className="text-neutral-500">Submission fee transaction hash <span className="text-neutral-400">(verified — locked)</span></span>
-                  <input className={`${field} mt-0.5 w-full cursor-not-allowed bg-neutral-100 font-mono text-[11px] dark:bg-neutral-800`} value={fee} readOnly />
-                </label>
-              ) : null}
+              {!noFee && fv ? <FeePaymentsList fv={fv} /> : null}
               <button onClick={submit} disabled={busy} className="rounded bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
                 {busy ? 'Submitting…' : 'Submit'}
               </button>
             </>
           ) : (
-            // §3 — fee not paid yet: pay → paste hash → verify on-chain → submit.
+            // §3 — fee not paid yet: pay → paste hash → verify on-chain. A partial payment leaves
+            // the earlier hashes in the list and clears the box for the next tx → repeat → submit.
             <>
-              <div className="text-neutral-500">
+              <div className="text-blue-900 dark:text-blue-200">
                 Pay the submission fee on-chain to the address below, paste the transaction hash, and verify it. A board member then confirms.
               </div>
               {feeAddress ? (
                 <div className="flex items-start gap-2">
-                  <div className="flex-1 break-all font-mono text-[11px] text-neutral-500">{feeAddress}</div>
+                  <div className="flex-1 break-all font-mono text-[11px] text-blue-700/80 dark:text-blue-300/80">{feeAddress}</div>
                   <CopyButton text={feeAddress} label="Copy address" />
                 </div>
               ) : null}
+              {fv && fv.txs.length > 0 ? <FeePaymentsList fv={fv} /> : null}
               <label className="block">
-                <span className="text-neutral-500">Submission fee transaction hash</span>
-                <input className={`${field} mt-0.5 w-full`} placeholder="64-character on-chain tx hash" value={fee} onChange={(e) => { setFee(e.target.value); setFv(null); }} />
+                <span className="text-blue-900 dark:text-blue-200">Submission fee transaction hash{fv && fv.paidAda > 0 ? ' (next payment)' : ''}</span>
+                <input className={`${field} mt-0.5 w-full`} placeholder="64-character on-chain tx hash" value={fee} onChange={(e) => setFee(e.target.value)} />
               </label>
               {/* Verify result (partial / not found / chain unreachable). */}
               {fv && !fv.fullyPaid ? (
                 <div className={`rounded border p-1.5 ${!fv.koiosAvailable ? 'border-neutral-300 bg-neutral-50 text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300' : fv.paidAda > 0 ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200' : 'border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300'}`}>
                   {!fv.koiosAvailable ? 'Couldn’t reach the chain — the platform keeps retrying; check back shortly.'
-                    : fv.paidAda > 0 ? `Partial: ${fv.paidAda.toLocaleString()} ₳ received, ${fv.missingAda.toLocaleString()} ₳ still missing (required ${fv.requiredAda.toLocaleString()} ₳).`
+                    : fv.paidAda > 0 ? `Partial: ${fv.paidAda.toLocaleString()} ₳ received, ${fv.missingAda.toLocaleString()} ₳ still missing (required ${fv.requiredAda.toLocaleString()} ₳). Send the rest in a new tx and paste the new hash above.`
                       : 'Not found / didn’t pay the fee address yet — re-checks every ~10 s.'}
                 </div>
               ) : null}
