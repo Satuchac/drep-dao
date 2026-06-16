@@ -505,16 +505,22 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   on-chain tx so anyone can re-hash and verify.
 
 **Member area (My Area)**
-- **Voting & reviews + Actions search:** both tabs have a search box that filters every list
-  by **proposal Title**, **Proposer name**, or **public Proposal ID** (case-insensitive,
-  client-side, shared `matchesProposalSearch` helper). To carry the proposer name + public id
-  into the reviewer-facing lists, `GET /me/assignments/filter` and `/me/assignments/milestone`
-  now return `proposer` (+ `publicId` / `proposalPublicId`). Reward-payout board actions carry
-  no single proposer/public-id, so they match on title + description + recipient names; the
-  paged fee history filters the rows currently loaded.
+- **Proposal search everywhere:** every proposal list — Voting & reviews, Actions, the round
+  proposal list, and Internal proposals — has a search box that filters by **proposal Title**,
+  **Proposer name**, or **public Proposal ID** (case-insensitive; each whitespace term must
+  match some field, so "tool great" finds "Dave's great tool"). The pure matcher lives in
+  `@drep-dao/shared` (`matchesProposalSearch`, unit-tested in `packages/shared`) and is
+  re-exported from the web `api.ts`. To carry the proposer name + public id into the
+  reviewer-facing lists, `GET /me/assignments/filter` and `/me/assignments/milestone` now
+  return `proposer` (+ `publicId` / `proposalPublicId`). Reward-payout board actions carry no
+  single proposer/public-id, so they match on title + description + recipient names; the paged
+  fee history filters the rows currently loaded.
 - **To do / Recent / History** also applies to **Debate & Vote** (round-based: *To do* = votable
   now, *Recent* = any active round incl. waiting-for-VOTE, *History* = finished/closed only) and
   the **Actions** tab (replaces its old "Show history" checkbox).
+- **Submitter profile portfolio** gains a **Rejected** headline stat (count of the submitter's
+  `REJECTED` proposals — turned down at filtering / Debate & Vote), alongside Submitted /
+  Requested / Granted budget / Paid so far / Completed / In progress (`submitterPortfolio`).
 
 **Proposals**
 - **Title immutability:** once submitted (past DRAFT / fee-reject), the title is locked

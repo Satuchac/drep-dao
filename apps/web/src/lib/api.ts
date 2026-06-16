@@ -1032,23 +1032,10 @@ export interface ProposalRejectionReason {
   from: string | null;
   rationale: string;
 }
-/**
- * §UI — case-insensitive client-side search across a proposal's Title, Proposer name, and
- * public Proposal ID. An empty/blank query matches everything. `extra` lets a panel feed
- * additional searchable text (e.g. a board action's description / recipient names).
- */
-export function matchesProposalSearch(
-  query: string | undefined,
-  fields: { title?: string | null; proposer?: string | null; publicId?: string | null; extra?: (string | null | undefined)[] },
-): boolean {
-  const q = (query ?? '').trim().toLowerCase();
-  if (!q) return true;
-  const haystacks = [fields.title, fields.proposer, fields.publicId, ...(fields.extra ?? [])]
-    .map((f) => (f ?? '').toLowerCase());
-  // Each whitespace-separated term must match at least one field (so "tool great" finds
-  // "Dave's great tool"); a single term stays a plain substring match.
-  return q.split(/\s+/).every((term) => haystacks.some((f) => f.includes(term)));
-}
+// §UI — proposal search helper (Title / Proposer / public ID, multi-term). Lives in the
+// shared package (so it can be unit-tested without a web runner); re-exported here so
+// components keep importing it from '@/lib/api'.
+export { matchesProposalSearch } from '@drep-dao/shared';
 
 export interface ProposalSummary {
   id: string;
