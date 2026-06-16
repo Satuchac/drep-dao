@@ -324,6 +324,10 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
   const [rewardFixed, setRewardFixed] = useState<number>(sval('rewardFixedPct') ?? ROUND_SETTING_DEFAULTS.rewardFixedPct);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // §6 — signature of the form at the last successful save. While the current signature matches,
+  // we show "✓ Saved"; any edit changes the signature, hiding it → "you need to save again".
+  const [savedSig, setSavedSig] = useState<string | null>(null);
+  const formSig = JSON.stringify({ name, budget, rewards, cats, settings, rewardExpert, rewardDvShare, rewardFixed });
   const setSetting = (k: string, v: string) => setSettings((s) => ({ ...s, [k]: v }));
   const num = (k: string) => (settings[k]?.trim() ? Number(settings[k]) : undefined);
   // Approval votes can't exceed their reviewer count; the inputs cap to the effective value.
@@ -433,6 +437,7 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
       if (editing && roundId) {
         // Edit: don't touch the schedule (the round is mid-schedule; stages are confirmed separately).
         await boardRoundsApi.update(roundId, { name: name.trim() || undefined, budgetAda: Number(budget), rewardsPoolAda: Number(rewards), categories, ...settingsInput });
+        setSavedSig(formSig); // mark the current form state as saved → shows "✓ Saved" until next edit
       } else {
         await boardRoundsApi.create({ name: name.trim() || undefined, budgetAda: Number(budget), rewardsPoolAda: Number(rewards), categories, schedule, ...settingsInput });
       }
@@ -713,13 +718,21 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
       {!canCreate ? (
         <p className="text-xs text-amber-600">Still needed: {missing.join('; ')}.</p>
       ) : null}
-      <button
-        type="submit"
-        disabled={busy || !canCreate}
-        className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-      >
-        {busy ? (editing ? 'Saving…' : 'Creating…') : editing ? 'Save changes' : 'Create round'}
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          type="submit"
+          disabled={busy || !canCreate}
+          className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+        >
+          {busy ? (editing ? 'Saving…' : 'Creating…') : editing ? 'Save changes' : 'Create round'}
+        </button>
+        {/* §6 — saved/unsaved indicator (edit mode): "✓ Saved" until a field changes. */}
+        {editing && savedSig !== null ? (
+          savedSig === formSig
+            ? <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">✓ Saved</span>
+            : <span className="text-sm font-medium text-amber-600 dark:text-amber-400">● Unsaved changes</span>
+        ) : null}
+      </div>
     </form>
   );
 }
