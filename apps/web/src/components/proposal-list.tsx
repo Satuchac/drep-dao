@@ -6,20 +6,23 @@ import { useUrlNav } from '@/lib/use-url-nav';
 import { StatusBadge, PROPOSAL_STATUS_CLS } from './round-ui';
 import { MilestoneBar } from './milestone-bar';
 
-/** §26.2 — three reader-facing buckets over the detailed proposal statuses:
- *    approved — cleared its current gate / ready for the next stage (APPROVED, COMPLETE)
+/** §26.2 — reader-facing buckets over the detailed proposal statuses:
+ *    pending  — submitted, awaiting the board's fee confirmation (PENDING)
+ *    active   — in the process: filtering / debate & vote (ACTIVE)
+ *    approved — cleared / funded (APPROVED, COMPLETE)
  *    rejected — explicitly rejected or failed (REJECTED, FAILED)
- *    pending  — waiting on a DAO/board member action (PENDING, ACTIVE, anything else)
  */
-type Bucket = 'pending' | 'approved' | 'rejected';
+type Bucket = 'pending' | 'active' | 'approved' | 'rejected';
 const bucketOf = (status: string): Bucket =>
   status === 'APPROVED' || status === 'COMPLETE' ? 'approved'
     : status === 'REJECTED' || status === 'FAILED' ? 'rejected'
-      : 'pending';
-// Pending first (needs someone's action), then approved, then rejected.
-const BUCKET_ORDER: Record<Bucket, number> = { pending: 0, approved: 1, rejected: 2 };
+      : status === 'ACTIVE' ? 'active'
+        : 'pending';
+// Pending first (needs board action), then active (in flight), then approved, then rejected.
+const BUCKET_ORDER: Record<Bucket, number> = { pending: 0, active: 1, approved: 2, rejected: 3 };
 const BUCKET_TABS = [
   { key: '', label: 'All' },
+  { key: 'active', label: 'Active' },
   { key: 'pending', label: 'Pending' },
   { key: 'approved', label: 'Approved' },
   { key: 'rejected', label: 'Rejected' },
