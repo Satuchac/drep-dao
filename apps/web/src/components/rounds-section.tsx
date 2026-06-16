@@ -913,7 +913,8 @@ function CategoryStatsBar({ stats, roundStatus, allocatedAda }: { stats: Categor
         <Stat label="Budget asked" value={ada(stats.totalRequestedAda)} />
         <Stat label="Accepted" value={stats.accepted.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
         <Stat label="Pending" value={stats.pending.toLocaleString()} tone="text-amber-600 dark:text-amber-400" />
-        <Stat label="Approved" value={stats.approved.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
+        {/* §3 — proposals that never entered the round: fee unpaid or board-rejected at the fee review. */}
+        <Stat label="Not accepted" value={stats.notAccepted.toLocaleString()} tone="text-red-600 dark:text-red-400" />
         <Stat label="Submitters" value={stats.submitters.toLocaleString()} />
         <Stat label="Fees collected" value={ada(stats.feesCollectedAda)} />
       </Row>

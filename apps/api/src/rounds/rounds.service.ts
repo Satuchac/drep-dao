@@ -12,6 +12,7 @@ import { DRepStatus, ProposalStage, ProposalStatus, RoundStatus, ROUND_SETTING_D
 import { PrismaService } from '../prisma/prisma.service';
 import { DvService } from '../proposals/dv.service';
 import { ProposalsService } from '../proposals/proposals.service';
+import { isFeeStageReject } from '../proposals/proposal-state';
 import { MeritService } from '../merit/merit.service';
 import { MeritSweepService } from '../merit/merit-sweep.service';
 import { CreateRoundDto, UpdateRoundDto, CategoryInput, ScheduleInput, ConfirmStageDto, RoundSettingsInput } from './dto';
@@ -71,6 +72,7 @@ interface CategoryStats {
   feesCollectedAda: number; // submission fees actually collected by the DAO
   pending: number; // PENDING — submitted, awaiting the board's fee confirmation
   accepted: number; // admitted into the round (fee confirmed → went public)
+  notAccepted: number; // rejected at the fee/submission stage (fee unpaid or board-rejected) — never entered the round
   // FILTERING — the §7 jury review.
   inFiltering: number; // still under review (ACTIVE @ FILTERING)
   passedFiltering: number; // cleared filtering → reached Debate & Vote (incl. those since decided)
@@ -92,6 +94,7 @@ const EMPTY_CATEGORY_STATS: CategoryStats = {
   feesCollectedAda: 0,
   pending: 0,
   accepted: 0,
+  notAccepted: 0,
   inFiltering: 0,
   passedFiltering: 0,
   rejectedFiltering: 0,
@@ -402,11 +405,15 @@ export class RoundsService {
       const isApproved = p.status === ProposalStatus.APPROVED || p.status === ProposalStatus.COMPLETE || p.status === ProposalStatus.FAILED;
       const isFilteringReject = p.status === ProposalStatus.REJECTED && p.stage === ProposalStage.FILTERING;
       const isDvReject = p.status === ProposalStatus.REJECTED && p.stage == null && p.resultFinalizedAt != null;
+      // Fee/submission-stage rejection: REJECTED before going public (no stage, no D&V tally) —
+      // the fee was never confirmed (unpaid or board-rejected) so the proposal never entered the round.
+      const isFeeReject = isFeeStageReject(p.status, p.stage, p.resultFinalizedAt);
       const inFiltering = p.status === ProposalStatus.ACTIVE && p.stage === ProposalStage.FILTERING;
       const inVoting = p.status === ProposalStatus.ACTIVE && p.stage === ProposalStage.DEBATE_VOTE;
 
-      // SUBMISSION status split: still awaiting fee confirmation vs admitted into the round.
+      // SUBMISSION status split: still awaiting fee confirmation vs admitted into the round vs not accepted.
       if (p.status === ProposalStatus.PENDING) s.pending += 1;
+      if (isFeeReject) s.notAccepted += 1;
       const wentPublic = inFiltering || inVoting || isApproved || isFilteringReject || isDvReject;
       if (wentPublic) s.accepted += 1; // fee confirmed → accepted into the round
       // Fee collected once the proposal went public (ACTIVE+) or was rejected during

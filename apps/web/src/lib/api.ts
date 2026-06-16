@@ -919,6 +919,7 @@ export interface RoundDetail extends RoundSummary {
       feesCollectedAda: number;
       pending: number;
       accepted: number;
+      notAccepted: number;
       inFiltering: number;
       passedFiltering: number;
       rejectedFiltering: number;

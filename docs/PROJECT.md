@@ -576,8 +576,12 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
 
 **Rounds**
 - **Per-category stats** on the Categories tab, by stage (Submission → Filtering →
-  Debate & Vote → Funding): submitted/accepted/pending/approved, budget asked,
-  submitters, fees collected, pass/reject counts, funded allocation, milestones.
+  Debate & Vote → Funding): budget asked, submitters, fees collected, pass/reject counts,
+  funded allocation, milestones. The **Submission** row shows Submitted / Accepted / Pending /
+  **Not accepted** (red) — `notAccepted` counts fee/submission-stage rejections (fee unpaid or
+  board-rejected at the fee review; `isFeeStageReject`, unit-tested). "Approved" only appears in
+  the Debate & Vote and Funding rows, where a proposal can actually win funding — it's no longer
+  shown (always 0) in Submission.
 - **Round control** (My area, board): split into a **submenu** — "Round stage control"
   (timeline) and "Round setup" (editable parameters). Stage scheduling now validates
   dates (start in the future, end after start, not before the previous stage's end —
