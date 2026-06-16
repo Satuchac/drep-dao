@@ -14,12 +14,17 @@ import { MilestoneBar } from './milestone-bar';
  *    rejected — explicitly rejected or failed (REJECTED, FAILED)
  */
 type Bucket = 'draft' | 'pending' | 'active' | 'approved' | 'rejected';
-const bucketOf = (status: string): Bucket =>
-  status === 'APPROVED' || status === 'COMPLETE' ? 'approved'
-    : status === 'REJECTED' || status === 'FAILED' ? 'rejected'
-      : status === 'ACTIVE' ? 'active'
-        : status === 'DRAFT' ? 'draft'
-          : 'pending';
+/** Bucket by readiness, not just raw status: ACTIVE means "ready / progressing" (green
+ *  progress), but an ACTIVE proposal still waiting on someone (amber/red progress — e.g. board
+ *  must assign reviewers / open the vote) belongs in PENDING ("something needs to be done"). */
+const bucketOf = (p: { status: string; progress?: ProposalProgress | null }): Bucket => {
+  const s = p.status;
+  if (s === 'APPROVED' || s === 'COMPLETE') return 'approved';
+  if (s === 'REJECTED' || s === 'FAILED') return 'rejected';
+  if (s === 'DRAFT') return 'draft';
+  if (s === 'ACTIVE') return p.progress?.tone === 'amber' || p.progress?.tone === 'red' ? 'pending' : 'active';
+  return 'pending'; // PENDING (fee not confirmed) + anything else awaiting action
+};
 // Draft (board-only) first, then pending (needs board action), active, approved, rejected.
 const BUCKET_ORDER: Record<Bucket, number> = { draft: 0, pending: 1, active: 2, approved: 3, rejected: 4 };
 const BUCKET_TABS = [
@@ -68,10 +73,13 @@ export function ProposalList({ roundId }: { roundId: string }) {
     return proposals
       // "All" hides private DRAFTs (board only sees them under the dedicated Drafts tab); a
       // specific bucket matches exactly.
-      .filter((p) => (bucket ? bucketOf(p.status) === bucket : bucketOf(p.status) !== 'draft'))
+      .filter((p) => (bucket ? bucketOf(p) === bucket : bucketOf(p) !== 'draft'))
       .filter((p) => !q || p.title.toLowerCase().includes(q) || (p.publicId ?? '').toLowerCase().includes(q))
-      .sort((a, b) => BUCKET_ORDER[bucketOf(a.status)] - BUCKET_ORDER[bucketOf(b.status)]);
+      .sort((a, b) => BUCKET_ORDER[bucketOf(a)] - BUCKET_ORDER[bucketOf(b)]);
   }, [proposals, bucket, search]);
+
+  // §16 — drafts are board-only and hidden from "All"; surface their count so the board knows.
+  const draftCount = useMemo(() => (proposals ?? []).filter((p) => bucketOf(p) === 'draft').length, [proposals]);
 
   if (error) return <div className="text-sm text-red-600">{error}</div>;
   if (!proposals) return <p className="text-sm text-neutral-500">Loading…</p>;
@@ -108,6 +116,13 @@ export function ProposalList({ roundId }: { roundId: string }) {
         />
         <span className="text-xs text-neutral-500">{filtered.length} proposal{filtered.length === 1 ? '' : 's'}</span>
       </div>
+
+      {/* §16 — under "All", remind the board that private drafts are excluded + how many there are. */}
+      {isBoard && bucket === '' && draftCount > 0 ? (
+        <p className="text-[11px] text-neutral-500">
+          Drafts are not included here — <button onClick={() => { setBucket('draft'); setPage(1); }} className="font-medium text-emerald-700 underline dark:text-emerald-400">{draftCount} draft{draftCount === 1 ? '' : 's'}</button> (board-only).
+        </p>
+      ) : null}
 
       {filtered.length === 0 ? (
         <p className="text-sm text-neutral-500">No proposals match the filter.</p>
