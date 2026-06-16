@@ -217,6 +217,9 @@ export function ProposalSubmit() {
     setEditingId(null);
     setEditingStatus(null);
     setEditingFeedback(null);
+    // Clear any prior "Submitted …" / "Saved" banner so it never lingers into a fresh form.
+    setMsg(null);
+    setError(null);
     setTitle('');
     setContent('');
     setFee('');
@@ -883,7 +886,13 @@ function MineRow({
     if (!submitting || !feeHexOk) { return; }
     let alive = true;
     setVerifying(true);
-    proposalsApi.verifyFee(p.id).then((v) => { if (alive) setFv(v); }).catch(() => {}).finally(() => { if (alive) setVerifying(false); });
+    proposalsApi.verifyFee(p.id).then((v) => {
+      if (!alive) return;
+      setFv(v);
+      // The saved hash is already counted toward a partial total → empty the box: the user
+      // must paste the NEXT tx's hash, not re-enter the one already recorded.
+      if (!v.fullyPaid && v.paidAda > 0) setFee('');
+    }).catch(() => {}).finally(() => { if (alive) setVerifying(false); });
     return () => { alive = false; };
     // Only on open (not on every keystroke); the Verify button re-checks after edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
