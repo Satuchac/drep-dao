@@ -238,6 +238,11 @@ export function ProposalSubmit() {
     setTitle('');
     setContent('');
     setFee('');
+    // Clear the prior proposal's fee-verification + address check — otherwise a fresh proposal
+    // wrongly shows the previous one's "fully paid" / submitted-hash list (it's per-proposal).
+    setFeeVerification(null);
+    setVerifying(false);
+    setAddrCheck(null);
     setCostBreakdown('');
     setTeamInfo('');
     setRevenueSharing('');
@@ -258,6 +263,9 @@ export function ProposalSubmit() {
     setError(null);
     setMsg(null);
     setOpenId(null);
+    // Drop the previously-open proposal's fee verification; this draft re-verifies its own hash.
+    setFeeVerification(null);
+    setVerifying(false);
     try {
       const p = await proposalsApi.get(id);
       setEditingId(p.id);
