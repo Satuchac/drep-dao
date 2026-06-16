@@ -519,10 +519,15 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   round the reviewer **hasn't** voted on; *Recent* = ones they **have** voted on (still changeable
   while the round stays in filtering); *History* = past-filtering rounds. A "not voted yet" item is
   only ever in To do, never Recent (`FilteringService.myAssignments`).
-- **To do / Recent / History** also applies to **Debate & Vote** (round-based: *To do* = votable
-  now, *Recent* = any active round incl. waiting-for-VOTE, *History* = finished **and** actually
-  reached D&V) and the **Actions** tab (replaces its old "Show history" checkbox). The bucketing
-  is the pure `matchesDvMode` (`@drep-dao/shared/proposal-lifecycle`, unit-tested). D&V *History*
+- **To do / Recent / History** also applies to **Debate & Vote** (round-**phase**-based: *To do* =
+  votable now (round in VOTE), *Recent* = round in the debate/vote phase (DEBATE or VOTE, incl.
+  "voting not open yet" during DEBATE), *History* = finished **and** actually reached D&V) and the
+  **Actions** tab (replaces its old "Show history" checkbox). The bucketing is the pure
+  `matchesDvMode` (`@drep-dao/shared/proposal-lifecycle`, unit-tested). The phase gate on *Recent*
+  prevents a double-listing: a proposal passes filtering (→ `stage='DEBATE_VOTE'`) the moment it has
+  enough YES, which can happen while its round is still in the FILTERING phase — during that window
+  it stays in the **Filtering** panel (vote still changeable) and does NOT also appear in D&V. D&V
+  *History*
   excludes proposals **rejected at the filtering stage** (`stage==='FILTERING'`, status
   `REJECTED`): those are still changeable in the Filtering panel, so they stay in Filtering
   *Recent* — only proposals that reached Debate & Vote (rejected in the vote → `stage` null;
