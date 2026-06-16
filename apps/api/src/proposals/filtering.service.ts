@@ -130,7 +130,14 @@ export class FilteringService {
     const assignments = await this.prisma.filterAssignment.findMany({
       where,
       include: {
-        proposal: { select: { id: true, title: true, status: true, stage: true, round: { select: { status: true } } } },
+        proposal: {
+          select: {
+            id: true, title: true, publicId: true, status: true, stage: true,
+            round: { select: { status: true } },
+            submitterUser: { select: { displayName: true } },
+            submitterDrep: { select: { drepIdOnchain: true } },
+          },
+        },
       },
       // Stable order (assignedAt can tie) so the list doesn't reshuffle between loads.
       orderBy: [{ assignedAt: 'desc' }, { proposalId: 'asc' }],
@@ -145,6 +152,9 @@ export class FilteringService {
     const rows = unique.map((a) => ({
       proposalId: a.proposalId,
       title: a.proposal.title,
+      // §UI — searchable metadata: public id + proposer name (display name → DRep id).
+      publicId: a.proposal.publicId ?? null,
+      proposer: a.proposal.submitterUser?.displayName ?? a.proposal.submitterDrep?.drepIdOnchain ?? null,
       myVote: myVotes.find((v) => v.proposalId === a.proposalId)?.choice ?? null,
       proposalStatus: a.proposal.status,
       proposalStage: a.proposal.stage,

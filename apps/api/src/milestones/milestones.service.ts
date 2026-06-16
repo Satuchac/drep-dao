@@ -380,7 +380,19 @@ export class MilestonesService {
       where: history
         ? { reviewerDrepId: drep.id }
         : { reviewerDrepId: drep.id, releasedAt: null, milestone: { status: 'POA_SUBMITTED' } },
-      include: { milestone: { include: { proposal: { select: { id: true, title: true } } } } },
+      include: {
+        milestone: {
+          include: {
+            proposal: {
+              select: {
+                id: true, title: true, publicId: true,
+                submitterUser: { select: { displayName: true } },
+                submitterDrep: { select: { drepIdOnchain: true } },
+              },
+            },
+          },
+        },
+      },
       orderBy: { assignedAt: 'desc' },
     });
     const myVotes = await this.prisma.vote.findMany({
@@ -390,6 +402,9 @@ export class MilestonesService {
       milestoneId: a.milestoneId,
       proposalId: a.milestone.proposal.id,
       proposalTitle: a.milestone.proposal.title,
+      // §UI — searchable metadata: public id + proposer name (display name → DRep id).
+      proposalPublicId: a.milestone.proposal.publicId ?? null,
+      proposer: a.milestone.proposal.submitterUser?.displayName ?? a.milestone.proposal.submitterDrep?.drepIdOnchain ?? null,
       milestoneIdx: a.milestone.idx,
       milestoneStatus: a.milestone.status,
       myVote: myVotes.find((v) => v.milestoneId === a.milestoneId)?.choice ?? null,

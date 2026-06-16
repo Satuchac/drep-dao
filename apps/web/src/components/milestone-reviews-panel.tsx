@@ -1,21 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { milestonesApi, type MilestoneAssignmentView } from '@/lib/api';
+import { milestonesApi, matchesProposalSearch, type MilestoneAssignmentView } from '@/lib/api';
 import { useUrlNav } from '@/lib/use-url-nav';
 
 /**
  * §11.3 — the DRep's milestone-review assignments awaiting a vote. The review itself happens on
  * the proposal's detail page (POA + vote), so each row links there. Self-hides when empty.
  */
-export function MilestoneReviewsPanel({ history = false }: { history?: boolean }) {
+export function MilestoneReviewsPanel({ history = false, query }: { history?: boolean; query?: string }) {
   const { setParams } = useUrlNav();
-  const [items, setItems] = useState<MilestoneAssignmentView[]>([]);
+  const [all, setAll] = useState<MilestoneAssignmentView[]>([]);
   const load = useCallback(() => {
-    milestonesApi.myAssignments(history).then(setItems).catch(() => setItems([]));
+    milestonesApi.myAssignments(history).then(setAll).catch(() => setAll([]));
   }, [history]);
   useEffect(load, [load]);
 
+  const items = all.filter((m) => matchesProposalSearch(query, { title: m.proposalTitle, proposer: m.proposer, publicId: m.proposalPublicId }));
   if (items.length === 0) return null;
 
   return (

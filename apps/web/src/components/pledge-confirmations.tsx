@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { boardDeadlinesApi, boardPledgeApi, messagesApi, type PendingPledge } from '@/lib/api';
+import { boardDeadlinesApi, boardPledgeApi, messagesApi, matchesProposalSearch, type PendingPledge } from '@/lib/api';
 import { ProposalMessageInfo } from './proposal-messages';
 import { useExplorer } from '@/lib/explorer';
 import { useUrlNav } from '@/lib/use-url-nav';
@@ -15,15 +15,16 @@ import { useUrlNav } from '@/lib/use-url-nav';
  *
  * Self-hides when empty.
  */
-export function PledgeConfirmations({ onChange }: { onChange?: () => void }) {
+export function PledgeConfirmations({ onChange, query }: { onChange?: () => void; query?: string }) {
   const { setParams } = useUrlNav();
-  const [pending, setPending] = useState<PendingPledge[]>([]);
+  const [all, setAll] = useState<PendingPledge[]>([]);
 
   const load = useCallback(() => {
-    boardPledgeApi.pending().then(setPending).catch(() => setPending([]));
+    boardPledgeApi.pending().then(setAll).catch(() => setAll([]));
   }, []);
   useEffect(load, [load]);
 
+  const pending = all.filter((p) => matchesProposalSearch(query, { title: p.title, proposer: p.submitter, publicId: p.publicId }));
   if (pending.length === 0) return null;
 
   return (

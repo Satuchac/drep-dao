@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { boardProposalsApi, boardMilestoneApi, type PendingReviewerAssignment } from '@/lib/api';
+import { boardProposalsApi, boardMilestoneApi, matchesProposalSearch, type PendingReviewerAssignment } from '@/lib/api';
 import { useUrlNav } from '@/lib/use-url-nav';
 
 /**
@@ -9,14 +9,15 @@ import { useUrlNav } from '@/lib/use-url-nav';
  * reviewers). One-click random assignment (expertise-matched, load-balanced, random tiebreak) or
  * open the proposal to pick manually.
  */
-export function ReviewerAssignments({ onChange }: { onChange?: () => void }) {
-  const [items, setItems] = useState<PendingReviewerAssignment[]>([]);
+export function ReviewerAssignments({ onChange, query }: { onChange?: () => void; query?: string }) {
+  const [all, setAll] = useState<PendingReviewerAssignment[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<Record<string, string>>({});
   const { setParams } = useUrlNav();
-  const load = useCallback(() => { boardProposalsApi.pendingReviewerAssignment().then(setItems).catch(() => setItems([])); }, []);
+  const load = useCallback(() => { boardProposalsApi.pendingReviewerAssignment().then(setAll).catch(() => setAll([])); }, []);
   useEffect(load, [load]);
 
+  const items = all.filter((it) => matchesProposalSearch(query, { title: it.title, proposer: it.submitter, publicId: it.publicId }));
   if (items.length === 0) return null;
 
   const assign = async (it: PendingReviewerAssignment) => {

@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context';
 import {
   boardProposalsApi,
   dvApi,
+  matchesProposalSearch,
   proposalsApi,
   roundsApi,
   type DvResult,
@@ -21,7 +22,7 @@ const VOTE_FLAG: Record<string, string> = {
   PENDING: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
 };
 
-export function VotingPanel({ mode = 'pending' }: { mode?: ReviewMode }) {
+export function VotingPanel({ mode = 'pending', query }: { mode?: ReviewMode; query?: string }) {
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
   const isDrep = profile?.roles.includes('DREP') ?? false;
@@ -45,8 +46,8 @@ export function VotingPanel({ mode = 'pending' }: { mode?: ReviewMode }) {
       : mode === 'recent'
         ? (p: ProposalSummary) => p.stage === 'DEBATE_VOTE' && !finished(p)
         : (p: ProposalSummary) => p.stage === 'DEBATE_VOTE' && !!p.roundId && voteRoundIds.has(p.roundId) && !finished(p);
-    setItems(all.filter(pred));
-  }, [mode]);
+    setItems(all.filter((p) => pred(p) && matchesProposalSearch(query, { title: p.title, proposer: p.submitter, publicId: p.publicId })));
+  }, [mode, query]);
   useEffect(() => {
     void load();
   }, [load]);

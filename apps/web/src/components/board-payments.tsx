@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { boardPaymentsApi, type FeePayment } from '@/lib/api';
+import { boardPaymentsApi, matchesProposalSearch, type FeePayment } from '@/lib/api';
 import { CopyButton } from './copy-button';
 import { fmtDate } from './round-ui';
 
@@ -11,13 +11,14 @@ import { fmtDate } from './round-ui';
  * submitter (the DAO returns fee). A board member records the on-chain tx to settle.
  * Self-hides when there's nothing outstanding.
  */
-export function BoardPayments({ history = false }: { history?: boolean }) {
-  const [items, setItems] = useState<FeePayment[]>([]);
+export function BoardPayments({ history = false, query }: { history?: boolean; query?: string }) {
+  const [all, setAll] = useState<FeePayment[]>([]);
   const load = useCallback(() => {
-    boardPaymentsApi.pending(history).then(setItems).catch(() => setItems([]));
+    boardPaymentsApi.pending(history).then(setAll).catch(() => setAll([]));
   }, [history]);
   useEffect(load, [load]);
 
+  const items = all.filter((p) => matchesProposalSearch(query, { title: p.proposalTitle, proposer: p.submitter, publicId: p.proposalPublicId }));
   if (items.length === 0) return null;
 
   return (

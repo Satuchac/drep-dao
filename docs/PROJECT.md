@@ -237,9 +237,11 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   /admin/proposals/payments…`): each item shows the **old → new fee**, the budget change, and —
   for a refund — the submitter's **payout address with a copy button**; the board records the
   on-chain **tx** to mark it SETTLED. Pending settlements count toward the **notification badge**.
-  The Actions tab has a **"Show history"** toggle (default off): on, it also lists **settled**
-  settlements + **executed** treasury actions (read-only, with tx) for auditing
-  (`?history=1` on `/admin/proposals/payments` + `/me/board-actions`); off, only the to-dos.
+  The Actions tab has a **To do / Recent / History** toggle (default *To do*; same control as
+  Voting & reviews): *History* lists **settled** settlements + **executed** treasury actions
+  (read-only, with tx) for auditing (`?history=1` on `/admin/proposals/payments` +
+  `/me/board-actions`); *To do* / *Recent* show the live to-dos (the board-action panels are
+  pending/done, so Recent currently mirrors To do).
 - **Payout / refund address (§12).** A proposal carries a `payoutAddress` (Cardano address)
   the submitter enters in the form — where the DAO sends **fee refunds** and the **funded
   budget**. It's shown read-only near the bottom of the proposal detail (with a copy button)
@@ -500,6 +502,18 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   (`GovSubject.PROPOSAL_DOC`, `buildDocHashMetadata`, `AnchorService.anchorProposalDoc`,
   idempotent). The proposal detail shows the exact text + hash + hash function + the
   on-chain tx so anyone can re-hash and verify.
+
+**Member area (My Area)**
+- **Voting & reviews + Actions search:** both tabs have a search box that filters every list
+  by **proposal Title**, **Proposer name**, or **public Proposal ID** (case-insensitive,
+  client-side, shared `matchesProposalSearch` helper). To carry the proposer name + public id
+  into the reviewer-facing lists, `GET /me/assignments/filter` and `/me/assignments/milestone`
+  now return `proposer` (+ `publicId` / `proposalPublicId`). Reward-payout board actions carry
+  no single proposer/public-id, so they match on title + description + recipient names; the
+  paged fee history filters the rows currently loaded.
+- **To do / Recent / History** also applies to **Debate & Vote** (round-based: *To do* = votable
+  now, *Recent* = any active round incl. waiting-for-VOTE, *History* = finished/closed only) and
+  the **Actions** tab (replaces its old "Show history" checkbox).
 
 **Proposals**
 - **Title immutability:** once submitted (past DRAFT / fee-reject), the title is locked

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { treasuryApi, type BoardAction } from '@/lib/api';
+import { treasuryApi, matchesProposalSearch, type BoardAction } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
@@ -13,7 +13,7 @@ import { notifyTodoChanged } from '@/lib/use-todo-counts';
  *  `refreshKey` is a parent-controlled counter — bumping it triggers an
  *  immediate refetch so newly-queued actions (top-ups, sweeps, transfers)
  *  appear without a page reload. */
-export function BoardActions({ onChange, history = false, refreshKey = 0, filter = 'all' }: { onChange?: () => void; history?: boolean; refreshKey?: number; filter?: 'all' | 'rewards' | 'non-rewards' }) {
+export function BoardActions({ onChange, history = false, refreshKey = 0, filter = 'all', query }: { onChange?: () => void; history?: boolean; refreshKey?: number; filter?: 'all' | 'rewards' | 'non-rewards'; query?: string }) {
   const { profile, signTx, signMessage } = useAuth();
   const { txUrl } = useExplorer();
   const [actions, setActions] = useState<BoardAction[]>([]);
@@ -135,9 +135,16 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
     }
   };
 
+  // Search filters by proposal title (PROJECT_FUNDING), the action description (OPS / top-ups),
+  // and recipient names (reward payouts) — board actions carry no public id / single proposer.
+  const matchAction = (a: BoardAction) =>
+    matchesProposalSearch(query, { title: a.proposalTitle, extra: [a.description, ...a.recipients.map((r) => r.name)] });
+  const shownActions = actions.filter(matchAction);
+  const shownPast = past.filter(matchAction);
+
   // Keep rendering while a transient "submitted" banner is up, even if the signed action has
   // already dropped into history (so the last signer still sees the confirmation).
-  if (actions.length === 0 && past.length === 0 && !submitted) return null;
+  if (shownActions.length === 0 && shownPast.length === 0 && !submitted) return null;
 
   return (
     <section className="space-y-2 rounded-lg border border-amber-300 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
@@ -183,9 +190,9 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
           )}
         </div>
       ) : null}
-      {actions.length === 0 ? <div className="text-xs text-neutral-500">Nothing awaiting signatures.</div> : null}
+      {shownActions.length === 0 ? <div className="text-xs text-neutral-500">Nothing awaiting signatures.</div> : null}
       <ul className="space-y-2">
-        {actions.map((a) => (
+        {shownActions.map((a) => (
           <li key={a.id} className="rounded-md border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium">
@@ -341,11 +348,11 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
         ))}
       </ul>
       {/* History: past actions (executed / no longer awaiting signatures), read-only. */}
-      {past.length > 0 ? (
+      {shownPast.length > 0 ? (
         <div className="mt-2">
           <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">History</div>
           <ul className="mt-1 space-y-1">
-            {past.map((a) => (
+            {shownPast.map((a) => (
               <li key={a.id} className="rounded border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">{a.proposalTitle ? `Milestone #${(a.milestoneIdx ?? 0) + 1} payout — ${a.proposalTitle}` : (a.description ?? a.kind)}</span>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { boardRevenueApi, messagesApi, type PendingRevenueSharing } from '@/lib/api';
+import { boardRevenueApi, messagesApi, matchesProposalSearch, type PendingRevenueSharing } from '@/lib/api';
 import { ConfirmDialog } from './confirm-dialog';
 import { ProposalMessageInfo } from './proposal-messages';
 
@@ -10,17 +10,18 @@ import { ProposalMessageInfo } from './proposal-messages';
  * those conditions verified by the board before the team can submit milestone POAs. Without this,
  * the team is blocked with "the revenue-sharing conditions must be verified by the board…".
  */
-export function RevenueSharingConfirmations({ onChange }: { onChange?: () => void }) {
-  const [pending, setPending] = useState<PendingRevenueSharing[]>([]);
+export function RevenueSharingConfirmations({ onChange, query }: { onChange?: () => void; query?: string }) {
+  const [all, setAll] = useState<PendingRevenueSharing[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   // §3.5 — inline "ask the submitter to do something" composer, keyed by proposal id.
   const [composeId, setComposeId] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [sent, setSent] = useState<string | null>(null);
-  const load = useCallback(() => { boardRevenueApi.pending().then(setPending).catch(() => setPending([])); }, []);
+  const load = useCallback(() => { boardRevenueApi.pending().then(setAll).catch(() => setAll([])); }, []);
   useEffect(load, [load]);
 
+  const pending = all.filter((p) => matchesProposalSearch(query, { title: p.title, proposer: p.submitter, publicId: p.publicId }));
   if (pending.length === 0) return null;
 
   const verify = async (id: string) => {

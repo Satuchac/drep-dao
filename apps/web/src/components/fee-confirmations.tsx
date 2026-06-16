@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { boardFeeApi, boardProposalsApi, type FeeHistoryPage, type FeeHistoryRow, type PendingFee } from '@/lib/api';
+import { boardFeeApi, boardProposalsApi, matchesProposalSearch, type FeeHistoryPage, type FeeHistoryRow, type PendingFee } from '@/lib/api';
 import { useExplorer } from '@/lib/explorer';
 import { fmtDateTime } from './round-ui';
 import { useUrlNav } from '@/lib/use-url-nav';
@@ -18,14 +18,16 @@ const HISTORY_PAGE = 20;
  * with a pager (default 20/page, newest first) — so the board can look back at past
  * decisions without scrolling the live proposal pages.
  */
-export function FeeConfirmations({ onChange, history = false }: { onChange?: () => void; history?: boolean }) {
-  const [pending, setPending] = useState<PendingFee[]>([]);
+export function FeeConfirmations({ onChange, history = false, query }: { onChange?: () => void; history?: boolean; query?: string }) {
+  const [all, setAll] = useState<PendingFee[]>([]);
 
   const load = useCallback(() => {
-    boardFeeApi.pending().then(setPending).catch(() => setPending([]));
+    boardFeeApi.pending().then(setAll).catch(() => setAll([]));
   }, []);
   useEffect(load, [load]);
 
+  // PendingFee carries no public id, so search matches title + proposer here.
+  const pending = all.filter((p) => matchesProposalSearch(query, { title: p.title, proposer: p.submitter }));
   if (pending.length === 0 && !history) return null;
 
   return (
@@ -45,7 +47,7 @@ export function FeeConfirmations({ onChange, history = false }: { onChange?: () 
           </ul>
         </section>
       ) : null}
-      {history ? <FeeHistory /> : null}
+      {history ? <FeeHistory query={query} /> : null}
     </>
   );
 }
@@ -54,7 +56,7 @@ export function FeeConfirmations({ onChange, history = false }: { onChange?: () 
  * Paginated history of decided fee reviews (approved + fee-rejected). Default
  * page size is 20 (matches the user's request); pager appears once total > 20.
  */
-function FeeHistory() {
+function FeeHistory({ query }: { query?: string }) {
   const { setParams } = useUrlNav();
   const { txUrl } = useExplorer();
   const [page, setPage] = useState<FeeHistoryPage | null>(null);
@@ -64,6 +66,8 @@ function FeeHistory() {
   }, [offset]);
   if (!page) return null;
 
+  // Search filters the rows currently loaded on this page (history is paged server-side).
+  const rows = page.rows.filter((r) => matchesProposalSearch(query, { title: r.title, proposer: r.submitter, publicId: r.publicId }));
   const start = page.rows.length === 0 ? 0 : page.offset + 1;
   const end = page.offset + page.rows.length;
   const last = Math.floor((page.total - 1) / HISTORY_PAGE) * HISTORY_PAGE;
@@ -76,9 +80,9 @@ function FeeHistory() {
           {page.total === 0 ? 'No decisions yet.' : `Showing ${start}–${end} of ${page.total}`}
         </span>
       </div>
-      {page.rows.length === 0 ? null : (
+      {rows.length === 0 ? null : (
         <ul className="space-y-2">
-          {page.rows.map((r) => (
+          {rows.map((r) => (
             <HistoryRow
               key={r.id}
               r={r}

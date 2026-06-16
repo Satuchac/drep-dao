@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { boardMilestoneApi, milestonesApi, type ActiveStopFunding } from '@/lib/api';
+import { boardMilestoneApi, milestonesApi, matchesProposalSearch, type ActiveStopFunding } from '@/lib/api';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { fmtDateTime, StatusBadge, PROPOSAL_STATUS_CLS } from './round-ui';
 
@@ -11,14 +11,16 @@ import { fmtDateTime, StatusBadge, PROPOSAL_STATUS_CLS } from './round-ui';
  * YES/NO vote (NO requires rationale); 3 YES → project FAILED + on-chain anchor.
  * Self-hides when there's nothing pending. Linking → the proposal detail still works.
  */
-export function StopFundingBoardPanel() {
+export function StopFundingBoardPanel({ query }: { query?: string }) {
   const { setParams } = useUrlNav();
-  const [items, setItems] = useState<ActiveStopFunding[]>([]);
+  const [all, setAll] = useState<ActiveStopFunding[]>([]);
   const load = useCallback(() => {
-    boardMilestoneApi.activeStopFundings().then(setItems).catch(() => setItems([]));
+    boardMilestoneApi.activeStopFundings().then(setAll).catch(() => setAll([]));
   }, []);
   useEffect(load, [load]);
 
+  // Proposer here matches the proposal title + public id + who raised the stop-funding vote.
+  const items = all.filter((s) => matchesProposalSearch(query, { title: s.proposalTitle, proposer: s.proposerName, publicId: s.proposalPublicId }));
   if (items.length === 0) return null;
 
   return (

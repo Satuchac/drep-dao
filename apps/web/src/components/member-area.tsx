@@ -315,6 +315,7 @@ function VotingReviewsTab() {
   // §7 — three views: To do (awaiting your vote), Recent (everything in the active stages,
   // voted or not), and History (all past rounds/stages).
   const [mode, setMode] = useState<ReviewMode>('pending');
+  const [query, setQuery] = useState('');
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -323,14 +324,34 @@ function VotingReviewsTab() {
             : mode === 'recent' ? 'Everything in the currently-active stages — voted or not.'
               : 'Everything awaiting your vote or review — filtering juries, Debate & Vote, and milestone reviews.'}
         </p>
-        <ReviewModeToggle mode={mode} onChange={setMode} />
+        <div className="flex flex-wrap items-center gap-2">
+          <ProposalSearchBox value={query} onChange={setQuery} />
+          <ReviewModeToggle mode={mode} onChange={setMode} />
+        </div>
       </div>
-      <FilteringPanel mode={mode} />
-      <VotingPanel mode={mode} />
+      <FilteringPanel mode={mode} query={query} />
+      <VotingPanel mode={mode} query={query} />
       {/* §9.2 — tie-break quick polls of the active round (self-hides when none). */}
       <ActiveRoundQuickPolls />
-      <MilestoneReviewsPanel history={mode === 'history'} />
+      <MilestoneReviewsPanel history={mode === 'history'} query={query} />
       <EmptyHint text={mode === 'history' ? 'No votes — past or present.' : mode === 'recent' ? 'Nothing in the active stages.' : 'Nothing is awaiting your vote right now.'} />
+    </div>
+  );
+}
+
+/** Search box shared by Voting & reviews and Actions — filters every list in the tab by
+ *  proposal Title, Proposer name, or public Proposal ID. */
+function ProposalSearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative">
+      <input
+        type="search"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search title, proposer, or ID…"
+        aria-label="Search by title, proposer name, or proposal ID"
+        className="w-60 rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs text-neutral-700 placeholder:text-neutral-400 focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
+      />
     </div>
   );
 }
@@ -423,6 +444,7 @@ function ActionsTab() {
   // are pending/done, so Recent currently mirrors To do; History shows the resolved items.
   const [mode, setMode] = useState<ReviewMode>('pending');
   const showHistory = mode === 'history';
+  const [query, setQuery] = useState('');
   const [viewMessages, setViewMessages] = useState(false);
   // §3.5 — board-wide message tallies for the header info + the "go to messages" history link.
   const [msgs, setMsgs] = useState<{ active: number; done: number }>({ active: 0, done: 0 });
@@ -446,17 +468,18 @@ function ActionsTab() {
           {msgs.done > 0 ? (
             <button onClick={() => setViewMessages(true)} className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">Go to messages</button>
           ) : null}
+          <ProposalSearchBox value={query} onChange={setQuery} />
           <ReviewModeToggle mode={mode} onChange={setMode} />
         </div>
       </div>
-      <BoardActions history={showHistory} filter="rewards" />
-      <ReviewerAssignments />
+      <BoardActions history={showHistory} filter="rewards" query={query} />
+      <ReviewerAssignments query={query} />
       <BoardMessages />
-      <RevenueSharingConfirmations />
-      <StopFundingBoardPanel />
-      <FeeConfirmations history={showHistory} />
-      <PledgeConfirmations />
-      <BoardPayments history={showHistory} />
+      <RevenueSharingConfirmations query={query} />
+      <StopFundingBoardPanel query={query} />
+      <FeeConfirmations history={showHistory} query={query} />
+      <PledgeConfirmations query={query} />
+      <BoardPayments history={showHistory} query={query} />
       <EmptyHint text={showHistory ? 'No actions — past or present.' : 'Nothing to do right now.'} />
     </div>
   );

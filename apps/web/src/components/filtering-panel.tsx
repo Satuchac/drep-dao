@@ -1,21 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { filteringApi, type FilterAssignment, type ReviewMode } from '@/lib/api';
+import { filteringApi, matchesProposalSearch, type FilterAssignment, type ReviewMode } from '@/lib/api';
 import { BackButton } from './round-ui';
 import { ProposalDetail } from './proposal-detail';
 
 /** §7 — a DRep's filtering review assignments, with a full rationale editor + the proposal. */
-export function FilteringPanel({ mode = 'pending' }: { mode?: ReviewMode }) {
-  const [assignments, setAssignments] = useState<FilterAssignment[]>([]);
+export function FilteringPanel({ mode = 'pending', query }: { mode?: ReviewMode; query?: string }) {
+  const [all, setAll] = useState<FilterAssignment[]>([]);
   // When a proposal is opened, we show ONLY that one (its detail + its own vote box),
   // not the other assignments — a reviewer votes on one proposal at a time.
   const [openId, setOpenId] = useState<string | null>(null);
   const load = useCallback(() => {
-    filteringApi.myAssignments(mode).then(setAssignments).catch(() => setAssignments([]));
+    filteringApi.myAssignments(mode).then(setAll).catch(() => setAll([]));
   }, [mode]);
   useEffect(load, [load]);
 
+  const assignments = all.filter((a) => matchesProposalSearch(query, { title: a.title, proposer: a.proposer, publicId: a.publicId }));
   if (assignments.length === 0) return null;
   const openRow = openId ? assignments.find((a) => a.proposalId === openId) ?? null : null;
   const heading = mode === 'history' ? 'all past assignments' : mode === 'recent' ? 'all in the active filtering stage' : 'your assignments';

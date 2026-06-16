@@ -1031,6 +1031,21 @@ export interface ProposalRejectionReason {
   from: string | null;
   rationale: string;
 }
+/**
+ * §UI — case-insensitive client-side search across a proposal's Title, Proposer name, and
+ * public Proposal ID. An empty/blank query matches everything. `extra` lets a panel feed
+ * additional searchable text (e.g. a board action's description / recipient names).
+ */
+export function matchesProposalSearch(
+  query: string | undefined,
+  fields: { title?: string | null; proposer?: string | null; publicId?: string | null; extra?: (string | null | undefined)[] },
+): boolean {
+  const q = (query ?? '').trim().toLowerCase();
+  if (!q) return true;
+  return [fields.title, fields.proposer, fields.publicId, ...(fields.extra ?? [])]
+    .some((f) => (f ?? '').toLowerCase().includes(q));
+}
+
 export interface ProposalSummary {
   id: string;
   publicId: string | null;
@@ -1148,6 +1163,9 @@ export const proposalsApi = {
 export interface FilterAssignment {
   proposalId: string;
   title: string;
+  /** §UI — searchable metadata: public proposal id + proposer name. */
+  publicId?: string | null;
+  proposer?: string | null;
   myVote: string | null;
   proposalStatus?: string;
   proposalStage?: string | null;
@@ -1462,6 +1480,9 @@ export interface MilestoneAssignmentView {
   milestoneId: string;
   proposalId: string;
   proposalTitle: string;
+  /** §UI — searchable metadata: public proposal id + proposer name. */
+  proposalPublicId?: string | null;
+  proposer?: string | null;
   milestoneIdx: number;
   myVote: string | null;
   milestoneStatus?: string;
