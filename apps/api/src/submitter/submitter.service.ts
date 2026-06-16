@@ -211,6 +211,38 @@ export class SubmitterService {
     return null;
   }
 
+  /**
+   * §3 — validate a payout/refund address: is it a well-formed Cardano address on the right
+   * network, and does it belong to the submitter's OWN wallet (same stake key) or a different
+   * wallet (foreign — a valid choice, just flagged)? CSL is imported lazily so the unit tests
+   * (which never call this) don't pull in the native lib.
+   */
+  async checkAddress(userId: string, address: string): Promise<{ valid: boolean; networkOk: boolean; mine: boolean; hasStakePart: boolean }> {
+    const trimmed = (address ?? '').trim();
+    const fail = { valid: false, networkOk: false, mine: false, hasStakePart: false };
+    if (!trimmed) return fail;
+    const CSL = await import('@emurgo/cardano-serialization-lib-nodejs');
+    try {
+      const addr = CSL.Address.from_bech32(trimmed);
+      const expectedNet = (process.env.CARDANO_NETWORK ?? 'Preprod') === 'Mainnet' ? 1 : 0;
+      const networkOk = addr.network_id() === expectedNet;
+      const stakeCred = CSL.BaseAddress.from_address(addr)?.stake_cred() ?? null;
+      let mine = false;
+      if (stakeCred) {
+        const me = await this.prisma.appUser.findUnique({ where: { id: userId }, select: { stakeAddress: true } });
+        if (me?.stakeAddress) {
+          try {
+            const reward = CSL.RewardAddress.new(addr.network_id(), stakeCred).to_address().to_bech32();
+            mine = reward === me.stakeAddress;
+          } catch { /* credential not key-based — leave mine=false */ }
+        }
+      }
+      return { valid: true, networkOk, mine, hasStakePart: !!stakeCred };
+    } catch {
+      return fail;
+    }
+  }
+
   /** §2 (board) — override a submitter's cross-wallet link to a DAO member (set or clear). */
   async setLink(appId: string, linkedDrepIdOnchain: string | null) {
     const a = await this.prisma.submitterApplication.findUnique({ where: { id: appId }, select: { userId: true } });

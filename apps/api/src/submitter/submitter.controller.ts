@@ -20,6 +20,12 @@ export class MeSubmitterController {
     return this.svc.mine(ctx.userId);
   }
 
+  // §3 — validate a payout/refund address + flag whether it's the submitter's own wallet.
+  @Get('check-payout-address')
+  checkPayoutAddress(@CurrentUser() ctx: AuthContext, @Query('address') address?: string) {
+    return this.svc.checkAddress(ctx.userId, address ?? '');
+  }
+
   // §2.1 — an approved submitter deregisters (blocked while proposals are in flight).
   @Post('submitter/leave')
   leave(@CurrentUser() ctx: AuthContext) {

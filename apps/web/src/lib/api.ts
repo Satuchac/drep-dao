@@ -798,6 +798,9 @@ export const submitterApi = {
   apply: (input: SubmitterApplicationInput) =>
     request<MySubmitter>('/me/submitter-application', { method: 'POST', body: JSON.stringify(input) }),
   directory: (includeLeft = false) => request<ApprovedSubmitter[]>(`/dao/submitters${includeLeft ? '?includeLeft=1' : ''}`),
+  // §3 — validate a payout/refund address + whether it's the submitter's own wallet.
+  checkPayoutAddress: (address: string) =>
+    request<{ valid: boolean; networkOk: boolean; mine: boolean; hasStakePart: boolean }>(`/me/check-payout-address?address=${encodeURIComponent(address)}`),
   portfolio: (id: string) => request<SubmitterPortfolio>(`/dao/submitters/${id}/portfolio`),
   leave: () => request<{ ok: boolean }>('/me/submitter/leave', { method: 'POST' }),
 };

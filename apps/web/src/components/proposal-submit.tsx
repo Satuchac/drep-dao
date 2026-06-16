@@ -5,6 +5,7 @@ import { DEFAULT_SUBCATEGORIES, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared'
 import {
   proposalsApi,
   roundsApi,
+  submitterApi,
   type FeeVerification,
   type ProposalMilestoneInput,
   type ProposalSummary,
@@ -55,6 +56,9 @@ export function ProposalSubmit() {
   const [ecosystemImpact, setEcosystemImpact] = useState('');
   const [successMetrics, setSuccessMetrics] = useState('');
   const [payoutAddress, setPayoutAddress] = useState('');
+  // §3 — live validation of the payout/refund address (valid Cardano addr on the right network,
+  // and whether it's the submitter's own wallet vs. a foreign one). Debounced.
+  const [addrCheck, setAddrCheck] = useState<{ valid: boolean; networkOk: boolean; mine: boolean; hasStakePart: boolean } | null>(null);
   const [subcatIds, setSubcatIds] = useState<string[]>([]);
   const [fee, setFee] = useState('');
   // §3 — optional refundable pledge. Off by default; the team opts in via a checkbox
@@ -117,6 +121,17 @@ export function ProposalSubmit() {
       .catch(() => undefined);
     loadMine();
   }, []);
+
+  // §3 — debounced payout-address check (valid + network + own-wallet).
+  useEffect(() => {
+    const a = payoutAddress.trim();
+    if (!a) { setAddrCheck(null); return; }
+    let alive = true;
+    const t = setTimeout(() => {
+      submitterApi.checkPayoutAddress(a).then((r) => { if (alive) setAddrCheck(r); }).catch(() => { if (alive) setAddrCheck(null); });
+    }, 400);
+    return () => { alive = false; clearTimeout(t); };
+  }, [payoutAddress]);
 
   useEffect(() => {
     if (!roundId) return;
@@ -615,10 +630,24 @@ export function ProposalSubmit() {
             </div>
           </div>
           {/* Cardano address the submitter receives funds at — fee refunds + the budget payout if funded. */}
-          <label className="block">
-            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Payout / refund address (Cardano)</span>
-            <input className={`${field} mt-0.5 w-full font-mono text-xs`} placeholder="addr_test1… — where the DAO sends refunds and the funded budget" value={payoutAddress} onChange={(e) => setPayoutAddress(e.target.value)} />
-          </label>
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-950/30">
+            <label className="block">
+              <span className="text-xs font-medium text-blue-900 dark:text-blue-200">Payout / refund address (Cardano)</span>
+              <input className={`${field} mt-0.5 w-full font-mono text-xs`} placeholder="addr_test1… — where the DAO sends refunds and the funded budget" value={payoutAddress} onChange={(e) => setPayoutAddress(e.target.value)} />
+            </label>
+            {/* §3 — live validity + own-wallet check. A foreign address is allowed, just flagged. */}
+            {payoutAddress.trim() && addrCheck ? (
+              !addrCheck.valid ? (
+                <p className="mt-1 text-[11px] font-medium text-red-600 dark:text-red-400">✗ Not a valid Cardano address.</p>
+              ) : !addrCheck.networkOk ? (
+                <p className="mt-1 text-[11px] font-medium text-red-600 dark:text-red-400">✗ Valid address, but on the wrong network for this platform.</p>
+              ) : addrCheck.mine ? (
+                <p className="mt-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">✓ Valid · your own wallet (same stake key as your login).</p>
+              ) : (
+                <p className="mt-1 text-[11px] font-medium text-blue-700 dark:text-blue-300">✓ Valid · a different wallet than your login{addrCheck.hasStakePart ? '' : ' (no stake part)'} — that&apos;s allowed, just double-check it&apos;s yours.</p>
+              )
+            ) : null}
+          </div>
           {/* §12/§16 — the fee + tx field appear only when the round charges a fee for this
               proposal type. When it's 0% (e.g. open-source), no payment is needed at all. */}
           {feeRequired ? (
