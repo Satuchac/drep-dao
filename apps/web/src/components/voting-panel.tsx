@@ -32,16 +32,14 @@ export function VotingPanel({ mode = 'pending', query }: { mode?: ReviewMode; qu
   const load = useCallback(async () => {
     const rounds = await roundsApi.list().catch(() => []);
     const lists = await Promise.all(rounds.map((r) => proposalsApi.byRound(r.id).catch(() => [])));
-    // Bucketing rules (To do / Recent / History, round-PHASE-based) live in matchesDvMode — see
-    // @drep-dao/shared/proposal-lifecycle. Recent only kicks in once the round reaches the debate/
-    // vote phase (so a proposal still in a FILTERING-phase round stays in the Filtering panel, not
-    // here); History excludes filtering-rejected proposals.
+    // Bucketing rules (To do / Recent / History) live in matchesDvMode — see
+    // @drep-dao/shared/proposal-lifecycle. To do + Recent require ballots OPEN (round in VOTE), so
+    // the panel is empty during DEBATE; History excludes filtering-rejected proposals.
     const voteRoundIds = new Set(rounds.filter((r) => r.status === 'VOTE' || r.status === 'DV').map((r) => r.id));
-    const dvPhaseRoundIds = new Set(rounds.filter((r) => r.status === 'DEBATE' || r.status === 'VOTE' || r.status === 'DV').map((r) => r.id));
     const closedRoundIds = new Set(rounds.filter((r) => r.status === 'CLOSED').map((r) => r.id));
     const all = lists.flat();
     setItems(all.filter((p) =>
-      matchesDvMode(p, mode, { voteRoundIds, dvPhaseRoundIds, closedRoundIds })
+      matchesDvMode(p, mode, { voteRoundIds, closedRoundIds })
       && matchesProposalSearch(query, { title: p.title, proposer: p.submitter, publicId: p.publicId })));
   }, [mode, query]);
   useEffect(() => {
@@ -49,7 +47,7 @@ export function VotingPanel({ mode = 'pending', query }: { mode?: ReviewMode; qu
   }, [load]);
 
   if (items.length === 0) return null;
-  const heading = mode === 'history' ? ' — past decisions' : mode === 'recent' ? ' — all in active rounds' : '';
+  const heading = mode === 'history' ? ' — past decisions' : mode === 'recent' ? ' — open for your vote' : '';
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">

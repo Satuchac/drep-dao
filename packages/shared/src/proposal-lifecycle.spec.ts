@@ -2,27 +2,23 @@ import { describe, it, expect } from 'vitest';
 import { matchesDvMode } from './proposal-lifecycle';
 
 describe('matchesDvMode (§7/§8 — Debate & Vote To do / Recent / History)', () => {
-  // rVote: round in VOTE (votable). rDebate: round in DEBATE (D&V phase, voting not open).
+  // rVote: round in VOTE (ballots open). rDebate: round in DEBATE (voting not open yet).
   // rFilter: round still in FILTERING. rClosed: round CLOSED.
-  const ctx = {
-    voteRoundIds: new Set(['rVote']),
-    dvPhaseRoundIds: new Set(['rVote', 'rDebate']),
-    closedRoundIds: new Set(['rClosed']),
-  };
+  const ctx = { voteRoundIds: new Set(['rVote']), closedRoundIds: new Set(['rClosed']) };
 
-  it('To do = in DEBATE_VOTE and the round is in VOTE (votable now)', () => {
+  it('To do and Recent both show a votable proposal (in DEBATE_VOTE, round in VOTE)', () => {
     const votable = { stage: 'DEBATE_VOTE', status: 'ACTIVE', roundId: 'rVote' };
     expect(matchesDvMode(votable, 'pending', ctx)).toBe(true);
-    expect(matchesDvMode(votable, 'recent', ctx)).toBe(true); // also shows in Recent
-
-    const debating = { stage: 'DEBATE_VOTE', status: 'ACTIVE', roundId: 'rDebate' };
-    expect(matchesDvMode(debating, 'pending', ctx)).toBe(false); // voting not open yet
-    expect(matchesDvMode(debating, 'recent', ctx)).toBe(true);   // ...but it is "Recent" (DEBATE phase)
+    expect(matchesDvMode(votable, 'recent', ctx)).toBe(true);
   });
 
-  it('BUG FIX: a proposal that passed filtering but whose round is STILL in FILTERING is NOT in D&V', () => {
-    // It belongs to the Filtering panel (filtering vote still changeable) — without the phase gate
-    // it would show in both panels' Recent at once.
+  it('shows NOTHING during DEBATE — ballots are not open, so there is nothing to do or change', () => {
+    const debating = { stage: 'DEBATE_VOTE', status: 'ACTIVE', roundId: 'rDebate' };
+    expect(matchesDvMode(debating, 'pending', ctx)).toBe(false);
+    expect(matchesDvMode(debating, 'recent', ctx)).toBe(false);
+  });
+
+  it('does NOT double-list a proposal whose round is still in FILTERING (it lives in the Filtering panel)', () => {
     const passedButFilteringRound = { stage: 'DEBATE_VOTE', status: 'ACTIVE', roundId: 'rFilter' };
     expect(matchesDvMode(passedButFilteringRound, 'recent', ctx)).toBe(false);
     expect(matchesDvMode(passedButFilteringRound, 'pending', ctx)).toBe(false);

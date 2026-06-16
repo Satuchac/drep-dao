@@ -19,7 +19,10 @@ export function FilteringPanel({ mode = 'pending', query }: { mode?: ReviewMode;
   const assignments = all.filter((a) => matchesProposalSearch(query, { title: a.title, proposer: a.proposer, publicId: a.publicId }));
   if (assignments.length === 0) return null;
   const openRow = openId ? assignments.find((a) => a.proposalId === openId) ?? null : null;
-  const heading = mode === 'history' ? 'all past assignments' : mode === 'recent' ? 'voted — in the active filtering stage' : 'your assignments';
+  // §7 — History = rounds past FILTERING: the filtering stage is over, so votes are FINAL and
+  // shown read-only (no Edit vote / vote box). To do / Recent stay editable while filtering is live.
+  const readOnly = mode === 'history';
+  const heading = mode === 'history' ? 'all past assignments (read-only)' : mode === 'recent' ? 'voted — in the active filtering stage' : 'your assignments';
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
@@ -27,12 +30,12 @@ export function FilteringPanel({ mode = 'pending', query }: { mode?: ReviewMode;
       <p className="text-xs text-neutral-500">1 person = 1 vote · a NO requires a written rationale. Rationale supports Markdown.</p>
       {openRow ? (
         <div className="mt-3">
-          <FilterAssignmentRow a={openRow} open onToggle={() => setOpenId(null)} onVoted={load} />
+          <FilterAssignmentRow a={openRow} open readOnly={readOnly} onToggle={() => setOpenId(null)} onVoted={load} />
         </div>
       ) : (
         <ul className="mt-3 space-y-3">
           {assignments.map((a) => (
-            <FilterAssignmentRow key={a.proposalId} a={a} open={false} onToggle={() => setOpenId(a.proposalId)} onVoted={load} />
+            <FilterAssignmentRow key={a.proposalId} a={a} open={false} readOnly={readOnly} onToggle={() => setOpenId(a.proposalId)} onVoted={load} />
           ))}
         </ul>
       )}
@@ -43,11 +46,13 @@ export function FilteringPanel({ mode = 'pending', query }: { mode?: ReviewMode;
 function FilterAssignmentRow({
   a,
   open,
+  readOnly = false,
   onToggle,
   onVoted,
 }: {
   a: FilterAssignment;
   open: boolean;
+  readOnly?: boolean;
   onToggle: () => void;
   onVoted: () => void;
 }) {
@@ -115,7 +120,10 @@ function FilterAssignmentRow({
               <span className={`text-xs ${a.myVote === 'NO' ? 'text-red-600' : 'text-emerald-600'}`}>voted {a.myVote}</span>
             ) : null}
           </div>
-          {voteBox}
+          {/* Filtering is over (History) → the vote is final; show it read-only, no editor. */}
+          {readOnly
+            ? <p className="mt-1 text-xs text-neutral-500">Filtering has ended — this vote is final and can no longer be changed.</p>
+            : voteBox}
         </div>
         <div className="mt-3">
           <ProposalDetail id={a.proposalId} onBack={onToggle} />
@@ -126,7 +134,7 @@ function FilterAssignmentRow({
 
   // Quick row: rationale + YES/NO collapsed by default — the user wants to see at a glance
   // that they voted, and only open the editor explicitly when they want to vote / change it.
-  return <QuickFilterRow a={a} voteBox={voteBox} onToggle={onToggle} />;
+  return <QuickFilterRow a={a} voteBox={voteBox} readOnly={readOnly} onToggle={onToggle} />;
 }
 
 /**
@@ -138,7 +146,7 @@ function FilterAssignmentRow({
  *   with a tooltip explaining the wait.
  * - View full proposal → still available as a small text link.
  */
-function QuickFilterRow({ a, voteBox, onToggle }: { a: FilterAssignment; voteBox: React.ReactNode; onToggle: () => void }) {
+function QuickFilterRow({ a, voteBox, readOnly = false, onToggle }: { a: FilterAssignment; voteBox: React.ReactNode; readOnly?: boolean; onToggle: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const queued = !!a.queued;
   const label = a.myVote ? 'Edit vote' : 'Vote';
@@ -169,26 +177,29 @@ function QuickFilterRow({ a, voteBox, onToggle }: { a: FilterAssignment; voteBox
               not voted yet
             </span>
           )}
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            disabled={queued}
-            title={queued
-              ? 'Voting opens when the board moves the round to FILTERING.'
-              : expanded ? 'Hide the vote box' : 'Open the vote box'}
-            className={`rounded-md border px-3 py-1 text-sm font-medium ${
-              queued
-                ? 'border-neutral-200 text-neutral-400 cursor-not-allowed dark:border-neutral-800'
-                : 'border-emerald-500 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950'
-            }`}
-          >
-            {expanded ? '▾ Close' : `▸ ${label}`}
-          </button>
+          {/* Filtering over (History) → no Edit/Vote button; the chip above shows the final vote. */}
+          {readOnly ? null : (
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              disabled={queued}
+              title={queued
+                ? 'Voting opens when the board moves the round to FILTERING.'
+                : expanded ? 'Hide the vote box' : 'Open the vote box'}
+              className={`rounded-md border px-3 py-1 text-sm font-medium ${
+                queued
+                  ? 'border-neutral-200 text-neutral-400 cursor-not-allowed dark:border-neutral-800'
+                  : 'border-emerald-500 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950'
+              }`}
+            >
+              {expanded ? '▾ Close' : `▸ ${label}`}
+            </button>
+          )}
           <button onClick={onToggle} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">
             View full proposal →
           </button>
         </span>
       </div>
-      {expanded && !queued ? voteBox : null}
+      {expanded && !queued && !readOnly ? voteBox : null}
       {queued && expanded ? (
         <div className="mt-2 rounded border border-sky-200 bg-sky-50 p-2 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
           <strong>Queued.</strong> This proposal is pre-assigned to you but its round is still in SUBMISSION. The vote opens automatically when the board moves the round to FILTERING; you&apos;ll see the Vote button enable here and the bell badge will bump up.
