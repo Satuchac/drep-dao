@@ -15,8 +15,10 @@ export class FilteringController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me/assignments/filter')
-  mine(@CurrentUser() ctx: AuthContext, @Query('history') history?: string) {
-    return this.filtering.myAssignments(ctx.userId, history === '1' || history === 'true');
+  mine(@CurrentUser() ctx: AuthContext, @Query('mode') mode?: string, @Query('history') history?: string) {
+    // Back-compat: ?history=1 → 'history'; otherwise ?mode=pending|recent|history (default pending).
+    const m = mode === 'recent' || mode === 'history' ? mode : history === '1' || history === 'true' ? 'history' : 'pending';
+    return this.filtering.myAssignments(ctx.userId, m);
   }
 
   // Count of items awaiting this user in the "Voting & reviews" tab (filtering + D&V + milestone).

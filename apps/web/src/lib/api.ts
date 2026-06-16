@@ -1199,8 +1199,10 @@ export interface FilterResult {
 }
 
 export interface VotingTasksCount { filtering: number; dv: number; milestone: number; total: number }
+/** §7 — review list view: actionable to-dos (default), all items in the active stage, or full history. */
+export type ReviewMode = 'pending' | 'recent' | 'history';
 export const filteringApi = {
-  myAssignments: (history = false) => request<FilterAssignment[]>(`/me/assignments/filter${history ? '?history=1' : ''}`),
+  myAssignments: (mode: ReviewMode = 'pending') => request<FilterAssignment[]>(`/me/assignments/filter?mode=${mode}`),
   votingTasks: () => request<VotingTasksCount>('/me/voting-tasks'),
   result: (proposalId: string) => request<FilterResult>(`/proposals/${proposalId}/filter-result`),
   vote: (proposalId: string, choice: 'YES' | 'NO' | 'ABSTAIN', rationale?: string) =>

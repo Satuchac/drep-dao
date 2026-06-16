@@ -1,27 +1,28 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { filteringApi, type FilterAssignment } from '@/lib/api';
+import { filteringApi, type FilterAssignment, type ReviewMode } from '@/lib/api';
 import { BackButton } from './round-ui';
 import { ProposalDetail } from './proposal-detail';
 
 /** §7 — a DRep's filtering review assignments, with a full rationale editor + the proposal. */
-export function FilteringPanel({ history = false }: { history?: boolean }) {
+export function FilteringPanel({ mode = 'pending' }: { mode?: ReviewMode }) {
   const [assignments, setAssignments] = useState<FilterAssignment[]>([]);
   // When a proposal is opened, we show ONLY that one (its detail + its own vote box),
   // not the other assignments — a reviewer votes on one proposal at a time.
   const [openId, setOpenId] = useState<string | null>(null);
   const load = useCallback(() => {
-    filteringApi.myAssignments(history).then(setAssignments).catch(() => setAssignments([]));
-  }, [history]);
+    filteringApi.myAssignments(mode).then(setAssignments).catch(() => setAssignments([]));
+  }, [mode]);
   useEffect(load, [load]);
 
   if (assignments.length === 0) return null;
   const openRow = openId ? assignments.find((a) => a.proposalId === openId) ?? null : null;
+  const heading = mode === 'history' ? 'all past assignments' : mode === 'recent' ? 'all in the active filtering stage' : 'your assignments';
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-      <h3 className="text-base font-semibold">Filtering — {history ? 'all past assignments' : 'your assignments'} ({assignments.length})</h3>
+      <h3 className="text-base font-semibold">Filtering — {heading} ({assignments.length})</h3>
       <p className="text-xs text-neutral-500">1 person = 1 vote · a NO requires a written rationale. Rationale supports Markdown.</p>
       {openRow ? (
         <div className="mt-3">

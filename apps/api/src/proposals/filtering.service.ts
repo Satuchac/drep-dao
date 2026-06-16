@@ -100,44 +100,42 @@ export class FilteringService {
     return this.result(proposalId);
   }
 
-  async myAssignments(userId: string, history = false) {
+  /**
+   * §7 — a reviewer's filtering assignments in one of three views:
+   *  - 'pending'  (default): assignments in a CURRENT filtering stage they HAVEN'T voted on yet —
+   *                the actionable to-do list. Once they vote, it leaves this view.
+   *  - 'recent'  : ALL assignments in a current filtering stage (voted or not) — the live picture
+   *                of this round's filtering, across every active round still in FILTERING/SUBMISSION.
+   *  - 'history' : every assignment they ever had (past rounds/stages included).
+   */
+  async myAssignments(userId: string, mode: 'pending' | 'recent' | 'history' = 'pending') {
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
     if (!drep) return [];
-    // Default view: only proposals still open for filtering — a decided one (REJECTED /
-    // advanced) is no longer actionable, so it shouldn't sit in the reviewer's to-do
-    // list. `history=true` returns ALL of the reviewer's past filtering assignments so
-    // they can recall how they voted on a closed round's proposals.
+    const where = mode === 'history'
+      ? { drepId: drep.id }
+      : {
+          drepId: drep.id,
+          releasedAt: null,
+          // §3 — include round.SUBMISSION too so the reviewer SEES pre-assignments with a QUEUED
+          // badge ("you'll be asked to vote once the round opens"). Spans all active rounds.
+          proposal: {
+            stage: ProposalStage.FILTERING,
+            status: ProposalStatus.ACTIVE,
+            round: { status: { in: [RoundStatus.SUBMISSION, RoundStatus.FILTERING] } },
+          },
+        };
     const assignments = await this.prisma.filterAssignment.findMany({
-      where: history
-        ? { drepId: drep.id }
-        : {
-            drepId: drep.id,
-            releasedAt: null,
-            // §3 — include round.SUBMISSION too so the reviewer SEES pre-assignments
-            // with a QUEUED badge ("you'll be asked to vote once the round opens"),
-            // not just an empty panel. votingTasksCount continues to gate the badge
-            // count on round.status=FILTERING — see below — so the bell only pings
-            // when there's something to actually vote on.
-            proposal: {
-              stage: ProposalStage.FILTERING,
-              status: ProposalStatus.ACTIVE,
-              round: { status: { in: [RoundStatus.SUBMISSION, RoundStatus.FILTERING] } },
-            },
-          },
+      where,
       include: {
-        proposal: {
-          select: {
-            id: true, title: true, status: true, stage: true,
-            round: { select: { status: true } },
-          },
-        },
+        proposal: { select: { id: true, title: true, status: true, stage: true, round: { select: { status: true } } } },
       },
-      orderBy: { assignedAt: 'desc' },
+      // Stable order (assignedAt can tie) so the list doesn't reshuffle between loads.
+      orderBy: [{ assignedAt: 'desc' }, { proposalId: 'asc' }],
     });
     const myVotes = await this.prisma.vote.findMany({
       where: { drepId: drep.id, phase: VotePhase.FILTERING, proposalId: { in: assignments.map((a) => a.proposalId) } },
     });
-    return assignments.map((a) => ({
+    const rows = assignments.map((a) => ({
       proposalId: a.proposalId,
       title: a.proposal.title,
       myVote: myVotes.find((v) => v.proposalId === a.proposalId)?.choice ?? null,
@@ -147,6 +145,9 @@ export class FilteringService {
       // a QUEUED badge and disables the Vote action until the round moves.
       queued: a.proposal.round?.status === RoundStatus.SUBMISSION,
     }));
+    // 'pending' = only the ones still awaiting this reviewer's vote (queued ones included —
+    // they become votable when the round opens). Voted ones drop out → they appear under Recent/History.
+    return mode === 'pending' ? rows.filter((r) => r.myVote == null) : rows;
   }
 
   /**

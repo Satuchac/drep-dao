@@ -5,7 +5,7 @@ import { card } from '@/lib/ui';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { useTodoCounts } from '@/lib/use-todo-counts';
-import { roundsApi, expertApi, drepApi, submitterApi, messagesApi, type MyExpert, type MySubmitter, type EntryEligibility } from '@/lib/api';
+import { roundsApi, expertApi, drepApi, submitterApi, messagesApi, type MyExpert, type MySubmitter, type EntryEligibility, type ReviewMode } from '@/lib/api';
 import { DrepForm } from './drep-form';
 import { EntryRequirementsNotice } from './join-dao-button';
 import { MyDrepStatus } from './my-drep-status';
@@ -312,22 +312,43 @@ function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPendi
 }
 
 function VotingReviewsTab() {
-  const [showHistory, setShowHistory] = useState(false);
+  // §7 — three views: To do (awaiting your vote), Recent (everything in the active stages,
+  // voted or not), and History (all past rounds/stages).
+  const [mode, setMode] = useState<ReviewMode>('pending');
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-neutral-500">Everything awaiting your vote or review — filtering juries, Debate &amp; Vote, and milestone reviews.</p>
-        <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
-          <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
-          Show history
-        </label>
+        <p className="text-sm text-neutral-500">
+          {mode === 'history' ? 'Your past votes & reviews across all rounds.'
+            : mode === 'recent' ? 'Everything in the currently-active stages — voted or not.'
+              : 'Everything awaiting your vote or review — filtering juries, Debate & Vote, and milestone reviews.'}
+        </p>
+        <ReviewModeToggle mode={mode} onChange={setMode} />
       </div>
-      <FilteringPanel history={showHistory} />
-      <VotingPanel history={showHistory} />
+      <FilteringPanel mode={mode} />
+      <VotingPanel history={mode === 'history'} />
       {/* §9.2 — tie-break quick polls of the active round (self-hides when none). */}
       <ActiveRoundQuickPolls />
-      <MilestoneReviewsPanel history={showHistory} />
-      <EmptyHint text={showHistory ? 'No votes — past or present.' : 'Nothing is awaiting your vote right now.'} />
+      <MilestoneReviewsPanel history={mode === 'history'} />
+      <EmptyHint text={mode === 'history' ? 'No votes — past or present.' : mode === 'recent' ? 'Nothing in the active stages.' : 'Nothing is awaiting your vote right now.'} />
+    </div>
+  );
+}
+
+/** §7 — segmented To do / Recent / History selector shared by Voting & reviews (and Actions). */
+function ReviewModeToggle({ mode, onChange }: { mode: ReviewMode; onChange: (m: ReviewMode) => void }) {
+  return (
+    <div className="flex overflow-hidden rounded-md border border-neutral-300 text-xs dark:border-neutral-700">
+      {([['pending', 'To do'], ['recent', 'Recent'], ['history', 'History']] as const).map(([k, l]) => (
+        <button
+          key={k}
+          onClick={() => onChange(k)}
+          className={`px-2.5 py-1 font-medium ${mode === k ? 'bg-emerald-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-100 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'}`}
+          title={k === 'pending' ? 'Items still awaiting your action' : k === 'recent' ? 'All items in the currently-active stages' : 'All past rounds/stages'}
+        >
+          {l}
+        </button>
+      ))}
     </div>
   );
 }
