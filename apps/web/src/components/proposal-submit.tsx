@@ -619,8 +619,8 @@ export function ProposalSubmit() {
           {/* §12/§16 — the fee + tx field appear only when the round charges a fee for this
               proposal type. When it's 0% (e.g. open-source), no payment is needed at all. */}
           {feeRequired ? (
-            <>
-              <div className="rounded border border-neutral-200 p-2 text-xs text-neutral-600 dark:border-neutral-800 dark:text-neutral-400">
+            <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-950/30">
+              <div className="text-xs text-blue-900 dark:text-blue-200">
                 <div>
                   Submission fee: <strong>{feePct}% ({commercial ? 'commercial' : 'open-source'})</strong> of the requested
                   amount ≈ <strong>{feeEstimate.toLocaleString()} ₳</strong>. To <strong>submit</strong>, pay it to the
@@ -628,54 +628,86 @@ export function ProposalSubmit() {
                 </div>
                 {cfg?.submissionFeeAddress ? (
                   <div className="mt-1 flex items-start gap-2">
-                    <div className="flex-1 break-all font-mono text-[11px] text-neutral-500">{cfg.submissionFeeAddress}</div>
+                    <div className="flex-1 break-all font-mono text-[11px] text-blue-700/80 dark:text-blue-300/80">{cfg.submissionFeeAddress}</div>
                     <CopyButton text={cfg.submissionFeeAddress} label="Copy address" />
                   </div>
                 ) : null}
               </div>
+
+              {/* §12 — every fee-payment tx already submitted, locked + with its on-chain amount.
+                  A partial payment leaves the earlier hashes here and clears the input below for
+                  the next tx, so several hashes accumulate. */}
+              {feeVerification && feeVerification.txs.length > 0 ? (
+                <div className="space-y-1">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300">Submitted fee payments</div>
+                  {feeVerification.txs.map((t) => (
+                    <div key={t.hash} className="flex flex-wrap items-center gap-2 rounded border border-blue-200 bg-white/70 px-2 py-1 text-[11px] dark:border-blue-900 dark:bg-neutral-900/50">
+                      <span className="flex-1 break-all font-mono text-neutral-600 dark:text-neutral-400">{t.hash}</span>
+                      <span className={t.paidAda > 0 ? 'whitespace-nowrap font-medium text-emerald-700 dark:text-emerald-400' : 'whitespace-nowrap text-neutral-500'}>
+                        {!t.koiosAvailable ? 'chain check failed' : t.paidAda > 0 ? `${t.paidAda.toLocaleString()} ₳ paid` : t.found ? '0 ₳ to fee address' : 'not found yet'}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="text-[11px] text-blue-900 dark:text-blue-200">
+                    Total: <strong>{feeVerification.paidAda.toLocaleString()} ₳</strong> of {feeVerification.requiredAda.toLocaleString()} ₳
+                    {feeVerification.fullyPaid ? ' — fully paid ✓' : ` · ${feeVerification.missingAda.toLocaleString()} ₳ still missing`}
+                  </div>
+                </div>
+              ) : null}
+
               {/* TX hash input + Verify button. Cardano tx hashes are 32-byte
                   blake2b → 64 hex chars; we validate the format inline (whitespace
                   / wrong length / non-hex chars get a clear message) before the
                   button is enabled. Verify auto-saves the draft first if needed
                   (so the hash is persisted + added to the cumulative tally) and
                   re-fires automatically when the user pastes a fresh valid-looking
-                  hash. The input locks once the on-chain total covers the fee. */}
-              <FeeTxInput
-                fee={fee}
-                onChange={(v) => { setFee(v); setFeeVerification(null); }}
-                locked={feeVerification?.fullyPaid === true}
-                verifying={verifying}
-                hasResult={feeVerification !== null}
-                onVerify={async () => {
-                  const trimmed = fee.trim();
-                  if (!/^[0-9a-f]{64}$/i.test(trimmed)) return; // safety; button disabled anyway
-                  setVerifying(true); setError(null);
-                  try {
-                    // Auto-save the draft if we don't have one yet — Verify is most
-                    // useful BEFORE the team submits, so the cost of an extra
-                    // create+update is fine for the UX win.
-                    let id = editingId;
-                    if (!id) {
-                      if (!draftReady) {
-                        setError('Fill in the proposal fields above first — the hash is recorded with the saved draft.');
-                        return;
+                  hash. Hidden once the on-chain total covers the fee. */}
+              {!feeVerification?.fullyPaid ? (
+                <FeeTxInput
+                  fee={fee}
+                  // Keep the prior result (and the submitted-hash list) visible while the next
+                  // hash is being typed; Verify (manual or auto) refreshes it.
+                  onChange={(v) => setFee(v)}
+                  locked={false}
+                  verifying={verifying}
+                  hasResult={feeVerification !== null}
+                  onVerify={async () => {
+                    const trimmed = fee.trim();
+                    if (!/^[0-9a-f]{64}$/i.test(trimmed)) return; // safety; button disabled anyway
+                    setVerifying(true); setError(null);
+                    try {
+                      // Auto-save the draft if we don't have one yet — Verify is most
+                      // useful BEFORE the team submits, so the cost of an extra
+                      // create+update is fine for the UX win.
+                      let id = editingId;
+                      if (!id) {
+                        if (!draftReady) {
+                          setError('Fill in the proposal fields above first — the hash is recorded with the saved draft.');
+                          return;
+                        }
+                        const created = await proposalsApi.create({ ...buildInput(), submissionFeeTxHash: trimmed });
+                        id = created.id;
+                        setEditingId(id);
+                        setEditingStatus(created.status);
+                      } else {
+                        await proposalsApi.update(id, { submissionFeeTxHash: trimmed });
                       }
-                      const created = await proposalsApi.create({ ...buildInput(), submissionFeeTxHash: trimmed });
-                      id = created.id;
-                      setEditingId(id);
-                      setEditingStatus(created.status);
-                    } else {
-                      await proposalsApi.update(id, { submissionFeeTxHash: trimmed });
+                      const v = await proposalsApi.verifyFee(id);
+                      setFeeVerification(v);
+                      // This hash was recorded + counted but the fee isn't covered yet → clear the
+                      // box so the submitter pastes the NEXT tx's hash (the old one stays in the list).
+                      const thisTx = v.txs.find((t) => t.hash.toLowerCase() === trimmed.toLowerCase());
+                      if (!v.fullyPaid && thisTx?.found && thisTx.koiosAvailable && thisTx.paidAda > 0) {
+                        setFee('');
+                      }
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : 'verification failed');
+                    } finally {
+                      setVerifying(false);
                     }
-                    const v = await proposalsApi.verifyFee(id);
-                    setFeeVerification(v);
-                  } catch (e) {
-                    setError(e instanceof Error ? e.message : 'verification failed');
-                  } finally {
-                    setVerifying(false);
-                  }
-                }}
-              />
+                  }}
+                />
+              ) : null}
               {feeVerification ? (
                 <div
                   className={`rounded border p-2 text-xs ${
@@ -690,8 +722,7 @@ export function ProposalSubmit() {
                 >
                   {feeVerification.fullyPaid ? (
                     <span>
-                      <strong>✓ Fully paid</strong> — {feeVerification.paidAda.toLocaleString()} ₳ received at the fee address (required {feeVerification.requiredAda.toLocaleString()} ₳).
-                      The TX hash field is locked. You can now submit.
+                      <strong>✓ Fully paid</strong> — {feeVerification.paidAda.toLocaleString()} ₳ received at the fee address (required {feeVerification.requiredAda.toLocaleString()} ₳). You can now submit.
                     </span>
                   ) : !feeVerification.koiosAvailable ? (
                     <span>
@@ -702,27 +733,16 @@ export function ProposalSubmit() {
                       <strong>Partial payment:</strong> {feeVerification.paidAda.toLocaleString()} ₳ received,{' '}
                       <strong>{feeVerification.missingAda.toLocaleString()} ₳ still missing</strong>{' '}
                       (required {feeVerification.requiredAda.toLocaleString()} ₳).
-                      Send the rest in a new tx, paste the new hash here, and click Verify again — both txs will be counted.
+                      Send the rest in a new tx and paste the new hash in the box above — every tx is counted.
                     </span>
                   ) : feeVerification.txs.every((t) => t.koiosAvailable && !t.found) ? (
                     <span>✗ The tx hash wasn&apos;t found on-chain yet. The platform re-checks every ~10 s — leave the form open and the answer will update as soon as the next block lands.</span>
                   ) : (
                     <span>✗ This tx didn&apos;t pay the fee address. Did you send to the right address?</span>
                   )}
-                  {/* Per-tx breakdown when there are several. */}
-                  {feeVerification.txs.length > 1 ? (
-                    <ul className="mt-1 space-y-0.5 text-[11px]">
-                      {feeVerification.txs.map((t) => (
-                        <li key={t.hash} className="break-all">
-                          <span className="font-mono">{t.hash.slice(0, 16)}…</span>{' '}
-                          {!t.koiosAvailable ? '→ chain check failed' : t.paidAda > 0 ? `→ ${t.paidAda.toLocaleString()} ₳ paid` : t.found ? '→ 0 ₳ to the fee address' : '→ not found on-chain'}
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
                 </div>
               ) : null}
-            </>
+            </div>
           ) : (
             <div className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
               No submission fee for {commercial ? 'commercial' : 'open-source'} proposals in this round — your proposal
