@@ -204,6 +204,25 @@ export function DaoOverview() {
                 </tr>
               ))}
             </tbody>
+            {/* §4 — column-aligned aggregate row: total on-chain voting power, total DAO
+                voting power (base), and total adjusted voting power across all members. */}
+            <tfoot className="border-t-2 border-neutral-300 bg-neutral-50 text-xs dark:border-neutral-700 dark:bg-neutral-900">
+              <tr>
+                <td className="px-3 py-2 font-semibold uppercase tracking-wide text-neutral-500" colSpan={2}>Aggregate</td>
+                <td className="px-3 py-2 text-right font-semibold tabular-nums" title="Total on-chain DRep voting power (ADA) across all members">
+                  {(sorted ?? []).reduce((s, m) => s + m.votingPowerAda, 0).toLocaleString()}
+                </td>
+                <td className="px-3 py-2" />
+                <td className="px-3 py-2 text-right font-semibold tabular-nums" title="Total DAO voting power (sum of the log₁₀ base power)">
+                  {(sorted ?? []).reduce((s, m) => s + m.basePower, 0).toFixed(2)}
+                </td>
+                <td className="px-3 py-2" />
+                <td className="px-3 py-2" />
+                <td className="px-3 py-2 text-right font-semibold tabular-nums" title="Total adjusted voting power across all members">
+                  {(sorted ?? []).reduce((s, m) => s + m.adjustedPower, 0).toFixed(2)}
+                </td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
