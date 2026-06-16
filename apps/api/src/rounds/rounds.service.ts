@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { DRepStatus, ProposalStage, ProposalStatus, RoundStatus, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { DvService } from '../proposals/dv.service';
+import { ProposalsService } from '../proposals/proposals.service';
 import { MeritService } from '../merit/merit.service';
 import { MeritSweepService } from '../merit/merit-sweep.service';
 import { CreateRoundDto, UpdateRoundDto, CategoryInput, ScheduleInput, ConfirmStageDto, RoundSettingsInput } from './dto';
@@ -116,7 +117,27 @@ export class RoundsService {
     private readonly dv?: DvService,
     @Optional() private readonly merit?: MeritService,
     @Optional() private readonly meritSweep?: MeritSweepService,
+    // §16 — used to count ACTIVE-but-not-ready proposals as pending (matches the list buckets).
+    @Optional() @Inject(forwardRef(() => ProposalsService))
+    private readonly proposalsSvc?: ProposalsService,
   ) {}
+
+  /** §16 — shift each round's ACTIVE-but-not-ready proposals into the "pending" count + out of
+   *  the active-stage breakdown, so the chips match the readiness shown in the proposal list. */
+  private applyReadiness(
+    counts: Record<string, number>,
+    activeStage: Record<string, number>,
+    nr: { total: number; byStage: Record<string, number> } | undefined,
+  ) {
+    if (!nr || nr.total <= 0) return;
+    counts[ProposalStatus.PENDING] = (counts[ProposalStatus.PENDING] ?? 0) + nr.total;
+    counts[ProposalStatus.ACTIVE] = Math.max(0, (counts[ProposalStatus.ACTIVE] ?? 0) - nr.total);
+    if (counts[ProposalStatus.ACTIVE] === 0) delete counts[ProposalStatus.ACTIVE];
+    for (const [stage, c] of Object.entries(nr.byStage)) {
+      activeStage[stage] = Math.max(0, (activeStage[stage] ?? 0) - c);
+      if (activeStage[stage] === 0) delete activeStage[stage];
+    }
+  }
 
   /** §6 — board creates a round in PREPARATION with categories, schedule, eligibility. */
   async create(dto: CreateRoundDto) {
@@ -186,6 +207,17 @@ export class RoundsService {
       m[g.stage] = g._count._all;
       activeByRound.set(g.roundId, m);
     }
+    // §16 — move ACTIVE-but-not-ready proposals into "pending" so the chips match the list.
+    if (this.proposalsSvc) {
+      const nrAll = await this.proposalsSvc.notReadyActiveCounts(rounds.map((r) => r.id));
+      for (const [rid, nr] of nrAll) {
+        const counts = byRound.get(rid) ?? {};
+        const active = activeByRound.get(rid) ?? {};
+        this.applyReadiness(counts, active, nr);
+        byRound.set(rid, counts);
+        activeByRound.set(rid, active);
+      }
+    }
     return rounds.map((r) => {
       const counts = byRound.get(r.id) ?? {};
       const total = Object.values(counts).reduce((s, n) => s + n, 0);
@@ -246,6 +278,10 @@ export class RoundsService {
     const activeStageCounts: Record<string, number> = {};
     for (const g of activeStageGrouped) {
       if (g.stage) activeStageCounts[g.stage] = g._count._all;
+    }
+    // §16 — count ACTIVE-but-not-ready proposals as pending so the chips match the proposal list.
+    if (this.proposalsSvc) {
+      this.applyReadiness(proposalCounts, activeStageCounts, (await this.proposalsSvc.notReadyActiveCounts([id])).get(id));
     }
     const schedule = r.schedule.map((s) => ({
       stageKey: s.stageKey,

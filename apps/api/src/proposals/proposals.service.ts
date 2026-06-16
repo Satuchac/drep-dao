@@ -1086,6 +1086,40 @@ export class ProposalsService {
     return !!viewerUserId && !!this.board && (await this.board.isBoardMember(viewerUserId));
   }
 
+  /**
+   * §16 — how many of each round's ACTIVE proposals are NOT yet ready (amber/red progress —
+   * awaiting board/submitter action, e.g. reviewers not assigned). These read as PENDING in the
+   * proposal list, so the round count chips use this to move them out of "active". Uses the SAME
+   * enrichment as the list, so the header counts and the list always agree.
+   */
+  async notReadyActiveCounts(roundIds: string[]): Promise<Map<string, { total: number; byStage: Record<string, number> }>> {
+    const out = new Map<string, { total: number; byStage: Record<string, number> }>();
+    if (roundIds.length === 0) return out;
+    const proposals = await this.prisma.proposal.findMany({
+      where: { roundId: { in: roundIds }, status: ProposalStatus.ACTIVE },
+      include: {
+        category: { select: { name: true } },
+        submitterUser: { select: { displayName: true, stakeAddress: true } },
+        submitterDrep: { select: { drepIdOnchain: true } },
+        round: { select: { status: true, filterReviewerCount: true, filterApprovalVotes: true, milestoneApprovalVotes: true } },
+      },
+    });
+    const enriched = await this.enrichSummaries(proposals);
+    const progressById = new Map(enriched.map((s) => [s.id, s.progress]));
+    for (const p of proposals) {
+      const tone = progressById.get(p.id)?.tone;
+      if (tone !== 'amber' && tone !== 'red') continue; // green/neutral = ready/in-flight
+      const rid = p.roundId;
+      if (!rid) continue;
+      const entry = out.get(rid) ?? { total: 0, byStage: {} };
+      entry.total += 1;
+      const stage = p.stage ?? 'unknown';
+      entry.byStage[stage] = (entry.byStage[stage] ?? 0) + 1;
+      out.set(rid, entry);
+    }
+    return out;
+  }
+
   async listByRound(roundId: string, status?: string, viewerUserId?: string) {
     // Board members see DRAFTs too; for everyone else they stay hidden.
     const hidden = (await this.isBoardViewer(viewerUserId)) ? [] : ProposalsService.LIST_HIDDEN_STATUSES;
