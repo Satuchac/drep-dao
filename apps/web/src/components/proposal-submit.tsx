@@ -14,7 +14,7 @@ import {
 } from '@/lib/api';
 import { useExplorer } from '@/lib/explorer';
 import { ProposalDetail } from './proposal-detail';
-import { MarkdownEditor } from './markdown';
+import { MarkdownEditor, MarkdownCollapseContext } from './markdown';
 import { CopyButton } from './copy-button';
 
 type Cat = { id: string; name: string; minAda: number | null; maxAda: number | null; conditions: string | null };
@@ -42,6 +42,10 @@ export function ProposalSubmit() {
   // "set a requested amount" check below, forcing them to fill it in).
   const [amount, setAmount] = useState(0);
   const [commercial, setCommercial] = useState(false);
+  // §3 — "Expand all / Collapse all" toggle for the collapsible MarkdownEditor fields.
+  const [expandSig, setExpandSig] = useState(0);
+  const [collapseSig, setCollapseSig] = useState(0);
+  const [allOpen, setAllOpen] = useState(true);
   // Milestone amounts start empty (0) — the team must enter them explicitly so
   // they don't drift with the requested amount. A subsequent change to
   // "Requested" won't quietly update the milestone budgets behind the team's back.
@@ -237,6 +241,11 @@ export function ProposalSubmit() {
     setError(null);
     setTitle('');
     setContent('');
+    // Don't carry the previous proposal's amount / category / flags into a fresh form.
+    setAmount(0);
+    setCommercial(false);
+    setCategoryId('');
+    setRevenueSharingRequired(false);
     setFee('');
     // Clear the prior proposal's fee-verification + address check — otherwise a fresh proposal
     // wrongly shows the previous one's "fully paid" / submitted-hash list (it's per-proposal).
@@ -441,7 +450,19 @@ export function ProposalSubmit() {
       ) : null}
 
       {open && rounds.length > 0 ? (
+        <MarkdownCollapseContext.Provider value={{ expandSignal: expandSig, collapseSignal: collapseSig }}>
         <form onSubmit={submitNow} className="mt-3 space-y-2">
+          {/* §3 — expand/collapse every shrinkable field at once. */}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => { if (allOpen) { setCollapseSig((n) => n + 1); setAllOpen(false); } else { setExpandSig((n) => n + 1); setAllOpen(true); } }}
+              className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+              title="Expand or collapse all the collapsible text fields below"
+            >
+              {allOpen ? '▣ Collapse all fields' : '▾ Expand all fields'}
+            </button>
+          </div>
           <div className="flex flex-wrap items-end gap-4">
             <label className="flex flex-col gap-0.5 text-xs font-medium text-neutral-600 dark:text-neutral-400">
               Round{editingId ? <span className="font-normal text-neutral-400"> (fixed once created)</span> : null}
@@ -834,6 +855,7 @@ export function ProposalSubmit() {
             )}
           </div>
         </form>
+        </MarkdownCollapseContext.Provider>
       ) : null}
 
       {mine.length > 0 ? (

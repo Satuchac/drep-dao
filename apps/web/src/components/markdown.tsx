@@ -1,7 +1,17 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { renderMarkdown } from '@/lib/markdown';
+
+/**
+ * Lets a parent expand/collapse ALL MarkdownEditors under it at once (e.g. an "Expand all /
+ * Collapse all" toggle on a form). Bumping `expandSignal` opens every editor; bumping
+ * `collapseSignal` shrinks them. Editors outside any provider just use their own controls.
+ */
+export const MarkdownCollapseContext = createContext<{ expandSignal: number; collapseSignal: number }>({
+  expandSignal: 0,
+  collapseSignal: 0,
+});
 
 /** Render a trusted-after-sanitization markdown string as formatted HTML. */
 export function Markdown({ children, className }: { children: string; className?: string }) {
@@ -100,6 +110,16 @@ export function MarkdownEditor({
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const [open, setOpen] = useState(!defaultCollapsed);
+  // §3 — respond to a parent "Expand all / Collapse all" toggle (skip the initial mount).
+  const collapseCtx = useContext(MarkdownCollapseContext);
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }
+    if (collapseCtx.expandSignal) setOpen(true);
+  }, [collapseCtx.expandSignal]);
+  useEffect(() => {
+    if (collapseCtx.collapseSignal) setOpen(false);
+  }, [collapseCtx.collapseSignal]);
   const [tall, setTall] = useState(false);
   const [preview, setPreview] = useState(false);
   const filled = value.trim().length > 0;
