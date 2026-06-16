@@ -331,7 +331,7 @@ export class SubmitterService {
 
     const FUNDED = new Set(['APPROVED', 'COMPLETE']);
     let requestedLov = 0n, approvedLov = 0n, paidLov = 0n;
-    let completed = 0, inProgress = 0, missingMilestones = 0;
+    let completed = 0, inProgress = 0, missingMilestones = 0, rejected = 0;
 
     const proposals = rows.map((p) => {
       const requested = p.requestedAmountAda ?? 0n;
@@ -342,6 +342,8 @@ export class SubmitterService {
       paidLov += paid;
       if (FUNDED.has(p.status)) approvedLov += requested;
       if (p.status === 'COMPLETE') completed += 1;
+      // Rejected at filtering / debate & vote (not the same as a funded project later stopped).
+      if (p.status === 'REJECTED') rejected += 1;
       // Funded but not yet complete → in progress; its unpaid milestones are "missing".
       if (p.status === 'APPROVED') {
         inProgress += 1;
@@ -371,6 +373,7 @@ export class SubmitterService {
         paidAda: Number(paidLov) / ADA,
         completed,
         inProgress,
+        rejected,
         missingMilestones,
       },
     };

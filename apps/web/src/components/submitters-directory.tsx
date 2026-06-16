@@ -177,7 +177,7 @@ function SubmitterPortfolioSection({ submitterId }: { submitterId: string }) {
       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Funding proposals</div>
 
       {/* Headline stats. */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
         <Stat label="Submitted" value={String(stats.submitted)} />
         <Stat label="Requested" value={ada(stats.requestedAda)} />
         <Stat label="Granted budget" value={ada(stats.approvedAda)} hint="proposals that were approved for funding" />
@@ -188,6 +188,7 @@ function SubmitterPortfolioSection({ submitterId }: { submitterId: string }) {
           value={String(stats.inProgress)}
           hint={`${stats.missingMilestones} milestone${stats.missingMilestones === 1 ? '' : 's'} still to deliver`}
         />
+        <Stat label="Rejected" value={String(stats.rejected)} hint="proposals turned down at filtering or Debate & Vote" />
       </div>
       {stats.inProgress > 0 ? (
         <p className="text-[11px] text-neutral-500">
