@@ -21,7 +21,8 @@ import {
  *  - rounds     → Round control (stages overdue to launch)
  *  - voting     → Voting & reviews (filtering / D&V / milestone tasks + quick-poll tie-breaks)
  *  - internal   → Internal proposals awaiting this DRep's vote
- *  - mine       → My proposals (a REJECTED milestone needing a fresh POA)
+ *  - mine       → My proposals (a rejection the submitter can revise: rejected at filtering or at
+ *                 the fee review, or a REJECTED milestone needing a fresh POA)
  *  - messages   → Messages (board spoke last on an OPEN thread → submitter must respond)
  *  - profile    → Profile (reward-payment address not set yet, for reward earners)
  */
@@ -127,11 +128,12 @@ export function useTodoCounts(isBoard: boolean, canVote: boolean, enabled = true
       if (canVote || isApprovedExpert) {
         try { const r = await rewardAddressApi.get(); if (!r.rewardPaymentAddress) next.profile += 1; } catch { /* 0 */ }
       }
-      // §11.2 — submitter's "my proposals" to-dos: any proposal on a REJECTED milestone needing a
-      // fresh POA. The backend tags those rows red with a "POA rejected" label, so we just count them.
+      // Submitter's "my proposals" to-dos — anything the submitter must act on, which the backend
+      // flags red with a "…resubmit" label: a proposal rejected at filtering (§7.4) or at the fee
+      // review (§16) that's still revisable, or a REJECTED milestone needing a fresh POA (§11.2).
       try {
         const mine = await proposalsApi.mine();
-        next.mine = mine.filter((p) => p.progress?.tone === 'red' && p.progress.label.includes('POA rejected')).length;
+        next.mine = mine.filter((p) => p.progress?.tone === 'red' && p.progress.label.includes('resubmit')).length;
       } catch { /* 0 */ }
       if (alive) setCounts(next);
     };

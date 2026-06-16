@@ -505,6 +505,14 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   on-chain tx so anyone can re-hash and verify.
 
 **Member area (My Area)**
+- **Submitter rejection notice (§7.4/§16):** when a proposal is **rejected** in a way the submitter
+  can act on — rejected by the filtering jury (while the round is still in FILTERING) or at the fee
+  review (during SUBMISSION) — its My-proposals row shows a **red "…revise & resubmit" chip** and the
+  **My proposals** tab gets a **notification badge** (which also rolls up into the login-box bell +
+  left-nav count). The label-generation is the pure `rejectedProgress` (`proposal-progress.ts`,
+  unit-tested); `useTodoCounts` counts red rows whose label contains "resubmit" (filtering / fee /
+  rejected-milestone-POA). Final rejections (Debate & Vote, or a filtering rejection after the round
+  advanced) show red but aren't badged — nothing to do.
 - **Proposal search everywhere:** every proposal list — Voting & reviews, Actions, the round
   proposal list, and Internal proposals — has a search box that filters by **proposal Title**,
   **Proposer name**, or **public Proposal ID** (case-insensitive; each whitespace term must

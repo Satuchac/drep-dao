@@ -23,6 +23,7 @@ import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { AnchorService } from '../cardano/anchor.service';
 import { BoardService } from '../auth/board.service';
 import { BudgetChangeDto, CreateProposalDto, MilestoneInput, ReviewFeeDto, ReviewPledgeDto, SubmitProposalDto, UpdateProposalDto } from './dto';
+import { rejectedProgress } from './proposal-progress';
 
 const LOVELACE = 1_000_000;
 const toLovelace = (ada: number): bigint => BigInt(Math.round(ada * LOVELACE));
@@ -1424,6 +1425,11 @@ export class ProposalsService {
             }
           }
         }
+      } else if (status === ProposalStatus.REJECTED) {
+        // §7.4/§16 — flag a rejection the submitter can still act on in RED so it stands out in
+        // My proposals and drives the tab's notification badge (badge counts labels with
+        // "resubmit"). A still-revisable rejection says "…resubmit"; a final one just "rejected".
+        progress = rejectedProgress(stage, p.round?.status ?? null, p.feeReviewFeedback);
       }
 
       // Build the "why was this rejected" snippets for REJECTED proposals.
