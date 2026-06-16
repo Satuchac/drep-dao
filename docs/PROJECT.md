@@ -515,6 +515,10 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   return `proposer` (+ `publicId` / `proposalPublicId`). Reward-payout board actions carry no
   single proposer/public-id, so they match on title + description + recipient names; the paged
   fee history filters the rows currently loaded.
+- **Filtering To do / Recent are disjoint by vote:** *To do* = assignments in an active filtering
+  round the reviewer **hasn't** voted on; *Recent* = ones they **have** voted on (still changeable
+  while the round stays in filtering); *History* = past-filtering rounds. A "not voted yet" item is
+  only ever in To do, never Recent (`FilteringService.myAssignments`).
 - **To do / Recent / History** also applies to **Debate & Vote** (round-based: *To do* = votable
   now, *Recent* = any active round incl. waiting-for-VOTE, *History* = finished **and** actually
   reached D&V) and the **Actions** tab (replaces its old "Show history" checkbox). The bucketing

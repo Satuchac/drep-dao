@@ -19,7 +19,7 @@ export function FilteringPanel({ mode = 'pending', query }: { mode?: ReviewMode;
   const assignments = all.filter((a) => matchesProposalSearch(query, { title: a.title, proposer: a.proposer, publicId: a.publicId }));
   if (assignments.length === 0) return null;
   const openRow = openId ? assignments.find((a) => a.proposalId === openId) ?? null : null;
-  const heading = mode === 'history' ? 'all past assignments' : mode === 'recent' ? 'all in the active filtering stage' : 'your assignments';
+  const heading = mode === 'history' ? 'all past assignments' : mode === 'recent' ? 'voted — in the active filtering stage' : 'your assignments';
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">

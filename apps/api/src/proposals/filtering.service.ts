@@ -101,12 +101,13 @@ export class FilteringService {
   }
 
   /**
-   * §7 — a reviewer's filtering assignments in one of three views:
-   *  - 'pending'  (default): assignments in a CURRENT filtering stage they HAVEN'T voted on yet —
-   *                the actionable to-do list. Once they vote, it leaves this view.
-   *  - 'recent'  : ALL assignments in a current filtering stage (voted or not) — the live picture
-   *                of this round's filtering, across every active round still in FILTERING/SUBMISSION.
-   *  - 'history' : every assignment they ever had (past rounds/stages included).
+   * §7 — a reviewer's filtering assignments in one of three views (To do / Recent / History
+   * partition cleanly — a proposal is in exactly one):
+   *  - 'pending' (To do): assignments in a CURRENT filtering stage they HAVEN'T voted on yet —
+   *                the actionable to-do list. Once they vote, it leaves this view for Recent.
+   *  - 'recent'  : assignments in a current filtering stage they HAVE voted on — still changeable
+   *                while the round stays in filtering. Not-voted ones live in To do, not here.
+   *  - 'history' : every assignment they ever had whose round has moved PAST filtering.
    */
   async myAssignments(userId: string, mode: 'pending' | 'recent' | 'history' = 'pending') {
     const drep = await this.prisma.drep.findUnique({ where: { userId } });
@@ -162,9 +163,13 @@ export class FilteringService {
       // a QUEUED badge and disables the Vote action until the round moves.
       queued: a.proposal.round?.status === RoundStatus.SUBMISSION,
     }));
-    // 'pending' = only the ones still awaiting this reviewer's vote (queued ones included —
-    // they become votable when the round opens). Voted ones drop out → they appear under Recent/History.
-    return mode === 'pending' ? rows.filter((r) => r.myVote == null) : rows;
+    // To do / Recent split on whether THIS reviewer has voted, so the two are disjoint:
+    //  - 'pending' (To do): not yet voted (queued ones included — votable once the round opens).
+    //  - 'recent'         : already voted (still changeable while the round stays in filtering).
+    // 'history' returns every past-filtering assignment regardless of vote.
+    return mode === 'pending' ? rows.filter((r) => r.myVote == null)
+      : mode === 'recent' ? rows.filter((r) => r.myVote != null)
+        : rows;
   }
 
   /**
