@@ -859,8 +859,23 @@ function StagesBar({ round }: { round: RoundDetail }) {
   const nextStage = nextIdx < STAGE_DEFS.length ? STAGE_DEFS[nextIdx] : null;
   const nextEntry = nextStage ? byKey.get(nextStage.key) : undefined;
   const nextStartMs = nextEntry?.startsAt ? new Date(nextEntry.startsAt).getTime() : null;
+  // §6 — the CURRENT stage (if the round is in one) + its planned end, for the "Ends in" countdown.
+  const curStage = curIdx >= 0 && curIdx < STAGE_DEFS.length ? STAGE_DEFS[curIdx] : null;
+  const curEntry = curStage ? byKey.get(curStage.key) : undefined;
+  const curEndMs = curEntry?.endsAt ? new Date(curEntry.endsAt).getTime() : null;
   return (
     <div>
+      {/* §6 — countdown to the CURRENT stage's planned end. */}
+      {curStage && curEndMs != null ? (
+        <div className="mb-1 text-sm">
+          <span className="font-medium text-neutral-700 dark:text-neutral-200">Current stage: {curStage.label.toUpperCase()}</span>
+          {curEndMs > now ? (
+            <span className="text-neutral-500"> · Ends in: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(curEndMs - now)}</span> <span className="text-xs">({fmtShort(curEntry?.endsAt)})</span></span>
+          ) : (
+            <span className="text-neutral-500"> · <span className="font-medium text-amber-600 dark:text-amber-400">ended {fmtShort(curEntry?.endsAt)}</span> — advances when the next stage starts</span>
+          )}
+        </div>
+      ) : null}
       {/* §6 — countdown to the next stage. */}
       {nextStage && nextStartMs != null ? (
         <div className="mb-1.5 text-sm">
