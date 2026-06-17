@@ -26,7 +26,7 @@ import { AnchorService } from '../cardano/anchor.service';
 import { BoardService } from '../auth/board.service';
 import { BudgetChangeDto, CreateProposalDto, MilestoneInput, ReviewFeeDto, ReviewPledgeDto, SubmitProposalDto, UpdateProposalDto } from './dto';
 import { rejectedProgress } from './proposal-progress';
-import { debateMilestoneEditError } from './proposal-state';
+import { debateMilestoneEditError, preserveMilestoneContent } from './proposal-state';
 
 const LOVELACE = 1_000_000;
 const toLovelace = (ada: number): bigint => BigInt(Math.round(ada * LOVELACE));
@@ -326,13 +326,19 @@ export class ProposalsService {
         },
       });
       if (dto.milestones && milestonesWritable) {
+        // §3 — safeguard: carry forward existing content for any field the payload left blank when
+        // the structure is unchanged, so an edit can never silently wipe milestone text.
+        const existingMs = await tx.milestone.findMany({
+          where: { proposalId: id }, orderBy: { idx: 'asc' }, select: { title: true, description: true, acceptanceCriteria: true },
+        });
+        const merged = preserveMilestoneContent(dto.milestones, existingMs);
         await tx.milestone.deleteMany({ where: { proposalId: id } });
         await tx.milestone.createMany({
-          data: dto.milestones.map((m, idx) => ({
+          data: merged.map((m, idx) => ({
             proposalId: id,
             idx,
             title: m.title ?? null,
-            description: m.description,
+            description: m.description ?? '',
             acceptanceCriteria: m.acceptanceCriteria ?? null,
             amountAda: toLovelace(m.amountAda),
             status: 'NOT_STARTED',
@@ -967,13 +973,19 @@ export class ProposalsService {
       if (inFiltering) {
         await tx.vote.deleteMany({ where: { proposalId: p.id, phase: VotePhase.FILTERING } });
       }
+      // §3 — same safeguard as the editor: an unchanged-structure budget change inherits existing
+      // milestone text for any field the (possibly older) request left blank, so content is never lost.
+      const existingMs = await tx.milestone.findMany({
+        where: { proposalId: p.id }, orderBy: { idx: 'asc' }, select: { title: true, description: true, acceptanceCriteria: true },
+      });
+      const mergedMs = preserveMilestoneContent(proposedMilestones, existingMs);
       await tx.milestone.deleteMany({ where: { proposalId: p.id } });
       await tx.milestone.createMany({
-        data: proposedMilestones.map((m, idx) => ({
+        data: mergedMs.map((m, idx) => ({
           proposalId: p.id,
           idx,
           title: m.title ?? null,
-          description: m.description,
+          description: m.description ?? '',
           acceptanceCriteria: m.acceptanceCriteria ?? null,
           amountAda: toLovelace(m.amountAda),
           status: 'NOT_STARTED',

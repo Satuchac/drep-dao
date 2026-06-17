@@ -20,6 +20,31 @@ export function isFeeStageReject(
  * "Request a budget change"). Returns an error message if the proposed amounts break that rule, or
  * null if only content changed. Amounts are compared in lovelace (exact integers).
  */
+/**
+ * §3 — DATA-LOSS SAFEGUARD for the milestone-recreation paths (edit + budget change). Those paths
+ * delete + re-create milestones from the request, so a client that forgets to send a field would
+ * blank it. When the structure is UNCHANGED (same count → milestones align by index), this carries
+ * forward the EXISTING title / description / acceptance criteria for any field the request left
+ * empty — so submitter content can never be silently lost by a partial payload. A genuine
+ * restructure (different count → add/remove/reorder) uses the incoming values as-is.
+ *
+ * Pure (no Prisma) so it's unit-testable; amounts pass through untouched.
+ */
+export interface IncomingMilestone { title?: string | null; description?: string | null; acceptanceCriteria?: string | null; amountAda: number; }
+export interface ExistingMilestoneContent { title: string | null; description: string | null; acceptanceCriteria: string | null; }
+
+export function preserveMilestoneContent<T extends IncomingMilestone>(incoming: T[], existing: ExistingMilestoneContent[]): T[] {
+  if (incoming.length !== existing.length) return incoming;
+  const keep = (next: string | null | undefined, prev: string | null): string | null | undefined =>
+    next != null && String(next).trim() !== '' ? next : (prev ?? next);
+  return incoming.map((m, i) => ({
+    ...m,
+    title: keep(m.title, existing[i].title),
+    description: keep(m.description, existing[i].description),
+    acceptanceCriteria: keep(m.acceptanceCriteria, existing[i].acceptanceCriteria),
+  }));
+}
+
 export function debateMilestoneEditError(
   proposedAmountsLovelace: bigint[],
   currentAmountsLovelace: bigint[],

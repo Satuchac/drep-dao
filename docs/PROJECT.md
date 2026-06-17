@@ -300,6 +300,17 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   add/remove + amount changes during DEBATE rejected via the pure `debateMilestoneEditError`,
   unit-tested). Each edit snapshots the prior content into `ProposalVersion` and the detail shows an
   **original-vs-updated line diff**. No edits during the D&V *voting* phase or after a decision.
+- **No-data-loss guarantee (§3).** Submitter-provided content must never be silently lost. Only the
+  **submitter** authors content (`updateDraft` is gated `submitterUserId === userId`; the board
+  *approves* a budget change but applies the submitter's own proposed milestones — it never writes
+  content; other board actions touch only status/fee/stage, and milestone status/POA/deadline updates
+  never touch milestone text). Proposal-field writes are `undefined`-guarded spreads, so an omitted
+  field is never overwritten. The two **milestone-recreation** paths (editor + budget change) run
+  through `preserveMilestoneContent` (unit-tested): when the milestone structure is unchanged, any
+  field a payload left blank **inherits the existing value**, so a partial/legacy client can't wipe a
+  title / description / acceptance criteria. And every content-changing mutation snapshots the prior
+  state into `ProposalVersion` first, so earlier content is always recoverable from the version
+  history. (This closed the bug where the old budget-change form dropped milestone title + criteria.)
 - **Milestone funding (§11).** After D&V approval the board draws + confirms
   reviewers; the submitter posts a Proof of Achievement per milestone; reviewers
   vote 1p1v (2-of-3 closes; NO needs feedback; resubmission re-opens review).
