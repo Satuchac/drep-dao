@@ -229,10 +229,10 @@ export class DvService {
 
   /**
    * §9.3 — called by the round-transition flow when the VOTE stage ends (round
-   * moves to FUNDING). Finalizes every DEBATE_VOTE-stage proposal in the round
+   * moves to TALLY). Finalizes every DEBATE_VOTE-stage proposal in the round
    * — APPROVED if threshold met, REJECTED otherwise. The finalize() guard that
    * refuses mid-VOTE doesn't apply here because we're called AFTER the round
-   * left VOTE (round.status === FUNDING when this runs).
+   * left VOTE (round.status === TALLY when this runs).
    */
   /**
    * §9.1 — auto-ranking per category: passing proposals are sorted by yes-power (then score %,
@@ -309,6 +309,32 @@ export class DvService {
 
   private async safeFinalize(proposalId: string, opts: { forcedOutcome?: 'APPROVED' | 'REJECTED'; note?: string }) {
     try { await this.finalize(proposalId, opts); } catch { /* board finalizes manually */ }
+  }
+
+  /**
+   * §11 — called by the round-transition flow when the round enters FUNDING. The
+   * funding mechanics activate only now (not during TALLY): the skin-in-the-game
+   * pledge clock starts for every approved proposal whose promised pledge is still
+   * unconfirmed. Idempotent — proposals that already have a grace window are left
+   * alone, so re-entering FUNDING never resets the clock.
+   */
+  async activateFunding(roundId: string) {
+    const round = await this.prisma.round.findUnique({ where: { id: roundId }, select: { pledgeGraceDays: true } });
+    const days = round?.pledgeGraceDays ?? ROUND_SETTING_DEFAULTS.pledgeGraceDays;
+    const approved = await this.prisma.proposal.findMany({
+      where: {
+        roundId,
+        status: ProposalStatus.APPROVED,
+        pledgeAmountAda: { gt: 0n },
+        pledgeConfirmedAt: null,
+        pledgeGraceEndsAt: null,
+      },
+      select: { id: true },
+    });
+    const endsAt = new Date(Date.now() + days * 86_400_000);
+    for (const p of approved) {
+      await this.prisma.proposal.update({ where: { id: p.id }, data: { pledgeGraceEndsAt: endsAt } });
+    }
   }
 
   /** §9.2 — auto-trigger: poll awaits the board's one-click confirm before voting opens. */
@@ -576,7 +602,7 @@ export class DvService {
     if (!proposal) throw new BadRequestException('proposal not found');
     if (proposal.round?.status === RoundStatus.VOTE) {
       throw new ConflictException(
-        'voting is still in progress (round is in VOTE); the tally is finalized automatically when the round advances to FUNDING',
+        'voting is still in progress (round is in VOTE); the tally is finalized automatically when the round advances to TALLY',
       );
     }
     const r = await this.result(proposalId);
@@ -585,22 +611,12 @@ export class DvService {
     // a proposal can pass the threshold yet be REJECTED (budget-cut), or win a tie-break.
     const status = (opts.forcedOutcome as ProposalStatus | undefined) ?? (r.approved ? ProposalStatus.APPROVED : ProposalStatus.REJECTED);
     const stage = status === ProposalStatus.APPROVED ? ProposalStage.FUNDING : null;
-    // §16.4 — an approved proposal with a promised-but-unconfirmed pledge starts its grace
-    // window now; the daily pledge-grace job alerts the board when it expires unpaid.
-    let pledgeGraceEndsAt: Date | undefined;
-    if (status === ProposalStatus.APPROVED) {
-      const p = await this.prisma.proposal.findUnique({
-        where: { id: proposalId },
-        select: { pledgeAmountAda: true, pledgeConfirmedAt: true, round: { select: { pledgeGraceDays: true } } },
-      });
-      if (p?.pledgeAmountAda && p.pledgeAmountAda > 0n && !p.pledgeConfirmedAt) {
-        const days = p.round?.pledgeGraceDays ?? ROUND_SETTING_DEFAULTS.pledgeGraceDays;
-        pledgeGraceEndsAt = new Date(Date.now() + days * 86_400_000);
-      }
-    }
+    // §16.4 — the skin-in-the-game pledge clock is NOT started here. finalize() runs at
+    // the VOTE→TALLY boundary, but the pledge grace (and the rest of the funding mechanics)
+    // only activate when the round reaches FUNDING — see activateFunding().
     await this.prisma.proposal.update({
       where: { id: proposalId },
-      data: { status, stage, resultFinalizedAt: new Date(), ...(pledgeGraceEndsAt ? { pledgeGraceEndsAt } : {}) },
+      data: { status, stage, resultFinalizedAt: new Date() },
     });
 
     // §9.3 — the publish action anchors the final tally on-chain.

@@ -27,6 +27,7 @@ export const ROUND_STATUS_CLS: Record<string, string> = {
   SUBMISSION: 'bg-amber-200 text-amber-900',
   FILTERING: 'bg-blue-200 text-blue-900',
   DV: 'bg-indigo-200 text-indigo-900',
+  TALLY: 'bg-violet-200 text-violet-900',
   FUNDING: 'bg-emerald-200 text-emerald-900',
   CLOSED: 'bg-neutral-300 text-neutral-700',
 };

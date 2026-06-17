@@ -125,8 +125,9 @@ export const RoundStatus = {
   SUBMISSION: 'SUBMISSION', // submission window open — proposals accepted (§3/§19)
   FILTERING: 'FILTERING',
   DEBATE: 'DEBATE', // §8.1 — DReps discuss; submitter may still revise; no voting yet
-  VOTE: 'VOTE',     // §8.2 — ballots open; proposal frozen; tally finalizes at the end
+  VOTE: 'VOTE',     // §8.2 — ballots open; proposal frozen; tally crystallizes when VOTE ends
   DV: 'DV',         // deprecated alias for VOTE; kept for any pre-split rows
+  TALLY: 'TALLY',   // §9 — results published (approved/rejected/budget-cut); only tie-break quick polls run; funding mechanics not yet active
   FUNDING: 'FUNDING',
   CLOSED: 'CLOSED',
 } as const;

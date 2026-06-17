@@ -37,7 +37,7 @@ export class RewardsService {
     if (kind === 'BOARD_MONTHLY') return true;
     if (!status) return false;
     if (kind === 'FILTER') {
-      return ([RoundStatus.DEBATE, RoundStatus.VOTE, RoundStatus.DV, RoundStatus.FUNDING, RoundStatus.CLOSED] as string[]).includes(status);
+      return ([RoundStatus.DEBATE, RoundStatus.VOTE, RoundStatus.DV, RoundStatus.TALLY, RoundStatus.FUNDING, RoundStatus.CLOSED] as string[]).includes(status);
     }
     // DV_FIXED / DV_BONUS / MILESTONE — payable once the round reaches FUNDING.
     return ([RoundStatus.FUNDING, RoundStatus.CLOSED] as string[]).includes(status);

@@ -426,7 +426,7 @@ function TreasuryTab() {
   );
 }
 
-/** §9.2 — quick polls of the active round, surfaced inside Voting & reviews. */
+/** §9.2 — quick polls of the active round, surfaced inside Voting & reviews and Actions. */
 function ActiveRoundQuickPolls() {
   const [roundId, setRoundId] = useState<string | null>(null);
   useEffect(() => {
@@ -472,6 +472,9 @@ function ActionsTab() {
           <ReviewModeToggle mode={mode} onChange={setMode} />
         </div>
       </div>
+      {/* §9.2 — tie-break quick polls of the active round: the board launches/monitors them
+          here as well as in Rounds → Tally (self-hides when the round has no polls). */}
+      <ActiveRoundQuickPolls />
       <BoardActions history={showHistory} filter="rewards" query={query} />
       <ReviewerAssignments query={query} />
       <BoardMessages />

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { ROUND_SETTING_DEFAULTS, ROUND_SETTING_META, ROUND_SETTING_BOOLEAN, computeRewardPoolsAda } from '@drep-dao/shared';
+import { ROUND_SETTING_DEFAULTS, ROUND_SETTING_META, ROUND_SETTING_BOOLEAN, computeRewardPoolsAda, dvDisplayPhase, roundReachedTally, roundStageIndex } from '@drep-dao/shared';
 import {
   boardRoundsApi,
   roundsApi,
@@ -26,6 +26,7 @@ const STAGE_DEFS = [
   { key: 'filtering', label: 'Filtering' },
   { key: 'debate', label: 'Debate' },
   { key: 'vote', label: 'Vote' },
+  { key: 'tally', label: 'Tally' },
   { key: 'funding', label: 'Funding' },
 ];
 const CATEGORY_TYPES = ['GRANT', 'RFP'];
@@ -113,7 +114,8 @@ export function RoundsSection() {
   const [rounds, setRounds] = useState<RoundSummary[]>([]);
   const [creating, setCreating] = useState(false);
   // Round-detail sub-tab: the proposals list vs the read-only round setup.
-  const [roundTab, setRoundTab] = useState<'proposals' | 'categories' | 'setup'>('proposals');
+  // §9 — the Tally tab appears once the Vote stage is over (round reached TALLY) and stays forever.
+  const [roundTab, setRoundTab] = useState<'proposals' | 'categories' | 'tally' | 'setup'>('proposals');
   // The drilled-into round lives in the URL (?round=) so it's shareable + survives opening a proposal.
   const open = rounds.find((r) => r.id === get('round')) ?? null;
 
@@ -137,9 +139,15 @@ export function RoundsSection() {
           <ProposalCounts counts={open.proposalCounts} activeStage={open.activeStageCounts} />
         </div>
 
-        {/* Horizontal menu: Proposals (the list) | Round setup (read-only settings). */}
+        {/* Horizontal menu: Proposals | Categories | Tally (after Vote) | Schedule and Round Setup. */}
         <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
-          {([['proposals', 'Proposals'], ['categories', 'Categories'], ['setup', 'Schedule and Round Setup']] as const).map(([key, label]) => (
+          {([
+            ['proposals', 'Proposals'],
+            ['categories', 'Categories'],
+            // §9 — Tally appears once the round has reached TALLY and remains forever after.
+            ...(roundReachedTally(open.status) ? [['tally', 'Tally'] as const] : []),
+            ['setup', 'Schedule and Round Setup'],
+          ] as const).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setRoundTab(key)}
@@ -156,10 +164,10 @@ export function RoundsSection() {
 
         {roundTab === 'setup' ? <RoundSettingsView roundId={open.id} />
           : roundTab === 'categories' ? <RoundCategoriesView roundId={open.id} />
+          : roundTab === 'tally' && roundReachedTally(open.status)
+            ? <RoundTallyView roundId={open.id} roundStatus={open.status} />
           : (
           <div className="space-y-4">
-            {/* §9.2 — tie-break polls at the budget cliff (self-hides when none). */}
-            <QuickPollsPanel roundId={open.id} />
             <ProposalList roundId={open.id} />
           </div>
         )}
@@ -824,7 +832,7 @@ function RewardBar({ pool, expertPct, dvShare, fixed }: { pool: number; expertPc
 // §6 — map the round's status to the stage it currently sits in (−1 = PREPARATION,
 // before any stage started; STAGE_DEFS.length = CLOSED, all stages done).
 const STATUS_STAGE_IDX: Record<string, number> = {
-  PREPARATION: -1, SUBMISSION: 0, FILTERING: 1, DEBATE: 2, VOTE: 3, DV: 3, FUNDING: 4, CLOSED: STAGE_DEFS.length,
+  PREPARATION: -1, SUBMISSION: 0, FILTERING: 1, DEBATE: 2, VOTE: 3, DV: 3, TALLY: 4, FUNDING: 5, CLOSED: STAGE_DEFS.length,
 };
 const fmtShort = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—');
 
@@ -950,12 +958,16 @@ const ada = (n: number) => `${n.toLocaleString()} ₳`;
  */
 function CategoryStatsBar({ stats, roundStatus, allocatedAda }: { stats: CategoryStats; roundStatus: string; allocatedAda: number }) {
   // Round stage order → which proposal stages have been reached, and whether each has ended.
-  const order = ['PREPARATION', 'SUBMISSION', 'FILTERING', 'DEBATE', 'VOTE', 'FUNDING', 'CLOSED'];
-  const idx = order.indexOf(roundStatus === 'DV' ? 'VOTE' : roundStatus);
-  const reached = (stage: string) => idx >= order.indexOf(stage);
+  const idx = roundStageIndex(roundStatus);
+  const reached = (stage: string) => idx >= roundStageIndex(stage);
   // A stage's results are final once the round has moved past it.
-  const filteringDone = idx > order.indexOf('FILTERING');
-  const voteDone = idx > order.indexOf('VOTE');
+  const filteringDone = idx > roundStageIndex('FILTERING');
+  // §9 — the D&V outcome crystallizes at TALLY (results published; tie-breaks may still run),
+  // and is FINAL once the round advances to FUNDING.
+  const dvPhase = dvDisplayPhase(roundStatus);
+  const tallyInProgress = dvPhase === 'tally';
+  const voteFinal = dvPhase === 'final';
+  const voteLive = dvPhase === 'live';
 
   const Stat = ({ label, value, tone }: { label: string; value: string; tone?: string }) => (
     <div className="rounded-md border border-neutral-200 px-2 py-1 dark:border-neutral-800">
@@ -1001,9 +1013,15 @@ function CategoryStatsBar({ stats, roundStatus, allocatedAda }: { stats: Categor
       ) : null}
 
       {reachedVote ? (
-        <Row label="Debate & Vote" hint={voteDone ? 'final' : 'in progress'}>
-          <Stat label="To voting" value={stats.passedFiltering.toLocaleString()} />
-          {!voteDone ? <Stat label="In voting" value={stats.inVoting.toLocaleString()} tone="text-amber-600 dark:text-amber-400" /> : null}
+        <Row label="Debate & Vote" hint={voteFinal ? 'final' : tallyInProgress ? 'tally in progress' : 'in progress'}>
+          {/* TO VOTING — total that reached voting while ballots are open; the still-undecided
+              (tie-break) remainder during the Tally; none once the result is final. */}
+          <Stat
+            label="To voting"
+            value={(voteFinal ? 0 : tallyInProgress ? stats.inVoting : stats.passedFiltering).toLocaleString()}
+            tone={tallyInProgress && stats.inVoting > 0 ? 'text-amber-600 dark:text-amber-400' : undefined}
+          />
+          {voteLive ? <Stat label="In voting" value={stats.inVoting.toLocaleString()} tone="text-amber-600 dark:text-amber-400" /> : null}
           <Stat label="Approved" value={stats.approved.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
           <Stat label="Rejected" value={stats.rejectedVote.toLocaleString()} tone="text-red-600 dark:text-red-400" />
         </Row>
@@ -1018,6 +1036,41 @@ function CategoryStatsBar({ stats, roundStatus, allocatedAda }: { stats: Categor
           <Stat label="Paid" value={stats.milestonesPaid.toLocaleString()} />
         </Row>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * §9 — Tally tab. Appears once the Vote stage is over (round reached TALLY) and stays
+ * forever after. Voting is closed; the result is published. Only tie-break quick polls
+ * run here — the board launches them and everyone watches the live results. Funding
+ * begins only once every quick poll has resolved.
+ */
+function RoundTallyView({ roundId, roundStatus }: { roundId: string; roundStatus: string }) {
+  const isFinal = dvDisplayPhase(roundStatus) === 'final'; // FUNDING / CLOSED
+  return (
+    <div className="space-y-4">
+      <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-semibold">Tally</h3>
+          <span className={`rounded px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
+            isFinal
+              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
+              : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+          }`}>
+            {isFinal ? 'Results final' : 'Tally in progress'}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-neutral-500">
+          Voting has closed and the result is published. Only tie-break quick polls run in the
+          Tally — the board launches each one and eligible DReps pick the winner.{' '}
+          {isFinal
+            ? 'Every poll has resolved and the round has advanced to Funding, so this tally is final.'
+            : 'Funding begins only once every quick poll below has resolved.'}
+        </p>
+      </section>
+      {/* §9.2 — tie-break polls at the budget cliff (self-hides when the round had no ties). */}
+      <QuickPollsPanel roundId={roundId} />
     </div>
   );
 }

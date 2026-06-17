@@ -1458,6 +1458,10 @@ export class ProposalsService {
         // the board to advance the round.
         if (roundStatus === 'DEBATE') {
           progress = { stage: 'DEBATE', label: '✓ passed filtering · in Debate (DReps comment; voting opens in Vote)', tone: 'emerald' };
+        } else if (roundStatus === 'TALLY') {
+          // §9 — voting is over; a proposal still ACTIVE in D&V at TALLY is tied at the
+          // budget cliff and awaiting its tie-break quick poll ("TO VOTING").
+          progress = { stage: 'VOTE', label: 'Tally — tie-break quick poll in progress', tone: 'amber' };
         } else if (roundStatus !== 'VOTE' && roundStatus !== 'DV') {
           progress = { stage: 'DV', label: '✓ passed filtering · Debate opens when round advances', tone: 'emerald' };
         } else if (!snap) {

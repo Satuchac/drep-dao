@@ -84,7 +84,7 @@ export class MeritSweepService implements OnModuleInit, OnModuleDestroy {
   /** Assigned filter reviewers who never voted, in rounds past FILTERING → −1. */
   private async missedFilter(): Promise<void> {
     const rounds = await this.prisma.round.findMany({
-      where: { status: { in: [RoundStatus.DEBATE, RoundStatus.VOTE, RoundStatus.DV, RoundStatus.FUNDING, RoundStatus.CLOSED] } },
+      where: { status: { in: [RoundStatus.DEBATE, RoundStatus.VOTE, RoundStatus.DV, RoundStatus.TALLY, RoundStatus.FUNDING, RoundStatus.CLOSED] } },
       select: { id: true },
     });
     for (const r of rounds) {
@@ -108,7 +108,7 @@ export class MeritSweepService implements OnModuleInit, OnModuleDestroy {
   /** Snapshot voters who never cast a D&V ballot, in rounds past VOTE → −1 (§4.4/§13.3). */
   private async missedDv(): Promise<void> {
     const rounds = await this.prisma.round.findMany({
-      where: { status: { in: [RoundStatus.FUNDING, RoundStatus.CLOSED] } },
+      where: { status: { in: [RoundStatus.TALLY, RoundStatus.FUNDING, RoundStatus.CLOSED] } },
       select: { id: true },
     });
     for (const r of rounds) {

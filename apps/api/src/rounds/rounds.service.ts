@@ -30,6 +30,7 @@ const STATUS_SEQUENCE: string[] = [
   RoundStatus.FILTERING,
   RoundStatus.DEBATE,
   RoundStatus.VOTE,
+  RoundStatus.TALLY,
   RoundStatus.FUNDING,
   RoundStatus.CLOSED,
 ];
@@ -39,6 +40,7 @@ const STAGE_KEY_FOR_STATUS: Record<string, string | undefined> = {
   [RoundStatus.FILTERING]: 'filtering',
   [RoundStatus.DEBATE]: 'debate',
   [RoundStatus.VOTE]: 'vote',
+  [RoundStatus.TALLY]: 'tally',
   [RoundStatus.FUNDING]: 'funding',
 };
 const STATUS_FOR_STAGE_KEY: Record<string, string> = Object.fromEntries(
@@ -51,6 +53,7 @@ const SCHEDULE_KEY_FOR_STATUS: Record<string, string[]> = {
   [RoundStatus.FILTERING]: ['filtering'],
   [RoundStatus.DEBATE]: ['debate'],
   [RoundStatus.VOTE]: ['vote', 'debate_vote'],
+  [RoundStatus.TALLY]: ['tally'],
   [RoundStatus.FUNDING]: ['funding'],
 };
 // A round is "active" (carrying live proposals) when in one of these stages.
@@ -59,6 +62,7 @@ const ACTIVE_ROUND_STATUSES: string[] = [
   RoundStatus.FILTERING,
   RoundStatus.DEBATE,
   RoundStatus.VOTE,
+  RoundStatus.TALLY,
   RoundStatus.FUNDING,
 ];
 
@@ -667,6 +671,21 @@ export class RoundsService {
     const round = await this.prisma.round.findUnique({ where: { id }, include: { schedule: true } });
     if (!round) throw new NotFoundException('round not found');
 
+    // §9 — FUNDING may only begin once every tie-break quick poll has resolved, so it
+    // is unambiguous which proposals advanced to funding (spec: "funding starts when
+    // it's clear which proposals made it"). Block the TALLY→FUNDING advance otherwise.
+    if (target === RoundStatus.FUNDING && round.status === RoundStatus.TALLY) {
+      const openPoll = await this.prisma.quickPoll.findFirst({
+        where: { roundId: id, status: { in: ['PENDING_BOARD', 'ACTIVE'] } },
+        select: { id: true },
+      });
+      if (openPoll) {
+        throw new ConflictException(
+          'a tie-break quick poll is still open — launch and resolve every quick poll before advancing to FUNDING',
+        );
+      }
+    }
+
     // §5.1 — rounds may overlap, but only ONE reviewing stage (Filtering / Debate /
     // Vote) can be active across all rounds at a time, so DReps are never asked to
     // filter/vote two rounds at once. DV is treated as VOTE for the conflict check.
@@ -738,12 +757,21 @@ export class RoundsService {
     if (target === RoundStatus.VOTE && this.dv) {
       await this.dv.openVotingForRound(id);
     }
-    // §9.3 — leaving VOTE for FUNDING: finalize every D&V-stage proposal so
-    // the result is published with the full vote turnout. Manual mid-VOTE
-    // finalize is blocked at the DvService level, so this is the canonical
-    // moment the tally crystallizes.
-    if (target === RoundStatus.FUNDING && round.status === RoundStatus.VOTE && this.dv) {
+    // §9.3 — leaving VOTE for TALLY: finalize every D&V-stage proposal so the result
+    // is published with the full vote turnout (approved / rejected / budget-cut) and
+    // tie-break quick polls are created. Manual mid-VOTE finalize is blocked at the
+    // DvService level, so this is the canonical moment the tally crystallizes. A legacy
+    // direct VOTE→FUNDING jump (no TALLY in the schedule) still finalizes here.
+    if (this.dv && round.status === RoundStatus.VOTE &&
+        (target === RoundStatus.TALLY || target === RoundStatus.FUNDING)) {
       await this.dv.finalizeRound(id);
+    }
+    // §11 — entering FUNDING: the funding mechanics activate NOW, not during TALLY.
+    // Start the skin-in-the-game pledge clock for every approved proposal (deferred out
+    // of finalize so it never ticks during the tally). Milestone-reviewer assignment and
+    // revenue-sharing verification are board-driven and separately gated to FUNDING.
+    if (target === RoundStatus.FUNDING && this.dv) {
+      await this.dv.activateFunding(id);
     }
     // §13.3 — settle merit immediately on every stage switch (missed-vote / missed-review
     // penalties + payout rewards) so a manual advance applies them now rather than waiting
@@ -766,7 +794,7 @@ export class RoundsService {
    */
   async advanceDueStages(now = new Date()): Promise<string[]> {
     const candidates = await this.prisma.round.findMany({
-      where: { status: { in: [RoundStatus.PREPARATION, RoundStatus.SUBMISSION, RoundStatus.FILTERING, RoundStatus.DEBATE, RoundStatus.VOTE, RoundStatus.DV] } },
+      where: { status: { in: [RoundStatus.PREPARATION, RoundStatus.SUBMISSION, RoundStatus.FILTERING, RoundStatus.DEBATE, RoundStatus.VOTE, RoundStatus.DV, RoundStatus.TALLY] } },
       include: { schedule: true },
     });
     const advanced: string[] = [];
@@ -797,7 +825,7 @@ export class RoundsService {
    */
   async listOverdueStages(now = new Date()): Promise<{ roundId: string; name: string; status: string; endsAt: Date }[]> {
     const rounds = await this.prisma.round.findMany({
-      where: { status: { in: [RoundStatus.SUBMISSION, RoundStatus.FILTERING, RoundStatus.DEBATE, RoundStatus.VOTE, RoundStatus.DV] } },
+      where: { status: { in: [RoundStatus.SUBMISSION, RoundStatus.FILTERING, RoundStatus.DEBATE, RoundStatus.VOTE, RoundStatus.DV, RoundStatus.TALLY] } },
       include: { schedule: true },
     });
     const out: { roundId: string; name: string; status: string; endsAt: Date }[] = [];

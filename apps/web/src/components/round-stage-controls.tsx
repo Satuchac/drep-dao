@@ -107,6 +107,7 @@ const ALL_STAGES: { key: string; status: string; label: string }[] = [
   { key: 'filtering',  status: 'FILTERING',  label: 'Filtering' },
   { key: 'debate',     status: 'DEBATE',     label: 'Debate' },
   { key: 'vote',       status: 'VOTE',       label: 'Vote' },
+  { key: 'tally',      status: 'TALLY',      label: 'Tally' },
   { key: 'funding',    status: 'FUNDING',    label: 'Funding' },
 ];
 // Legacy 'debate_vote' rows fall back to "Vote" semantically (the deprecated
@@ -116,6 +117,7 @@ const STAGE_LABEL_BY_KEY: Record<string, string> = {
   filtering: 'Filtering',
   debate: 'Debate',
   vote: 'Vote',
+  tally: 'Tally',
   debate_vote: 'Debate & Vote (legacy)',
   funding: 'Funding',
 };
@@ -128,6 +130,7 @@ const CURRENT_STAGE_KEY: Record<string, string | null> = {
   DEBATE: 'debate',
   VOTE: 'vote',
   DV: 'debate_vote',
+  TALLY: 'tally',
   FUNDING: 'funding',
   CLOSED: null,
 };

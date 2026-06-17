@@ -192,7 +192,7 @@ function VoteCard({
 
   const boardNote = isBoard ? (
     <div className="mt-2 text-xs text-neutral-500">
-      {r?.open ? 'Tally finalizes automatically when the round advances to FUNDING.' : 'Voting opens automatically when the round enters VOTE.'}
+      {r?.open ? 'Tally finalizes automatically when the round advances to TALLY (after the Vote stage ends).' : 'Voting opens automatically when the round enters VOTE.'}
     </div>
   ) : null;
 
