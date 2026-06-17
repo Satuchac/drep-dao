@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { filteringApi, matchesProposalSearch, type FilterAssignment, type ReviewMode } from '@/lib/api';
 import { BackButton } from './round-ui';
 import { ProposalDetail } from './proposal-detail';
+import { MarkdownEditor } from './markdown';
 
 /** §7 — a DRep's filtering review assignments, with a full rationale editor + the proposal. */
 export function FilteringPanel({ mode = 'pending', query }: { mode?: ReviewMode; query?: string }) {
@@ -80,13 +81,16 @@ function FilterAssignmentRow({
   // The rationale editor + YES/NO buttons — shared by the quick row and the open view.
   const voteBox = (
     <>
-      <textarea
-        value={rationale}
-        onChange={(e) => setRationale(e.target.value)}
-        rows={6}
-        placeholder="Your rationale (Markdown supported; required for a NO vote). Can be as long as you need."
-        className="mt-2 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-      />
+      <div className="mt-2">
+        <MarkdownEditor
+          value={rationale}
+          onChange={setRationale}
+          title="Rationale"
+          hint="required for a NO vote · formatting (bold, lists) supported"
+          placeholder="Your rationale — can be as long as you need."
+          minRows={6}
+        />
+      </div>
       {error ? <div className="mt-1 text-sm text-red-600">{error}</div> : null}
       {/* §7.2 — filtering is YES / NO only (a NO needs a rationale); there is no abstain. */}
       <div className="mt-1 flex gap-2">

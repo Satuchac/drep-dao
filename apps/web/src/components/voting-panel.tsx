@@ -14,6 +14,7 @@ import {
   type ReviewMode,
 } from '@/lib/api';
 import { ProposalDetail } from './proposal-detail';
+import { MarkdownEditor } from './markdown';
 
 // Per-DRep vote flag shown in the card's top-right corner.
 const VOTE_FLAG: Record<string, string> = {
@@ -168,12 +169,13 @@ function VoteCard({
               </label>
             ))}
           </div>
-          <textarea
-            className="w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-900"
-            rows={8}
-            placeholder="Rationale (Markdown supported; min 200 chars). Explain your reasoning — it's published with your vote."
+          <MarkdownEditor
             value={rationale}
-            onChange={(e) => setRationale(e.target.value)}
+            onChange={setRationale}
+            title="Rationale"
+            hint="min 200 chars · published with your vote"
+            placeholder="Explain your reasoning — formatting (bold, lists) supported."
+            minRows={8}
           />
           {/* §8 — read-only history of superseded rationales, collapsible, below the box. */}
           {r?.myRationaleHistory && r.myRationaleHistory.length > 0 ? (

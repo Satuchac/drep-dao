@@ -568,11 +568,15 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   only ever in To do, never Recent (`FilteringService.myAssignments`).
 - **To do / Recent / History** also applies to **Debate & Vote** and the **Actions** tab (replaces
   its old "Show history" checkbox). The bucketing is the pure `matchesDvMode`
-  (`@drep-dao/shared/proposal-lifecycle`, unit-tested). For D&V, **both To do and Recent require the
-  round to be in VOTE** (ballots open) — the panel is **empty during DEBATE** (the DRep debates/
-  comments then, but can't cast or change a ballot, so "voting not open yet" rows would be noise).
-  This also prevents double-listing: a proposal passes filtering (→ `stage='DEBATE_VOTE'`) while its
-  round may still be in FILTERING — it stays in the **Filtering** panel until the round reaches VOTE.
+  (`@drep-dao/shared/proposal-lifecycle`, unit-tested). For D&V, both modes require the round to be
+  in **VOTE** (ballots open — so the panel is **empty during DEBATE**), and the DRep's own vote then
+  splits them: **To do = not voted yet, Recent = already voted** (still changeable while VOTE is
+  open). So initially everything is in To do; each cast vote moves that proposal to Recent; vote them
+  all and To do is empty. This needs the viewer's vote per row: `listByRound`/`listAllRounds` resolve
+  the viewer's DRep and `enrichSummaries` returns **`myDvVote`** per proposal. (A proposal that passed
+  filtering while its round is still in FILTERING stays in the **Filtering** panel, not double-listed.)
+  The D&V + filtering **rationale editors are the rich, shrinkable `MarkdownEditor`** (bold/italic/
+  bullet+numbered lists/headings/links), consistent wherever a vote rationale is entered.
   **Filtering History is read-only** — once the round leaves FILTERING the filtering vote is final
   (the backend already rejects late votes: `vote()` requires round status FILTERING), so History
   drops the Edit-vote button and the vote box and shows the recorded vote only. D&V *History*

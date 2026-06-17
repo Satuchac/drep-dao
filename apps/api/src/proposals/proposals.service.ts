@@ -1242,7 +1242,8 @@ export class ProposalsService {
         round: { select: { status: true, filterReviewerCount: true, filterApprovalVotes: true, milestoneApprovalVotes: true } },
       },
     });
-    return this.enrichSummaries(proposals);
+    const viewerDrep = viewerUserId ? await this.prisma.drep.findUnique({ where: { userId: viewerUserId }, select: { id: true } }) : null;
+    return this.enrichSummaries(proposals, viewerDrep?.id ?? null);
   }
 
   /** §26.2 — every proposal ever processed, across ALL rounds ("All rounds"
@@ -1265,7 +1266,8 @@ export class ProposalsService {
         round: { select: { status: true, filterReviewerCount: true, filterApprovalVotes: true, milestoneApprovalVotes: true } },
       },
     });
-    return this.enrichSummaries(proposals);
+    const viewerDrep = viewerUserId ? await this.prisma.drep.findUnique({ where: { userId: viewerUserId }, select: { id: true } }) : null;
+    return this.enrichSummaries(proposals, viewerDrep?.id ?? null);
   }
 
   /**
@@ -1285,6 +1287,9 @@ export class ProposalsService {
       feeReviewFeedback?: string | null;
       round?: { status?: string; filterReviewerCount: number | null; filterApprovalVotes: number | null; milestoneApprovalVotes: number | null } | null;
     }>,
+    // §8 — the viewing DRep's id, so each D&V row can report whether THEY have voted yet (drives the
+    // Voting & reviews To do/Recent split: not-voted → To do, voted → Recent).
+    viewerDrepId?: string | null,
   ) {
     if (proposals.length === 0) return [];
     const ids = proposals.map((p) => p.id);
@@ -1580,7 +1585,9 @@ export class ProposalsService {
         }
       }
 
-      return { ...base, progress, rejectionReasons, milestoneReviewers, milestoneReviewerNames, milestoneBar: barsByProposal.get(p.id) ?? null, feeTopUpDue: topUpDue.has(p.id) };
+      // §8 — the viewer's own D&V vote on this proposal (null if they haven't voted or aren't a DRep).
+      const myDvVote = viewerDrepId ? (dvVotesBy.get(p.id) ?? []).find((v) => v.drepId === viewerDrepId)?.choice ?? null : null;
+      return { ...base, progress, rejectionReasons, milestoneReviewers, milestoneReviewerNames, milestoneBar: barsByProposal.get(p.id) ?? null, feeTopUpDue: topUpDue.has(p.id), myDvVote };
     });
   }
 

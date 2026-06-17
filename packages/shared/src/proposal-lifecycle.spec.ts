@@ -6,10 +6,14 @@ describe('matchesDvMode (§7/§8 — Debate & Vote To do / Recent / History)', (
   // rFilter: round still in FILTERING. rClosed: round CLOSED.
   const ctx = { voteRoundIds: new Set(['rVote']), closedRoundIds: new Set(['rClosed']) };
 
-  it('To do and Recent both show a votable proposal (in DEBATE_VOTE, round in VOTE)', () => {
-    const votable = { stage: 'DEBATE_VOTE', status: 'ACTIVE', roundId: 'rVote' };
-    expect(matchesDvMode(votable, 'pending', ctx)).toBe(true);
-    expect(matchesDvMode(votable, 'recent', ctx)).toBe(true);
+  it('To do = votable + NOT voted; Recent = votable + voted (they never overlap)', () => {
+    const notVoted = { stage: 'DEBATE_VOTE', status: 'ACTIVE', roundId: 'rVote', myDvVote: null };
+    expect(matchesDvMode(notVoted, 'pending', ctx)).toBe(true);
+    expect(matchesDvMode(notVoted, 'recent', ctx)).toBe(false);
+
+    const voted = { stage: 'DEBATE_VOTE', status: 'ACTIVE', roundId: 'rVote', myDvVote: 'YES' };
+    expect(matchesDvMode(voted, 'pending', ctx)).toBe(false);
+    expect(matchesDvMode(voted, 'recent', ctx)).toBe(true);
   });
 
   it('shows NOTHING during DEBATE — ballots are not open, so there is nothing to do or change', () => {

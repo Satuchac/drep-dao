@@ -1068,6 +1068,8 @@ export interface ProposalSummary {
   milestoneBar?: MilestoneSegment[] | null;
   /** §12 — the submitter still owes a submission-fee top-up (budget increase). */
   feeTopUpDue?: boolean;
+  /** §8 — the viewing DRep's own Debate & Vote choice on this proposal (null = not voted yet). */
+  myDvVote?: string | null;
 }
 export interface MilestoneSegment {
   idx: number;
