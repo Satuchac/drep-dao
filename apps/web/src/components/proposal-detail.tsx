@@ -618,22 +618,39 @@ function MilestonePlan({ milestones }: { milestones: PDetail['milestones'] }) {
  */
 function RejectionBanner({ proposal: p }: { proposal: PDetail }) {
   const [filterRes, setFilterRes] = useState<FilterResult | null>(null);
+  // §9 — the published D&V tally, to tell a threshold-miss from a budget-cut (a proposal that PASSED
+  // the threshold but couldn't be funded because higher-ranked proposals exhausted the category budget).
+  const [dvRes, setDvRes] = useState<DvResult | null>(null);
   useEffect(() => {
     if (p.stage === 'FILTERING') {
       filteringApi.result(p.id).then(setFilterRes).catch(() => setFilterRes(null));
     }
-  }, [p.id, p.stage]);
+    if (p.stage === null && p.resultFinalizedAt) {
+      dvApi.result(p.id).then(setDvRes).catch(() => setDvRes(null));
+    }
+  }, [p.id, p.stage, p.resultFinalizedAt]);
 
   if (p.stage === null) {
     // §9.3 — a D&V rejection also has stage=null (set by finalize), but it's NOT
     // a fee-stage rejection — discriminate by resultFinalizedAt being set.
     if (p.resultFinalizedAt) {
+      // §9.1/§9.2 — budget-cut: the tally PASSED the threshold but the proposal wasn't funded
+      // (higher-ranked proposals used up the category's allocation). Otherwise it's a threshold miss.
+      const budgetCut = dvRes?.approved === true;
       return (
         <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/40">
-          <div className="text-sm font-semibold text-red-800 dark:text-red-300">Rejected at Debate &amp; Vote</div>
+          <div className="text-sm font-semibold text-red-800 dark:text-red-300">
+            {budgetCut ? 'Not funded — budget-cut (Debate & Vote)' : 'Rejected at Debate & Vote'}
+          </div>
           <div className="mt-0.5 text-sm text-red-700 dark:text-red-300">
-            The published tally did not meet the approval threshold — see the rationales + per-voter weights in the
-            Debate &amp; Vote section below.
+            {budgetCut ? (
+              <>This proposal <strong>passed the approval threshold</strong>{dvRes ? ` (${dvRes.ratioPct}% ≥ ${dvRes.thresholdPct}%)` : ''}, but the
+              category&apos;s budget was used up by higher-ranked proposals, so it could not be funded this round
+              (budget-cut). See the tally + per-voter weights in the Debate &amp; Vote section below.</>
+            ) : (
+              <>The published tally did not meet the approval threshold{dvRes ? ` (${dvRes.ratioPct}% < ${dvRes.thresholdPct}%)` : ''} — see the
+              rationales + per-voter weights in the Debate &amp; Vote section below.</>
+            )}
           </div>
         </div>
       );
