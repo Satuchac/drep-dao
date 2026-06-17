@@ -51,6 +51,9 @@ export function VotingPanel({ mode = 'pending', query }: { mode?: ReviewMode; qu
   // When a proposal is opened to read + vote, show ONLY that one (its single vote box + the full
   // proposal) — not the other proposals' boxes — to avoid the "which box do I fill?" confusion.
   const [openId, setOpenId] = useState<string | null>(null);
+  // Switching To do / Recent / History always returns to the collapsed list — a proposal you opened
+  // (and voted) in To do shouldn't still be sitting open when you land on Recent.
+  useEffect(() => { setOpenId(null); }, [mode]);
   if (items.length === 0) return null;
   const openRow = openId ? items.find((p) => p.id === openId) ?? null : null;
   const heading = mode === 'history' ? ' — past decisions' : mode === 'recent' ? ' — open for your vote' : '';
