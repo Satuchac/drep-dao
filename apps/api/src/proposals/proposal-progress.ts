@@ -6,8 +6,12 @@
  * Kept as a pure function (no Prisma) so it can be unit-tested directly.
  *   - stage 'FILTERING'                 → rejected by the filtering jury; revisable while the round
  *                                         is still in FILTERING (otherwise final).
- *   - stage null + fee-review feedback  → rejected at the fee review; revisable while SUBMISSION.
- *   - otherwise (stage null, no fee fb) → rejected in Debate & Vote (final).
+ *   - stage null + fee fb, NOT finalized → rejected at the fee review; revisable while SUBMISSION.
+ *   - otherwise (incl. a finalized loss) → rejected in Debate & Vote (final).
+ *
+ * `resultFinalizedAt` disambiguates the two stage-null cases: a Debate & Vote loss (incl. a
+ * budget-cut) has the result finalized and keeps its admission fee note, so it must NOT be read
+ * as a fee rejection just because feeReviewFeedback is set.
  */
 export type ProgressChip = { stage: string; label: string; tone: 'red' };
 
@@ -15,13 +19,14 @@ export function rejectedProgress(
   stage: string | null,
   roundStatus: string | null,
   feeReviewFeedback: string | null | undefined,
+  resultFinalizedAt?: Date | null,
 ): ProgressChip {
   if (stage === 'FILTERING') {
     return roundStatus === 'FILTERING'
       ? { stage: 'FILTERING', label: 'rejected at filtering — revise & resubmit', tone: 'red' }
       : { stage: 'FILTERING', label: 'rejected at filtering', tone: 'red' };
   }
-  if (stage == null && feeReviewFeedback) {
+  if (stage == null && feeReviewFeedback && !resultFinalizedAt) {
     return roundStatus === 'SUBMISSION'
       ? { stage: 'FEE', label: 'fee rejected — fix & resubmit', tone: 'red' }
       : { stage: 'FEE', label: 'fee rejected by the board', tone: 'red' };

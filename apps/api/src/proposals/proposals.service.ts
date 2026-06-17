@@ -26,7 +26,7 @@ import { AnchorService } from '../cardano/anchor.service';
 import { BoardService } from '../auth/board.service';
 import { BudgetChangeDto, CreateProposalDto, MilestoneInput, ReviewFeeDto, ReviewPledgeDto, SubmitProposalDto, UpdateProposalDto } from './dto';
 import { rejectedProgress } from './proposal-progress';
-import { debateMilestoneEditError, preserveMilestoneContent } from './proposal-state';
+import { debateMilestoneEditError, isFeeStageReject, preserveMilestoneContent } from './proposal-state';
 
 const LOVELACE = 1_000_000;
 const toLovelace = (ada: number): bigint => BigInt(Math.round(ada * LOVELACE));
@@ -1292,6 +1292,7 @@ export class ProposalsService {
   private async enrichSummaries(
     proposals: Array<Parameters<ProposalsService['summary']>[0] & {
       feeReviewFeedback?: string | null;
+      resultFinalizedAt?: Date | null;
       round?: { status?: string; filterReviewerCount: number | null; filterApprovalVotes: number | null; milestoneApprovalVotes: number | null } | null;
     }>,
     // §8 — the viewing DRep's id, so each D&V row can report whether THEY have voted yet (drives the
@@ -1551,21 +1552,25 @@ export class ProposalsService {
         // §7.4/§16 — flag a rejection the submitter can still act on in RED so it stands out in
         // My proposals and drives the tab's notification badge (badge counts labels with
         // "resubmit"). A still-revisable rejection says "…resubmit"; a final one just "rejected".
-        progress = rejectedProgress(stage, p.round?.status ?? null, p.feeReviewFeedback);
+        progress = rejectedProgress(stage, p.round?.status ?? null, p.feeReviewFeedback, p.resultFinalizedAt);
       }
 
       // Build the "why was this rejected" snippets for REJECTED proposals.
       let rejectionReasons: { stage: string; from: string | null; rationale: string }[] | null = null;
       if (status === ProposalStatus.REJECTED) {
         const reasons: { stage: string; from: string | null; rationale: string }[] = [];
-        // Fee rejection feedback comes from the board, not a DRep.
-        if (!p.stage && p.feeReviewFeedback) {
+        // Only a genuine fee-stage rejection (never admitted → result not finalized) shows the
+        // board's fee feedback. A Debate & Vote loss keeps its admission note ("paid") but is NOT
+        // a fee rejection — isFeeStageReject tells them apart via resultFinalizedAt.
+        if (isFeeStageReject(status, p.stage ?? null, p.resultFinalizedAt ?? null) && p.feeReviewFeedback) {
           reasons.push({ stage: 'FEE', from: 'board (fee review)', rationale: p.feeReviewFeedback });
         } else if (p.stage === 'FILTERING') {
           for (const v of (fVotesBy.get(p.id) ?? []).filter((x) => x.choice === 'NO' && x.rationale)) {
             reasons.push({ stage: 'FILTERING', from: v.drep.user?.displayName ?? v.drep.drepIdOnchain ?? null, rationale: v.rationale ?? '' });
           }
-        } else if (p.stage === 'DEBATE_VOTE') {
+        } else if (p.stage === 'DEBATE_VOTE' || (p.resultFinalizedAt && !p.stage)) {
+          // Active D&V loss, or a finalized loss (finalize nulls the stage). A budget-cut has no
+          // NO-rationale votes, so reasons stays empty and no spurious reason is shown.
           for (const v of (dvVotesBy.get(p.id) ?? []).filter((x) => x.choice === 'NO' && x.rationale)) {
             reasons.push({ stage: 'DV', from: v.drep.user?.displayName ?? v.drep.drepIdOnchain ?? null, rationale: v.rationale ?? '' });
           }

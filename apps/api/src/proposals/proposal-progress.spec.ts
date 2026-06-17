@@ -25,4 +25,12 @@ describe('rejectedProgress (§7.4/§16 — submitter rejection notice)', () => {
     expect(r.label).not.toContain('resubmit');
     expect(r.label).toContain('Debate & Vote');
   });
+
+  it('does NOT read a finalized D&V loss as a fee rejection, even with an admission fee note', () => {
+    // A proposal admitted with a "paid" note, then budget-cut in D&V: stage nulled by finalize,
+    // result finalized. It must read as a Debate & Vote loss, not a fee rejection.
+    const r = rejectedProgress(null, 'TALLY', 'paid', new Date());
+    expect(r.stage).toBe('DV');
+    expect(r.label).toContain('Debate & Vote');
+  });
 });
