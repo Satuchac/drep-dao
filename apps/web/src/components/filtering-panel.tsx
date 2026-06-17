@@ -178,7 +178,8 @@ function QuickFilterRow({ a, voteBox, readOnly = false, onToggle }: { a: FilterA
             </span>
           ) : (
             <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-              not voted yet
+              {/* History (read-only) = filtering is over, so it can no longer be voted → "not voted". */}
+              {readOnly ? 'not voted' : 'not voted yet'}
             </span>
           )}
           {/* Filtering over (History) → no Edit/Vote button; the chip above shows the final vote. */}
