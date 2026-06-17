@@ -1230,6 +1230,8 @@ function DvSection({ id }: { id: string; isBoard: boolean }) {
 function PowerBar({ yes, no, abstain, total, thresholdPosPct, thresholdPct }: { yes: number; no: number; abstain: number; total: number; thresholdPosPct: number; thresholdPct: number }) {
   const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0);
   const fmt = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+  // Share of TOTAL power (so YES/NO/abstain sum to 100% and match the bar segment widths).
+  const pctLabel = (v: number) => (total > 0 ? ` (${Math.round(pct(v))}%)` : '');
   const tpos = Math.min(100, Math.max(0, thresholdPosPct));
   return (
     <div className="mt-6">
@@ -1246,9 +1248,9 @@ function PowerBar({ yes, no, abstain, total, thresholdPosPct, thresholdPct }: { 
         <div className="absolute -top-1.5 bottom-0 w-0.5 bg-neutral-900 dark:bg-white" style={{ left: `${tpos}%` }} title={`threshold ${thresholdPct}%`} />
       </div>
       <div className="mt-1 flex flex-wrap gap-3 text-xs text-neutral-500">
-        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-emerald-500" />YES {fmt(yes)}</span>
-        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-red-400" />NO {fmt(no)}</span>
-        {abstain > 0 ? <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-neutral-400" />abstain {fmt(abstain)}</span> : null}
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-emerald-500" />YES {fmt(yes)}{pctLabel(yes)}</span>
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-red-400" />NO {fmt(no)}{pctLabel(no)}</span>
+        {abstain > 0 ? <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-neutral-400" />abstain {fmt(abstain)}{pctLabel(abstain)}</span> : null}
         <span className="tabular-nums">total power {fmt(total)} · threshold {thresholdPct}%</span>
       </div>
     </div>
