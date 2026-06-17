@@ -2044,7 +2044,11 @@ function EditSection({
 function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal: PDetail; onChange: () => void }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(proposal.requestedAmountAda);
-  const [ms, setMs] = useState(proposal.milestones.map((m) => ({ description: m.description ?? '', amountAda: m.amountAda })));
+  // Carry the FULL milestone (title + acceptance criteria too) so a budget change never wipes them
+  // when the board re-creates the milestones on approval.
+  const [ms, setMs] = useState(proposal.milestones.map((m) => ({
+    title: m.title ?? '', description: m.description ?? '', acceptanceCriteria: m.acceptanceCriteria ?? '', amountAda: m.amountAda,
+  })));
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2070,7 +2074,7 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
     try {
       await proposalsApi.budgetChange(id, {
         requestedAmountAda: Number(amount),
-        milestones: ms.map((m) => ({ description: m.description, amountAda: Number(m.amountAda) })),
+        milestones: ms.map((m) => ({ title: m.title.trim() || undefined, description: m.description, acceptanceCriteria: m.acceptanceCriteria.trim() || undefined, amountAda: Number(m.amountAda) })),
         reason: reason.trim() || undefined,
       });
       setMsg('Budget change submitted — waiting for a board member to approve. Your existing reviewer votes stay until the board decides.');
@@ -2121,14 +2125,21 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
       </label>
       <div>
         <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Milestones (must sum to the new amount)</div>
-        {ms.map((m, i) => (
-          <div key={i} className="mt-1 flex flex-wrap items-center gap-2">
-            <input className="flex-1 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" placeholder="description" value={m.description} onChange={(e) => setMs((p) => p.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} />
-            <input type="number" className="w-28 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={m.amountAda} onChange={(e) => setMs((p) => p.map((x, j) => (j === i ? { ...x, amountAda: Number(e.target.value) } : x)))} />
-            {ms.length > 1 ? <button type="button" className="text-xs text-red-600" onClick={() => setMs((p) => p.filter((_, j) => j !== i))}>remove</button> : null}
-          </div>
-        ))}
-        <button type="button" className="mt-1 text-xs underline" onClick={() => setMs((p) => [...p, { description: '', amountAda: 0 }])}>+ add milestone</button>
+        {ms.map((m, i) => {
+          const upd = (patch: Partial<typeof m>) => setMs((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)));
+          return (
+            <div key={i} className="mt-1 space-y-1 rounded border border-neutral-200 p-2 dark:border-neutral-800">
+              <div className="flex flex-wrap items-center gap-2">
+                <input className="flex-1 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" placeholder="title" value={m.title} onChange={(e) => upd({ title: e.target.value })} />
+                <input type="number" className="w-28 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={m.amountAda} onChange={(e) => upd({ amountAda: Number(e.target.value) })} />
+                {ms.length > 1 ? <button type="button" className="text-xs text-red-600" onClick={() => setMs((p) => p.filter((_, j) => j !== i))}>remove</button> : null}
+              </div>
+              <textarea className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" rows={2} placeholder="description" value={m.description} onChange={(e) => upd({ description: e.target.value })} />
+              <textarea className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" rows={2} placeholder="acceptance criteria" value={m.acceptanceCriteria} onChange={(e) => upd({ acceptanceCriteria: e.target.value })} />
+            </div>
+          );
+        })}
+        <button type="button" className="mt-1 text-xs underline" onClick={() => setMs((p) => [...p, { title: '', description: '', acceptanceCriteria: '', amountAda: 0 }])}>+ add milestone</button>
         <div className={`mt-1 text-xs ${match ? 'text-emerald-600' : 'font-medium text-red-600'}`}>
           {match ? `✓ sums to ${sum.toLocaleString()} ₳` : `⚠ sums to ${sum.toLocaleString()} ₳ — must equal ${Number(amount).toLocaleString()} ₳`}
         </div>
