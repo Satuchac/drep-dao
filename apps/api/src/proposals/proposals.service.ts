@@ -1587,7 +1587,10 @@ export class ProposalsService {
 
       // §8 — the viewer's own D&V vote on this proposal (null if they haven't voted or aren't a DRep).
       const myDvVote = viewerDrepId ? (dvVotesBy.get(p.id) ?? []).find((v) => v.drepId === viewerDrepId)?.choice ?? null : null;
-      return { ...base, progress, rejectionReasons, milestoneReviewers, milestoneReviewerNames, milestoneBar: barsByProposal.get(p.id) ?? null, feeTopUpDue: topUpDue.has(p.id), myDvVote };
+      // §6 — the round's status, so the list can tell whether the submitter may still edit (editing
+      // closes once the round reaches VOTE — Debate is the last editable stage).
+      const roundStatus = (p as { round?: { status?: string } | null }).round?.status ?? null;
+      return { ...base, progress, rejectionReasons, milestoneReviewers, milestoneReviewerNames, milestoneBar: barsByProposal.get(p.id) ?? null, feeTopUpDue: topUpDue.has(p.id), myDvVote, roundStatus };
     });
   }
 

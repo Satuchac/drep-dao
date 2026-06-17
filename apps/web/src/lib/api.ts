@@ -1070,6 +1070,8 @@ export interface ProposalSummary {
   feeTopUpDue?: boolean;
   /** §8 — the viewing DRep's own Debate & Vote choice on this proposal (null = not voted yet). */
   myDvVote?: string | null;
+  /** §6 — the round's status, so lists can gate submitter editing (closes once VOTE starts). */
+  roundStatus?: string | null;
 }
 export interface MilestoneSegment {
   idx: number;

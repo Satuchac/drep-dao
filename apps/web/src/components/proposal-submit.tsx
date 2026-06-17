@@ -986,8 +986,15 @@ function MineRow({
   const feeRejected = p.status === 'REJECTED' && !p.stage;
   // Pre-public (DRAFT/PENDING/fee-rejected) → edit ALL fields in the full form.
   const fullFormEdit = isDraft || p.status === 'PENDING' || feeRejected;
-  // Public/under-review (Filtering / Debate & Vote) → revise content in the detail editor.
-  const detailEdit = !fullFormEdit && (p.stage === 'FILTERING' || p.stage === 'DEBATE_VOTE');
+  // §6/§8 — editing closes once the round reaches VOTE: Debate is the LAST editable stage. The
+  // detail editor is offered only while the round is still in SUBMISSION (polish) or DEBATE
+  // (revise), or in the post-filtering-rejection resubmit cycle — never in VOTE / FUNDING / CLOSED.
+  // Mirrors the backend ownEditable gate, so the button never appears when a save would be rejected.
+  const detailEdit = !fullFormEdit && (
+    (p.roundStatus === 'SUBMISSION' && p.status === 'ACTIVE' && p.stage === 'FILTERING') ||
+    (p.roundStatus === 'DEBATE' && p.status === 'ACTIVE' && p.stage === 'DEBATE_VOTE') ||
+    (p.status === 'REJECTED' && p.stage === 'FILTERING' && p.roundStatus === 'FILTERING')
+  );
 
   const submit = async () => {
     setError(null);
