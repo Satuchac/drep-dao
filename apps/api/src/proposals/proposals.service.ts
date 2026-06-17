@@ -756,6 +756,9 @@ export class ProposalsService {
       where: {
         status: ProposalStatus.APPROVED,
         stage: ProposalStage.FUNDING,
+        // §11 — skin-in-the-game is a FUNDING-stage task (like revenue-sharing + reviewers);
+        // don't surface the pledge confirmation to the board before the round reaches FUNDING.
+        round: { status: RoundStatus.FUNDING },
         pledgeAmountAda: { gt: 0n },
         pledgeTxHash: { not: null },
         pledgeConfirmedAt: null,
@@ -825,6 +828,10 @@ export class ProposalsService {
         stage: ProposalStage.FUNDING,
         revenueSharingRequired: true,
         revenueSharingVerifiedAt: null,
+        // §11 — revenue-sharing verification is a FUNDING-stage task. A proposal is APPROVED
+        // (and stage=FUNDING) from the TALLY tally, but the funding mechanics only switch on
+        // when the round itself reaches FUNDING — so don't surface it to the board before then.
+        round: { status: RoundStatus.FUNDING },
       },
       orderBy: { updatedAt: 'asc' },
       include: {
