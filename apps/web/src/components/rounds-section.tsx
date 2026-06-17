@@ -1018,7 +1018,7 @@ function CategoryStatsBar({ stats, roundStatus, allocatedAda }: { stats: Categor
       ) : null}
 
       {reachedVote ? (
-        <Row label="Debate & Vote" hint={voteFinal ? 'final' : tallyInProgress ? 'tally in progress' : 'in progress'}>
+        <Row label="Debate & Vote & Tally" hint={voteFinal ? 'final' : tallyInProgress ? 'tally in progress' : 'in progress'}>
           {/* TO VOTING — total that reached voting while ballots are open; the still-undecided
               (tie-break) remainder during the Tally; none once the result is final. */}
           <Stat
