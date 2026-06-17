@@ -281,12 +281,17 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   fields, incl. milestones + the fee tx). The **requested amount + commercial flag lock once
   a fee is quoted** (PENDING) — only DRAFT / fee-rejected can change them; a fee-rejected
   proposal can be fixed and **Re-submitted** (→ PENDING/ACTIVE, clearing the old feedback).
-  Edits in these states aren't versioned. Once public (Filtering / Debate & Vote before
-  voting opens), the detail editor revises **every descriptive field — title, pitch, cost
-  breakdown, team, revenue sharing, expertise tags** (the **budget** is fee-coupled and
-  changes via *Request a budget change*); each edit snapshots the prior content into
-  `ProposalVersion` and the detail shows an **original-vs-updated line diff**. No edits during
-  the D&V voting phase or after a decision.
+  Edits in these states aren't versioned. Once public, the detail editor revises **every
+  descriptive field — title (locked), pitch, cost breakdown, team, revenue sharing, expertise
+  tags**, plus **milestone content (title / description / acceptance criteria)**. The **budget**
+  is fee-coupled: during **DEBATE** the requested amount, the milestone amounts, and the number of
+  milestones are **locked** (the form shows them read-only) — they change only via *Request a
+  budget change*, which settles the fee delta. Only the **resubmit cycle** (rejected at filtering,
+  while the round is still in FILTERING) reopens the full budget shape, since the proposal must be
+  rebuilt. Enforced server-side too (`updateDraft`: `amountLocked` unless resubmit; milestone
+  add/remove + amount changes during DEBATE rejected via the pure `debateMilestoneEditError`,
+  unit-tested). Each edit snapshots the prior content into `ProposalVersion` and the detail shows an
+  **original-vs-updated line diff**. No edits during the D&V *voting* phase or after a decision.
 - **Milestone funding (§11).** After D&V approval the board draws + confirms
   reviewers; the submitter posts a Proof of Achievement per milestone; reviewers
   vote 1p1v (2-of-3 closes; NO needs feedback; resubmission re-opens review).

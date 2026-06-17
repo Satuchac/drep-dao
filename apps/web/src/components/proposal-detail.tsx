@@ -1740,15 +1740,18 @@ function EditSection({
     proposal.roundStatus === 'FILTERING' &&
     proposal.filterResubmissionsUsed < proposal.filterResubmissionsAllowed;
   const editable = inSubmission || inDebate || canResubmit;
-  // Budget + milestones + pledge are unlocked in the resubmit cycle (the team
-  // rebuilds after a filtering rejection) AND during DEBATE (the team revises
-  // the whole proposal — no votes have been cast on the new shape yet, ballots
-  // only start in VOTE). SUBMISSION polish keeps amount + milestones locked
-  // because the fee was already quoted from the original amount — that path
-  // uses the existing "Request a budget change" flow which settles the fee delta.
-  const budgetEditable = canResubmit || inDebate;
-  // Pledge follows the same rule: editable wherever the rest of the budget is.
-  const pledgeEditable = budgetEditable && !proposal.pledgeConfirmedAt;
+  // §7.4/§8.1/§12 — what can change where:
+  //  - budgetEditable (requested amount + commercial flag + milestone AMOUNTS + add/remove
+  //    milestones): only in the resubmit cycle, where the team rebuilds after a filtering
+  //    rejection. During DEBATE the budget is LOCKED — it changes only via "Request a budget
+  //    change" (which settles the fee delta and resets votes), mirroring the backend gate.
+  //  - milestonesEditable (milestone CONTENT — title / description / acceptance criteria): also
+  //    during DEBATE, so the team can revise the plan's text in response to reviewer feedback.
+  const budgetEditable = canResubmit;
+  const milestonesEditable = canResubmit || inDebate;
+  // Pledge text/amount stays editable through the resubmit + debate revision phases (until the
+  // board confirms it on-chain) — it isn't part of the requested-budget lock.
+  const pledgeEditable = (canResubmit || inDebate) && !proposal.pledgeConfirmedAt;
   if (!editable) return null;
 
   const milestoneSum = milestones.reduce((acc, m) => acc + Number(m.amountAda || 0), 0);
@@ -1772,10 +1775,13 @@ function EditSection({
         successMetricsMd: successMetrics,
         payoutAddress,
         subcategoryIds: subcatIds,
-        ...(budgetEditable
+        // Budget shape (amount + commercial) only in the resubmit cycle.
+        ...(budgetEditable ? { requestedAmountAda: Number(amount), isCommercial: commercial } : {}),
+        // Milestones are sent whenever their content is editable (resubmit OR debate). During
+        // debate the amounts are unchanged (inputs locked), so the backend's amount-match check
+        // passes and only the content updates.
+        ...(milestonesEditable
           ? {
-              requestedAmountAda: Number(amount),
-              isCommercial: commercial,
               milestones: milestones.map((m) => ({
                 title: m.title.trim() || undefined,
                 description: m.description,
@@ -1811,31 +1817,38 @@ function EditSection({
       <div className="text-xs text-neutral-500">
         {budgetEditable
           ? 'Revise the proposal — every field including the budget and milestones (the submission-fee tx hash is locked).'
-          : 'Edit the proposal text. The budget (amount + milestones) changes via "Request a budget change".'}
+          : milestonesEditable
+            ? 'Revise the proposal text and milestone details (title / description / acceptance criteria). The budget — requested amount and milestone amounts — changes only via "Request a budget change".'
+            : 'Edit the proposal text. The budget (amount + milestones) changes via "Request a budget change".'}
       </div>
       <label className="block">
         <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title</span>
         <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm opacity-60 dark:border-neutral-700 dark:bg-neutral-900" value={title} disabled readOnly />
         <span className="mt-0.5 block text-[11px] italic text-neutral-500 dark:text-neutral-400">The title is locked — it cannot be changed once the proposal is submitted.</span>
       </label>
-      {budgetEditable ? (
+      {milestonesEditable ? (
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm">
             <span className="block text-xs font-medium text-neutral-600 dark:text-neutral-400">Requested ₳</span>
-            <input type="number" className="mt-0.5 w-36 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
+            <input type="number" className={`mt-0.5 w-36 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900 ${budgetEditable ? '' : 'opacity-60'}`} value={amount} disabled={!budgetEditable} readOnly={!budgetEditable} onChange={(e) => setAmount(Number(e.target.value))} />
           </label>
-          <label className="flex items-center gap-1.5 text-sm">
-            <input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} />
+          <label className={`flex items-center gap-1.5 text-sm ${budgetEditable ? '' : 'opacity-60'}`}>
+            <input type="checkbox" checked={commercial} disabled={!budgetEditable} onChange={(e) => setCommercial(e.target.checked)} />
             Commercial / for profit
           </label>
+          {!budgetEditable ? (
+            <span className="text-[11px] italic text-neutral-500 dark:text-neutral-400">Locked during Debate — change via &ldquo;Request a budget change&rdquo;.</span>
+          ) : null}
         </div>
       ) : null}
       {/* Entering edit mode signals intent to edit — keep every section expanded so
           the submitter can see all editable fields, even the ones that were empty. */}
       <MarkdownEditor value={content} onChange={setContent} title="Pitch / summary" subtitle="What are you proposing to build, and why? Who is it for, what does it solve, and what makes it the right project at the right time?" placeholder="Proposal pitch (markdown)" minRows={6} />
-      {budgetEditable ? (
+      {milestonesEditable ? (
         <div className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
-          <div className="text-sm font-medium">Milestones (must sum to the requested amount)</div>
+          <div className="text-sm font-medium">
+            Milestones{budgetEditable ? ' (must sum to the requested amount)' : ' — edit the details; budgets are locked'}
+          </div>
           <div className="mt-1 space-y-2">
             {milestones.map((m, i) => {
               const set = (patch: Partial<typeof m>) =>
@@ -1844,7 +1857,8 @@ function EditSection({
                 <div key={i} className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-neutral-500">Milestone {i + 1}</span>
-                    {milestones.length > 1 ? (
+                    {/* Add/remove restructures the budget → resubmit cycle only. */}
+                    {budgetEditable && milestones.length > 1 ? (
                       <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => setMilestones((p) => p.filter((_, j) => j !== i))}>remove</button>
                     ) : null}
                   </div>
@@ -1853,9 +1867,9 @@ function EditSection({
                       <span className="block text-xs font-medium text-neutral-600 dark:text-neutral-400">Title</span>
                       <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" placeholder="Milestone title" value={m.title} onChange={(e) => set({ title: e.target.value })} />
                     </label>
-                    <label>
+                    <label className={budgetEditable ? '' : 'opacity-60'}>
                       <span className="block text-xs font-medium text-neutral-600 dark:text-neutral-400">Budget (₳)</span>
-                      <input type="number" className="mt-0.5 w-32 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={m.amountAda} onChange={(e) => set({ amountAda: Number(e.target.value) })} />
+                      <input type="number" className={`mt-0.5 w-32 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900 ${budgetEditable ? '' : 'cursor-not-allowed'}`} value={m.amountAda} disabled={!budgetEditable} readOnly={!budgetEditable} onChange={(e) => set({ amountAda: Number(e.target.value) })} />
                     </label>
                   </div>
                   <div className="mt-2">
@@ -1868,12 +1882,20 @@ function EditSection({
               );
             })}
           </div>
-          <button type="button" className="mt-1 text-xs underline" onClick={() => setMilestones((p) => [...p, { title: '', description: '', acceptanceCriteria: '', amountAda: 0 }])}>+ add milestone</button>
-          <div className={`mt-1 text-xs ${milestonesMatch ? 'text-emerald-600' : 'font-medium text-red-600'}`}>
-            {milestonesMatch
-              ? `✓ Milestones sum to ${milestoneSum.toLocaleString()} ₳ (matches requested).`
-              : `⚠ Milestones sum to ${milestoneSum.toLocaleString()} ₳ but the requested amount is ${Number(amount).toLocaleString()} ₳ — they must be equal (off by ${Math.abs(milestoneSum - Number(amount)).toLocaleString()} ₳).`}
-          </div>
+          {budgetEditable ? (
+            <>
+              <button type="button" className="mt-1 text-xs underline" onClick={() => setMilestones((p) => [...p, { title: '', description: '', acceptanceCriteria: '', amountAda: 0 }])}>+ add milestone</button>
+              <div className={`mt-1 text-xs ${milestonesMatch ? 'text-emerald-600' : 'font-medium text-red-600'}`}>
+                {milestonesMatch
+                  ? `✓ Milestones sum to ${milestoneSum.toLocaleString()} ₳ (matches requested).`
+                  : `⚠ Milestones sum to ${milestoneSum.toLocaleString()} ₳ but the requested amount is ${Number(amount).toLocaleString()} ₳ — they must be equal (off by ${Math.abs(milestoneSum - Number(amount)).toLocaleString()} ₳).`}
+              </div>
+            </>
+          ) : (
+            <div className="mt-1 text-[11px] italic text-neutral-500 dark:text-neutral-400">
+              Milestone budgets and the number of milestones are locked during Debate — change them via &ldquo;Request a budget change&rdquo;.
+            </div>
+          )}
         </div>
       ) : null}
       <MarkdownEditor value={ecosystemImpact} onChange={setEcosystemImpact} title="Expected ecosystem impact" subtitle="What specific benefit will the project have for the ecosystem? Who will the result serve, what problem does it solve and why should it be funded from community funds?" placeholder="Who benefits, what changes — short- and long-term." minRows={3} />

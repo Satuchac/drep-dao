@@ -24,6 +24,7 @@ import { AnchorService } from '../cardano/anchor.service';
 import { BoardService } from '../auth/board.service';
 import { BudgetChangeDto, CreateProposalDto, MilestoneInput, ReviewFeeDto, ReviewPledgeDto, SubmitProposalDto, UpdateProposalDto } from './dto';
 import { rejectedProgress } from './proposal-progress';
+import { debateMilestoneEditError } from './proposal-state';
 
 const LOVELACE = 1_000_000;
 const toLovelace = (ada: number): bigint => BigInt(Math.round(ada * LOVELACE));
@@ -172,16 +173,32 @@ export class ProposalsService {
    */
   async updateDraft(userId: string, id: string, dto: UpdateProposalDto) {
     const { proposal: p, postSubmission } = await this.ownEditable(userId, id);
-    // §7.4 — resubmit cycle (REJECTED at filtering) AND §8.1 — DEBATE phase
-    // both let the team rework the budget shape: filtering has just finished
-    // and no D&V ballots have been cast on the current shape yet, so changes
-    // don't invalidate live votes. The fee that was paid stays put.
+    // §7.4 — resubmit cycle (REJECTED at filtering): the team rebuilds the whole proposal,
+    // including the BUDGET SHAPE (requested amount, commercial flag, milestone amounts, and
+    // adding/removing milestones), because filtering just rejected it and nothing downstream
+    // depends on the old shape. §8.1 — DEBATE: the team may revise milestone CONTENT (title /
+    // description / acceptance criteria) and the proposal text, but the BUDGET (requested amount
+    // + milestone amounts + milestone count) is locked — those change ONLY via requestBudgetChange
+    // (which settles the fee delta and resets votes), never silently inside a debate edit.
     const inResubmitCycle = p.status === ProposalStatus.REJECTED && p.stage === ProposalStage.FILTERING;
     const inDebate = (p as { round?: { status?: string } | null }).round?.status === RoundStatus.DEBATE && p.status === ProposalStatus.ACTIVE;
-    const fullRevisionPhase = inResubmitCycle || inDebate;
+    const budgetEditable = inResubmitCycle; // budget SHAPE reworkable only in the resubmit cycle
+    const milestonesWritable = !postSubmission || budgetEditable || inDebate;
     if (dto.milestones) {
-      if (postSubmission && !fullRevisionPhase) {
+      if (!milestonesWritable) {
         throw new ConflictException('milestones cannot be restructured after submission');
+      }
+      // During DEBATE only milestone CONTENT may change — the count and each amount must match the
+      // current plan (budget edits go through "Request a budget change").
+      if (inDebate && !budgetEditable) {
+        const existing = await this.prisma.milestone.findMany({
+          where: { proposalId: id }, orderBy: { idx: 'asc' }, select: { amountAda: true },
+        });
+        const err = debateMilestoneEditError(
+          dto.milestones.map((m) => toLovelace(Number(m.amountAda ?? 0))),
+          existing.map((e) => e.amountAda),
+        );
+        if (err) throw new BadRequestException(err);
       }
       const total = dto.requestedAmountAda ?? toAda(p.requestedAmountAda);
       this.assertMilestonesSum(dto.milestones, total);
@@ -211,7 +228,7 @@ export class ProposalsService {
     }
     // §3 — a (re)named title must still meet the round's minimum length.
     if (dto.title !== undefined) await this.assertTitleLength(p.roundId, dto.title);
-    const amountLocked = !(p.status === ProposalStatus.DRAFT || feeRejected || fullRevisionPhase);
+    const amountLocked = !(p.status === ProposalStatus.DRAFT || feeRejected || budgetEditable);
     if (amountLocked) {
       if (dto.requestedAmountAda != null && dto.requestedAmountAda !== toAda(p.requestedAmountAda)) {
         throw new BadRequestException('the requested amount is locked after submission — request a budget change instead');
@@ -302,7 +319,7 @@ export class ProposalsService {
           updatedAt: new Date(),
         },
       });
-      if (dto.milestones && (!postSubmission || fullRevisionPhase)) {
+      if (dto.milestones && milestonesWritable) {
         await tx.milestone.deleteMany({ where: { proposalId: id } });
         await tx.milestone.createMany({
           data: dto.milestones.map((m, idx) => ({
