@@ -863,16 +863,24 @@ function StagesBar({ round }: { round: RoundDetail }) {
   const curStage = curIdx >= 0 && curIdx < STAGE_DEFS.length ? STAGE_DEFS[curIdx] : null;
   const curEntry = curStage ? byKey.get(curStage.key) : undefined;
   const curEndMs = curEntry?.endsAt ? new Date(curEntry.endsAt).getTime() : null;
+  // §6 — the round's stage has run past its planned end but the round hasn't advanced yet → there is
+  // NO active stage right now (a gap before the next one starts). It's shown as done, not current.
+  const curEnded = curEndMs != null && curEndMs <= now;
   return (
     <div>
-      {/* §6 — countdown to the CURRENT stage's planned end. */}
+      {/* §6 — countdown to the CURRENT stage's planned end (or, once it passed, a "no active stage"
+          notice since the round is between stages until the next one starts). */}
       {curStage && curEndMs != null ? (
         <div className="mb-1 text-sm">
-          <span className="font-medium text-neutral-700 dark:text-neutral-200">Current stage: {curStage.label.toUpperCase()}</span>
-          {curEndMs > now ? (
-            <span className="text-neutral-500"> · Ends in: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(curEndMs - now)}</span> <span className="text-xs">({fmtShort(curEntry?.endsAt)})</span></span>
+          {curEnded ? (
+            <span className="text-neutral-500">
+              <span className="font-medium text-amber-600 dark:text-amber-400">No stage active right now</span> · {curStage.label.toUpperCase()} ended {fmtShort(curEntry?.endsAt)}
+            </span>
           ) : (
-            <span className="text-neutral-500"> · <span className="font-medium text-amber-600 dark:text-amber-400">ended {fmtShort(curEntry?.endsAt)}</span> — advances when the next stage starts</span>
+            <>
+              <span className="font-medium text-neutral-700 dark:text-neutral-200">Current stage: {curStage.label.toUpperCase()}</span>
+              <span className="text-neutral-500"> · Ends in: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(curEndMs - now)}</span> <span className="text-xs">({fmtShort(curEntry?.endsAt)})</span></span>
+            </>
           )}
         </div>
       ) : null}
@@ -904,7 +912,9 @@ function StagesBar({ round }: { round: RoundDetail }) {
       <div className="flex flex-wrap gap-1.5">
         {STAGE_DEFS.map((s, i) => {
           const e = byKey.get(s.key);
-          const state = curIdx === -1 ? 'upcoming' : i < curIdx ? 'done' : i === curIdx ? 'current' : 'upcoming';
+          // The round's own stage shows as "current" only while it's still running; once its planned
+          // end passes (but the round hasn't advanced) it's shown done, so no box reads as current.
+          const state = curIdx === -1 ? 'upcoming' : i < curIdx ? 'done' : i === curIdx ? (curEnded ? 'done' : 'current') : 'upcoming';
           const overdue = state === 'upcoming' && isOverdue(i, e);
           const cls =
             overdue
