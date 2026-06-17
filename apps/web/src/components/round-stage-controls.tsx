@@ -383,11 +383,14 @@ function StageRow({
     else if (endMs <= now && endDirty) problems.push('The end date must be in the future.');
     else if (endMs <= frozenStartMs) problems.push('The end date must be after the start date.');
     const valid = problems.length === 0;
+    // §6 — once the window has passed the stage is no longer "current": no stage is active
+    // until the round advances. Mirrors the read-only Schedule view's "No stage active right now".
+    const ended = !Number.isNaN(endMs) && endMs <= now;
     return (
-      <div className="rounded border border-emerald-300 bg-emerald-50/40 p-2 dark:border-emerald-900 dark:bg-emerald-950/20">
+      <div className={`rounded border p-2 ${ended ? 'border-amber-300 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20' : 'border-emerald-300 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20'}`}>
         <div className="text-xs">
-          <span className="rounded bg-emerald-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100">
-            current
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${ended ? 'bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100' : 'bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100'}`}>
+            {ended ? 'ended' : 'current'}
           </span>{' '}
           <span className="font-medium">{label}</span>
           {' · '}
@@ -418,7 +421,7 @@ function StageRow({
             </div>
           ) : (
             <div className="mt-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-              Ended <strong>{untilLabel(now - endMs)}</strong> ago — this stage stays current until the round advances: launch the next stage below (or it auto-starts at its planned time). Set a later end above only to extend this stage.
+              Ended <strong>{untilLabel(now - endMs)}</strong> ago — no stage is active right now. The round advances when you launch the next stage below (or it auto-starts at its planned time). Set a later end above only to extend this stage.
             </div>
           )
         ) : null}
