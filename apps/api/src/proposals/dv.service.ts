@@ -609,6 +609,10 @@ export class DvService {
     if (proposals.length === 0) return { categories: [] };
     const ids = proposals.map((p) => p.id);
 
+    // §9 — per-category budget (allocatedAda is stored in lovelace, like requestedAmountAda).
+    const cats = await this.prisma.roundCategory.findMany({ where: { roundId }, select: { id: true, allocatedAda: true } });
+    const allocByCat = new Map(cats.map((c) => [c.id, Number(c.allocatedAda ?? 0n) / 1e6]));
+
     // §8.2 — board members who opted out of funding votes carry zero weight in every tally.
     const boardHashes = new Set(
       (await this.prisma.boardSeat.findMany({ where: { removedAt: null }, select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
@@ -649,6 +653,10 @@ export class DvService {
       id: string; publicId: string | null; title: string; requestedAmountAda: number;
       categoryId: string | null; categoryName: string | null;
       outcome: 'APPROVED' | 'PENDING' | 'REJECTED';
+      // Why the budget mattered for this proposal:
+      //  funded — won funding · cut — passed the vote but the category budget ran out (budget-cut)
+      //  tie    — tied at the budget cliff, a quick poll decides · votes — rejected on the vote (below threshold)
+      budgetOutcome: 'funded' | 'cut' | 'tie' | 'votes';
       yesPower: number; noPower: number; abstainPower: number; totalPower: number;
       thresholdPct: number; ratioPct: number; cast: number; eligible: number;
       inQuickPoll: boolean; quickPollPower: number;
@@ -672,32 +680,46 @@ export class DvService {
       const noPower = Math.max(0, totalPower - yesPower - abstainPower);
       const denom = Math.max(0, totalPower - abstainPower);
       const thresholdPct = p.approvalThresholdPct ? Number(p.approvalThresholdPct) : ROUND_SETTING_DEFAULTS.dvApprovalThresholdPct;
+      const ratioPct = denom > 0 ? (yesPower / denom) * 100 : 0;
+      const passedThreshold = denom > 0 && ratioPct >= thresholdPct;
       const outcome: Row['outcome'] =
         p.status === ProposalStatus.APPROVED || p.status === ProposalStatus.COMPLETE || p.status === ProposalStatus.FAILED ? 'APPROVED'
         : p.status === ProposalStatus.REJECTED ? 'REJECTED'
         : 'PENDING';
+      // The budget only decides the fate of proposals that passed the vote. A proposal that
+      // missed the threshold is rejected on votes regardless of how much budget was left.
+      const budgetOutcome: Row['budgetOutcome'] =
+        outcome === 'APPROVED' ? 'funded'
+        : outcome === 'PENDING' ? 'tie'
+        : passedThreshold ? 'cut' // REJECTED but passed the vote → the budget ran out
+        : 'votes';
       rows.push({
         id: p.id, publicId: p.publicId, title: p.title,
         requestedAmountAda: Number(p.requestedAmountAda ?? 0n) / 1e6,
         categoryId: p.categoryId, categoryName: p.category?.name ?? null,
-        outcome,
+        outcome, budgetOutcome,
         yesPower: round2(yesPower), noPower: round2(noPower), abstainPower: round2(abstainPower),
-        totalPower: round2(totalPower), thresholdPct, ratioPct: round2(denom > 0 ? (yesPower / denom) * 100 : 0),
+        totalPower: round2(totalPower), thresholdPct, ratioPct: round2(ratioPct),
         cast, eligible,
         inQuickPoll: inActivePoll.has(p.id), quickPollPower: round2(pollPowerByProposal.get(p.id) ?? 0),
       });
     }
 
-    const byCat = new Map<string, { id: string | null; name: string | null; proposals: Row[] }>();
+    const byCat = new Map<string, { id: string | null; name: string | null; allocatedAda: number; allocatedToApprovedAda: number; remainingAda: number; proposals: Row[] }>();
     for (const r of rows) {
       const key = r.categoryId ?? '';
-      if (!byCat.has(key)) byCat.set(key, { id: r.categoryId, name: r.categoryName, proposals: [] });
+      if (!byCat.has(key)) {
+        byCat.set(key, { id: r.categoryId, name: r.categoryName, allocatedAda: allocByCat.get(r.categoryId ?? '') ?? 0, allocatedToApprovedAda: 0, remainingAda: 0, proposals: [] });
+      }
       byCat.get(key)!.proposals.push(r);
     }
     for (const c of byCat.values()) {
       // Most-supported first; live quick-poll power then ratio break ties (so PENDING candidates
       // sort by the ongoing tie-break). Approved cluster at the top, rejected at the bottom.
       c.proposals.sort((a, b) => b.yesPower - a.yesPower || b.quickPollPower - a.quickPollPower || b.ratioPct - a.ratioPct);
+      // Budget actually committed to funded proposals, and what's left unallocated.
+      c.allocatedToApprovedAda = round2(c.proposals.filter((p) => p.outcome === 'APPROVED').reduce((s, p) => s + p.requestedAmountAda, 0));
+      c.remainingAda = round2(c.allocatedAda - c.allocatedToApprovedAda);
     }
     return { categories: [...byCat.values()].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '')) };
   }

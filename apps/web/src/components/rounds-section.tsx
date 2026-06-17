@@ -1121,10 +1121,16 @@ function RoundVotingResultsView({ roundId }: { roundId: string }) {
           ))}
         </select>
       </div>
+      <CategoryBudgetBar
+        budget={selected.allocatedAda}
+        allocated={selected.allocatedToApprovedAda}
+        remaining={selected.remainingAda}
+      />
       <p className="text-xs text-neutral-500">
         Ordered most-supported → least. <span className="font-medium text-emerald-700 dark:text-emerald-400">APPROVED</span> ·{' '}
         <span className="font-medium text-amber-700 dark:text-amber-400">PENDING</span> (awaiting the tie-break quick poll) ·{' '}
-        <span className="font-medium text-red-700 dark:text-red-400">REJECTED</span>.
+        <span className="font-medium text-red-700 dark:text-red-400">REJECTED</span>. Each proposal shows whether the
+        category budget was enough to fund it (green) or ran out (red).
       </p>
       <div className="space-y-3">
         {selected.proposals.map((p) => <VotingResultCard key={p.id} p={p} />)}
@@ -1144,7 +1150,46 @@ const OUTCOME_CHIP: Record<string, string> = {
   REJECTED: 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100',
 };
 
+/** §9 — category budget: total, what's committed to funded proposals, and the unallocated remainder. */
+function CategoryBudgetBar({ budget, allocated, remaining }: { budget: number; allocated: number; remaining: number }) {
+  const usedPct = budget > 0 ? Math.min(100, (allocated / budget) * 100) : 0;
+  const overspent = remaining < 0;
+  return (
+    <div className="rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+        <span className="font-medium">Category budget</span>
+        <span className="tabular-nums font-semibold text-blue-600 dark:text-blue-400">{ada(budget)}</span>
+      </div>
+      <div className="mt-2 h-3 w-full overflow-hidden rounded bg-neutral-200 dark:bg-neutral-800">
+        <div className={`h-full ${overspent ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${usedPct}%` }} />
+      </div>
+      <div className="mt-1 flex flex-wrap justify-between gap-2 text-xs">
+        <span className="text-emerald-700 dark:text-emerald-400">Allocated {ada(allocated)} ({Math.round(usedPct)}%)</span>
+        <span className={remaining > 0 ? 'text-neutral-500' : 'text-neutral-400'}>
+          {overspent ? `Over budget by ${ada(-remaining)}` : `Unallocated ${ada(remaining)}`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// Per-proposal budget signal — green when the budget funded it, red when it ran out.
+const BUDGET_NOTE: Record<string, { label: string; cls: string }> = {
+  funded: { label: '✓ funded — within the category budget', cls: 'text-emerald-700 dark:text-emerald-400' },
+  cut: { label: '✗ budget-cut — passed the vote, but the category budget was exhausted', cls: 'text-red-700 dark:text-red-400' },
+  tie: { label: '⏳ tie at the budget cliff — the quick poll allocates the remaining budget', cls: 'text-amber-700 dark:text-amber-400' },
+  votes: { label: '✗ rejected on the vote (below threshold) — budget not a factor', cls: 'text-neutral-500' },
+};
+// The requested-amount colour mirrors the budget signal (green funded, red ran out).
+const AMOUNT_CLS: Record<string, string> = {
+  funded: 'text-emerald-600 dark:text-emerald-400',
+  cut: 'text-red-600 dark:text-red-400',
+  tie: 'text-amber-600 dark:text-amber-400',
+  votes: 'text-neutral-500',
+};
+
 function VotingResultCard({ p }: { p: VotingResultProposal }) {
+  const note = BUDGET_NOTE[p.budgetOutcome] ?? BUDGET_NOTE.votes;
   return (
     <section className={`rounded-lg border p-3 ${OUTCOME_BG[p.outcome] ?? 'border-neutral-200'}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1152,12 +1197,14 @@ function VotingResultCard({ p }: { p: VotingResultProposal }) {
           <span className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${OUTCOME_CHIP[p.outcome]}`}>{p.outcome}</span>
           <span className="font-medium">{p.publicId ? `${p.publicId} · ` : ''}{p.title}</span>
         </span>
-        <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{p.requestedAmountAda.toLocaleString()} ₳</span>
+        <span className={`text-xs font-semibold ${AMOUNT_CLS[p.budgetOutcome] ?? 'text-blue-600 dark:text-blue-400'}`}>{ada(p.requestedAmountAda)}</span>
       </div>
       <div className="mt-1 text-xs text-neutral-500">
         {p.cast}/{p.eligible} eligible DReps voted · {p.ratioPct}% of participating power (threshold {p.thresholdPct}%)
         {p.inQuickPoll ? <span className="ml-1 text-amber-600 dark:text-amber-400">· tie-break quick poll in progress</span> : null}
       </div>
+      {/* §9 — budget verdict: was the category budget enough to fund this proposal? */}
+      <div className={`mt-1 text-xs font-medium ${note.cls}`}>{note.label}</div>
       <PowerBar
         yes={p.yesPower}
         no={p.noPower}

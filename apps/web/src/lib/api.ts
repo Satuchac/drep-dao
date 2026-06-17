@@ -1338,6 +1338,9 @@ export interface VotingResultProposal {
   categoryId: string | null;
   categoryName: string | null;
   outcome: 'APPROVED' | 'PENDING' | 'REJECTED';
+  // funded — won funding · cut — passed the vote but the budget ran out · tie — tied at the cliff
+  // (quick poll decides) · votes — rejected on the vote (below threshold).
+  budgetOutcome: 'funded' | 'cut' | 'tie' | 'votes';
   yesPower: number;
   noPower: number;
   abstainPower: number;
@@ -1350,7 +1353,14 @@ export interface VotingResultProposal {
   quickPollPower: number;
 }
 export interface VotingResults {
-  categories: { id: string | null; name: string | null; proposals: VotingResultProposal[] }[];
+  categories: {
+    id: string | null;
+    name: string | null;
+    allocatedAda: number;            // the category's total budget
+    allocatedToApprovedAda: number;  // committed to funded proposals
+    remainingAda: number;            // unallocated remainder
+    proposals: VotingResultProposal[];
+  }[];
 }
 
 // -------- Public platform config (explorer, network, fee address) --------
