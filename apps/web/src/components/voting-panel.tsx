@@ -15,6 +15,7 @@ import {
 } from '@/lib/api';
 import { ProposalDetail } from './proposal-detail';
 import { MarkdownEditor } from './markdown';
+import { BackButton } from './round-ui';
 
 // Per-DRep vote flag shown in the card's top-right corner.
 const VOTE_FLAG: Record<string, string> = {
@@ -47,18 +48,28 @@ export function VotingPanel({ mode = 'pending', query }: { mode?: ReviewMode; qu
     void load();
   }, [load]);
 
+  // When a proposal is opened to read + vote, show ONLY that one (its single vote box + the full
+  // proposal) — not the other proposals' boxes — to avoid the "which box do I fill?" confusion.
+  const [openId, setOpenId] = useState<string | null>(null);
   if (items.length === 0) return null;
+  const openRow = openId ? items.find((p) => p.id === openId) ?? null : null;
   const heading = mode === 'history' ? ' — past decisions' : mode === 'recent' ? ' — open for your vote' : '';
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
       <h3 className="text-base font-semibold">Debate &amp; Vote ({items.length}){heading}</h3>
       <p className="text-xs text-neutral-500">Balanced voting power (§4); rationale ≥ 200 chars.</p>
-      <ul className="mt-2 space-y-3">
-        {items.map((p) => (
-          <VoteCard key={p.id} proposal={p} isBoard={isBoard} isDrep={isDrep} onChange={load} />
-        ))}
-      </ul>
+      {openRow ? (
+        <div className="mt-2">
+          <VoteCard proposal={openRow} isBoard={isBoard} isDrep={isDrep} open onToggle={() => setOpenId(null)} onChange={load} />
+        </div>
+      ) : (
+        <ul className="mt-2 space-y-3">
+          {items.map((p) => (
+            <VoteCard key={p.id} proposal={p} isBoard={isBoard} isDrep={isDrep} open={false} onToggle={() => setOpenId(p.id)} onChange={load} />
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -67,11 +78,17 @@ function VoteCard({
   proposal,
   isBoard,
   isDrep,
+  open,
+  onToggle,
   onChange,
 }: {
   proposal: ProposalSummary;
   isBoard: boolean;
   isDrep: boolean;
+  /** true = the only card shown (read the full proposal + vote here). */
+  open: boolean;
+  /** open → go back to the list; list → open this proposal. */
+  onToggle: () => void;
   onChange: () => void;
 }) {
   const [r, setR] = useState<DvResult | null>(null);
@@ -79,15 +96,15 @@ function VoteCard({
   const [rationale, setRationale] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState(false);
+  // In the list, the vote box stays collapsed behind a Vote/Edit-vote toggle so the list isn't a
+  // wall of rationale boxes; in the open view it's always shown.
+  const [expanded, setExpanded] = useState(false);
 
   const loadResult = useCallback(() => {
     dvApi.result(proposal.id).then(setR).catch(() => setR(null));
   }, [proposal.id]);
   useEffect(loadResult, [loadResult]);
   // Pre-fill the box with the DRep's current rationale so a re-vote starts from what they wrote.
-  // Only fires when the saved rationale actually changes (initial load / after casting), so it
-  // never clobbers in-progress edits.
   useEffect(() => {
     if (r?.myRationale) setRationale(r.myRationale);
   }, [r?.myRationale]);
@@ -106,113 +123,117 @@ function VoteCard({
     }
   };
 
+  // Vote flag (DReps only): their own choice once cast, else PENDING while voting is open.
+  const flag = isDrep ? r?.myChoice ?? (r?.open ? 'PENDING' : null) : null;
+
+  const tally = r?.open ? (
+    <div className="mt-1 text-xs text-neutral-500">
+      {r.cast}/{r.eligible} voted · YES {r.yesPower} / denom {r.denominator} ={' '}
+      <strong>{r.ratioPct}%</strong> (threshold {r.thresholdPct}%) ·{' '}
+      <span className={r.approved ? 'text-emerald-600' : 'text-red-600'}>{r.approved ? 'passing' : 'failing'}</span>
+    </div>
+  ) : (
+    <div className="mt-1 text-xs text-neutral-500">Voting not open yet.</div>
+  );
+
+  // §8 — the single, BLUE vote box (radio + rich rationale + history + cast button). Shared by the
+  // open view and the list's expanded toggle, so there's exactly one rationale box per proposal.
+  const voteBox = isDrep && r?.open ? (
+    <div className="mt-2 space-y-1 rounded-md border border-blue-300 bg-blue-50/50 p-2 dark:border-blue-900 dark:bg-blue-950/20">
+      <div className="text-xs font-semibold text-blue-700 dark:text-blue-300">Your vote &amp; rationale</div>
+      <div className="flex gap-3 text-xs">
+        {(['YES', 'NO', 'ABSTAIN'] as const).map((c) => (
+          <label key={c} className="flex items-center gap-1">
+            <input type="radio" checked={choice === c} onChange={() => setChoice(c)} /> {c}
+          </label>
+        ))}
+      </div>
+      <MarkdownEditor
+        value={rationale}
+        onChange={setRationale}
+        title="Rationale"
+        hint="min 200 chars · published with your vote"
+        placeholder="Explain your reasoning — formatting (bold, lists) supported."
+        minRows={8}
+      />
+      {r?.myRationaleHistory && r.myRationaleHistory.length > 0 ? (
+        <details className="rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900/40">
+          <summary className="cursor-pointer select-none text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">
+            Previous rationales ({r.myRationaleHistory.length}) — view only
+          </summary>
+          <ul className="mt-1 space-y-1">
+            {r.myRationaleHistory.map((h, i) => (
+              <li key={i} className="rounded border border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-900">
+                <div className="mb-0.5 flex items-center gap-2 text-[10px]">
+                  <span className={`font-bold uppercase ${h.choice === 'NO' ? 'text-red-600' : h.choice === 'YES' ? 'text-emerald-600' : 'text-neutral-500'}`}>{h.choice}</span>
+                  <span className="text-neutral-400">{new Date(h.castAt).toLocaleString()}</span>
+                </div>
+                <div className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{h.rationale}</div>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+      <button
+        disabled={busy || rationale.trim().length < 200}
+        onClick={() => act(() => dvApi.vote(proposal.id, choice, rationale))}
+        className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+      >
+        {rationale.trim().length < 200
+          ? `${r?.myChoice ? 'Update vote' : 'Cast vote'} (${rationale.trim().length}/200)`
+          : r?.myChoice ? 'Update vote' : 'Cast vote'}
+      </button>
+      {error ? <div className="mt-1 text-xs text-red-600">{error}</div> : null}
+    </div>
+  ) : null;
+
+  const boardNote = isBoard ? (
+    <div className="mt-2 text-xs text-neutral-500">
+      {r?.open ? 'Tally finalizes automatically when the round advances to FUNDING.' : 'Voting opens automatically when the round enters VOTE.'}
+    </div>
+  ) : null;
+
+  // Open: ONLY this proposal — the single blue vote box, then the full proposal to read.
   if (open) {
     return (
-      <li className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
-        <ProposalDetail id={proposal.id} onBack={() => setOpen(false)} />
+      <li className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
+        <BackButton onBack={onToggle} label="back to your votes" />
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+          <span className="font-medium">{proposal.title}</span>
+          {flag ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${VOTE_FLAG[flag]}`}>{flag}</span> : null}
+        </div>
+        {tally}
+        {voteBox}
+        {boardNote}
+        <div className="mt-3">
+          <ProposalDetail id={proposal.id} onBack={onToggle} />
+        </div>
       </li>
     );
   }
 
-  // Vote flag (DReps only): their own choice once cast, else PENDING while voting is open.
-  const flag = isDrep ? r?.myChoice ?? (r?.open ? 'PENDING' : null) : null;
-
+  // Collapsed list row: flag + tally + a Vote/Edit-vote toggle (opens the one blue box) and the
+  // "View full proposal" link. So a DRep can vote straight from the list, or open to read first.
   return (
     <li className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium">{proposal.title}</span>
         <span className="flex items-center gap-3">
           {flag ? (
-            <span
-              className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${VOTE_FLAG[flag]}`}
-              title={flag === 'PENDING' ? "You haven't voted yet" : `You voted ${flag}`}
-            >
-              {flag}
-            </span>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${VOTE_FLAG[flag]}`} title={flag === 'PENDING' ? "You haven't voted yet" : `You voted ${flag}`}>{flag}</span>
           ) : null}
           <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{proposal.requestedAmountAda.toLocaleString()} ₳</span>
-          <button onClick={() => setOpen(true)} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">
-            View full proposal →
-          </button>
+          {isDrep && r?.open ? (
+            <button onClick={() => setExpanded((v) => !v)} className="rounded-md border border-blue-500 px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950">
+              {expanded ? '▾ Close' : r?.myChoice ? '▸ Edit vote' : '▸ Vote'}
+            </button>
+          ) : null}
+          <button onClick={onToggle} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">View full proposal →</button>
         </span>
       </div>
-
-      {r?.open ? (
-        <div className="mt-1 text-xs text-neutral-500">
-          {r.cast}/{r.eligible} voted · YES {r.yesPower} / denom {r.denominator} ={' '}
-          <strong>{r.ratioPct}%</strong> (threshold {r.thresholdPct}%) ·{' '}
-          <span className={r.approved ? 'text-emerald-600' : 'text-red-600'}>
-            {r.approved ? 'passing' : 'failing'}
-          </span>
-        </div>
-      ) : (
-        <div className="mt-1 text-xs text-neutral-500">Voting not open yet.</div>
-      )}
-
-      {isBoard ? (
-        <div className="mt-2 text-xs text-neutral-500">
-          {/* §8/§9.3 — voting auto-opens when the round enters VOTE and the tally
-              auto-finalizes when the round advances to FUNDING. No manual Open /
-              Finalize button — board drives both via the Round stage controls. */}
-          {r?.open
-            ? 'Tally finalizes automatically when the round advances to FUNDING.'
-            : 'Voting opens automatically when the round enters VOTE.'}
-        </div>
-      ) : null}
-
-      {isDrep && r?.open ? (
-        <div className="mt-2 space-y-1">
-          <div className="flex gap-3 text-xs">
-            {(['YES', 'NO', 'ABSTAIN'] as const).map((c) => (
-              <label key={c} className="flex items-center gap-1">
-                <input type="radio" checked={choice === c} onChange={() => setChoice(c)} /> {c}
-              </label>
-            ))}
-          </div>
-          <MarkdownEditor
-            value={rationale}
-            onChange={setRationale}
-            title="Rationale"
-            hint="min 200 chars · published with your vote"
-            placeholder="Explain your reasoning — formatting (bold, lists) supported."
-            minRows={8}
-          />
-          {/* §8 — read-only history of superseded rationales, collapsible, below the box. */}
-          {r?.myRationaleHistory && r.myRationaleHistory.length > 0 ? (
-            <details className="rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900/40">
-              <summary className="cursor-pointer select-none text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">
-                Previous rationales ({r.myRationaleHistory.length}) — view only
-              </summary>
-              <ul className="mt-1 space-y-1">
-                {r.myRationaleHistory.map((h, i) => (
-                  <li key={i} className="rounded border border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-900">
-                    <div className="mb-0.5 flex items-center gap-2 text-[10px]">
-                      <span className={`font-bold uppercase ${h.choice === 'NO' ? 'text-red-600' : h.choice === 'YES' ? 'text-emerald-600' : 'text-neutral-500'}`}>
-                        {h.choice}
-                      </span>
-                      <span className="text-neutral-400">{new Date(h.castAt).toLocaleString()}</span>
-                    </div>
-                    <div className="whitespace-pre-wrap text-neutral-600 dark:text-neutral-300">{h.rationale}</div>
-                  </li>
-                ))}
-              </ul>
-            </details>
-          ) : null}
-          <button
-            disabled={busy || rationale.trim().length < 200}
-            onClick={() => act(() => dvApi.vote(proposal.id, choice, rationale))}
-            className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-          >
-            {rationale.trim().length < 200
-              ? `${r?.myChoice ? 'Update vote' : 'Cast vote'} (${rationale.trim().length}/200)`
-              : r?.myChoice
-                ? 'Update vote'
-                : 'Cast vote'}
-          </button>
-        </div>
-      ) : null}
-
-      {error ? <div className="mt-1 text-xs text-red-600">{error}</div> : null}
+      {tally}
+      {boardNote}
+      {expanded ? voteBox : null}
     </li>
   );
 }
