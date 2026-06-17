@@ -3,7 +3,7 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { SUBCAT_LABEL } from '@/lib/ui';
 import { card } from '@/lib/ui';
-import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
+import { DEFAULT_SUBCATEGORIES, canCommentOnProposal } from '@drep-dao/shared';
 import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
 import {
@@ -279,11 +279,7 @@ export function ProposalDetail({
       <CommentsSection
         id={id}
         title={p.title}
-        canPost={
-          !!profile &&
-          (mine ||
-            profile.roles.some((r) => ['BOARD', 'DREP', 'DAO_MEMBER', 'EXPERT_APPROVED'].includes(r)))
-        }
+        canPost={!!profile && canCommentOnProposal(profile.roles, mine)}
       />
       {/* §3.5 — board ↔ submitter message history (board + submitter only). */}
       {isBoard || mine ? <ProposalMessagesPanel proposalId={id} canBoard={isBoard} /> : null}

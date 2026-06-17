@@ -505,6 +505,12 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   on-chain tx so anyone can re-hash and verify.
 
 **Member area (My Area)**
+- **Approved experts can always comment (§20).** Fixed a bug where an approved expert was blocked
+  from posting comments: the composer gate checked a non-existent `'EXPERT_APPROVED'` role, but an
+  approved expert's role is `'EXPERT'` (granted only once the board approves them and they haven't
+  left). The rule is now the pure, unit-tested `canCommentOnProposal(roles, isTeamMember)` in
+  `@drep-dao/shared` (team + board/DRep/DAO-member/EXPERT may post; viewers read only). The backend
+  comment-create endpoint never role-gated, so this was purely the frontend composer.
 - **Open all / Shrink all when viewing a proposal:** the read-only proposal detail now has a page-
   level "▣ Shrink all / ▾ Open all" toggle (parity with the edit form), so a DRep/viewer can collapse
   or expand every section (Pitch, Milestones, KPIs, …) at once. `CollapsibleView` listens to the same
