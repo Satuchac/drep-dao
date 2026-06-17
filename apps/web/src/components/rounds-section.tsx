@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { ROUND_SETTING_DEFAULTS, ROUND_SETTING_META, ROUND_SETTING_BOOLEAN, computeRewardPoolsAda } from '@drep-dao/shared';
@@ -332,10 +332,20 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
   const [rewardFixed, setRewardFixed] = useState<number>(sval('rewardFixedPct') ?? ROUND_SETTING_DEFAULTS.rewardFixedPct);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // §6 — signature of the form at the last successful save. While the current signature matches,
-  // we show "✓ Saved"; any edit changes the signature, hiding it → "you need to save again".
-  const [savedSig, setSavedSig] = useState<string | null>(null);
+  // §6 — dirty tracking: a signature of the editable form state. The baseline is the loaded round
+  // (and is re-pinned on each successful save). Save is enabled only when the form differs from the
+  // baseline; Cancel restores the baseline; "✓ Saved" shows while they match.
   const formSig = JSON.stringify({ name, budget, rewards, cats, settings, rewardExpert, rewardDvShare, rewardFixed });
+  const [savedSig, setSavedSig] = useState(formSig);
+  const baselineRef = useRef({ name, budget, rewards, cats, settings, rewardExpert, rewardDvShare, rewardFixed });
+  const dirty = formSig !== savedSig;
+  // Restore every field to the last-saved baseline (Cancel) and clear any error.
+  const cancelEdits = () => {
+    const b = baselineRef.current;
+    setName(b.name); setBudget(b.budget); setRewards(b.rewards); setCats(b.cats); setSettings(b.settings);
+    setRewardExpert(b.rewardExpert); setRewardDvShare(b.rewardDvShare); setRewardFixed(b.rewardFixed);
+    setError(null);
+  };
   const setSetting = (k: string, v: string) => setSettings((s) => ({ ...s, [k]: v }));
   const num = (k: string) => (settings[k]?.trim() ? Number(settings[k]) : undefined);
   // Approval votes can't exceed their reviewer count; the inputs cap to the effective value.
@@ -445,7 +455,9 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
       if (editing && roundId) {
         // Edit: don't touch the schedule (the round is mid-schedule; stages are confirmed separately).
         await boardRoundsApi.update(roundId, { name: name.trim() || undefined, budgetAda: Number(budget), rewardsPoolAda: Number(rewards), categories, ...settingsInput });
-        setSavedSig(formSig); // mark the current form state as saved → shows "✓ Saved" until next edit
+        // Re-pin the baseline to what we just saved → "✓ Saved", Save disabled, Cancel reverts here.
+        baselineRef.current = { name, budget, rewards, cats, settings, rewardExpert, rewardDvShare, rewardFixed };
+        setSavedSig(formSig);
       } else {
         await boardRoundsApi.create({ name: name.trim() || undefined, budgetAda: Number(budget), rewardsPoolAda: Number(rewards), categories, schedule, ...settingsInput });
       }
@@ -744,16 +756,29 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
       <div className="flex items-center gap-3">
         <button
           type="submit"
-          disabled={busy || !canCreate}
+          // §6 — in edit mode, Save is enabled only when there are unsaved changes.
+          disabled={busy || !canCreate || (editing && !dirty)}
           className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
         >
           {busy ? (editing ? 'Saving…' : 'Creating…') : editing ? 'Save changes' : 'Create round'}
         </button>
-        {/* §6 — saved/unsaved indicator (edit mode): "✓ Saved" until a field changes. */}
-        {editing && savedSig !== null ? (
-          savedSig === formSig
-            ? <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">✓ Saved</span>
-            : <span className="text-sm font-medium text-amber-600 dark:text-amber-400">● Unsaved changes</span>
+        {/* §6 — Cancel discards unsaved edits (reverts to the last-saved baseline). */}
+        {editing && dirty ? (
+          <button
+            type="button"
+            onClick={cancelEdits}
+            disabled={busy}
+            className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          >
+            Cancel
+          </button>
+        ) : null}
+        {/* §6 — saved/unsaved indicator (edit mode): "✓ Saved" while the form matches what's saved;
+            it disappears the moment a field changes (replaced by "● Unsaved changes"). */}
+        {editing ? (
+          dirty
+            ? <span className="text-sm font-medium text-amber-600 dark:text-amber-400">● Unsaved changes</span>
+            : <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">✓ Saved</span>
         ) : null}
       </div>
     </form>
