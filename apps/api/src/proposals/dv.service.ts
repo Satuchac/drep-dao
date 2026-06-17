@@ -714,10 +714,16 @@ export class DvService {
       }
       byCat.get(key)!.proposals.push(r);
     }
+    // APPROVED first, then PENDING (still in a tie-break), then REJECTED — and within each
+    // group most-supported → least (D&V power, then the live quick-poll standing, then ratio).
+    // Outcome leads because tied proposals share the same D&V power, so the result must order them.
+    const outcomeRank: Record<string, number> = { APPROVED: 0, PENDING: 1, REJECTED: 2 };
     for (const c of byCat.values()) {
-      // Most-supported first; live quick-poll power then ratio break ties (so PENDING candidates
-      // sort by the ongoing tie-break). Approved cluster at the top, rejected at the bottom.
-      c.proposals.sort((a, b) => b.yesPower - a.yesPower || b.quickPollPower - a.quickPollPower || b.ratioPct - a.ratioPct);
+      c.proposals.sort((a, b) =>
+        (outcomeRank[a.outcome] ?? 3) - (outcomeRank[b.outcome] ?? 3)
+        || b.yesPower - a.yesPower
+        || b.quickPollPower - a.quickPollPower
+        || b.ratioPct - a.ratioPct);
       // Budget actually committed to funded proposals, and what's left unallocated.
       c.allocatedToApprovedAda = round2(c.proposals.filter((p) => p.outcome === 'APPROVED').reduce((s, p) => s + p.requestedAmountAda, 0));
       c.remainingAda = round2(c.allocatedAda - c.allocatedToApprovedAda);
