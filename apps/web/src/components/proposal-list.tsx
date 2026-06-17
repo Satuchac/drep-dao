@@ -171,7 +171,7 @@ export function ProposalList({ roundId }: { roundId: string }) {
             </div>
             <div className="mt-1 text-xs text-neutral-500">
               {p.categoryName ?? 'uncategorized'}
-              {p.requestedAmountAda ? ` · ${p.requestedAmountAda.toLocaleString()} ₳` : ''}
+              {p.requestedAmountAda ? <> · <span className="font-semibold text-blue-600 dark:text-blue-400">{p.requestedAmountAda.toLocaleString()} ₳</span></> : ''}
               {p.isCommercial != null ? ` · ${p.isCommercial ? 'commercial' : 'open-source'}` : ''}
             </div>
             {/* §11 — milestone progress bar (FUNDING-stage proposals; persists into history). */}

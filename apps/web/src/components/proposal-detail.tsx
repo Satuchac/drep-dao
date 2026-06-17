@@ -141,7 +141,7 @@ export function ProposalDetail({
           </div>
         </div>
         <div className="mt-1 text-xs text-neutral-500">
-          {p.categoryName ?? 'uncategorized'} · {p.requestedAmountAda.toLocaleString()} ₳ ·{' '}
+          {p.categoryName ?? 'uncategorized'} · <span className="font-semibold text-blue-600 dark:text-blue-400">{p.requestedAmountAda.toLocaleString()} ₳</span> ·{' '}
           {p.isCommercial ? 'commercial' : 'open-source'} · fee {p.submissionFeeAda.toLocaleString()} ₳
           {p.categoryAsk && (p.categoryAsk.minAda != null || p.categoryAsk.maxAda != null) ? (
             <> · category ask {p.categoryAsk.minAda != null ? `${p.categoryAsk.minAda.toLocaleString()}` : '0'}–{p.categoryAsk.maxAda != null ? `${p.categoryAsk.maxAda.toLocaleString()}` : '∞'} ₳</>
@@ -588,7 +588,7 @@ function MilestonePlan({ milestones }: { milestones: PDetail['milestones'] }) {
           <li key={m.id} className="rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">
             <div className="font-medium">
               Milestone #{m.idx + 1}{m.title ? ` — ${m.title}` : ''}
-              <span className="text-neutral-500"> · {m.amountAda.toLocaleString()} ₳</span>
+              <span className="font-semibold text-blue-600 dark:text-blue-400"> · {m.amountAda.toLocaleString()} ₳</span>
             </div>
             {m.description ? <Markdown className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">{m.description}</Markdown> : null}
             <div className="mt-1">
@@ -2899,7 +2899,7 @@ function MilestoneRow({ m, isMine, canPoa, locked = false, isBoard = false, prop
       <div className="flex items-center justify-between">
         <span className="font-medium">
           Milestone #{m.idx + 1}{m.title ? ` — ${m.title}` : ''}
-          <span className="text-neutral-500"> · {m.amountAda.toLocaleString()} ₳</span>
+          <span className="font-semibold text-blue-600 dark:text-blue-400"> · {m.amountAda.toLocaleString()} ₳</span>
         </span>
         <div className="flex items-center gap-2">
           <span className="text-xs text-neutral-500">

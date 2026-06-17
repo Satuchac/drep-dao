@@ -129,7 +129,7 @@ function VoteCard({
               {flag}
             </span>
           ) : null}
-          <span className="text-xs text-neutral-500">{proposal.requestedAmountAda.toLocaleString()} ₳</span>
+          <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{proposal.requestedAmountAda.toLocaleString()} ₳</span>
           <button onClick={() => setOpen(true)} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">
             View full proposal →
           </button>

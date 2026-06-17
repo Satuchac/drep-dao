@@ -1010,7 +1010,7 @@ function MineRow({
     <li className="rounded border border-neutral-200 dark:border-neutral-800">
       <div className="flex items-center justify-between px-3 py-1.5">
         <button onClick={onOpen} className="flex-1 text-left hover:underline">
-          <span>{p.title} <span className="text-neutral-500">· {p.requestedAmountAda.toLocaleString()} ₳</span></span>
+          <span>{p.title} <span className="font-semibold text-blue-600 dark:text-blue-400">· {p.requestedAmountAda.toLocaleString()} ₳</span></span>
         </button>
         <span className="flex items-center gap-2">
           <span className={`text-xs ${p.status === 'REJECTED' ? 'font-medium text-red-600' : isDraft ? 'text-amber-600' : 'text-neutral-500'}`}>
