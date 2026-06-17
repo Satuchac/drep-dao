@@ -1999,6 +1999,8 @@ export interface QuickPollView {
 export const quickPollApi = {
   forRound: (roundId: string) => request<QuickPollView[]>(`/rounds/${roundId}/quick-polls`),
   launch: (id: string) => request<QuickPollView>(`/admin/quick-polls/${id}/launch`, { method: 'POST' }),
+  // §9.2 — board closes a poll early (end of Tally): finalises with the votes cast so far.
+  resolve: (id: string) => request<{ status: string }>(`/admin/quick-polls/${id}/resolve`, { method: 'POST' }),
   // §9.2 — submit a full priority ranking of the candidates (highest first).
   vote: (id: string, ranking: string[]) => request<QuickPollView>(`/quick-polls/${id}/vote`, { method: 'POST', body: JSON.stringify({ ranking }) }),
   myPending: () => request<{ count: number }>('/me/pending-quick-polls'),

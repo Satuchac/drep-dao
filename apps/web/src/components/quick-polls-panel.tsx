@@ -95,6 +95,12 @@ function QuickPollCard({ poll, isBoard, launching, onLaunch, onChange }: {
     catch (e) { setErr(e instanceof Error ? e.message : 'failed'); }
     finally { setBusy(false); }
   };
+  const resolveNow = async () => {
+    setBusy(true); setErr(null);
+    try { await quickPollApi.resolve(poll.id); onChange(); }
+    catch (e) { setErr(e instanceof Error ? e.message : 'failed'); }
+    finally { setBusy(false); }
+  };
 
   return (
     <div className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
@@ -106,6 +112,11 @@ function QuickPollCard({ poll, isBoard, launching, onLaunch, onChange }: {
           {poll.status === 'PENDING_BOARD' && isBoard ? (
             <button onClick={onLaunch} disabled={launching} className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
               {launching ? '…' : 'Launch poll'}
+            </button>
+          ) : null}
+          {poll.status === 'ACTIVE' && isBoard ? (
+            <button onClick={() => void resolveNow()} disabled={busy} title="Finalise this poll now with the votes cast so far" className="rounded border border-emerald-500 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950">
+              {busy ? '…' : 'Resolve now'}
             </button>
           ) : null}
         </span>

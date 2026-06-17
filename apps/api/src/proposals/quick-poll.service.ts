@@ -157,6 +157,12 @@ export class QuickPollService {
       create: { quickPollId: pollId, drepId: drep.id, ranking, choice: ranking[0] ?? null, power },
     });
     await this.merit?.tryAward(drep.id, 'QUICK_POLL_VOTE', pollId);
+    // Resolve as soon as every eligible DRep has voted — no more votes can arrive, so there's
+    // no point waiting out the window; the funding result reflects immediately.
+    const voted = await this.prisma.quickPollVote.count({ where: { quickPollId: pollId } });
+    if (poll.eligibleDrepIds.length > 0 && voted >= poll.eligibleDrepIds.length) {
+      await this.resolve(pollId).catch((e) => this.logger.warn(`auto-resolve of ${pollId} failed: ${e instanceof Error ? e.message : e}`));
+    }
     return this.listOne(pollId, userId);
   }
 
@@ -176,7 +182,13 @@ export class QuickPollService {
     return due.length;
   }
 
-  async resolve(pollId: string) {
+  /**
+   * Resolve a tie-break poll. Normally called by the scheduler when the window ends, or the
+   * instant every eligible DRep has voted (no point waiting). `force` (board "Resolve now")
+   * finalises immediately with whatever votes exist, skipping the participation/extension gate —
+   * unless nobody voted, in which case it fails (no basis to decide).
+   */
+  async resolve(pollId: string, opts: { force?: boolean } = {}) {
     const poll = await this.prisma.quickPoll.findUnique({ where: { id: pollId }, include: { votes: true } });
     if (!poll) throw new NotFoundException('quick poll not found');
     if (poll.status !== 'ACTIVE') throw new ConflictException('poll is not active');
@@ -188,7 +200,16 @@ export class QuickPollService {
     const votedPower = poll.votes.reduce((sum, v) => sum + v.power, 0);
     const participationPct = totalEligible > 0 ? (votedPower / totalEligible) * 100 : 0;
 
-    if (participationPct < s.participationPct) {
+    if (opts.force && poll.votes.length === 0) {
+      // Board closed the poll with no votes cast → nothing to decide; none funded.
+      await this.prisma.quickPoll.update({ where: { id: pollId }, data: { status: 'FAILED' } });
+      for (const id of poll.candidates) {
+        await this.dv.finalize(id, { forcedOutcome: 'REJECTED', note: 'budget-cut (quick poll closed with no votes)' }).catch(() => undefined);
+      }
+      return { status: 'FAILED' };
+    }
+
+    if (!opts.force && participationPct < s.participationPct) {
       if (poll.extensions < s.maxExtensions) {
         const endsAt = new Date((poll.endsAt ?? new Date()).getTime() + s.durationHours * 3600_000);
         await this.prisma.quickPoll.update({ where: { id: pollId }, data: { extensions: poll.extensions + 1, endsAt } });

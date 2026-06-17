@@ -23,6 +23,13 @@ export class QuickPollController {
     return this.polls.launch(id);
   }
 
+  // Board closes a poll early (e.g. at the end of Tally) — finalises with the votes cast so far.
+  @Post('admin/quick-polls/:id/resolve')
+  @UseGuards(BoardGuard)
+  resolve(@Param('id', ParseUUIDPipe) id: string) {
+    return this.polls.resolve(id, { force: true });
+  }
+
   // Eligible DRep submits/updates their ranked tie-break preference.
   @Post('quick-polls/:id/vote')
   vote(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: QuickPollVoteDto) {
