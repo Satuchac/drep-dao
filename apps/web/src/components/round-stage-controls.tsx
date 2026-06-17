@@ -316,9 +316,19 @@ function StageRow({
   const [endsAt, setEndsAt] = useState(toLocalInput(row?.endsAt));
   const [autoStart, setAutoStart] = useState(row?.autoStart ?? false);
   const [confirmLaunch, setConfirmLaunch] = useState(false);
-  // Live clock for the next-stage countdown (minute granularity → days/hours).
+  // Live clock for the stage countdowns (minute granularity → days/hours). Ticks while the page is
+  // open so "Ends in / Starts in" and the overdue state update without a manual refresh.
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(id); }, []);
+  // §6 — re-sync the editable inputs to the SAVED schedule whenever it changes underneath us (e.g.
+  // after confirming/launching a stage reloads the round). Keyed on the saved values so it clears
+  // "Not saved" + stale edits after a save, but never clobbers an in-progress edit on a no-op poll.
+  useEffect(() => {
+    setStartsAt(toLocalInput(row?.startsAt));
+    setEndsAt(toLocalInput(row?.endsAt));
+    setAutoStart(row?.autoStart ?? false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [row?.startsAt, row?.endsAt, row?.autoStart]);
   const startMs = startsAt ? new Date(startsAt).getTime() : NaN;
   const endMs = endsAt ? new Date(endsAt).getTime() : NaN;
   // §6 — a stage can't start before the previous stage's (stored) end. Flags the start red.
@@ -370,8 +380,6 @@ function StageRow({
     else if (endMs <= now && endDirty) problems.push('The end date must be in the future.');
     else if (endMs <= frozenStartMs) problems.push('The end date must be after the start date.');
     const valid = problems.length === 0;
-    // Calm note (not an error) when the planned end has passed and the board hasn't touched it.
-    const endOverdue = !Number.isNaN(endMs) && endMs <= now && !endDirty;
     return (
       <div className="rounded border border-emerald-300 bg-emerald-50/40 p-2 dark:border-emerald-900 dark:bg-emerald-950/20">
         <div className="text-xs">
@@ -397,10 +405,19 @@ function StageRow({
           </button>
           <SavedBadge dirty={endDirty} />
         </div>
-        {endOverdue ? (
-          <div className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-            This stage&apos;s planned end has passed — the next stage starts at its own planned time (auto-start handles it), or launch it below. Set a later end above only to extend this stage.
-          </div>
+        {/* §6 — live countdown to the planned end (mirrors the next stage's "Starts in"). Once it
+            passes, the stage doesn't auto-close — the round advances when the NEXT stage starts
+            (auto-start) or the board launches it; so we say "Ended … ago" and point there. */}
+        {!Number.isNaN(endMs) ? (
+          endMs > now ? (
+            <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-300">
+              Ends in: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(endMs - now)}</span> <span className="text-xs text-neutral-500">({fmtDateTime(endsAt ? new Date(endsAt).toISOString() : row.endsAt)})</span>
+            </div>
+          ) : (
+            <div className="mt-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+              Ended <strong>{untilLabel(now - endMs)}</strong> ago — this stage stays current until the round advances: launch the next stage below (or it auto-starts at its planned time). Set a later end above only to extend this stage.
+            </div>
+          )
         ) : null}
         <Problems items={problems} />
       </div>
@@ -408,9 +425,11 @@ function StageRow({
   }
   if (kind === 'next') {
     const confirmed = !!nextStage?.confirmed;
-    // §6/§8 — overdue: the planned start is in the past but the stage hasn't begun.
-    const plannedStartMs = nextStage?.planned?.startsAt ? new Date(nextStage.planned.startsAt).getTime() : null;
-    const overdue = plannedStartMs != null && plannedStartMs < now;
+    // §6/§8 — overdue + the countdown track the EDITABLE start in the inputs (startMs), not the
+    // server's last-confirmed value, so editing the start into the future immediately clears the
+    // warning (and "Starts in" previews the new time) before the board even confirms.
+    const overdue = !Number.isNaN(startMs) && startMs < now;
+    const startLabel = startsAt ? fmtDateTime(new Date(startsAt).toISOString()) : fmtDateTime(nextStage?.planned?.startsAt);
     // Relational/format problems — a broken state for BOTH buttons (Launch keeps the stage's
     // planned length, so an end-before-start is nonsensical for it too).
     const relProblems: string[] = [];
@@ -454,15 +473,15 @@ function StageRow({
             unconfirmed: a loud red call to action (pick a future date or launch now). */}
         {overdue && autoStartHandlesIt ? (
           <div className="mt-1.5 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-            Planned start ({fmtDateTime(nextStage?.planned?.startsAt)}) has passed — <strong>auto-start</strong> advances it on the next scheduled check (within a minute). No action needed; use <strong>Launch {label} now</strong> to start immediately.
+            Planned start ({startLabel}) has passed — <strong>auto-start</strong> advances it on the next scheduled check (within a minute). No action needed; use <strong>Launch {label} now</strong> to start immediately.
           </div>
         ) : overdue ? (
           <div className="mt-1.5 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            ⚠ The planned start ({fmtDateTime(nextStage?.planned?.startsAt)}) is in the past. Launch {label} now, or move the start date into the future and confirm.
+            ⚠ The start ({startLabel}) is in the past. Launch {label} now, or move the start date into the future and confirm.
           </div>
-        ) : plannedStartMs != null ? (
+        ) : !Number.isNaN(startMs) ? (
           <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-300">
-            Starts in: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(plannedStartMs - now)}</span>
+            Starts in: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(startMs - now)}</span> <span className="text-xs text-neutral-500">({startLabel})</span>
           </div>
         ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-2">
