@@ -1068,8 +1068,11 @@ export class ProposalsService {
    */
   async listPayments(includeSettled = false) {
     const rows = await this.prisma.feeAdjustment.findMany({
-      where: includeSettled ? {} : { status: 'PENDING' },
-      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }], // PENDING before SETTLED, newest first
+      // Outstanding = anything not yet SETTLED. This MUST include AWAITING_CONFIRM — a TOPUP the
+      // submitter has paid + submitted the tx for, which the board now needs to verify + confirm.
+      // (Filtering on status:'PENDING' here hid those from the board's panel + to-do badge.)
+      where: includeSettled ? {} : { status: { not: 'SETTLED' } },
+      orderBy: [{ status: 'asc' }, { createdAt: 'desc' }], // PENDING/AWAITING_CONFIRM before SETTLED, newest first
       include: {
         proposal: {
           select: { publicId: true, title: true, payoutAddress: true, submitterUser: { select: { displayName: true } }, submitterDrep: { select: { drepIdOnchain: true } } },
