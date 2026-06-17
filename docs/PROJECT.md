@@ -505,6 +505,10 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   on-chain tx so anyone can re-hash and verify.
 
 **Member area (My Area)**
+- **Comment colour by author class (§20).** A proposal comment is tinted by who wrote it: **Expert
+  → violet**, **DRep / DAO member / board member → grey** (voting-eligibility no longer affects the
+  colour); replies stay yellow, deleted neutral. The role labels (Expert / DRep / Board member) are
+  unchanged. The classifier is the pure, unit-tested `commentAuthorTone(role)` in `@drep-dao/shared`.
 - **Approved experts can always comment (§20).** Fixed a bug where an approved expert was blocked
   from posting comments: the composer gate checked a non-existent `'EXPERT_APPROVED'` role, but an
   approved expert's role is `'EXPERT'` (granted only once the board approves them and they haven't

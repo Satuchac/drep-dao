@@ -3,7 +3,7 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { SUBCAT_LABEL } from '@/lib/ui';
 import { card } from '@/lib/ui';
-import { DEFAULT_SUBCATEGORIES, canCommentOnProposal } from '@drep-dao/shared';
+import { DEFAULT_SUBCATEGORIES, canCommentOnProposal, commentAuthorTone } from '@drep-dao/shared';
 import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
 import {
@@ -2944,10 +2944,11 @@ function MilestoneRow({ m, isMine, canPoa, locked = false, isBoard = false, prop
  * §20.1 — public discussion under each proposal.
  *
  * Row tint:
- *   - reply (any author)              → yellow
- *   - submitter / team                 → grey
- *   - DAO member / DRep / board / expert → green
- *   - everyone else / [deleted]        → neutral
+ *   - reply (any author)               → yellow
+ *   - Expert                            → violet
+ *   - DRep / DAO member / board member  → grey
+ *   - the viewer's own (no class)       → grey
+ *   - everyone else / [deleted]         → neutral
  *
  * Editor: MarkdownEditor everywhere — top-level "Add a public comment", per-row
  * reply box, and the inline edit on the viewer's own comment. The reply / edit
@@ -2962,22 +2963,18 @@ function MilestoneRow({ m, isMine, canPoa, locked = false, isBoard = false, prop
  * the parent gates `canPost` accordingly. Edit / delete is owner-only inside
  * the 5-minute window (the backend rejects late edits with a clear message).
  */
-const COMMENT_ROLES_GREEN = new Set(['Board member', 'DAO member', 'Expert']);
+const TINT_GREY = 'border-neutral-300 bg-neutral-100/70 dark:border-neutral-700 dark:bg-neutral-900/50';
 
 function commentTint(c: CommentNode): string {
   if (c.deleted) return 'border-neutral-200 bg-neutral-50/60 dark:border-neutral-800 dark:bg-neutral-900/30';
   if (c.parentId) return 'border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30'; // reply → yellow
-  // "This is mine" tint is for the viewer only — `isMine` is true only when the
-  // signed-in viewer wrote the comment. Other viewers see the comment in its
-  // author-class colour (voting-eligible purple / DRep-or-board green / etc.).
-  // The Team badge (isSubmitter) still marks the submitter's posts for everyone.
-  if (c.isMine) return 'border-neutral-300 bg-neutral-100/70 dark:border-neutral-700 dark:bg-neutral-900/50';
-  // §8.1 — voting-eligible DReps render purple so the team can spot the
-  // voters' perspective at a glance during the Debate phase.
-  if (c.isVotingEligible)
-    return 'border-purple-300 bg-purple-50/60 dark:border-purple-900 dark:bg-purple-950/30';
-  if (c.author.role && COMMENT_ROLES_GREEN.has(c.author.role))
-    return 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30'; // DRep / board → green
+  // Author-class tint (pure classifier in @drep-dao/shared): experts → violet so the team can spot
+  // expert input at a glance; DReps and board members → grey. Class alone decides the colour.
+  const tone = commentAuthorTone(c.author.role);
+  if (tone === 'violet') return 'border-violet-300 bg-violet-50/60 dark:border-violet-900 dark:bg-violet-950/30';
+  if (tone === 'grey') return TINT_GREY;
+  // The viewer's own comment (with no special author class) still gets the grey "mine" tint.
+  if (c.isMine) return TINT_GREY;
   return 'border-neutral-200 dark:border-neutral-800';
 }
 
