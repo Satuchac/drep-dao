@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { boardRoundsApi, roundsApi, type RoundDetail } from '@/lib/api';
+import { ROUND_SETTING_DEFAULTS, ROUND_SETTING_META } from '@drep-dao/shared';
 import { ProposalCounts, StatusBadge, fmtDateTime, toLocalInput, DateField } from './round-ui';
 import { CreateRoundForm } from './rounds-section';
 import { ConfirmDialog } from './confirm-dialog';
@@ -195,11 +196,12 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
         <div className="mt-3">
           {canEdit ? (
             <CreateRoundForm initial={round} roundId={round.id} onDone={onChange} />
-          ) : (
+          ) : round.status === 'CLOSED' ? (
             <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-              ⚠ Round setup is locked once review starts (Filtering onward). The schedule can still be
-              adjusted under <strong>Round stage control</strong>.
+              ⚠ The round is closed — its setup can no longer be edited.
             </p>
+          ) : (
+            <LockedRoundSetup round={round} onChange={onChange} />
           )}
         </div>
       ) : null}
@@ -575,6 +577,122 @@ function StageRow({
         <SavedBadge dirty={planDirty} />
       </div>
       <Problems items={planProblems} />
+    </div>
+  );
+}
+
+/**
+ * §6 — restricted round-setup editor shown once review has started (Filtering onward). Only the
+ * cosmetic / UX fields are editable — round name, category DESCRIPTIONS, and the text-length limits
+ * — because changing them affects no decision, fee, or vote already in play. The budget, category
+ * allocations / asks, fees, approval rules, rewards, etc. stay frozen (edit them before Filtering
+ * or in a new round); the schedule is adjusted under Round stage control.
+ */
+const SOFT_LENGTH_FIELDS: { key: 'mandatoryWords' | 'mandatoryWordsMax' | 'minimumTitleLen' | 'minimumMilestoneTitleLen'; label: string }[] = [
+  { key: 'mandatoryWords', label: 'Minimum words per field' },
+  { key: 'mandatoryWordsMax', label: 'Maximum words per field' },
+  { key: 'minimumTitleLen', label: 'Minimum title length (chars)' },
+  { key: 'minimumMilestoneTitleLen', label: 'Minimum milestone title (words)' },
+];
+
+function LockedRoundSetup({ round, onChange }: { round: RoundDetail; onChange: () => void }) {
+  const [name, setName] = useState(round.name ?? '');
+  const [descs, setDescs] = useState<Record<string, string>>(() =>
+    Object.fromEntries(round.categories.map((c) => [c.id, c.description ?? ''])),
+  );
+  const [lens, setLens] = useState<Record<string, string>>(() =>
+    Object.fromEntries(SOFT_LENGTH_FIELDS.map((f) => [f.key, round.settings[f.key] != null ? String(round.settings[f.key]) : ''])),
+  );
+  const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const field = 'rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
+
+  const save = async () => {
+    setBusy(true); setError(null); setSaved(false);
+    try {
+      const soft: Record<string, number> = {};
+      for (const f of SOFT_LENGTH_FIELDS) if (lens[f.key]?.trim()) soft[f.key] = Number(lens[f.key]);
+      await boardRoundsApi.update(round.id, {
+        name: name.trim() || undefined,
+        ...soft,
+        // Full category objects (validation needs name + allocation); the backend applies only the
+        // description in this locked phase and ignores the rest.
+        categories: round.categories.map((c) => ({
+          id: c.id, name: c.name, type: c.type, allocatedAda: c.allocatedAda,
+          minAda: c.minAda ?? undefined, maxAda: c.maxAda ?? undefined,
+          conditions: c.conditions ?? undefined, description: descs[c.id] ?? '',
+        })),
+      });
+      setSaved(true);
+      onChange();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'save failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+        ⚠ Review has started, so the round&apos;s rules &amp; economics (budget, category allocations &amp; asks,
+        fees, approval rules, rewards…) are <strong>locked</strong>. You can still edit the cosmetic fields below;
+        the schedule is adjusted under <strong>Round stage control</strong>.
+      </p>
+
+      <label className="block text-sm">
+        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Round name</span>
+        <input className={`${field} mt-0.5 w-full`} value={name} onChange={(e) => { setName(e.target.value); setSaved(false); }} />
+      </label>
+
+      <div>
+        <div className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">Category descriptions</div>
+        <div className="space-y-2">
+          {round.categories.map((c) => (
+            <label key={c.id} className="block text-sm">
+              <span className="text-xs text-neutral-500">{c.name}</span>
+              <textarea
+                rows={2}
+                className={`${field} mt-0.5 w-full`}
+                value={descs[c.id] ?? ''}
+                onChange={(e) => { setDescs((d) => ({ ...d, [c.id]: e.target.value })); setSaved(false); }}
+              />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">Text-length limits (UX)</div>
+        <div className="space-y-2">
+          {SOFT_LENGTH_FIELDS.map((f) => (
+            <div key={f.key} className="flex items-start gap-2">
+              <label className="w-44 shrink-0 pt-1 text-xs text-neutral-600 dark:text-neutral-300" htmlFor={`ls-${f.key}`}>{f.label}</label>
+              <div className="min-w-0">
+                <input
+                  id={`ls-${f.key}`}
+                  type="number"
+                  min={0}
+                  value={lens[f.key] ?? ''}
+                  onChange={(e) => { setLens((l) => ({ ...l, [f.key]: e.target.value })); setSaved(false); }}
+                  placeholder={String(ROUND_SETTING_DEFAULTS[f.key])}
+                  className={`${field} w-24`}
+                />
+                <p className="mt-0.5 max-w-xl text-[11px] text-neutral-500">{ROUND_SETTING_META[f.key]}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button onClick={save} disabled={busy} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+          {busy ? 'Saving…' : 'Save changes'}
+        </button>
+        {saved ? <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">✓ Saved</span> : null}
+        {error ? <span className="text-xs text-red-600">{error}</span> : null}
+      </div>
     </div>
   );
 }

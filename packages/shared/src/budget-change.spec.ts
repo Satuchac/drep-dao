@@ -1,5 +1,22 @@
 import { describe, it, expect } from 'vitest';
-import { roundFlagOn, budgetChangeSettlement, ROUND_SETTING_DEFAULTS } from './config';
+import { roundFlagOn, budgetChangeSettlement, ROUND_SETTING_DEFAULTS, ROUND_SETTING_SOFT } from './config';
+
+describe('ROUND_SETTING_SOFT (§6 — editable after review starts)', () => {
+  it('includes ONLY the cosmetic text-length limits', () => {
+    expect([...ROUND_SETTING_SOFT].sort()).toEqual(
+      ['mandatoryWords', 'mandatoryWordsMax', 'minimumMilestoneTitleLen', 'minimumTitleLen'],
+    );
+  });
+  it('never includes rules/economics settings (those stay frozen at review start)', () => {
+    for (const critical of [
+      'filterApprovalVotes', 'dvApprovalThresholdPct', 'milestoneApprovalVotes',
+      'feeCommercialPct', 'feeOssPct', 'feeCapPerRoundAda', 'pledgeThresholdAda',
+      'rewardDvSharePct', 'ignoreBudgetChange', 'requireFeeTopUp', 'requireFeeReturn',
+    ]) {
+      expect(ROUND_SETTING_SOFT.has(critical)).toBe(false);
+    }
+  });
+});
 
 describe('roundFlagOn (§12 — YES/NO round settings)', () => {
   it('uses the stored 1/0 value when present', () => {
