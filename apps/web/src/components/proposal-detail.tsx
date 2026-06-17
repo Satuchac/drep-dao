@@ -36,7 +36,7 @@ import {
   type RoundDetail,
   type FeeVerification,
 } from '@/lib/api';
-import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, RationaleText } from './round-ui';
+import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, RationaleText, PowerBar } from './round-ui';
 import { Markdown, MarkdownEditor, MarkdownCollapseContext } from './markdown';
 import { CopyButton } from './copy-button';
 import { ConfirmDialog } from './confirm-dialog';
@@ -1240,37 +1240,6 @@ function DvSection({ id }: { id: string; isBoard: boolean }) {
           flip it off in My area → Profile. */}
       <div className="mt-3"><Votes votes={r.votes ?? []} /></div>
     </section>
-  );
-}
-
-/** §4.4 — YES / NO / abstain as balanced voting power, scaled to total power, with a threshold marker. */
-function PowerBar({ yes, no, abstain, total, thresholdPosPct, thresholdPct }: { yes: number; no: number; abstain: number; total: number; thresholdPosPct: number; thresholdPct: number }) {
-  const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0);
-  const fmt = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
-  // Share of TOTAL power (so YES/NO/abstain sum to 100% and match the bar segment widths).
-  const pctLabel = (v: number) => (total > 0 ? ` (${Math.round(pct(v))}%)` : '');
-  const tpos = Math.min(100, Math.max(0, thresholdPosPct));
-  return (
-    <div className="mt-6">
-      <div className="relative h-5 w-full rounded bg-neutral-200 dark:bg-neutral-800">
-        <div className="absolute inset-0 overflow-hidden rounded">
-          <div className="absolute inset-y-0 left-0 bg-emerald-500" style={{ width: `${pct(yes)}%` }} />
-          <div className="absolute inset-y-0 bg-red-400" style={{ left: `${pct(yes)}%`, width: `${pct(no)}%` }} />
-          <div className="absolute inset-y-0 bg-neutral-400" style={{ left: `${pct(yes + no)}%`, width: `${pct(abstain)}%` }} />
-        </div>
-        {/* §6 — threshold marker with a labelled percentage above the line. */}
-        <div className="absolute -top-5 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-neutral-700 dark:text-neutral-300" style={{ left: `${tpos}%` }}>
-          threshold {thresholdPct}%
-        </div>
-        <div className="absolute -top-1.5 bottom-0 w-0.5 bg-neutral-900 dark:bg-white" style={{ left: `${tpos}%` }} title={`threshold ${thresholdPct}%`} />
-      </div>
-      <div className="mt-1 flex flex-wrap gap-3 text-xs text-neutral-500">
-        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-emerald-500" />YES {fmt(yes)}{pctLabel(yes)}</span>
-        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-red-400" />NO {fmt(no)}{pctLabel(no)}</span>
-        {abstain > 0 ? <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-neutral-400" />abstain {fmt(abstain)}{pctLabel(abstain)}</span> : null}
-        <span className="tabular-nums">total power {fmt(total)} · threshold {thresholdPct}%</span>
-      </div>
-    </div>
   );
 }
 

@@ -17,6 +17,13 @@ export class DvController {
     return this.dv.result(id, ctx?.userId);
   }
 
+  // §9 — continuous per-category voting results for a round (the "Voting Result" tab). Public.
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get('rounds/:roundId/voting-results')
+  votingResults(@Param('roundId', ParseUUIDPipe) roundId: string) {
+    return this.dv.votingResults(roundId);
+  }
+
   @UseGuards(JwtAuthGuard)
   @Post('proposals/:id/dv-vote')
   vote(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: DvVoteDto) {

@@ -6,6 +6,7 @@ import { useUrlNav } from '@/lib/use-url-nav';
 import { ROUND_SETTING_DEFAULTS, ROUND_SETTING_META, ROUND_SETTING_BOOLEAN, computeRewardPoolsAda, dvDisplayPhase, roundReachedTally, roundStageIndex } from '@drep-dao/shared';
 import {
   boardRoundsApi,
+  dvApi,
   roundsApi,
   type CreateRoundInput,
   type RoundCategoryInput,
@@ -13,10 +14,12 @@ import {
   type RoundScheduleEntry,
   type RoundSettingsInput,
   type RoundSummary,
+  type VotingResults,
+  type VotingResultProposal,
 } from '@/lib/api';
 import { ProposalList } from './proposal-list';
 import { QuickPollsPanel } from './quick-polls-panel';
-import { BackButton, ProposalCounts, StatusBadge, toLocalInput } from './round-ui';
+import { BackButton, PowerBar, ProposalCounts, StatusBadge, thresholdMarkerPct, toLocalInput } from './round-ui';
 import { MarkdownEditor } from './markdown';
 import { ClampedMarkdown } from './clamped-markdown';
 
@@ -115,7 +118,7 @@ export function RoundsSection() {
   const [creating, setCreating] = useState(false);
   // Round-detail sub-tab: the proposals list vs the read-only round setup.
   // §9 — the Tally tab appears once the Vote stage is over (round reached TALLY) and stays forever.
-  const [roundTab, setRoundTab] = useState<'proposals' | 'categories' | 'tally' | 'setup'>('proposals');
+  const [roundTab, setRoundTab] = useState<'proposals' | 'categories' | 'tally' | 'voting' | 'setup'>('proposals');
   // The drilled-into round lives in the URL (?round=) so it's shareable + survives opening a proposal.
   const open = rounds.find((r) => r.id === get('round')) ?? null;
 
@@ -146,6 +149,7 @@ export function RoundsSection() {
             ['categories', 'Categories'],
             // §9 — Tally appears once the round has reached TALLY and remains forever after.
             ...(roundReachedTally(open.status) ? [['tally', 'Tally'] as const] : []),
+            ['voting', 'Voting Result'],
             ['setup', 'Schedule and Round Setup'],
           ] as const).map(([key, label]) => (
             <button
@@ -166,6 +170,7 @@ export function RoundsSection() {
           : roundTab === 'categories' ? <RoundCategoriesView roundId={open.id} />
           : roundTab === 'tally' && roundReachedTally(open.status)
             ? <RoundTallyView roundId={open.id} roundStatus={open.status} />
+          : roundTab === 'voting' ? <RoundVotingResultsView roundId={open.id} />
           : (
           <div className="space-y-4">
             <ProposalList roundId={open.id} />
@@ -1072,6 +1077,96 @@ function RoundTallyView({ roundId, roundStatus }: { roundId: string; roundStatus
       {/* §9.2 — tie-break polls at the budget cliff (self-hides when the round had no ties). */}
       <QuickPollsPanel roundId={roundId} />
     </div>
+  );
+}
+
+/**
+ * §9 — Voting Result tab. Continuous per-category Debate & Vote results: pick a category
+ * from the combo box; its proposals are ordered most-supported → least, each shown with the
+ * same YES / NO / abstain / threshold bar as the vote phase. Background marks the outcome —
+ * green APPROVED, yellow PENDING (voting open or a tie-break quick poll is deciding it),
+ * red REJECTED. PENDING bars are shown too, so a tie at the budget cliff is visible.
+ */
+function RoundVotingResultsView({ roundId }: { roundId: string }) {
+  const [data, setData] = useState<VotingResults | null>(null);
+  const [catId, setCatId] = useState<string | null>(null);
+  // Poll so the view tracks live votes + the ongoing quick poll without a manual refresh.
+  useEffect(() => {
+    let alive = true;
+    const load = () => dvApi.votingResults(roundId).then((d) => { if (alive) setData(d); }).catch(() => { if (alive) setData({ categories: [] }); });
+    load();
+    const id = setInterval(load, 15_000);
+    return () => { alive = false; clearInterval(id); };
+  }, [roundId]);
+
+  if (!data) return <p className="text-sm text-neutral-500">Loading voting results…</p>;
+  if (data.categories.length === 0) {
+    return <p className="text-sm text-neutral-500">No voting results yet — they appear once proposals reach Debate &amp; Vote.</p>;
+  }
+  const selected = data.categories.find((c) => (c.id ?? '') === (catId ?? '')) ?? data.categories[0];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="text-xs text-neutral-500">Category</label>
+        <select
+          value={selected.id ?? ''}
+          onChange={(e) => setCatId(e.target.value)}
+          className="rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+        >
+          {data.categories.map((c) => (
+            <option key={c.id ?? 'uncat'} value={c.id ?? ''}>
+              {c.name ?? 'Uncategorised'} ({c.proposals.length})
+            </option>
+          ))}
+        </select>
+      </div>
+      <p className="text-xs text-neutral-500">
+        Ordered most-supported → least. <span className="font-medium text-emerald-700 dark:text-emerald-400">APPROVED</span> ·{' '}
+        <span className="font-medium text-amber-700 dark:text-amber-400">PENDING</span> (awaiting the tie-break quick poll) ·{' '}
+        <span className="font-medium text-red-700 dark:text-red-400">REJECTED</span>.
+      </p>
+      <div className="space-y-3">
+        {selected.proposals.map((p) => <VotingResultCard key={p.id} p={p} />)}
+      </div>
+    </div>
+  );
+}
+
+const OUTCOME_BG: Record<string, string> = {
+  APPROVED: 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30',
+  PENDING: 'border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30',
+  REJECTED: 'border-red-300 bg-red-50/60 dark:border-red-900 dark:bg-red-950/30',
+};
+const OUTCOME_CHIP: Record<string, string> = {
+  APPROVED: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100',
+  PENDING: 'bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100',
+  REJECTED: 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100',
+};
+
+function VotingResultCard({ p }: { p: VotingResultProposal }) {
+  return (
+    <section className={`rounded-lg border p-3 ${OUTCOME_BG[p.outcome] ?? 'border-neutral-200'}`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="flex items-center gap-2">
+          <span className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${OUTCOME_CHIP[p.outcome]}`}>{p.outcome}</span>
+          <span className="font-medium">{p.publicId ? `${p.publicId} · ` : ''}{p.title}</span>
+        </span>
+        <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{p.requestedAmountAda.toLocaleString()} ₳</span>
+      </div>
+      <div className="mt-1 text-xs text-neutral-500">
+        {p.cast}/{p.eligible} eligible DReps voted · {p.ratioPct}% of participating power (threshold {p.thresholdPct}%)
+        {p.inQuickPoll ? <span className="ml-1 text-amber-600 dark:text-amber-400">· tie-break quick poll in progress</span> : null}
+      </div>
+      <PowerBar
+        yes={p.yesPower}
+        no={p.noPower}
+        abstain={p.abstainPower}
+        total={p.totalPower}
+        thresholdPosPct={thresholdMarkerPct(p.totalPower, p.abstainPower, p.thresholdPct)}
+        thresholdPct={p.thresholdPct}
+      />
+    </section>
   );
 }
 

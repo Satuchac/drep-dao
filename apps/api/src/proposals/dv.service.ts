@@ -587,6 +587,122 @@ export class DvService {
   }
 
   /**
+   * §9 — continuous per-category Debate & Vote results for a whole round, for the
+   * round's "Voting Result" tab. Every proposal that reached Debate & Vote (i.e. has
+   * a vote snapshot — filtering-rejected ones never got one) gets the same YES / NO /
+   * abstain / threshold tally shown in the vote phase, plus an outcome:
+   *   - APPROVED  — funded (status APPROVED / COMPLETE / FAILED)
+   *   - REJECTED  — lost (threshold miss or budget-cut)
+   *   - PENDING   — not yet decided: voting still open, or a tie-break quick poll is running.
+   * Within a category, proposals are ordered most-supported → least (YES power), with the
+   * live quick-poll standing breaking ties so PENDING candidates reflect the ongoing poll.
+   */
+  async votingResults(roundId: string) {
+    const proposals = await this.prisma.proposal.findMany({
+      where: { roundId },
+      select: {
+        id: true, publicId: true, title: true, requestedAmountAda: true,
+        status: true, approvalThresholdPct: true,
+        categoryId: true, category: { select: { id: true, name: true } },
+      },
+    });
+    if (proposals.length === 0) return { categories: [] };
+    const ids = proposals.map((p) => p.id);
+
+    // §8.2 — board members who opted out of funding votes carry zero weight in every tally.
+    const boardHashes = new Set(
+      (await this.prisma.boardSeat.findMany({ where: { removedAt: null }, select: { drepKeyHash: true } })).map((s) => s.drepKeyHash),
+    );
+    const snapshots = await this.prisma.voteSnapshot.findMany({ where: { proposalId: { in: ids } }, include: { entries: true } });
+    const snapByProposal = new Map(snapshots.map((s) => [s.proposalId, s]));
+    const votes = await this.prisma.vote.findMany({
+      where: { proposalId: { in: ids }, phase: VotePhase.DEBATE_VOTE },
+      select: { proposalId: true, drepId: true, choice: true },
+    });
+    const voteByProposalDrep = new Map<string, Map<string, string>>();
+    for (const v of votes) {
+      if (!voteByProposalDrep.has(v.proposalId)) voteByProposalDrep.set(v.proposalId, new Map());
+      voteByProposalDrep.get(v.proposalId)!.set(v.drepId, v.choice);
+    }
+    const allDrepIds = [...new Set(snapshots.flatMap((s) => s.entries.map((e) => e.drepId)))];
+    const dreps = await this.prisma.drep.findMany({
+      where: { id: { in: allDrepIds } },
+      select: { id: true, votesOnFundingProposals: true, user: { select: { drepKeyHash: true } } },
+    });
+    const skip = new Set(
+      dreps.filter((d) => !d.votesOnFundingProposals && d.user.drepKeyHash && boardHashes.has(d.user.drepKeyHash)).map((d) => d.id),
+    );
+
+    // Live quick-poll power per candidate — orders PENDING proposals by the ongoing tie-break.
+    const polls = await this.prisma.quickPoll.findMany({ where: { roundId }, include: { votes: true } });
+    const pollPowerByProposal = new Map<string, number>();
+    const inActivePoll = new Set<string>();
+    for (const poll of polls) {
+      for (const cand of poll.candidates) {
+        const power = poll.votes.filter((v) => v.choice === cand).reduce((s, v) => s + v.power, 0);
+        pollPowerByProposal.set(cand, (pollPowerByProposal.get(cand) ?? 0) + power);
+        if (poll.status === 'PENDING_BOARD' || poll.status === 'ACTIVE') inActivePoll.add(cand);
+      }
+    }
+
+    type Row = {
+      id: string; publicId: string | null; title: string; requestedAmountAda: number;
+      categoryId: string | null; categoryName: string | null;
+      outcome: 'APPROVED' | 'PENDING' | 'REJECTED';
+      yesPower: number; noPower: number; abstainPower: number; totalPower: number;
+      thresholdPct: number; ratioPct: number; cast: number; eligible: number;
+      inQuickPoll: boolean; quickPollPower: number;
+    };
+    const rows: Row[] = [];
+    for (const p of proposals) {
+      const snap = snapByProposal.get(p.id);
+      if (!snap) continue; // never reached Debate & Vote → not a voting result
+      const voteByDrep = voteByProposalDrep.get(p.id) ?? new Map<string, string>();
+      let yesPower = 0, abstainPower = 0, totalPower = 0, cast = 0, eligible = 0;
+      for (const e of snap.entries) {
+        if (skip.has(e.drepId)) continue;
+        eligible++;
+        const fp = Number(e.finalPower ?? 0);
+        totalPower += fp;
+        const c = voteByDrep.get(e.drepId);
+        if (c) cast++;
+        if (c === VoteChoice.YES) yesPower += fp;
+        else if (c === VoteChoice.ABSTAIN) abstainPower += fp;
+      }
+      const noPower = Math.max(0, totalPower - yesPower - abstainPower);
+      const denom = Math.max(0, totalPower - abstainPower);
+      const thresholdPct = p.approvalThresholdPct ? Number(p.approvalThresholdPct) : ROUND_SETTING_DEFAULTS.dvApprovalThresholdPct;
+      const outcome: Row['outcome'] =
+        p.status === ProposalStatus.APPROVED || p.status === ProposalStatus.COMPLETE || p.status === ProposalStatus.FAILED ? 'APPROVED'
+        : p.status === ProposalStatus.REJECTED ? 'REJECTED'
+        : 'PENDING';
+      rows.push({
+        id: p.id, publicId: p.publicId, title: p.title,
+        requestedAmountAda: Number(p.requestedAmountAda ?? 0n) / 1e6,
+        categoryId: p.categoryId, categoryName: p.category?.name ?? null,
+        outcome,
+        yesPower: round2(yesPower), noPower: round2(noPower), abstainPower: round2(abstainPower),
+        totalPower: round2(totalPower), thresholdPct, ratioPct: round2(denom > 0 ? (yesPower / denom) * 100 : 0),
+        cast, eligible,
+        inQuickPoll: inActivePoll.has(p.id), quickPollPower: round2(pollPowerByProposal.get(p.id) ?? 0),
+      });
+    }
+
+    const byCat = new Map<string, { id: string | null; name: string | null; proposals: Row[] }>();
+    for (const r of rows) {
+      const key = r.categoryId ?? '';
+      if (!byCat.has(key)) byCat.set(key, { id: r.categoryId, name: r.categoryName, proposals: [] });
+      byCat.get(key)!.proposals.push(r);
+    }
+    for (const c of byCat.values()) {
+      // Most-supported first; live quick-poll power then ratio break ties (so PENDING candidates
+      // sort by the ongoing tie-break). Approved cluster at the top, rejected at the bottom.
+      c.proposals.sort((a, b) => b.yesPower - a.yesPower || b.quickPollPower - a.quickPollPower || b.ratioPct - a.ratioPct);
+    }
+    return { categories: [...byCat.values()].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '')) };
+  }
+
+  /**
    * §9.3 — finalize the tally and publish the result. APPROVED if threshold met,
    * else REJECTED. Anchors the result on-chain. Refuses while the round is still
    * in VOTE — finalizing mid-vote would publish a half-counted result based on

@@ -1326,7 +1326,32 @@ export const dvApi = {
       body: JSON.stringify({ choice, rationale }),
     }),
   optIn: (id: string) => request<DvResult>(`/proposals/${id}/dv-opt-in`, { method: 'POST' }),
+  votingResults: (roundId: string) => request<VotingResults>(`/rounds/${roundId}/voting-results`),
 };
+
+// §9 — per-category continuous Debate & Vote results for a round (the "Voting Result" tab).
+export interface VotingResultProposal {
+  id: string;
+  publicId: string | null;
+  title: string;
+  requestedAmountAda: number;
+  categoryId: string | null;
+  categoryName: string | null;
+  outcome: 'APPROVED' | 'PENDING' | 'REJECTED';
+  yesPower: number;
+  noPower: number;
+  abstainPower: number;
+  totalPower: number;
+  thresholdPct: number;
+  ratioPct: number;
+  cast: number;
+  eligible: number;
+  inQuickPoll: boolean;
+  quickPollPower: number;
+}
+export interface VotingResults {
+  categories: { id: string | null; name: string | null; proposals: VotingResultProposal[] }[];
+}
 
 // -------- Public platform config (explorer, network, fee address) --------
 export interface PublicConfig {
