@@ -861,6 +861,10 @@ export interface RoundSettingsInput {
   mandatoryWordsMax?: number;
   minimumTitleLen?: number;
   minimumMilestoneTitleLen?: number;
+  // §12 — budget-change policy (YES/NO as 1/0).
+  ignoreBudgetChange?: number;
+  requireFeeTopUp?: number;
+  requireFeeReturn?: number;
 }
 export interface CreateRoundInput extends RoundSettingsInput {
   name?: string;
@@ -1062,6 +1066,8 @@ export interface ProposalSummary {
   /** §11 — milestone progress bar; present only once the proposal reached the
    *  FUNDING stage (then it persists into history). One entry per milestone. */
   milestoneBar?: MilestoneSegment[] | null;
+  /** §12 — the submitter still owes a submission-fee top-up (budget increase). */
+  feeTopUpDue?: boolean;
 }
 export interface MilestoneSegment {
   idx: number;
@@ -1101,6 +1107,9 @@ export interface ProposalDetail extends ProposalSummary {
   // The proposal's round status (PREPARATION / SUBMISSION / FILTERING / DV / FUNDING / CLOSED).
   // Used by edit gates: editing closes once the round moves past SUBMISSION (unless rejected).
   roundStatus: string | null;
+  // §12 — YES → the budget is freely editable in the editor and there's no "Request a budget
+  // change" button (the submission fee never changes).
+  ignoreBudgetChange: boolean;
   submittedAt: string | null;
   // §9.3 — set when the D&V tally is published. Lets the rejection banner
   // distinguish a D&V rejection (stage=null + this set) from a fee rejection.
@@ -1656,8 +1665,24 @@ export interface FeePayment {
 }
 export const boardPaymentsApi = {
   pending: (history = false) => request<FeePayment[]>(`/admin/proposals/payments${history ? '?history=1' : ''}`),
-  settle: (id: string, txHash: string) =>
-    request<{ status: string }>(`/admin/proposals/payments/${id}/settle`, { method: 'POST', body: JSON.stringify({ txHash }) }),
+  // REFUND: pass the board's tx hash. TOPUP: confirm the submitter's payment (no hash needed).
+  settle: (id: string, txHash?: string) =>
+    request<{ status: string }>(`/admin/proposals/payments/${id}/settle`, { method: 'POST', body: JSON.stringify(txHash ? { txHash } : {}) }),
+};
+
+/** §12 — the outstanding submission-fee TOP-UP on the submitter's own proposal (after a budget
+ *  increase in a round that requires it). Submitter pays on-chain + submits the tx; board confirms. */
+export interface FeeTopUp {
+  id: string;
+  status: 'PENDING' | 'AWAITING_CONFIRM' | string;
+  amountAda: number;
+  txHash: string | null;
+  newFeeAda: number | null;
+}
+export const feeTopUpApi = {
+  get: (proposalId: string) => request<FeeTopUp | null>(`/proposals/${proposalId}/fee-topup`),
+  pay: (proposalId: string, txHash: string) =>
+    request<{ status: string }>(`/proposals/${proposalId}/fee-topup`, { method: 'POST', body: JSON.stringify({ txHash }) }),
 };
 export interface MilestoneCandidate {
   kind: 'DRep' | 'Expert';

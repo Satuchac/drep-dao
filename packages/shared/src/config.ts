@@ -125,7 +125,54 @@ export const ROUND_SETTING_DEFAULTS = {
   // mandatoryWords (which governs the longer fields). Checked at submit + post-submission
   // edits. 0 disables the check.
   minimumMilestoneTitleLen: 1,
+  // §12 — budget-change policy (boolean settings, 0 = NO, 1 = YES; see ROUND_SETTING_BOOLEAN).
+  // ignoreBudgetChange (default YES): the submitter may edit the requested amount + milestone
+  // budgets freely in the edit form, with no "Request a budget change" button and NO fee change —
+  // whatever was paid at submission stays valid forever. Set NO to lock the budget so it changes
+  // only via the board-approved request flow, which then honours the two fee settings below.
+  ignoreBudgetChange: 1,
+  // requireFeeTopUp (default NO, only applies when ignoreBudgetChange = NO): when a budget
+  // INCREASE is approved, require the submitter to top up the submission fee by the increase's
+  // fee delta (submitter pays + provides the tx; the board verifies + confirms). NO = the board
+  // just confirms the change with no payment.
+  requireFeeTopUp: 0,
+  // requireFeeReturn (default NO, only applies when ignoreBudgetChange = NO): when a budget
+  // DECREASE is approved, require the board to return the fee delta to the submitter via the
+  // multisig (board sends + records the tx). NO = the board just confirms with no refund.
+  requireFeeReturn: 0,
 } as const;
+
+/** §12 — settings that are YES/NO toggles (stored as 1/0). The round-setup form renders these as
+ *  a YES/NO control rather than a number input. */
+export const ROUND_SETTING_BOOLEAN: ReadonlySet<string> = new Set([
+  'ignoreBudgetChange',
+  'requireFeeTopUp',
+  'requireFeeReturn',
+]);
+
+/** §12 — resolve a YES/NO round setting (the stored column or its default) to a boolean. */
+export function roundFlagOn(
+  value: number | null | undefined,
+  key: 'ignoreBudgetChange' | 'requireFeeTopUp' | 'requireFeeReturn',
+): boolean {
+  return (value ?? ROUND_SETTING_DEFAULTS[key]) === 1;
+}
+
+/**
+ * §12 — given the submission-fee delta of an approved budget change and the round's fee policy,
+ * decide whether a fee settlement is created and of which kind: a positive delta is a submitter
+ * TOPUP (only when requireFeeTopUp); a negative delta is a board REFUND (only when requireFeeReturn).
+ * Returns null when the fee didn't change. `create` is false when the board just confirms with no
+ * payment.
+ */
+export function budgetChangeSettlement(
+  feeDelta: number,
+  flags: { requireTopUp: boolean; requireReturn: boolean },
+): { kind: 'TOPUP' | 'REFUND'; create: boolean } | null {
+  if (feeDelta > 0) return { kind: 'TOPUP', create: flags.requireTopUp };
+  if (feeDelta < 0) return { kind: 'REFUND', create: flags.requireReturn };
+  return null;
+}
 
 export type RoundSettingKey = keyof typeof ROUND_SETTING_DEFAULTS;
 
@@ -172,6 +219,12 @@ export const ROUND_SETTING_META: Record<RoundSettingKey, string> = {
     'Minimum number of characters a proposal title must have. Checked on every proposal save/edit. 0 disables the check.',
   minimumMilestoneTitleLen:
     'Minimum word count for short text fields (each milestone title). Checked at submit and on post-submission edits. 0 disables the check.',
+  ignoreBudgetChange:
+    'YES (default): submitters may change the requested amount and milestone budgets freely in the edit form — there is no "Request a budget change" button and the submission fee never changes (what was paid at submission stays valid forever). NO: the budget is locked in the edit form and can only change via a board-approved "Request a budget change", which then applies the two fee settings below.',
+  requireFeeTopUp:
+    'Only applies when "Ignore budget change" is NO. YES: when an approved budget change INCREASES the budget, the submitter must top up the submission fee by the fee delta — the submitter pays on-chain and submits the tx hash on their proposal, and the board verifies and confirms it. NO (default): the board just confirms the increase with no extra payment.',
+  requireFeeReturn:
+    'Only applies when "Ignore budget change" is NO. YES: when an approved budget change DECREASES the budget, the board must return the fee delta to the submitter from the treasury multisig and record the tx. NO (default): the board just confirms the decrease with no refund.',
 };
 
 /** Known block explorers → tx/address URL templates per network ({hash}/{address} placeholders). */

@@ -224,19 +224,27 @@ A round runs **PREPARATION → SUBMISSION → FILTERING → DV → FUNDING → C
   on-chain `verifyPayment` result; the reviewer **Approves** (→ ACTIVE/Filtering) or
   **Rejects** (→ REJECTED, reason required) with feedback the submitter sees in a red
   **FEEDBACK** box next to the fee tx (`feeReviewFeedback`).
-- **Fee integrity + budget changes (§12).** The fee-determining inputs — **requested amount
-  + commercial flag — are locked once a fee is quoted** (anything past DRAFT / fee-rejected):
-  `updateDraft` rejects changing them, so a submitter can't quote+pay a small fee then raise
-  the budget for free (the form disables those inputs while PENDING). A fee-rejected proposal
-  (no accepted payment) stays freely editable. **Once ACTIVE**, the submitter changes the
-  budget via **`requestBudgetChange`** (`POST /proposals/:id/budget-change`): the amount +
-  milestones update immediately and the **fee delta becomes a settlement** — an **increase**
-  owes a **TOPUP** (submitter pays more), a **decrease** a **REFUND** (DAO returns) — recorded
-  as a `FeeAdjustment` (storing prev/new amount **and** prev/new total fee). The board settles
-  it in **My Area → Actions** (alongside treasury approvals + fee confirmations; `GET/POST
-  /admin/proposals/payments…`): each item shows the **old → new fee**, the budget change, and —
-  for a refund — the submitter's **payout address with a copy button**; the board records the
-  on-chain **tx** to mark it SETTLED. Pending settlements count toward the **notification badge**.
+- **Budget-change policy — round settings (§12).** Three per-round YES/NO settings (stored 1/0;
+  rendered as YES/NO in round setup; `roundFlagOn` resolves them):
+  - **`ignoreBudgetChange`** (default **YES**): the submitter edits the **requested amount +
+    milestone budgets freely** in the proposal editor (every editable phase), there is **no
+    "Request a budget change" button**, and the **submission fee never changes** — what was paid at
+    submission is valid forever. `updateDraft` allows the budget edits (`budgetEditable`); the
+    button is hidden and `requestBudgetChange` is refused. Set **NO** to **lock** the budget in the
+    editor so it changes only via the board-approved request flow (then the two settings apply).
+  - **`requireFeeTopUp`** (default **NO**, only when ignore=NO): on an approved budget **increase**,
+    the **submitter** must top up the fee by the fee delta. A `FeeAdjustment` `TOPUP` is created; the
+    submitter pays to the submission-fee address and **submits the tx hash on their proposal**
+    (`POST /proposals/:id/fee-topup` → AWAITING_CONFIRM, surfaced by a My-proposals badge +
+    `feeTopUpDue`), then a **board member verifies + confirms** it (no board tx). NO = the board just
+    confirms the increase, no payment.
+  - **`requireFeeReturn`** (default **NO**, only when ignore=NO): on an approved **decrease**, the
+    **board** returns the fee delta from the treasury multisig and records the tx (`REFUND`). NO =
+    confirm only, no refund.
+  Settlements still store prev/new amount + prev/new total fee and surface in **My Area → Actions**;
+  a `TOPUP` shows the submitter's tx for the board to confirm, a `REFUND` shows the payout address
+  for the board to send + record. The fee-determining inputs stay locked while PENDING (pre-ACTIVE)
+  as before. **Bug fix:** the top-up tx is now provided by the **submitter** (not the board).
   The Actions tab has a **To do / Recent / History** toggle (default *To do*; same control as
   Voting & reviews): *History* lists **settled** settlements + **executed** treasury actions
   (read-only, with tx) for auditing (`?history=1` on `/admin/proposals/payments` +

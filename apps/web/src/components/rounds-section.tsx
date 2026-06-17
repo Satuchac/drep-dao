@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { ROUND_SETTING_DEFAULTS, ROUND_SETTING_META, computeRewardPoolsAda } from '@drep-dao/shared';
+import { ROUND_SETTING_DEFAULTS, ROUND_SETTING_META, ROUND_SETTING_BOOLEAN, computeRewardPoolsAda } from '@drep-dao/shared';
 import {
   boardRoundsApi,
   roundsApi,
@@ -94,6 +94,14 @@ const SETTING_GROUPS: { title: string; fields: { key: SettingKey; label: string;
       { key: 'mandatoryWordsMax', label: 'Maximum words per field' },
       { key: 'minimumTitleLen', label: 'Minimum title length (chars)' },
       { key: 'minimumMilestoneTitleLen', label: 'Minimum milestone title (words)' },
+    ],
+  },
+  {
+    title: 'Budget changes',
+    fields: [
+      { key: 'ignoreBudgetChange', label: 'Ignore budget change (free edits)' },
+      { key: 'requireFeeTopUp', label: 'Require fee top-up on increase' },
+      { key: 'requireFeeReturn', label: 'Require fee return on decrease' },
     ],
   },
 ];
@@ -579,6 +587,7 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
             <div className="space-y-2">
               {g.fields.map((f) => {
                 const max = approvalMax(f.key);
+                const isBool = ROUND_SETTING_BOOLEAN.has(f.key);
                 return (
                   <div key={f.key} className="flex items-start gap-2">
                     <label className="w-44 shrink-0 pt-1 text-xs text-neutral-600 dark:text-neutral-300" htmlFor={`rs-${f.key}`}>
@@ -586,17 +595,31 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
                     </label>
                     <div className="min-w-0">
                       <span className="flex items-center gap-1">
-                        <input
-                          id={`rs-${f.key}`}
-                          type="number"
-                          min={0}
-                          max={max ?? (f.unit === '%' ? 100 : undefined)}
-                          value={settings[f.key] ?? ''}
-                          onChange={(e) => setSetting(f.key, e.target.value)}
-                          placeholder={String(ROUND_SETTING_DEFAULTS[f.key])}
-                          className={`${field} w-24`}
-                        />
-                        {max !== undefined ? <span className="text-[10px] text-neutral-400">max {max}</span> : null}
+                        {isBool ? (
+                          // §12 — YES/NO toggle (stored as 1/0). Blank = the default.
+                          <select
+                            id={`rs-${f.key}`}
+                            value={settings[f.key] ?? ''}
+                            onChange={(e) => setSetting(f.key, e.target.value)}
+                            className={`${field} w-28`}
+                          >
+                            <option value="">default ({ROUND_SETTING_DEFAULTS[f.key] === 1 ? 'YES' : 'NO'})</option>
+                            <option value="1">YES</option>
+                            <option value="0">NO</option>
+                          </select>
+                        ) : (
+                          <input
+                            id={`rs-${f.key}`}
+                            type="number"
+                            min={0}
+                            max={max ?? (f.unit === '%' ? 100 : undefined)}
+                            value={settings[f.key] ?? ''}
+                            onChange={(e) => setSetting(f.key, e.target.value)}
+                            placeholder={String(ROUND_SETTING_DEFAULTS[f.key])}
+                            className={`${field} w-24`}
+                          />
+                        )}
+                        {!isBool && max !== undefined ? <span className="text-[10px] text-neutral-400">max {max}</span> : null}
                       </span>
                       <p className="mt-0.5 max-w-xl text-[11px] text-neutral-500">{ROUND_SETTING_META[f.key]}</p>
                     </div>
@@ -1030,8 +1053,9 @@ function RoundSettingsView({ roundId }: { roundId: string }) {
               <span key={f.key} className="text-neutral-600 dark:text-neutral-300" title={ROUND_SETTING_META[f.key]}>
                 {f.label}:{' '}
                 <span className="font-medium">
-                  {resolved(f.key).toLocaleString()}
-                  {f.unit === '%' ? '%' : f.unit === '₳' ? ' ₳' : ''}
+                  {ROUND_SETTING_BOOLEAN.has(f.key)
+                    ? (resolved(f.key) === 1 ? 'YES' : 'NO')
+                    : `${resolved(f.key).toLocaleString()}${f.unit === '%' ? '%' : f.unit === '₳' ? ' ₳' : ''}`}
                 </span>
                 {s[f.key] == null ? <span className="ml-0.5 text-[10px] text-neutral-400">(default)</span> : null}
               </span>

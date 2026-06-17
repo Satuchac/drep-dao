@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { boardPaymentsApi, matchesProposalSearch, type FeePayment } from '@/lib/api';
 import { CopyButton } from './copy-button';
+import { useExplorer } from '@/lib/explorer';
 import { fmtDate } from './round-ui';
 
 /**
@@ -38,18 +39,24 @@ export function BoardPayments({ history = false, query }: { history?: boolean; q
 }
 
 function PaymentRow({ p, onSettled }: { p: FeePayment; onSettled: () => void }) {
+  const { txUrl } = useExplorer();
   const [tx, setTx] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const isTopup = p.kind === 'TOPUP';
   const settled = p.status === 'SETTLED';
+  // §12 — a TOPUP is paid by the SUBMITTER: PENDING = waiting for their payment (board can't act);
+  // AWAITING_CONFIRM = they paid + submitted the tx, the board verifies it on-chain + confirms.
+  // A REFUND is paid by the BOARD: the board sends from the multisig and records the tx hash.
+  const awaitingConfirm = p.status === 'AWAITING_CONFIRM';
 
-  const settle = async () => {
+  // REFUND → record the board's tx; TOPUP → confirm the submitter's already-submitted tx (no hash).
+  const settle = async (withTx: boolean) => {
     setError(null);
-    if (!tx.trim()) { setError('Paste the on-chain tx hash to settle.'); return; }
+    if (withTx && !tx.trim()) { setError('Paste the on-chain tx hash to settle.'); return; }
     setBusy(true);
     try {
-      await boardPaymentsApi.settle(p.id, tx.trim());
+      await boardPaymentsApi.settle(p.id, withTx ? tx.trim() : undefined);
       onSettled();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'settle failed');
@@ -108,15 +115,35 @@ function PaymentRow({ p, onSettled }: { p: FeePayment; onSettled: () => void }) 
             </>
           ) : null}
         </div>
+      ) : isTopup ? (
+        // TOPUP — the submitter pays. Board only acts once they've submitted the tx (AWAITING_CONFIRM).
+        awaitingConfirm ? (
+          <div className="mt-2 space-y-1">
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-neutral-500">Submitter&apos;s top-up tx:</span>
+              {p.txHash ? (
+                <a href={txUrl(p.txHash)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">{p.txHash} ↗</a>
+              ) : <span className="text-neutral-400">—</span>}
+            </div>
+            <button disabled={busy} onClick={() => settle(false)} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950">
+              {busy ? 'Confirming…' : 'Verify on-chain & confirm'}
+            </button>
+          </div>
+        ) : (
+          <div className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+            ⏳ Awaiting the submitter&apos;s top-up payment — they pay {p.amountAda.toLocaleString()} ₳ and submit the tx on their proposal, then you confirm it here.
+          </div>
+        )
       ) : (
+        // REFUND — the board sends from the multisig and records the tx hash.
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <input
             className="flex-1 rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-            placeholder={isTopup ? 'tx hash of the submitter’s top-up payment' : 'tx hash of the refund you sent'}
+            placeholder="tx hash of the refund you sent"
             value={tx}
             onChange={(e) => setTx(e.target.value)}
           />
-          <button disabled={busy} onClick={settle} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950">
+          <button disabled={busy} onClick={() => settle(true)} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950">
             {busy ? 'Saving…' : 'Mark settled'}
           </button>
         </div>

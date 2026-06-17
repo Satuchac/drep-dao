@@ -14,6 +14,8 @@ import {
   RoundStatus,
   VotePhase,
   VotingType,
+  roundFlagOn,
+  budgetChangeSettlement,
 } from '@drep-dao/shared';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@drep-dao/db';
@@ -182,7 +184,11 @@ export class ProposalsService {
     // (which settles the fee delta and resets votes), never silently inside a debate edit.
     const inResubmitCycle = p.status === ProposalStatus.REJECTED && p.stage === ProposalStage.FILTERING;
     const inDebate = (p as { round?: { status?: string } | null }).round?.status === RoundStatus.DEBATE && p.status === ProposalStatus.ACTIVE;
-    const budgetEditable = inResubmitCycle; // budget SHAPE reworkable only in the resubmit cycle
+    // §12 — when the round ignores budget changes, the budget (amount + milestone amounts + count)
+    // is freely editable like any text field and the fee never changes — no request flow. Otherwise
+    // the budget SHAPE is reworkable only in the resubmit cycle (DEBATE allows content-only edits).
+    const ignoreBudget = roundFlagOn((p as { round?: { ignoreBudgetChange?: number | null } | null }).round?.ignoreBudgetChange, 'ignoreBudgetChange');
+    const budgetEditable = inResubmitCycle || ignoreBudget;
     const milestonesWritable = !postSubmission || budgetEditable || inDebate;
     if (dto.milestones) {
       if (!milestonesWritable) {
@@ -851,10 +857,15 @@ export class ProposalsService {
   async requestBudgetChange(userId: string, id: string, dto: BudgetChangeDto) {
     const p = await this.prisma.proposal.findUnique({
       where: { id },
-      include: { round: { select: { status: true, filterBudgetChangesAllowed: true } } },
+      include: { round: { select: { status: true, filterBudgetChangesAllowed: true, ignoreBudgetChange: true } } },
     });
     if (!p) throw new NotFoundException('proposal not found');
     if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
+    // §12 — in a round that ignores budget changes there is no request flow: the submitter edits
+    // the budget directly and the fee never changes.
+    if (roundFlagOn(p.round?.ignoreBudgetChange, 'ignoreBudgetChange')) {
+      throw new ConflictException('this round allows free budget edits — change the budget directly in the proposal editor, no request needed');
+    }
     if (p.status !== ProposalStatus.ACTIVE) {
       throw new ConflictException('the budget can only be changed once the proposal is ACTIVE (fee settled)');
     }
@@ -906,7 +917,7 @@ export class ProposalsService {
   async approveBudgetChange(boardUserId: string, requestId: string, feedback?: string) {
     const req = await this.prisma.budgetChangeRequest.findUnique({
       where: { id: requestId },
-      include: { proposal: { include: { round: { select: { status: true, filterBudgetChangesAllowed: true } } } } },
+      include: { proposal: { include: { round: { select: { status: true, filterBudgetChangesAllowed: true, requireFeeTopUp: true, requireFeeReturn: true } } } } },
     });
     if (!req) throw new NotFoundException('budget-change request not found');
     if (req.status !== 'PENDING') throw new ConflictException(`request already ${req.status.toLowerCase()}`);
@@ -968,11 +979,18 @@ export class ProposalsService {
           status: 'NOT_STARTED',
         })),
       });
-      if (delta !== 0) {
+      // §12 — a fee settlement is created only when the round requires it: a TOPUP (submitter pays
+      // the increase delta) when requireFeeTopUp is YES, a REFUND (board returns the decrease delta)
+      // when requireFeeReturn is YES. Otherwise the board just confirmed the change with no payment.
+      const decision = budgetChangeSettlement(delta, {
+        requireTopUp: roundFlagOn(p.round?.requireFeeTopUp, 'requireFeeTopUp'),
+        requireReturn: roundFlagOn(p.round?.requireFeeReturn, 'requireFeeReturn'),
+      });
+      if (decision?.create) {
         await tx.feeAdjustment.create({
           data: {
             proposalId: p.id,
-            kind: delta > 0 ? 'TOPUP' : 'REFUND',
+            kind: decision.kind,
             amountAda: toLovelace(Math.abs(delta)),
             prevAmountAda: toLovelace(oldAmount),
             newAmountAda: toLovelace(newAmount),
@@ -1068,16 +1086,63 @@ export class ProposalsService {
     }));
   }
 
-  /** §12 — a board member records the on-chain tx that settles a top-up/refund → SETTLED. */
-  async settlePayment(userId: string, adjustmentId: string, txHash: string) {
+  /**
+   * §12 — settle a fee adjustment → SETTLED.
+   *  - TOPUP: the SUBMITTER pays + submits the tx (see submitterTopUp), so the board only
+   *    verifies and CONFIRMS it here (status must be AWAITING_CONFIRM; the tx is the submitter's).
+   *  - REFUND: the BOARD sends the fee back from the multisig and records the tx hash here.
+   */
+  async settlePayment(userId: string, adjustmentId: string, txHash?: string) {
     const a = await this.prisma.feeAdjustment.findUnique({ where: { id: adjustmentId } });
     if (!a) throw new NotFoundException('payment not found');
-    if (a.status !== 'PENDING') throw new ConflictException('payment is already settled');
-    await this.prisma.feeAdjustment.update({
-      where: { id: adjustmentId },
-      data: { status: 'SETTLED', txHash: txHash.trim(), settledAt: new Date(), settledByUserId: userId },
-    });
+    if (a.status === 'SETTLED') throw new ConflictException('payment is already settled');
+    if (a.kind === 'TOPUP') {
+      if (a.status !== 'AWAITING_CONFIRM' || !a.txHash) {
+        throw new ConflictException('awaiting the submitter’s top-up payment — they pay and submit the tx, then the board confirms it');
+      }
+      await this.prisma.feeAdjustment.update({
+        where: { id: adjustmentId },
+        data: { status: 'SETTLED', settledAt: new Date(), settledByUserId: userId },
+      });
+    } else {
+      if (!txHash?.trim()) throw new BadRequestException('record the refund tx hash to settle it');
+      await this.prisma.feeAdjustment.update({
+        where: { id: adjustmentId },
+        data: { status: 'SETTLED', txHash: txHash.trim(), settledAt: new Date(), settledByUserId: userId },
+      });
+    }
     return { status: 'SETTLED' as const };
+  }
+
+  /**
+   * §12 — the submitter pays an outstanding fee TOP-UP on-chain and submits the tx hash. The
+   * adjustment flips to AWAITING_CONFIRM; a board member then verifies + confirms it (settlePayment).
+   */
+  async submitterTopUp(userId: string, proposalId: string, txHash: string) {
+    if (!txHash?.trim()) throw new BadRequestException('a tx hash is required');
+    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId }, select: { submitterUserId: true } });
+    if (!proposal) throw new NotFoundException('proposal not found');
+    if (proposal.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
+    const a = await this.prisma.feeAdjustment.findFirst({
+      where: { proposalId, kind: 'TOPUP', status: { in: ['PENDING', 'AWAITING_CONFIRM'] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!a) throw new ConflictException('no outstanding fee top-up on this proposal');
+    await this.prisma.feeAdjustment.update({
+      where: { id: a.id },
+      data: { txHash: txHash.trim(), status: 'AWAITING_CONFIRM' },
+    });
+    return { status: 'AWAITING_CONFIRM' as const };
+  }
+
+  /** §12 — the outstanding fee TOP-UP on a proposal (for the submitter's own view), if any. */
+  async myFeeTopUp(proposalId: string) {
+    const a = await this.prisma.feeAdjustment.findFirst({
+      where: { proposalId, kind: 'TOPUP', status: { in: ['PENDING', 'AWAITING_CONFIRM'] } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!a) return null;
+    return { id: a.id, status: a.status, amountAda: toAda(a.amountAda), txHash: a.txHash, newFeeAda: a.newFeeAda == null ? null : toAda(a.newFeeAda) };
   }
 
   /** §5.2 — assert an amount fits a category's min/max ask (shared by create + budget change). */
@@ -1208,6 +1273,15 @@ export class ProposalsService {
   ) {
     if (proposals.length === 0) return [];
     const ids = proposals.map((p) => p.id);
+
+    // §12 — proposals with an outstanding submission-fee top-up the submitter still owes (after a
+    // budget increase). PENDING = the submitter must pay; AWAITING_CONFIRM = paid, board to verify.
+    const topUpDue = new Set(
+      (await this.prisma.feeAdjustment.findMany({
+        where: { proposalId: { in: ids }, kind: 'TOPUP', status: { in: ['PENDING', 'AWAITING_CONFIRM'] } },
+        select: { proposalId: true },
+      })).map((a) => a.proposalId),
+    );
 
     // Batch queries.
     const filterAssign = await this.prisma.filterAssignment.findMany({
@@ -1491,7 +1565,7 @@ export class ProposalsService {
         }
       }
 
-      return { ...base, progress, rejectionReasons, milestoneReviewers, milestoneReviewerNames, milestoneBar: barsByProposal.get(p.id) ?? null };
+      return { ...base, progress, rejectionReasons, milestoneReviewers, milestoneReviewerNames, milestoneBar: barsByProposal.get(p.id) ?? null, feeTopUpDue: topUpDue.has(p.id) };
     });
   }
 
@@ -1710,7 +1784,7 @@ export class ProposalsService {
           category: { select: { name: true, minAda: true, maxAda: true, conditions: true } },
           submitterUser: { select: { displayName: true } },
           submitterDrep: { select: { drepIdOnchain: true } },
-          round: { select: { status: true, filterResubmissionsAllowed: true, filterBudgetChangesAllowed: true, milestoneApprovalVotes: true } },
+          round: { select: { status: true, filterResubmissionsAllowed: true, filterBudgetChangesAllowed: true, milestoneApprovalVotes: true, ignoreBudgetChange: true } },
         },
       }),
       this.prisma.budgetChangeRequest.findFirst({
@@ -1786,6 +1860,8 @@ export class ProposalsService {
           }
         : null,
       roundStatus: p.round?.status ?? null,
+      // §12 — YES → budget freely editable, no request flow (drives the editor + hides the button).
+      ignoreBudgetChange: roundFlagOn(p.round?.ignoreBudgetChange, 'ignoreBudgetChange'),
       submittedAt: p.submittedAt,
       // §9.3 — set when the board (or auto-finalize on VOTE → FUNDING) publishes
       // the D&V tally. Lets the rejection banner distinguish a D&V rejection
@@ -2002,7 +2078,7 @@ export class ProposalsService {
   private async ownEditable(userId: string, id: string) {
     const p = await this.prisma.proposal.findUnique({
       where: { id },
-      include: { round: { select: { status: true, filterResubmissionsAllowed: true, filterBudgetChangesAllowed: true } } },
+      include: { round: { select: { status: true, filterResubmissionsAllowed: true, filterBudgetChangesAllowed: true, ignoreBudgetChange: true } } },
     });
     if (!p) throw new NotFoundException('proposal not found');
     if (p.submitterUserId !== userId) throw new ForbiddenException('not your proposal');

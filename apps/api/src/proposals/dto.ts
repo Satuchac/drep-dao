@@ -120,6 +120,12 @@ export class BudgetChangeDecisionDto {
 }
 
 export class SettlePaymentDto {
+  // Optional: a REFUND records the board's tx hash here; a TOPUP confirm uses the submitter's
+  // already-submitted hash, so the board sends none.
+  @IsOptional() @IsString() @MaxLength(120) txHash?: string;
+}
+
+export class FeeTopUpDto {
   @IsString() @IsNotEmpty() @MaxLength(120) txHash!: string;
 }
 

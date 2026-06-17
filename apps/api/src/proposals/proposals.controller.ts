@@ -13,7 +13,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { ProposalsService } from './proposals.service';
-import { BudgetChangeDto, CreateProposalDto, PledgeTxHashDto, SubmitProposalDto, UpdateProposalDto } from './dto';
+import { BudgetChangeDto, CreateProposalDto, FeeTopUpDto, PledgeTxHashDto, SubmitProposalDto, UpdateProposalDto } from './dto';
 
 @Controller()
 export class ProposalsController {
@@ -85,6 +85,20 @@ export class ProposalsController {
   @Post('proposals/:id/budget-change')
   budgetChange(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: BudgetChangeDto) {
     return this.proposals.requestBudgetChange(ctx.userId, id, dto);
+  }
+
+  // §12 — submitter views / pays an outstanding submission-fee TOP-UP (after a budget increase
+  // in a round that requires it). The submitter pays on-chain + submits the tx; the board confirms.
+  @UseGuards(JwtAuthGuard)
+  @Get('proposals/:id/fee-topup')
+  feeTopUp(@Param('id', ParseUUIDPipe) id: string) {
+    return this.proposals.myFeeTopUp(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('proposals/:id/fee-topup')
+  payFeeTopUp(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: FeeTopUpDto) {
+    return this.proposals.submitterTopUp(ctx.userId, id, dto.txHash);
   }
 
   // §12 — submitter checks on-chain how much of the submission fee landed so far

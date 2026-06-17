@@ -95,10 +95,16 @@ export function useTodoCounts(isBoard: boolean, canVote: boolean, enabled = true
         // authorized (phase 1) or signed (phase 2), it's waiting on others, not their to-do.
         const needsMe = (x: BoardAction) => (x.phase === 'AUTHORIZE' ? !x.mineCommitted : !x.mineApproved);
         next.treasury = acts.filter((x) => x.kind !== 'REWARD_PAYOUT' && needsMe(x)).length;
+        // §12 — only board-actionable fee settlements: a REFUND the board must send, or a TOPUP the
+        // submitter already paid (AWAITING_CONFIRM) that the board must confirm. A TOPUP still
+        // PENDING is the submitter's to-do, not the board's.
+        const boardPayable = p.status === 'fulfilled'
+          ? p.value.filter((x) => (x.kind === 'REFUND' && x.status !== 'SETTLED') || (x.kind === 'TOPUP' && x.status === 'AWAITING_CONFIRM')).length
+          : 0;
         next.actions =
           acts.filter((x) => x.kind === 'REWARD_PAYOUT' && needsMe(x)).length +
           (f.status === 'fulfilled' ? f.value.length : 0) +
-          (p.status === 'fulfilled' ? p.value.length : 0) +
+          boardPayable +
           (stop.status === 'fulfilled' ? stop.value.count : 0) +
           (pl.status === 'fulfilled' ? pl.value.length : 0) +
           (rev.status === 'fulfilled' ? rev.value.length : 0) +
@@ -133,7 +139,11 @@ export function useTodoCounts(isBoard: boolean, canVote: boolean, enabled = true
       // review (§16) that's still revisable, or a REJECTED milestone needing a fresh POA (§11.2).
       try {
         const mine = await proposalsApi.mine();
-        next.mine = mine.filter((p) => p.progress?.tone === 'red' && p.progress.label.includes('resubmit')).length;
+        // Red "…resubmit" rows (filtering/fee/POA rejections) + any proposal with an outstanding
+        // submission-fee top-up the submitter still owes (§12).
+        next.mine = mine.filter((p) =>
+          (p.progress?.tone === 'red' && p.progress.label.includes('resubmit')) || p.feeTopUpDue,
+        ).length;
       } catch { /* 0 */ }
       if (alive) setCounts(next);
     };

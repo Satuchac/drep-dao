@@ -354,6 +354,9 @@ export class RoundsService {
         mandatoryWordsMax: r.mandatoryWordsMax,
         minimumTitleLen: r.minimumTitleLen,
         minimumMilestoneTitleLen: r.minimumMilestoneTitleLen,
+        ignoreBudgetChange: r.ignoreBudgetChange,
+        requireFeeTopUp: r.requireFeeTopUp,
+        requireFeeReturn: r.requireFeeReturn,
       },
       // §8 — what the board must confirm/launch next (null once CLOSED).
       nextStage: this.computeNextStage(r.status, schedule),

@@ -10,6 +10,8 @@ import {
   proposalsApi,
   proposalVersionsApi,
   proposalEditApi,
+  feeTopUpApi,
+  type FeeTopUp,
   filteringApi,
   dvApi,
   milestonesApi,
@@ -246,8 +248,12 @@ export function ProposalDetail({
             {/* §8.1 — content fingerprint, once the proposal has been frozen (round reached VOTE). */}
             {p.contentFingerprint ? <ContentFingerprintView fp={p.contentFingerprint} /> : null}
             {mine ? <FeeBlock proposal={p} /> : null}
-            {/* §12 — once ACTIVE, the budget can change but the fee delta is settled by the board. */}
-            {mine && p.status === 'ACTIVE' ? <BudgetChangeSection id={id} proposal={p} onChange={load} /> : null}
+            {/* §12 — submitter pays an outstanding submission-fee top-up (after a budget increase
+                in a round that requires it). Self-hides when there's nothing to pay. */}
+            {mine ? <FeeTopUpPanel id={id} /> : null}
+            {/* §12 — once ACTIVE, the budget can change via a board-approved request — unless the
+                round ignores budget changes (then the budget is edited directly above). */}
+            {mine && p.status === 'ACTIVE' && !p.ignoreBudgetChange ? <BudgetChangeSection id={id} proposal={p} onChange={load} /> : null}
             {/* Pre-public (PENDING / fee-rejected): edit ALL fields in the full form. */}
             {mine && onEditFull && (p.status === 'PENDING' || (p.status === 'REJECTED' && !p.stage)) ? (
               <button onClick={onEditFull} className="mt-3 rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
@@ -688,6 +694,60 @@ function RejectionBanner({ proposal: p }: { proposal: PDetail }) {
  * reason in `feeReviewFeedback` too — they render as a separate sibling block OUTSIDE the
  * fee box. A draft that was never submitted has `submittedAt == null`; that's our signal.
  */
+/**
+ * §12 — the submitter's outstanding submission-fee TOP-UP (after a budget increase in a round with
+ * REQUIRE_FEE_TOP_UP). The submitter pays the delta to the submission-fee address and pastes the tx;
+ * a board member then verifies + confirms. Self-hides when there's nothing to pay.
+ */
+function FeeTopUpPanel({ id }: { id: string }) {
+  const { txUrl, cfg } = useExplorer();
+  const [topUp, setTopUp] = useState<FeeTopUp | null>(null);
+  const [tx, setTx] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const load = useCallback(() => { feeTopUpApi.get(id).then(setTopUp).catch(() => setTopUp(null)); }, [id]);
+  useEffect(load, [load]);
+  if (!topUp) return null;
+  const awaiting = topUp.status === 'AWAITING_CONFIRM';
+  const submit = async () => {
+    setError(null);
+    if (!/^[0-9a-f]{64}$/i.test(tx.trim())) { setError('Paste the 64-hex tx hash of your top-up payment.'); return; }
+    setBusy(true);
+    try { await feeTopUpApi.pay(id, tx.trim()); setTx(''); load(); }
+    catch (e) { setError(e instanceof Error ? e.message : 'failed'); }
+    finally { setBusy(false); }
+  };
+  return (
+    <section className="mt-3 space-y-1 rounded-md border border-amber-300 bg-amber-50/60 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30">
+      <div className="font-semibold text-amber-800 dark:text-amber-200">Submission fee top-up required</div>
+      <p className="text-xs text-neutral-600 dark:text-neutral-300">
+        Your budget increase raised the submission fee. Send the extra <strong>{topUp.amountAda.toLocaleString()} ₳</strong>
+        {topUp.newFeeAda != null ? <> (new total fee {topUp.newFeeAda.toLocaleString()} ₳)</> : null} to the submission-fee
+        address, then paste the tx hash below. A board member verifies and confirms it.
+      </p>
+      {cfg?.submissionFeeAddress ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-neutral-500">Pay to:</span>
+          <span className="break-all font-mono text-[11px] text-neutral-700 dark:text-neutral-300">{cfg.submissionFeeAddress}</span>
+          <CopyButton text={cfg.submissionFeeAddress} label="Copy address" />
+        </div>
+      ) : null}
+      {awaiting && topUp.txHash ? (
+        <div className="text-xs text-emerald-700 dark:text-emerald-300">
+          ✓ Submitted — <a href={txUrl(topUp.txHash)} target="_blank" rel="noreferrer" className="font-mono underline">{topUp.txHash.slice(0, 16)}…</a>. Awaiting the board&apos;s confirmation. You can re-submit a corrected hash below if needed.
+        </div>
+      ) : null}
+      <div className="mt-1 flex flex-wrap items-center gap-2">
+        <input value={tx} onChange={(e) => setTx(e.target.value)} placeholder="64-hex top-up tx hash" className="flex-1 rounded border border-neutral-300 px-2 py-1 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900" />
+        <button disabled={busy} onClick={submit} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950">
+          {busy ? '…' : awaiting ? 'Re-submit hash' : 'Submit top-up tx'}
+        </button>
+      </div>
+      {error ? <div className="text-xs text-red-600">{error}</div> : null}
+    </section>
+  );
+}
+
 function FeeBlock({ proposal }: { proposal: PDetail }) {
   const { txUrl } = useExplorer();
   const hashes = proposal.submissionFeeTxHashes?.length
@@ -1747,11 +1807,14 @@ function EditSection({
   //    change" (which settles the fee delta and resets votes), mirroring the backend gate.
   //  - milestonesEditable (milestone CONTENT — title / description / acceptance criteria): also
   //    during DEBATE, so the team can revise the plan's text in response to reviewer feedback.
-  const budgetEditable = canResubmit;
-  const milestonesEditable = canResubmit || inDebate;
+  // §12 — when the round ignores budget changes, the budget is freely editable in every editable
+  // phase (no request flow, fee frozen). Otherwise the budget shape is reworkable only in the
+  // resubmit cycle, and DEBATE allows milestone CONTENT only.
+  const budgetEditable = canResubmit || proposal.ignoreBudgetChange;
+  const milestonesEditable = canResubmit || inDebate || proposal.ignoreBudgetChange;
   // Pledge text/amount stays editable through the resubmit + debate revision phases (until the
   // board confirms it on-chain) — it isn't part of the requested-budget lock.
-  const pledgeEditable = (canResubmit || inDebate) && !proposal.pledgeConfirmedAt;
+  const pledgeEditable = (canResubmit || inDebate || proposal.ignoreBudgetChange) && !proposal.pledgeConfirmedAt;
   if (!editable) return null;
 
   const milestoneSum = milestones.reduce((acc, m) => acc + Number(m.amountAda || 0), 0);

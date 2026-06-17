@@ -66,6 +66,10 @@ export class RoundSettingsInput {
   @IsOptional() @IsInt() @Min(0) minimumTitleLen?: number;
   // §3 — minimum word count for short text fields (milestone titles). 0 disables.
   @IsOptional() @IsInt() @Min(0) minimumMilestoneTitleLen?: number;
+  // §12 — budget-change policy (YES/NO as 1/0). See ROUND_SETTING_META for behavior.
+  @IsOptional() @IsInt() @Min(0) @Max(1) ignoreBudgetChange?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(1) requireFeeTopUp?: number;
+  @IsOptional() @IsInt() @Min(0) @Max(1) requireFeeReturn?: number;
 }
 
 // MVP schedule uses coarse operational windows rather than the 9 fine-grained
