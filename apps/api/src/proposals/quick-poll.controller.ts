@@ -23,10 +23,10 @@ export class QuickPollController {
     return this.polls.launch(id);
   }
 
-  // Eligible DRep casts/changes their tie-break vote.
+  // Eligible DRep submits/updates their ranked tie-break preference.
   @Post('quick-polls/:id/vote')
   vote(@CurrentUser() ctx: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: QuickPollVoteDto) {
-    return this.polls.vote(ctx.userId, id, dto.choice);
+    return this.polls.vote(ctx.userId, id, dto.ranking);
   }
 
   // Polls awaiting MY vote (badge).

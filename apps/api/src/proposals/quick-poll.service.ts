@@ -1,14 +1,21 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import { ROUND_SETTING_DEFAULTS } from '@drep-dao/shared';
+import { ROUND_SETTING_DEFAULTS, ProposalStatus } from '@drep-dao/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { DvService } from './dv.service';
 import { MeritService } from '../merit/merit.service';
+import { bordaScores, walkBudget } from './quick-poll-math';
 
 /**
  * §9.2 — Quick Poll tie-break. Auto-created by finalizeRound when equal scores collide at the
  * budget cliff; the board confirms with one click; eligible DReps (frozen at creation, same as
  * D&V) vote with balanced power for 48 h (configurable). 51% participation required — else
- * extend (≤3×); final fallback: neither tied proposal is funded.
+ * extend (≤3×); final fallback: none of the tied proposals are funded.
+ *
+ * Voting is RANKED: each DRep orders the tied candidates by priority. The poll aggregates a
+ * power-weighted Borda score and walks the category's remaining budget top-down, funding every
+ * candidate that still fits — so one poll funds as many as the budget allows, not just one. A
+ * genuine tie (equal aggregate score) for the last affordable slot spawns a smaller follow-up
+ * poll between just those candidates.
  */
 @Injectable()
 export class QuickPollService {
@@ -32,6 +39,37 @@ export class QuickPollService {
     };
   }
 
+  /** The category budget still unallocated when this poll resolves: total minus what's already
+   *  been APPROVED. The tied candidates compete for this remainder. Lovelace (may be ≤ 0). */
+  private async categoryRemainingLovelace(roundId: string, categoryId: string): Promise<bigint> {
+    const cat = await this.prisma.roundCategory.findUnique({ where: { id: categoryId }, select: { allocatedAda: true } });
+    if (!cat) return 0n;
+    const approved = await this.prisma.proposal.findMany({
+      where: { roundId, categoryId, status: ProposalStatus.APPROVED },
+      select: { requestedAmountAda: true },
+    });
+    const used = approved.reduce((s, p) => s + (p.requestedAmountAda ?? 0n), 0n);
+    return (cat.allocatedAda ?? 0n) - used;
+  }
+
+  /** Candidates with their amount + Borda score, sorted by score desc then earliest submission. */
+  private async rankedCandidates(poll: { candidates: string[]; votes: { ranking: string[]; choice: string | null; power: number }[] }) {
+    const score = bordaScores(poll.candidates, poll.votes);
+    const props = await this.prisma.proposal.findMany({
+      where: { id: { in: poll.candidates } },
+      select: { id: true, requestedAmountAda: true, submittedAt: true, createdAt: true },
+    });
+    const byId = new Map(props.map((p) => [p.id, p]));
+    return poll.candidates
+      .map((id) => ({
+        id,
+        amount: byId.get(id)?.requestedAmountAda ?? 0n,
+        score: score.get(id) ?? 0,
+        submittedAt: (byId.get(id)?.submittedAt ?? byId.get(id)?.createdAt ?? new Date(0)).getTime(),
+      }))
+      .sort((a, b) => b.score - a.score || a.submittedAt - b.submittedAt);
+  }
+
   async listForRound(roundId: string, userId?: string) {
     const polls = await this.prisma.quickPoll.findMany({
       where: { roundId },
@@ -44,25 +82,40 @@ export class QuickPollService {
       select: { id: true, title: true, publicId: true, requestedAmountAda: true },
     });
     const candById = new Map(candidates.map((c) => [c.id, c]));
-    return polls.map((p) => ({
-      id: p.id,
-      categoryName: p.category?.name ?? null,
-      status: p.status,
-      startsAt: p.startsAt,
-      endsAt: p.endsAt,
-      extensions: p.extensions,
-      winnerId: p.winnerId,
-      eligibleCount: p.eligibleDrepIds.length,
-      votedCount: p.votes.length,
-      myChoice: myDrep ? p.votes.find((v) => v.drepId === myDrep.id)?.choice ?? null : null,
-      iAmEligible: !!myDrep && p.eligibleDrepIds.includes(myDrep.id),
-      candidates: p.candidates.map((id) => ({
-        id,
-        title: candById.get(id)?.title ?? '?',
-        publicId: candById.get(id)?.publicId ?? null,
-        requestedAmountAda: Number(candById.get(id)?.requestedAmountAda ?? 0n) / 1e6,
-        power: p.votes.filter((v) => v.choice === id).reduce((s, v) => s + v.power, 0),
-      })),
+    return Promise.all(polls.map(async (p) => {
+      const sorted = await this.rankedCandidates(p);
+      const remaining = await this.categoryRemainingLovelace(roundId, p.categoryId);
+      // Projected outcome if the poll resolved right now (live "who's winning").
+      const projection = walkBudget(sorted.map((s) => ({ id: s.id, amount: s.amount, score: s.score })), remaining);
+      const fundedSet = new Set(projection.funded);
+      const tieSet = new Set(projection.tieGroup);
+      const scoreById = new Map(sorted.map((s) => [s.id, s.score]));
+      const myVote = myDrep ? p.votes.find((v) => v.drepId === myDrep.id) : undefined;
+      return {
+        id: p.id,
+        categoryName: p.category?.name ?? null,
+        status: p.status,
+        startsAt: p.startsAt,
+        endsAt: p.endsAt,
+        extensions: p.extensions,
+        winnerId: p.winnerId,
+        eligibleCount: p.eligibleDrepIds.length,
+        votedCount: p.votes.length,
+        iAmEligible: !!myDrep && p.eligibleDrepIds.includes(myDrep.id),
+        remainingAda: Number(remaining) / 1e6,
+        // The caller's current ranking (ordered candidate ids), if they voted.
+        myRanking: myVote ? (myVote.ranking.length ? myVote.ranking : myVote.choice ? [myVote.choice] : []) : null,
+        // Candidates in priority (aggregate score) order, with the live projection.
+        candidates: sorted.map((s) => ({
+          id: s.id,
+          title: candById.get(s.id)?.title ?? '?',
+          publicId: candById.get(s.id)?.publicId ?? null,
+          requestedAmountAda: Number(candById.get(s.id)?.requestedAmountAda ?? 0n) / 1e6,
+          score: Math.round((scoreById.get(s.id) ?? 0) * 100) / 100,
+          projectedFunded: fundedSet.has(s.id),
+          projectedTie: tieSet.has(s.id),
+        })),
+      };
     }));
   }
 
@@ -80,19 +133,28 @@ export class QuickPollService {
     return this.listOne(pollId);
   }
 
-  async vote(userId: string, pollId: string, choiceProposalId: string) {
+  /** §9.2 — an eligible DRep submits/updates their priority ranking of the tied candidates. */
+  async vote(userId: string, pollId: string, ranking: string[]) {
     const poll = await this.prisma.quickPoll.findUnique({ where: { id: pollId } });
     if (!poll) throw new NotFoundException('quick poll not found');
     if (poll.status !== 'ACTIVE') throw new ConflictException('this poll is not open for voting');
     if (poll.endsAt && poll.endsAt <= new Date()) throw new ConflictException('this poll has ended');
-    if (!poll.candidates.includes(choiceProposalId)) throw new BadRequestException('not a candidate of this poll');
+    // The ranking must be a full ordering of the candidates — every candidate exactly once.
+    const candidateSet = new Set(poll.candidates);
+    const seen = new Set<string>();
+    for (const id of ranking) {
+      if (!candidateSet.has(id)) throw new BadRequestException('ranking contains a proposal that is not a candidate of this poll');
+      if (seen.has(id)) throw new BadRequestException('ranking lists a proposal more than once');
+      seen.add(id);
+    }
+    if (ranking.length !== poll.candidates.length) throw new BadRequestException('rank every candidate exactly once');
     const drep = await this.prisma.drep.findUnique({ where: { userId }, select: { id: true } });
     if (!drep || !poll.eligibleDrepIds.includes(drep.id)) throw new ForbiddenException('you are not eligible to vote in this poll');
     const power = (await this.dv.liveBalancedPower([drep.id])).get(drep.id) ?? 0;
     await this.prisma.quickPollVote.upsert({
       where: { quickPollId_drepId: { quickPollId: pollId, drepId: drep.id } },
-      update: { choice: choiceProposalId, power, castAt: new Date() },
-      create: { quickPollId: pollId, drepId: drep.id, choice: choiceProposalId, power },
+      update: { ranking, choice: ranking[0] ?? null, power, castAt: new Date() },
+      create: { quickPollId: pollId, drepId: drep.id, ranking, choice: ranking[0] ?? null, power },
     });
     await this.merit?.tryAward(drep.id, 'QUICK_POLL_VOTE', pollId);
     return this.listOne(pollId, userId);
@@ -133,7 +195,7 @@ export class QuickPollService {
         this.logger.log(`quick poll ${pollId}: participation ${participationPct.toFixed(1)}% < ${s.participationPct}% — extended (${poll.extensions + 1}/${s.maxExtensions})`);
         return { status: 'ACTIVE', extended: true };
       }
-      // Final fallback — neither tied proposal is funded.
+      // Final fallback — none of the tied proposals are funded.
       await this.prisma.quickPoll.update({ where: { id: pollId }, data: { status: 'FAILED' } });
       for (const id of poll.candidates) {
         await this.dv.finalize(id, { forcedOutcome: 'REJECTED', note: 'budget-cut (quick poll failed — participation too low)' }).catch(() => undefined);
@@ -141,24 +203,26 @@ export class QuickPollService {
       return { status: 'FAILED' };
     }
 
-    // Winner: highest summed power; ties broken by earliest submission.
-    const powerByChoice = new Map<string, number>();
-    for (const v of poll.votes) powerByChoice.set(v.choice, (powerByChoice.get(v.choice) ?? 0) + v.power);
-    const subs = await this.prisma.proposal.findMany({
-      where: { id: { in: poll.candidates } },
-      select: { id: true, submittedAt: true, createdAt: true },
-    });
-    const subAt = new Map(subs.map((p) => [p.id, (p.submittedAt ?? p.createdAt).getTime()]));
-    const winner = [...poll.candidates].sort((a, b) =>
-      (powerByChoice.get(b) ?? 0) - (powerByChoice.get(a) ?? 0) || (subAt.get(a) ?? 0) - (subAt.get(b) ?? 0),
-    )[0];
+    // Rank by power-weighted priority, then fill the remaining category budget top-down.
+    const sorted = await this.rankedCandidates(poll);
+    const remaining = await this.categoryRemainingLovelace(poll.roundId, poll.categoryId);
+    const { funded, rejected, tieGroup } = walkBudget(sorted.map((c) => ({ id: c.id, amount: c.amount, score: c.score })), remaining);
 
-    await this.prisma.quickPoll.update({ where: { id: pollId }, data: { status: 'RESOLVED', winnerId: winner } });
-    await this.dv.finalize(winner, { forcedOutcome: 'APPROVED', note: 'quick-poll winner' }).catch(() => undefined);
-    for (const id of poll.candidates.filter((c) => c !== winner)) {
-      await this.dv.finalize(id, { forcedOutcome: 'REJECTED', note: 'budget-cut (lost quick poll)' }).catch(() => undefined);
+    // Mark this poll resolved BEFORE creating any follow-up, so createQuickPoll's "one open poll
+    // per category" guard doesn't see this one as still active.
+    await this.prisma.quickPoll.update({ where: { id: pollId }, data: { status: 'RESOLVED', winnerId: funded[0] ?? null } });
+    for (const id of funded) {
+      await this.dv.finalize(id, { forcedOutcome: 'APPROVED', note: 'ranked quick-poll winner' }).catch(() => undefined);
     }
-    return { status: 'RESOLVED', winner };
+    for (const id of rejected) {
+      await this.dv.finalize(id, { forcedOutcome: 'REJECTED', note: 'budget-cut (lost ranked quick poll)' }).catch(() => undefined);
+    }
+    if (tieGroup.length > 1) {
+      // Genuine tie for the last affordable slot → a smaller follow-up poll decides it.
+      await this.dv.createQuickPoll(poll.roundId, poll.categoryId, tieGroup);
+      this.logger.log(`quick poll ${pollId}: ${funded.length} funded, follow-up poll for ${tieGroup.length}-way tie`);
+    }
+    return { status: 'RESOLVED', funded, followUp: tieGroup.length > 1 ? tieGroup : undefined };
   }
 
   /** Polls awaiting THIS DRep's vote (drives the voting to-do badge). */

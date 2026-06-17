@@ -1990,14 +1990,17 @@ export interface QuickPollView {
   winnerId: string | null;
   eligibleCount: number;
   votedCount: number;
-  myChoice: string | null;
   iAmEligible: boolean;
-  candidates: { id: string; title: string; publicId: string | null; requestedAmountAda: number; power: number }[];
+  remainingAda: number; // category budget still unallocated — what the tied candidates compete for
+  myRanking: string[] | null; // the caller's priority order (candidate ids), if they voted
+  // Candidates in aggregate priority order, with the live projection (would-fund / tie at the cliff).
+  candidates: { id: string; title: string; publicId: string | null; requestedAmountAda: number; score: number; projectedFunded: boolean; projectedTie: boolean }[];
 }
 export const quickPollApi = {
   forRound: (roundId: string) => request<QuickPollView[]>(`/rounds/${roundId}/quick-polls`),
   launch: (id: string) => request<QuickPollView>(`/admin/quick-polls/${id}/launch`, { method: 'POST' }),
-  vote: (id: string, choice: string) => request<QuickPollView>(`/quick-polls/${id}/vote`, { method: 'POST', body: JSON.stringify({ choice }) }),
+  // §9.2 — submit a full priority ranking of the candidates (highest first).
+  vote: (id: string, ranking: string[]) => request<QuickPollView>(`/quick-polls/${id}/vote`, { method: 'POST', body: JSON.stringify({ ranking }) }),
   myPending: () => request<{ count: number }>('/me/pending-quick-polls'),
 };
 

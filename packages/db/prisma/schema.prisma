@@ -889,13 +889,15 @@ model QuickPoll {
 model QuickPollVote {
   quickPollId String   @map("quick_poll_id") @db.Uuid
   drepId      String   @map("drep_id") @db.Uuid
-  choice      String   @db.Uuid // proposal id chosen
+  // §9.2 — ranked priority: candidate proposal ids ordered highest-priority first.
+  ranking     String[] @default([]) @db.Uuid
+  choice      String?  @db.Uuid // top pick (= ranking[0]); kept for the choiceProposal relation + back-compat
   power       Float    @default(0) // §9.2 balanced voting power at cast time
   castAt      DateTime @default(now()) @map("cast_at") @db.Timestamptz(6)
 
   quickPoll      QuickPoll @relation(fields: [quickPollId], references: [id])
   drep           Drep      @relation(fields: [drepId], references: [id])
-  choiceProposal Proposal  @relation("QuickPollChoice", fields: [choice], references: [id])
+  choiceProposal Proposal? @relation("QuickPollChoice", fields: [choice], references: [id])
 
   @@id([quickPollId, drepId])
   @@map("quick_poll_vote")

@@ -337,8 +337,9 @@ export class DvService {
     }
   }
 
-  /** §9.2 — auto-trigger: poll awaits the board's one-click confirm before voting opens. */
-  private async createQuickPoll(roundId: string, categoryId: string, candidateIds: string[]) {
+  /** §9.2 — auto-trigger: poll awaits the board's one-click confirm before voting opens.
+   *  Public so a ranked poll's resolution can spawn a follow-up poll for a genuine sub-tie. */
+  async createQuickPoll(roundId: string, categoryId: string, candidateIds: string[]) {
     const existing = await this.prisma.quickPoll.findFirst({
       where: { roundId, categoryId, status: { in: ['PENDING_BOARD', 'ACTIVE'] } },
       select: { id: true },
