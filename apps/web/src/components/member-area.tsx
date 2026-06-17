@@ -332,7 +332,7 @@ function VotingReviewsTab() {
       <FilteringPanel mode={mode} query={query} />
       <VotingPanel mode={mode} query={query} />
       {/* §9.2 — tie-break quick polls of the active round (self-hides when none). */}
-      <ActiveRoundQuickPolls />
+      <ActiveRoundQuickPolls mode={mode} perspective="voter" />
       <MilestoneReviewsPanel history={mode === 'history'} query={query} />
       <EmptyHint text={mode === 'history' ? 'No votes — past or present.' : mode === 'recent' ? 'Nothing in the active stages.' : 'Nothing is awaiting your vote right now.'} />
     </div>
@@ -426,14 +426,16 @@ function TreasuryTab() {
   );
 }
 
-/** §9.2 — quick polls of the active round, surfaced inside Voting & reviews and Actions. */
-function ActiveRoundQuickPolls() {
+/** §9.2 — quick polls of the active round, surfaced inside Voting & reviews and Actions.
+ *  `mode` follows the To do / Recent / History selector; `perspective` picks the board's
+ *  launch queue vs the voter's vote queue (see QuickPollsPanel). */
+function ActiveRoundQuickPolls({ mode, perspective }: { mode?: ReviewMode; perspective?: 'board' | 'voter' }) {
   const [roundId, setRoundId] = useState<string | null>(null);
   useEffect(() => {
     roundsApi.active().then((r) => setRoundId(r?.id ?? null)).catch(() => setRoundId(null));
   }, []);
   if (!roundId) return null;
-  return <QuickPollsPanel roundId={roundId} />;
+  return <QuickPollsPanel roundId={roundId} mode={mode} perspective={perspective} />;
 }
 
 /** Board "Actions" tab: review/audit to-dos that aren't treasury moves —
@@ -472,9 +474,9 @@ function ActionsTab() {
           <ReviewModeToggle mode={mode} onChange={setMode} />
         </div>
       </div>
-      {/* §9.2 — tie-break quick polls of the active round: the board launches/monitors them
-          here as well as in Rounds → Tally (self-hides when the round has no polls). */}
-      <ActiveRoundQuickPolls />
+      {/* §9.2 — tie-break quick polls of the active round: the board's launch queue (To do =
+          not yet launched, Recent = launched). Also in Rounds → Tally (self-hides when none). */}
+      <ActiveRoundQuickPolls mode={mode} perspective="board" />
       <BoardActions history={showHistory} filter="rewards" query={query} />
       <ReviewerAssignments query={query} />
       <BoardMessages />

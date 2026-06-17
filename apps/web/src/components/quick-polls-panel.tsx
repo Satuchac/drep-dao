@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { quickPollApi, type QuickPollView } from '@/lib/api';
+import { quickPollApi, type QuickPollView, type ReviewMode } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 
 const STATUS_CLS: Record<string, string> = {
@@ -16,7 +16,15 @@ const STATUS_CLS: Record<string, string> = {
  * budget cliff: the board launches with one click; eligible DReps pick which proposal gets the
  * remaining budget. Self-hides when the round has no polls.
  */
-export function QuickPollsPanel({ roundId }: { roundId: string }) {
+/**
+ * §9.2 — tie-break polls of a round.
+ * `mode` filters the list by the To do / Recent / History selector. With no mode (the Tally
+ * tab) every poll is shown. `perspective` decides what "to do" means:
+ *   - 'board' (Actions launch queue): To do = not yet launched (PENDING_BOARD) → Recent = launched (ACTIVE).
+ *   - 'voter' (Voting & reviews):     To do = launched & awaiting MY vote → Recent = launched & I voted.
+ * History (both) = resolved / failed.
+ */
+export function QuickPollsPanel({ roundId, mode, perspective = 'board' }: { roundId: string; mode?: ReviewMode; perspective?: 'board' | 'voter' }) {
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
   const [polls, setPolls] = useState<QuickPollView[]>([]);
@@ -25,7 +33,17 @@ export function QuickPollsPanel({ roundId }: { roundId: string }) {
   const load = useCallback(() => { quickPollApi.forRound(roundId).then(setPolls).catch(() => setPolls([])); }, [roundId]);
   useEffect(() => { load(); }, [load]);
 
-  if (polls.length === 0) return null;
+  const visible = !mode ? polls : polls.filter((p) => {
+    const done = p.status === 'RESOLVED' || p.status === 'FAILED';
+    if (mode === 'history') return done;
+    if (perspective === 'voter') {
+      const canVote = p.status === 'ACTIVE' && p.iAmEligible;
+      return mode === 'pending' ? canVote && p.myChoice == null : canVote && p.myChoice != null;
+    }
+    // board launch queue: PENDING_BOARD is the to-do; once launched it's ACTIVE (Recent).
+    return mode === 'pending' ? p.status === 'PENDING_BOARD' : p.status === 'ACTIVE';
+  });
+  if (visible.length === 0) return null;
 
   const launch = async (id: string) => {
     setBusy(id); setErr(null);
@@ -38,13 +56,13 @@ export function QuickPollsPanel({ roundId }: { roundId: string }) {
 
   return (
     <section className="space-y-2 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-      <h3 className="text-base font-semibold">Quick polls — tie-break ({polls.length})</h3>
+      <h3 className="text-base font-semibold">Quick polls — tie-break ({visible.length})</h3>
       <p className="text-xs text-neutral-500">
         §9.2 — proposals with equal scores at the budget cliff. The winner takes the remaining
         category budget; 48 h window, 51% participation (extended up to 3× when too low).
       </p>
       {err ? <div className="text-xs text-red-600">{err}</div> : null}
-      {polls.map((p) => (
+      {visible.map((p) => (
         <div key={p.id} className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="font-medium">{p.categoryName ?? 'category'} · tie of {p.candidates.length}</span>
