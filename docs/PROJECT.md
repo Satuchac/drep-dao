@@ -611,16 +611,14 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   dates (start in the future, end after start, not before the previous stage's end —
   shown inline), displays each stage's **length**, shows a **Saved / ● Not saved**
   indicator per stage, and confirms **Launch … now** via the in-app dialog.
-- **Round setup lock + soft edits (§6).** The full Round-setup form is editable only in
-  **Preparation/Submission**. Once review starts (Filtering onward) the round's rules & economics
-  (budget, category allocations & asks, fees, approval rules, rewards, pledge, budget-change policy)
-  are **frozen** — they're the fixed basis everyone submitted/voted under. But the board can still
-  edit the **cosmetic / UX** fields via a restricted form: the **round name**, **category
-  descriptions**, and the **text-length limits** (`ROUND_SETTING_SOFT` = mandatoryWords/-Max,
-  minimumTitleLen, minimumMilestoneTitleLen) — they change no decision, fee, or vote, only the
-  validation of future edits. `RoundsService.update` routes a post-Submission edit through
-  `updateSoftSettings` (applies only those + descriptions; ignores everything else); CLOSED rounds
-  can't be edited at all. The soft-set membership is unit-tested so a critical setting can't slip in.
+- **Round setup is board-editable at any stage (§6).** The **full** Round-setup form (name, total
+  budget, rewards pool, every per-category field — allocation, min/max ask, **description** +
+  **conditions** via the rich collapsible Markdown editor — and all numeric/boolean settings) is
+  shown and **editable in every stage**, not just Preparation/Submission. `RoundsService.update` no
+  longer status-locks (it still validates category-budget coverage + approval-vote-vs-reviewer-count,
+  and never orphans a category that has proposals). Once review has started the form shows a **caution
+  banner** — changes can affect decisions already in flight (fees paid, votes cast, reward maths) —
+  but the board is trusted to edit with care. The schedule is still adjusted under Round stage control.
 - **Auto-start & overdue UX (§8).** A background ticker (`RoundsSchedulerService`, every 60 s)
   auto-advances a round into its next stage when that stage is **confirmed + auto-start** and its
   planned start has arrived — the trigger is the pure, unit-tested `isStageDueToAutoStart`. The

@@ -8,7 +8,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DRepStatus, ProposalStage, ProposalStatus, RoundStatus, ROUND_SETTING_DEFAULTS, ROUND_SETTING_SOFT } from '@drep-dao/shared';
+import { DRepStatus, ProposalStage, ProposalStatus, RoundStatus, ROUND_SETTING_DEFAULTS } from '@drep-dao/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { DvService } from '../proposals/dv.service';
 import { ProposalsService } from '../proposals/proposals.service';
@@ -455,20 +455,12 @@ export class RoundsService {
     return out;
   }
 
-  /** Editable while still pre-review — PREPARATION or SUBMISSION (once Filtering/D&V start, the
-   * round config is locked). Categories are reconciled by id so existing proposals aren't orphaned. */
+  /** §6 — the board may edit a round's setup at ANY stage (they're trusted to be careful — the UI
+   * warns that changes during review can affect decisions already in flight). Categories are
+   * reconciled by id so a category a proposal already points at is never orphaned. */
   async update(id: string, dto: UpdateRoundDto) {
     const round = await this.prisma.round.findUnique({ where: { id }, include: { categories: true } });
     if (!round) throw new NotFoundException('round not found');
-    if (round.status !== RoundStatus.PREPARATION && round.status !== RoundStatus.SUBMISSION) {
-      // §6 — once review has started the round's rules/economics are frozen, but the board may
-      // still tweak purely cosmetic / UX fields (round name, category descriptions, and the text
-      // -length limits) since they change no decision, fee, or vote already in play.
-      if (round.status === RoundStatus.CLOSED) {
-        throw new ConflictException('the round is closed — its setup can no longer be edited');
-      }
-      return this.updateSoftSettings(id, round, dto);
-    }
     // P4/P7 — re-validate against the resulting budget + schedule.
     const budgetAda = dto.budgetAda ?? toAda(round.budgetAda);
     if (dto.categories) this.assertCategoriesCoverBudget(dto.categories, budgetAda);
@@ -520,33 +512,6 @@ export class RoundsService {
         const ids = await this.resolveEligibility(dto.eligibleDrepIds);
         await tx.roundDrepEligibility.deleteMany({ where: { roundId: id } });
         await tx.roundDrepEligibility.createMany({ data: ids.map((drepId) => ({ roundId: id, drepId })) });
-      }
-    });
-    return this.get(id);
-  }
-
-  /**
-   * §6 — restricted edit allowed AFTER review starts: applies ONLY the cosmetic / UX fields — round
-   * name, the ROUND_SETTING_SOFT text-length limits, and each category's DESCRIPTION (matched by id).
-   * Budget, allocations, asks, fees, approval rules, rewards, schedule, eligibility, etc. are
-   * ignored here — they stay frozen. Used for FILTERING / DEBATE / VOTE / FUNDING rounds.
-   */
-  private async updateSoftSettings(id: string, round: { categories: { id: string }[] }, dto: UpdateRoundDto) {
-    const soft: Record<string, number> = {};
-    for (const key of ROUND_SETTING_SOFT) {
-      const v = (dto as Record<string, unknown>)[key];
-      if (typeof v === 'number') soft[key] = v;
-    }
-    const knownCatIds = new Set(round.categories.map((c) => c.id));
-    await this.prisma.$transaction(async (tx) => {
-      await tx.round.update({
-        where: { id },
-        data: { ...(dto.name !== undefined ? { name: dto.name } : {}), ...soft },
-      });
-      for (const c of dto.categories ?? []) {
-        if (c.id && knownCatIds.has(c.id) && c.description !== undefined) {
-          await tx.roundCategory.update({ where: { id: c.id }, data: { description: c.description } });
-        }
       }
     });
     return this.get(id);

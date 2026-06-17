@@ -150,20 +150,6 @@ export const ROUND_SETTING_BOOLEAN: ReadonlySet<string> = new Set([
   'requireFeeReturn',
 ]);
 
-/**
- * §6 — settings safe to edit even AFTER review starts (Filtering onward): purely cosmetic / UX
- * limits that don't change any decision, economics, fee, or voting outcome already in play. Only
- * future proposal edits are validated against them. (Round name + category DESCRIPTIONS are also
- * editable late, handled separately — they're not in ROUND_SETTING_DEFAULTS.) Everything else stays
- * frozen at review start.
- */
-export const ROUND_SETTING_SOFT: ReadonlySet<string> = new Set([
-  'mandatoryWords',
-  'mandatoryWordsMax',
-  'minimumTitleLen',
-  'minimumMilestoneTitleLen',
-]);
-
 /** §12 — resolve a YES/NO round setting (the stored column or its default) to a boolean. */
 export function roundFlagOn(
   value: number | null | undefined,
