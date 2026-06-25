@@ -89,8 +89,3 @@ export class VoteInternalDto {
   @IsOptional() @IsArray() @IsString({ each: true }) options?: string[];
   @IsOptional() @IsString() @MaxLength(4000) rationale?: string;
 }
-
-/** §10 — the submitter may move the voting end (extend/shorten) while ACTIVE; never the content. */
-export class ExtendInternalDto {
-  @IsISO8601() votingEndAt!: string;
-}

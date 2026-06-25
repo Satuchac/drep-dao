@@ -441,17 +441,8 @@ export class InternalProposalsService {
     return this.detail(proposalId, userId);
   }
 
-  /** §10 — the submitter moves the voting end (extend or shorten); content stays frozen. */
-  async extendVoting(userId: string, proposalId: string, votingEndAt: string) {
-    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
-    if (!proposal || proposal.type !== ProposalType.INTERNAL) throw new NotFoundException('internal proposal not found');
-    if (proposal.submitterUserId !== userId) throw new ForbiddenException('only the submitter can change the voting end');
-    if (proposal.status !== ProposalStatus.ACTIVE) throw new ConflictException('voting has already concluded');
-    const end = new Date(votingEndAt);
-    if (Number.isNaN(end.getTime()) || end.getTime() <= Date.now()) throw new BadRequestException('the new end must be in the future');
-    await this.prisma.proposal.update({ where: { id: proposalId }, data: { votingEndAt: end } });
-    return this.detail(proposalId, userId);
-  }
+  // §10 — the voting end is fixed at submission and never changes afterwards (set it before
+  // submitting / while it's a draft). There is intentionally no "extend voting" endpoint.
 
   // ---- listing + detail -----------------------------------------------------
 

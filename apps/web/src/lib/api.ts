@@ -1898,8 +1898,6 @@ export const internalProposalsApi = {
     request<{ id: string; deleted: boolean }>(`/internal-proposals/drafts/${id}`, { method: 'DELETE' }),
   vote: (id: string, input: VoteInternalInput) =>
     request<InternalProposalDetail>(`/internal-proposals/${id}/vote`, { method: 'POST', body: JSON.stringify(input) }),
-  extend: (id: string, votingEndAt: string) =>
-    request<InternalProposalDetail>(`/internal-proposals/${id}/extend`, { method: 'POST', body: JSON.stringify({ votingEndAt }) }),
   installBoard: (id: string) =>
     request<{ id: string; publicId: string | null; boardInstalledAt: string | null }>(
       `/internal-proposals/${id}/install-board`,

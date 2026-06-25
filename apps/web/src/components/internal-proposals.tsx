@@ -708,7 +708,6 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const [busy, setBusy] = useState(false);
   const [rationale, setRationale] = useState('');
   const [picked, setPicked] = useState<string[]>([]);
-  const [newEnd, setNewEnd] = useState('');
   // Once a DRep has voted the card locks to a read-only summary; "Change vote" reopens the form.
   const [changing, setChanging] = useState(false);
 
@@ -979,17 +978,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
         <div className={card}><p className="text-sm text-neutral-500">You are not eligible to vote on this proposal ({SCOPE_LABEL[p.votersScope] ?? p.votersScope}).</p></div>
       ) : null}
 
-      {/* Submitter: move the voting end (content stays frozen). */}
-      {p.isMine && p.status === 'ACTIVE' ? (
-        <div className={card}>
-          <h3 className="text-base font-semibold">Manage voting period</h3>
-          <p className="text-xs text-neutral-500">You can move the end of voting (you can&apos;t edit the content while voting is open).</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <DateField value={newEnd || toLocalInput(p.votingEndAt)} onChange={setNewEnd} />
-            <button disabled={busy} onClick={() => act(() => internalProposalsApi.extend(id, new Date(newEnd || toLocalInput(p.votingEndAt)).toISOString()))} className="rounded border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800">Update end</button>
-          </div>
-        </div>
-      ) : null}
+      {/* §10 — the voting end is fixed at submission; it can't be changed once voting is open. */}
     </div>
   );
 }

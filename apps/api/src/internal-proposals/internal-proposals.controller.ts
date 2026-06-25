@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, UseGu
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { InternalProposalsService } from './internal-proposals.service';
-import { CreateInternalProposalDto, ExtendInternalDto, SaveDraftDto, VoteInternalDto } from './dto';
+import { CreateInternalProposalDto, SaveDraftDto, VoteInternalDto } from './dto';
 
 // §10 — internal proposals (threshold voting / polls). Any authenticated user reads the public
 // ones; PRIVATE ones are filtered to board members inside the service.
@@ -51,11 +51,6 @@ export class InternalProposalsController {
   @Post(':id/vote')
   vote(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: VoteInternalDto) {
     return this.internal.vote(c.userId, id, dto);
-  }
-
-  @Post(':id/extend')
-  extend(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: ExtendInternalDto) {
-    return this.internal.extendVoting(c.userId, id, dto.votingEndAt);
   }
 
   @Post(':id/finalize')
