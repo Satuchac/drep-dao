@@ -559,6 +559,27 @@ export class MultisigBroadcastService {
         this.logger.warn(`reward payout anchor skipped: ${e instanceof Error ? e.message : e}`);
       }
     }
+    // Anchor the recipient address, amount, and tx hash of a single-output spend
+    // (funding-milestone payout or internal-proposal spending). Best-effort; never blocks.
+    const anchorSpend = async (stage: string) => {
+      if (!action.destAddress || action.amountAda == null) return;
+      try {
+        const sigs = await this.prisma.multisigSignature.findMany({
+          where: { actionId },
+          include: { drep: { select: { drepIdOnchain: true } } },
+        });
+        await this.anchor.anchorPayout({
+          stage,
+          round: action.proposalTitle ?? null,
+          roundId: null,
+          payoutTxHash: txHash,
+          recipients: [{ to: action.destAddress, lovelace: Number(action.amountAda) }],
+          signers: sigs.map((s) => s.drep.drepIdOnchain),
+        });
+      } catch (e) {
+        this.logger.warn(`spend anchor skipped: ${e instanceof Error ? e.message : e}`);
+      }
+    };
     // §11.4 — a confirmed PROJECT_FUNDING payout stamps the milestone PAID (the schema always
     // promised this), then §16.3 checks whether a pledge-return share is due.
     if (action.kind === 'PROJECT_FUNDING' && action.milestoneId) {
@@ -566,6 +587,9 @@ export class MultisigBroadcastService {
         where: { id: action.milestoneId },
         data: { paidAt: new Date(), paidInTx: txHash },
       });
+      await anchorSpend(
+        action.milestoneIdx != null ? `Milestone #${action.milestoneIdx + 1} payout` : 'Milestone payout',
+      );
       if (action.proposalId && this.pledgeReturn) {
         try {
           await this.pledgeReturn.maybePrepareReturn(action.proposalId, action.milestoneId);
@@ -573,6 +597,11 @@ export class MultisigBroadcastService {
           this.logger.warn(`pledge-return check failed: ${e instanceof Error ? e.message : e}`);
         }
       }
+    }
+    // An OPS spend that funds an internal proposal (carries proposalId + destAddress) — anchor
+    // the recipient, amount, and tx so the proof matches funding-milestone payouts.
+    if (action.kind === 'OPS' && action.proposalId && action.destAddress) {
+      await anchorSpend('Internal proposal payout');
     }
     // §13.2 — every signer of a tx that reached the network earns +1 (once per action).
     try {

@@ -127,7 +127,7 @@ describe('buildResultMetadata (§4 — on-chain voting-power precision)', () => 
     expect(meta.tally.yes).toBe('11.94');
     expect(meta.tally.totalPower).toBe('25.08');
     expect(meta.tally.threshold).toBe(67); // a percentage — stays a whole number
-    expect(meta.tally.unit).toBe('power');
+    expect(meta.tally.unit).toBe('adjusted power');
   });
 
   it('ONCHAIN: also emits precise 2-decimal power strings', () => {
@@ -144,7 +144,7 @@ describe('buildResultMetadata (§4 — on-chain voting-power precision)', () => 
     expect(meta.tally.yes).toBe('67827.34');
   });
 
-  it('1P1V: tallies stay whole vote counts (integers, unit "1 member - 1 vote")', () => {
+  it('1P1V: tallies stay whole vote counts (integers, unit "1 vote")', () => {
     const meta = buildResultMetadata({
       ...base,
       style: VotingStyle.ONE_PERSON_ONE_VOTE,
@@ -155,7 +155,7 @@ describe('buildResultMetadata (§4 — on-chain voting-power precision)', () => 
     })[GOVERNANCE_METADATA_LABEL];
     expect(meta.tally.yes).toBe(3);
     expect(meta.tally.no).toBe(1);
-    expect(meta.tally.unit).toBe('1 member - 1 vote');
+    expect(meta.tally.unit).toBe('1 vote');
     expect('totalPower' in meta.tally).toBe(false);
   });
 });

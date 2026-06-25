@@ -128,9 +128,10 @@ export interface AnchorResultMetadata {
   // For 1P1V (unit "1 member - 1 vote"): yes/no are vote counts, threshold is the count needed.
   // For BAL: yes/no are summed voting power, threshold is the % of total power required, and
   // totalPower is the snapshot's total eligible power.
-  // yes/no/totalPower are integers for 1P1V (vote counts) and 2-decimal strings for BALANCED /
-  // ONCHAIN (fractional power); threshold is always whole (a count or a percentage).
-  tally: { yes: number | string; no: number | string; threshold: number; unit: '1 member - 1 vote' | 'power'; totalPower?: number | string };
+  // yes/no/totalPower are integers for 1P1V (vote counts) and exact-decimal strings for BALANCED /
+  // ONCHAIN (fractional power); threshold is always whole (a count or a percentage). `unit` names
+  // the voting method: "1 vote" (1P1V), "adjusted power" (BALANCED), "on-chain power" (ONCHAIN).
+  tally: { yes: number | string; no: number | string; threshold: number; unit: '1 vote' | 'adjusted power' | 'on-chain power'; totalPower?: number | string };
   outcome: string;
   decidedAt: string;
   proofHash?: string;
@@ -154,14 +155,17 @@ export function buildResultMetadata(p: {
   verify?: string;
 }): Record<string, AnchorResultMetadata> {
   const balanced = p.style !== VotingStyle.ONE_PERSON_ONE_VOTE;
+  // The unit names the voting method precisely: 1P1V counts heads ("1 vote"); BALANCED is the
+  // merit-adjusted power ("adjusted power"); ONCHAIN is the raw delegated power ("on-chain power").
+  const unit: AnchorResultMetadata['tally']['unit'] =
+    p.style === VotingStyle.ONE_PERSON_ONE_VOTE ? '1 vote' : p.style === VotingStyle.ONCHAIN ? 'on-chain power' : 'adjusted power';
   // Cardano tx metadata forbids floats. 1P1V tallies are whole vote counts (kept as integers).
-  // BALANCED / ONCHAIN voting power is fractional, so emit it to 2 decimals as a STRING — this
-  // preserves the precise value on-chain (e.g. "6.09", not 6). The off-chain preimage that
-  // `proofHash` commits to carries the same precision.
+  // BALANCED / ONCHAIN voting power is fractional and must NOT be rounded — emit the exact value
+  // (to 2 decimals, no trailing-zero padding) as a STRING, e.g. "4.8" / "6.09", never "5".
   const r = (n: number) => Math.round(n);
   const pow = (n: number | string): number | string => {
     const x = typeof n === 'string' ? Number(n) : n;
-    return balanced ? x.toFixed(2) : r(x);
+    return balanced ? String(Math.round(x * 100) / 100) : r(x);
   };
   const meta: AnchorResultMetadata = {
     title: SUBJECT_TITLE[p.subject],
@@ -176,7 +180,7 @@ export function buildResultMetadata(p: {
       yes: pow(p.yes),
       no: pow(p.no),
       threshold: r(p.threshold), // a vote count (1P1V) or a percentage (balanced) — always whole
-      unit: balanced ? 'power' : '1 member - 1 vote',
+      unit,
       ...(balanced && p.totalPower != null ? { totalPower: pow(p.totalPower) } : {}),
     },
     outcome: p.outcome,
