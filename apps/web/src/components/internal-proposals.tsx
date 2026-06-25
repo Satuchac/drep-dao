@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { card } from '@/lib/ui';
 import {
   internalProposalsApi,
@@ -18,7 +18,7 @@ import {
 import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
 import { useUrlNav } from '@/lib/use-url-nav';
-import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput, DateField, RationaleText } from './round-ui';
+import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput, DateField, RationaleText, useNow, fmtCountdown } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
 
 
@@ -718,6 +718,25 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
   }, [id]);
   useEffect(load, [load]);
 
+  // §10 — live countdown to the voting end. The backend finalizes an internal proposal on every
+  // read, so when the end passes while the page is open we refetch once (status flips to
+  // APPROVED/REJECTED immediately) and poll periodically as a safety net.
+  const now = useNow(1000);
+  const endMs = p?.votingEndAt ? new Date(p.votingEndAt).getTime() : null;
+  const expired = endMs != null && now >= endMs;
+  const expiryFiredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!p || p.status !== 'ACTIVE' || endMs == null || now < endMs) return;
+    if (expiryFiredRef.current === id) return; // refetch only once per proposal when it expires
+    expiryFiredRef.current = id;
+    load();
+  }, [now, p, endMs, id, load]);
+  useEffect(() => {
+    if (p?.status !== 'ACTIVE') return;
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, [p?.status, load]);
+
   // Only a load failure (no proposal yet) replaces the page; a failed vote shows inline below
   // so the voter stays on the proposal page.
   if (!p) return <div className="space-y-3"><BackBtn onBack={onBack} />{error ? <div className="text-sm text-red-600">{error}</div> : <p className="text-sm text-neutral-500">Loading…</p>}</div>;
@@ -762,6 +781,11 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
     <div className="space-y-4">
       <BackBtn onBack={onBack} />
       {error ? <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{error}</div> : null}
+      {p.status === 'ACTIVE' && expired ? (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
+          ⏱ Voting has ended — finalizing the result…
+        </div>
+      ) : null}
       <div className={card}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h2 className="text-lg font-semibold">
@@ -777,7 +801,11 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
         <div className="mt-1 text-xs text-neutral-500">
           {TYPE_LABEL[p.internalType] ?? p.internalType} · {SCOPE_LABEL[p.votersScope] ?? p.votersScope} · {VTYPE_LABEL[p.votingType] ?? p.votingType}
           {p.tally.kind === 'THRESHOLD' ? ` · threshold ${p.thresholdPct ?? '?'}%` : ''}
-          {' · '}{p.status === 'ACTIVE' ? `voting ends ${fmtDateTime(p.votingEndAt)}` : `voting ${fmtDateTime(p.votingStartAt)} → ${fmtDateTime(p.votingEndAt)}`}
+          {' · '}{p.status === 'ACTIVE'
+            ? (expired
+                ? <span className="font-medium text-amber-600">voting ended — finalizing…</span>
+                : <>voting ends in <span className={endMs != null && endMs - now <= 2 * 3600_000 ? 'font-semibold text-red-600' : 'font-medium text-neutral-700 dark:text-neutral-300'}>{fmtCountdown((endMs ?? now) - now)}</span></>)
+            : `voting ${fmtDateTime(p.votingStartAt)} → ${fmtDateTime(p.votingEndAt)}`}
         </div>
 
         <div className="mt-3">
@@ -916,7 +944,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
       ) : null}
 
       {/* Voting */}
-      {p.status === 'ACTIVE' && p.canVote ? (
+      {p.status === 'ACTIVE' && p.canVote && !expired ? (
         <div className={card}>
           <h3 className="text-base font-semibold">Cast your vote</h3>
           {hasVoted && !changing ? (
@@ -976,7 +1004,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
             </>
           )}
         </div>
-      ) : p.status === 'ACTIVE' ? (
+      ) : p.status === 'ACTIVE' && !expired ? (
         <div className={card}><p className="text-sm text-neutral-500">You are not eligible to vote on this proposal ({SCOPE_LABEL[p.votersScope] ?? p.votersScope}).</p></div>
       ) : null}
 

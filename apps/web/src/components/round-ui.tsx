@@ -85,6 +85,30 @@ export function ProposalCounts({ counts, activeStage }: { counts?: Record<string
 
 export const fmtDateTime = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+
+/** A ticking "now" (ms) that updates every `intervalMs` — for live countdowns. */
+export function useNow(intervalMs = 1000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(t);
+  }, [intervalMs]);
+  return now;
+}
+
+/** Human countdown for a remaining-ms value: "2d 3h", "1h 23m", "4m 12s", "9s", "0s". */
+export function fmtCountdown(ms: number): string {
+  if (ms <= 0) return '0s';
+  const s = Math.floor(ms / 1000);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
 /** Same as fmtDateTime but date only — used wherever the time isn't meaningful (board install date, etc.). */
 export const fmtDate = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString(undefined, { dateStyle: 'medium' }) : '—';
