@@ -723,25 +723,38 @@ export class InternalProposalsService {
     if (!p || p.internalType !== InternalType.SPENDING) return;
     if (p.status !== ProposalStatus.APPROVED) return;
     if (p.spendingActionId || !p.spendingAmountAda || !p.spendingDestAddress) return;
+    const amountAda = p.spendingAmountAda;
+    const destAddress = p.spendingDestAddress;
     const sourceBucketId = p.spendingSourceBucketId
       ?? (await this.prisma.treasuryBucket.findFirst({
         where: { isDefaultOperations: true, config: { replacedAt: null } },
         select: { id: true },
       }))?.id
       ?? null;
-    const action = await this.prisma.multisigAction.create({
-      data: {
-        kind: 'OPS',
-        status: 'PENDING_SIGS',
-        amountAda: p.spendingAmountAda,
-        destAddress: p.spendingDestAddress,
-        sourceBucketId,
-        proposalId: p.id,
-        proposalTitle: p.title,
-        description: `Spending internal proposal · ${p.publicId ?? p.title} — approved by vote, ${(Number(p.spendingAmountAda) / 1e6).toLocaleString()} ₳ to ${p.spendingDestAddress.slice(0, 24)}…`,
-      },
+    // §10.5 — this runs on EVERY detail read, so two board members opening the approved proposal at
+    // once would both pass the guard above and each create an action — the "two identical signing
+    // events" bug. Lock the proposal row so the check-and-create is atomic, re-check under the lock,
+    // and adopt any existing OPS action instead of making a second one.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM proposal WHERE id = ${proposalId}::uuid FOR UPDATE`;
+      const fresh = await tx.proposal.findUnique({ where: { id: proposalId }, select: { spendingActionId: true } });
+      if (fresh?.spendingActionId) return; // another concurrent call already prepared it
+      const existing = await tx.multisigAction.findFirst({ where: { proposalId, kind: 'OPS' }, select: { id: true } });
+      const actionId = existing?.id ?? (await tx.multisigAction.create({
+        data: {
+          kind: 'OPS',
+          status: 'PENDING_SIGS',
+          amountAda,
+          destAddress,
+          sourceBucketId,
+          proposalId: p.id,
+          proposalTitle: p.title,
+          description: `Spending internal proposal · ${p.publicId ?? p.title} — approved by vote, ${(Number(amountAda) / 1e6).toLocaleString()} ₳ to ${destAddress.slice(0, 24)}…`,
+        },
+        select: { id: true },
+      })).id;
+      await tx.proposal.update({ where: { id: proposalId }, data: { spendingActionId: actionId } });
     });
-    await this.prisma.proposal.update({ where: { id: p.id }, data: { spendingActionId: action.id } });
   }
 
   /**
