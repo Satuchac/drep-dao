@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { SUBCAT_LABEL } from '@/lib/ui';
 import { card } from '@/lib/ui';
 import { DEFAULT_SUBCATEGORIES, canCommentOnProposal, commentAuthorTone } from '@drep-dao/shared';
@@ -36,7 +36,7 @@ import {
   type RoundDetail,
   type FeeVerification,
 } from '@/lib/api';
-import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, RationaleText, PowerBar } from './round-ui';
+import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, RationaleText, PowerBar, useNow, fmtCountdown } from './round-ui';
 import { Markdown, MarkdownEditor, MarkdownCollapseContext } from './markdown';
 import { CopyButton } from './copy-button';
 import { ConfirmDialog } from './confirm-dialog';
@@ -94,6 +94,12 @@ export function ProposalDetail({
     proposalsApi.mine().then((list) => setMine(list.some((m) => m.id === id))).catch(() => setMine(false));
   }, [id]);
   useEffect(load, [load]);
+  // §6 — poll so a stage/status change (round advancing, D&V concluding) shows on an open page
+  // without a manual reload — the status badge + stage labels update on their own.
+  useEffect(() => {
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, [load]);
 
   if (error) return <div className="space-y-2"><BackBtn onBack={onBack} /><div className="text-sm text-red-600">{error}</div></div>;
   if (!p) return <div className="space-y-2"><BackBtn onBack={onBack} /><p className="text-sm text-neutral-500">Loading…</p></div>;
@@ -1803,6 +1809,46 @@ function EditSection({
   // Pledge text/amount stays editable through the resubmit + debate revision phases (until the
   // board confirms it on-chain) — it isn't part of the requested-budget lock.
   const pledgeEditable = (canResubmit || inDebate || proposal.ignoreBudgetChange) && !proposal.pledgeConfirmedAt;
+
+  // §6/§8 — the editing window closes when the current stage's scheduled end passes (Debate is the
+  // last editable stage). Pull that end time from the round schedule for a live countdown + lock.
+  const now = useNow(1000);
+  const [stageEndsAt, setStageEndsAt] = useState<string | null>(null);
+  useEffect(() => {
+    const key = inDebate ? 'debate' : inSubmission ? 'submission' : canResubmit ? 'filtering' : null;
+    if (!key || !proposal.roundId) { setStageEndsAt(null); return; }
+    roundsApi.get(proposal.roundId)
+      .then((rd) => setStageEndsAt(rd.schedule.find((s) => s.stageKey === key)?.endsAt ?? null))
+      .catch(() => setStageEndsAt(null));
+  }, [proposal.roundId, inDebate, inSubmission, canResubmit]);
+  const endMs = stageEndsAt ? new Date(stageEndsAt).getTime() : null;
+  const editClosed = endMs != null && now >= endMs;
+  const last2h = endMs != null && !editClosed && endMs - now <= 2 * 3600_000;
+  // When the window closes while the page is open, refetch once so the round-advance (and the
+  // disappearing edit form) reflects as soon as the server catches up.
+  const closedFiredRef = useRef(false);
+  useEffect(() => { if (editClosed && !closedFiredRef.current) { closedFiredRef.current = true; onChange(); } }, [editClosed, onChange]);
+
+  // §3 — "ignore unchanged": dirty only when an editable field actually differs from the saved
+  // proposal, so the "save before the window closes" nudge never nags about a pristine form.
+  const sig = (f: Record<string, unknown>) => JSON.stringify(f);
+  const baselineSig = sig({
+    content: proposal.contentMd, costBreakdown: proposal.costBreakdownMd ?? '', teamInfo: proposal.teamInfoMd ?? '',
+    revenueSharing: proposal.revenueSharingMd ?? '', revenueSharingRequired: !!proposal.revenueSharingRequired,
+    ecosystemImpact: proposal.ecosystemImpactMd ?? '', successMetrics: proposal.successMetricsMd ?? '',
+    payoutAddress: proposal.payoutAddress ?? '', subcatIds: [...(proposal.subcategoryIds ?? [])].sort(),
+    amount: proposal.requestedAmountAda, commercial: !!proposal.isCommercial,
+    milestones: proposal.milestones.map((m) => ({ t: m.title ?? '', d: m.description ?? '', a: m.acceptanceCriteria ?? '', amt: m.amountAda })),
+    pledgeAmount: proposal.pledgeAmountAda ?? 0, pledgeReturn: proposal.pledgeReturnMethod ?? '',
+  });
+  const currentSig = sig({
+    content, costBreakdown, teamInfo, revenueSharing, revenueSharingRequired, ecosystemImpact, successMetrics,
+    payoutAddress, subcatIds: [...subcatIds].sort(), amount, commercial,
+    milestones: milestones.map((m) => ({ t: m.title, d: m.description, a: m.acceptanceCriteria, amt: m.amountAda })),
+    pledgeAmount: pledgeEnabled ? pledgeAmount : 0, pledgeReturn: pledgeEnabled ? pledgeReturnMethod : '',
+  });
+  const dirty = currentSig !== baselineSig;
+
   if (!editable) return null;
 
   const milestoneSum = milestones.reduce((acc, m) => acc + Number(m.amountAda || 0), 0);
@@ -1810,6 +1856,7 @@ function EditSection({
 
   const save = async () => {
     setError(null);
+    if (editClosed) { setError('The editing window has closed — this stage has ended, so the proposal can no longer be edited.'); return; }
     if (budgetEditable && !milestonesMatch) {
       setError(`Milestones sum to ${milestoneSum.toLocaleString()} ₳ but must equal the requested amount ${Number(amount).toLocaleString()} ₳.`);
       return;
@@ -1865,6 +1912,20 @@ function EditSection({
     );
   return (
     <div className="mt-3 space-y-2 rounded border border-neutral-200 p-2 dark:border-neutral-800">
+      {/* §6/§8 — editing window deadline. Once the stage ends, the proposal can't be edited; warn
+          (red) in the last 2 hours, and harder if there are unsaved changes. */}
+      {endMs != null ? (
+        editClosed ? (
+          <div className="rounded border border-red-300 bg-red-50 px-2 py-1.5 text-xs font-medium text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+            ⏱ Editing has closed — this stage ended. {dirty ? 'Unsaved changes can no longer be saved.' : 'The proposal is now locked.'}
+          </div>
+        ) : (
+          <div className={`rounded border px-2 py-1.5 text-xs ${last2h ? 'border-red-300 bg-red-50 font-medium text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300' : 'border-neutral-200 text-neutral-600 dark:border-neutral-800 dark:text-neutral-400'}`}>
+            ⏱ Editing closes in <strong>{fmtCountdown(endMs - now)}</strong> (when this stage ends).
+            {dirty ? ' You have unsaved changes — save them before then.' : ' Save any changes before then.'}
+          </div>
+        )
+      ) : null}
       <div className="text-xs text-neutral-500">
         {budgetEditable
           ? 'Revise the proposal — every field including the budget and milestones (the submission-fee tx hash is locked).'
@@ -2015,8 +2076,8 @@ function EditSection({
       </div>
       {error ? <div className="text-xs text-red-600">{error}</div> : null}
       <div className="flex gap-2">
-        <button disabled={busy} onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-          {busy ? 'Saving…' : 'Save (creates a new version)'}
+        <button disabled={busy || editClosed} onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+          {busy ? 'Saving…' : editClosed ? 'Editing closed' : 'Save (creates a new version)'}
         </button>
         <button onClick={() => onOpenChange(false)} className="text-xs text-neutral-500 hover:underline">cancel</button>
       </div>
