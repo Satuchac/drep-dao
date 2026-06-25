@@ -203,6 +203,8 @@ export function InternalProposals() {
                   <span className="font-medium">
                     {p.publicId ? <span className="mr-2 font-mono text-xs text-neutral-500">{p.publicId}</span> : null}
                     {p.title || <span className="italic text-neutral-400">(untitled draft)</span>}
+                    {/* §10.5 — show the treasury payout amount for SPENDING proposals. */}
+                    {p.internalType === 'SPENDING' && p.spendingAmountAda != null ? <span className="ml-1 font-semibold text-blue-600 dark:text-blue-400">· {p.spendingAmountAda.toLocaleString()} ₳</span> : null}
                     {p.isPrivate ? <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">PRIVATE · board</span> : null}
                   </span>
                   <div className="flex items-center gap-2">

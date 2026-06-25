@@ -1809,6 +1809,8 @@ export interface InternalProposalSummary {
   canVote: boolean;
   isBoardElection: boolean;
   boardInstalledAt: string | null;
+  /** §10.5 — ADA a SPENDING proposal pays from the treasury on approval (null for other types). */
+  spendingAmountAda?: number | null;
 }
 export interface BoardCandidate {
   drepId: string;

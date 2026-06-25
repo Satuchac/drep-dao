@@ -633,7 +633,8 @@ export class TreasuryService implements OnModuleInit {
     const actions = await this.prisma.multisigAction.findMany({
       where: { txHash: { not: null } },
       select: {
-        txHash: true, kind: true, amountAda: true, description: true, proposalTitle: true, proposalId: true, destAddress: true, sourceBucketId: true,
+        txHash: true, kind: true, status: true, amountAda: true, description: true, proposalTitle: true, proposalId: true,
+        destAddress: true, sourceBucketId: true, paidAt: true, createdAt: true,
         // §15 — who signed, so the history shows the 3-of-5 behind each tx.
         signatures: { select: { drep: { select: { user: { select: { displayName: true } } } } } },
       },
@@ -653,6 +654,10 @@ export class TreasuryService implements OnModuleInit {
       PLEDGE_RETURN: 'pledge return', LEFTOVER_RETURN: 'leftover return', MIGRATION: 'treasury migration',
       BOARD_TRANSFER: 'treasury transfer',
     };
+    // OPS covers BOTH hot-wallet top-ups (no proposal) and internal-spending-proposal payouts
+    // (have a proposal) — label them apart so a spending payout doesn't read as a "top-up".
+    const actionLabel = (a: { kind: string; proposalId?: string | null }) =>
+      a.kind === 'OPS' ? (a.proposalId ? 'internal-proposal payout' : 'hot-wallet top-up') : KIND_LABEL[a.kind] ?? 'treasury spend';
 
     // §15 — every wallet the DAO controls (multisig + buckets + hot wallet, all already in
     // `addresses`). A tx whose destination is one of these moved money around, not out — INTERNAL.
@@ -682,8 +687,11 @@ export class TreasuryService implements OnModuleInit {
       // that over the computed net, because db-sync's consumed-marking lags
       // and a just-sent payout can look like incoming change. Hot-wallet
       // sweeps come back as plain incoming → INTERNAL via their tx hash.
+      // Internal = the destination is one of OUR wallets (hot-wallet top-up, bucket-to-bucket
+      // move, migration). An OPS action that pays an EXTERNAL address (an internal SPENDING
+      // proposal's payout) is a real OUTGOING spend — so classify by destination, not by kind.
       const internalMove = action
-        ? (action.kind === 'OPS' || (action.destAddress != null && internalAddrs.has(action.destAddress)))
+        ? (action.destAddress != null && internalAddrs.has(action.destAddress))
         : sweepHashes.has(t.hash);
       const boardPayout = action && !internalMove;
       const direction: 'IN' | 'OUT' | 'INTERNAL' = internalMove ? 'INTERNAL' : boardPayout ? 'OUT' : net >= 0n ? 'IN' : 'OUT';
@@ -702,7 +710,7 @@ export class TreasuryService implements OnModuleInit {
           tx.submitter = fee.submitter ?? undefined;
         } else tx.label = 'anonymous income';
       } else if (action) {
-        tx.label = KIND_LABEL[action.kind] ?? 'treasury spend';
+        tx.label = actionLabel(action);
         tx.proposalId = action.proposalId ?? undefined;
         tx.proposalPublicId = action.proposalId ? publicIdById.get(action.proposalId) ?? undefined : undefined;
         tx.proposalTitle = action.proposalTitle ?? action.description ?? undefined;
@@ -716,6 +724,30 @@ export class TreasuryService implements OnModuleInit {
       }
       return tx;
     }).filter((t): t is TreasuryTx => t !== null);
+
+    // §15 — guarantee every executed treasury spend shows even if the on-chain address scan
+    // (db-sync/Koios) returned nothing for it (sync lag, rate-limit, or the address isn't indexed
+    // yet — the symptom: an approved internal-spending payout went out but "No transactions yet").
+    // Add any broadcast/confirmed multisig action by its recorded tx hash that isn't already listed.
+    const present = new Set(transactions.map((t) => t.hash));
+    for (const a of actions) {
+      if (!a.txHash || present.has(a.txHash) || a.status === 'FAILED') continue;
+      const internalMove = a.destAddress != null && internalAddrs.has(a.destAddress);
+      transactions.push({
+        hash: a.txHash,
+        time: Math.floor((a.paidAt ?? a.createdAt).getTime() / 1000),
+        direction: internalMove ? 'INTERNAL' : 'OUT',
+        amountAda: a.amountAda != null ? Number(a.amountAda) / ADA : 0,
+        label: actionLabel(a),
+        proposalId: a.proposalId ?? undefined,
+        proposalPublicId: a.proposalId ? publicIdById.get(a.proposalId) ?? undefined : undefined,
+        proposalTitle: a.proposalTitle ?? a.description ?? undefined,
+        destAddress: a.destAddress ?? undefined,
+        sourceAddress: (a.sourceBucketId ? bucketAddrById.get(a.sourceBucketId) : undefined) ?? active?.bech32Address ?? undefined,
+        signers: a.signatures.length ? a.signatures.map((s) => s.drep?.user?.displayName ?? 'board member') : undefined,
+      });
+    }
+    transactions.sort((x, y) => y.time - x.time); // newest first (after merging the fallback rows)
 
     // Merge any board-provided context (overrides the auto label + adds an attributed note).
     const hashes = transactions.map((t) => t.hash);

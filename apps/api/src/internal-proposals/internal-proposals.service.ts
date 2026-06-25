@@ -626,6 +626,8 @@ export class InternalProposalsService {
       isMine: d.isMine,
       myVotes: d.myVotes, // surface "you voted ..." in the list row
       canVote: d.canVote,
+      // §10.5 — the ADA a SPENDING proposal pays out (null for every other type), shown in the list.
+      spendingAmountAda: d.spending?.amountAda ?? null,
     };
   }
 

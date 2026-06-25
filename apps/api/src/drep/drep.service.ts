@@ -269,6 +269,15 @@ export class DrepService {
   /** Everything the platform has anchored on-chain, newest first, human-readable. */
   async listOnChainProofs() {
     const anchors = await this.prisma.anchor.findMany({ orderBy: { createdAt: 'desc' }, take: 200 });
+    // §10.5 — surface the ADA a SPENDING internal proposal paid out, behind its proof's tally.
+    const propIds = [...new Set(anchors.map((a) => a.proposalId).filter((x): x is string => !!x))];
+    const spends = propIds.length
+      ? await this.prisma.proposal.findMany({
+          where: { id: { in: propIds }, internalType: 'SPENDING', spendingAmountAda: { not: null } },
+          select: { id: true, spendingAmountAda: true },
+        })
+      : [];
+    const spendAdaByProposal = new Map(spends.map((p) => [p.id, Number(p.spendingAmountAda) / 1_000_000]));
     return anchors.map((a) => {
       const p = (a.preimage ?? {}) as {
         subject?: string;
@@ -323,6 +332,8 @@ export class DrepService {
             : `${r.outcome} — ${r.yes}/${r.threshold} YES`;
       }
       if (ref) detail += `${detail ? ' · ' : ''}${ref.length > 44 ? `${ref.slice(0, 40)}…` : ref}`;
+      const spendAda = a.proposalId ? spendAdaByProposal.get(a.proposalId) : undefined;
+      if (spendAda != null) detail += `${detail ? ' · ' : ''}${spendAda.toLocaleString()} ₳`;
       return {
         id: a.id,
         title,
