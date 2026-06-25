@@ -6,12 +6,12 @@ import { invalidateConfig } from '@/lib/explorer';
 
 const EXPLORER_OPTIONS = ['cardanoscan', 'cexplorer', 'adastat'];
 
-// §15/§20 — multisig signing ceremony. 1-Phase needs a wallet that signs
+// §15/§20 — multisig signing ceremony. 1-Phase (default) needs a wallet that signs
 // native-script txs without being named in the body (Eternl); 2-Phase is the
-// universal CIP-30 fallback.
+// universal CIP-30 backup.
 const SIGNING_PROCESS_OPTIONS = [
-  { value: '1_PHASE', label: '1-Phase (requires Eternl wallet)' },
-  { value: '2_PHASE', label: '2-Phase (any CIP-30 wallet)' },
+  { value: '1_PHASE', label: '1-Phase (default — requires Eternl wallet)' },
+  { value: '2_PHASE', label: '2-Phase (backup — any CIP-30 wallet)' },
 ];
 
 // Params that are stored + editable but not yet read by any feature (the feature
@@ -151,8 +151,8 @@ export function GovernanceSetup() {
                             ))}
                           </select>
                           <div className="mt-0.5 max-w-xs text-[10px] text-neutral-500">
-                            1-Phase: every board member signs once — requires the <strong>Eternl</strong> wallet.
-                            If a member&apos;s wallet can&apos;t sign, switch back to 2-Phase (works with any CIP-30 wallet).
+                            1-Phase (default): every board member signs once — requires the <strong>Eternl</strong> wallet.
+                            If a member&apos;s wallet can&apos;t sign, switch to 2-Phase (the backup — works with any CIP-30 wallet).
                           </div>
                         </div>
                       ) : p.key === 'CARDANO_EXPLORER' ? (

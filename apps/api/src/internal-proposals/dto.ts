@@ -16,7 +16,7 @@ import {
 const INTERNAL_TYPES = ['INSTRUCTIVE', 'INFORMATIVE', 'POLL', 'SPENDING'];
 const SCOPES = ['DREPS_ONLY', 'BOARD_ONLY', 'BOTH'];
 const THRESHOLDS = ['DEFAULT', 'IMPORTANT'];
-const VOTING_TYPES = ['ONE_PERSON_ONE_VOTE', 'BALANCED'];
+const VOTING_TYPES = ['ONE_PERSON_ONE_VOTE', 'BALANCED', 'ONCHAIN'];
 
 /** §10.1 — submit an internal proposal (goes straight to ACTIVE; voting opens immediately). */
 export class CreateInternalProposalDto {
@@ -55,6 +55,32 @@ export class CreateInternalProposalDto {
   // deliveryDate. The submit method forces scope=BOTH / type=BALANCED / threshold=IMPORTANT.
   @IsOptional() @IsBoolean() isBoardElection?: boolean;
   @IsOptional() @IsArray() @IsString({ each: true }) candidates?: string[];
+
+  // When submitting from a saved draft, the draft row to remove once the live proposal is created.
+  @IsOptional() @IsString() draftId?: string;
+}
+
+/**
+ * §10 — save/update a draft internal proposal. Everything is optional and unvalidated for
+ * completeness (a draft is work-in-progress) — full validation only happens on submit. The
+ * draft is stored with status DRAFT, no voting snapshot, and is visible only to its author.
+ */
+export class SaveDraftDto {
+  @IsOptional() @IsString() @MaxLength(200) title?: string;
+  @IsOptional() @IsString() @MaxLength(20000) contentMd?: string;
+  @IsOptional() @IsIn(INTERNAL_TYPES) internalType?: string;
+  @IsOptional() @IsIn(SCOPES) votersScope?: string;
+  @IsOptional() @IsIn(THRESHOLDS) thresholdKind?: string;
+  @IsOptional() @IsIn(VOTING_TYPES) votingType?: string;
+  @IsOptional() @IsISO8601() votingEndAt?: string;
+  @IsOptional() @IsBoolean() isPrivate?: boolean;
+  @IsOptional() @IsArray() @IsString({ each: true }) pollOptions?: string[];
+  @IsOptional() @IsBoolean() pollMultiple?: boolean;
+  @IsOptional() @IsArray() @IsString({ each: true }) actors?: string[];
+  @IsOptional() @IsISO8601() deliveryDate?: string;
+  @IsOptional() @Min(0) spendingAmountAda?: number;
+  @IsOptional() @IsString() spendingSourceBucketId?: string;
+  @IsOptional() @IsString() @MaxLength(200) spendingDestAddress?: string;
 }
 
 /** Cast or change a vote. Threshold proposals use `choice`; polls use `options`. */

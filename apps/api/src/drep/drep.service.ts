@@ -605,6 +605,8 @@ export class DrepService {
       kycOptin: dto.kycOptin ?? false,
       callsOptin: dto.callsOptin ?? false,
       admissionCallOptin: dto.admissionCallOptin ?? false,
+      // §2 — optional self-declared link to a submitter profile (empty string clears it).
+      linkedSubmitterUserId: dto.linkedSubmitterUserId?.trim() || null,
       admittedAt: null,
       removedAt: null,
     };

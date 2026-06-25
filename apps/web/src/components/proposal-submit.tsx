@@ -13,6 +13,7 @@ import {
   type RoundSummary,
 } from '@/lib/api';
 import { useExplorer } from '@/lib/explorer';
+import { useUrlNav } from '@/lib/use-url-nav';
 import { ProposalDetail } from './proposal-detail';
 import { MarkdownEditor, MarkdownCollapseContext } from './markdown';
 import { CopyButton } from './copy-button';
@@ -21,6 +22,9 @@ type Cat = { id: string; name: string; minAda: number | null; maxAda: number | n
 
 export function ProposalSubmit() {
   const { cfg } = useExplorer();
+  const { setParams } = useUrlNav();
+  // §10 — "My proposals" is split by type: Funding vs the user's own Internal proposals.
+  const [myTab, setMyTab] = useState<'FUNDING' | 'INTERNAL'>('FUNDING');
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
@@ -156,6 +160,15 @@ export function ProposalSubmit() {
       setCategoryId((cur) => (cs.some((c) => c.id === cur) ? cur : cs[0]?.id ?? ''));
     });
   }, [roundId]);
+
+  // §10 — split "My proposals" by type. Default to Funding; auto-switch off an empty tab so the
+  // user always lands on a non-empty list (and stays put when both have proposals).
+  const fundingMine = mine.filter((p) => p.type !== 'INTERNAL');
+  const internalMine = mine.filter((p) => p.type === 'INTERNAL');
+  useEffect(() => {
+    if (myTab === 'FUNDING' && fundingMine.length === 0 && internalMine.length > 0) setMyTab('INTERNAL');
+    else if (myTab === 'INTERNAL' && internalMine.length === 0 && fundingMine.length > 0) setMyTab('FUNDING');
+  }, [fundingMine.length, internalMine.length, myTab]);
 
   const selectedCat = cats.find((c) => c.id === categoryId);
 
@@ -430,9 +443,11 @@ export function ProposalSubmit() {
           >
             {open ? 'Cancel' : '+ New proposal'}
           </button>
-        ) : (
+        ) : myTab === 'FUNDING' ? (
+          // Funding-only note — internal proposals aren't tied to a round, so it'd be misleading on
+          // the Internal tab (DReps can submit those any time from the Internal proposals tab).
           <span className="text-xs text-neutral-500">New proposals open during a round&apos;s Submission stage.</span>
-        )}
+        ) : null}
       </div>
 
       {msg ? <div className="mt-2 text-sm text-emerald-600">{msg}</div> : null}
@@ -875,21 +890,52 @@ export function ProposalSubmit() {
 
       {mine.length > 0 ? (
         <div className="mt-3">
-          <div className="text-sm font-medium">My proposals</div>
-          <p className="text-xs text-neutral-500">Drafts are private. Open one to read/edit it; submit a draft when you&apos;re ready (pay the fee + paste the tx).</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-sm font-medium">My proposals</div>
+            {/* §10 — Funding vs Internal split (with counts). Only shown when the user actually has
+                internal proposals; a submitter who isn't a DRep can only have funding ones, so they
+                never see (or need) this filter. Empty tabs are disabled. */}
+            {internalMine.length > 0 ? (
+              <div className="flex overflow-hidden rounded-md border border-neutral-300 dark:border-neutral-700">
+                {([['FUNDING', 'Funding', fundingMine.length], ['INTERNAL', 'Internal', internalMine.length]] as const).map(([key, label, count]) => (
+                  <button
+                    key={key}
+                    onClick={() => setMyTab(key)}
+                    disabled={count === 0}
+                    className={`px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${
+                      myTab === key
+                        ? 'bg-emerald-600 text-white'
+                        : 'bg-white text-neutral-600 hover:bg-neutral-100 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
+                    }`}
+                  >
+                    {label} ({count})
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
+          <p className="text-xs text-neutral-500">
+            {myTab === 'FUNDING'
+              ? 'Drafts are private. Open one to read/edit it; submit a draft when you’re ready (pay the fee + paste the tx).'
+              : 'Your DAO-governance internal proposals. Open one in the Internal proposals tab.'}
+          </p>
           <ul className="mt-1 space-y-1 text-sm">
-            {/* Hide the proposal currently open in the editor above (avoids a confusing duplicate). */}
-            {mine.filter((p) => p.id !== editingId).map((p) => (
-              <MineRow
-                key={p.id}
-                p={p}
-                feeAddress={cfg?.submissionFeeAddress ?? undefined}
-                onOpen={() => { setOpenInEditMode(false); setOpenId(p.id); }}
-                onEdit={() => startEdit(p.id)}
-                onDetailEdit={() => { setOpenInEditMode(true); setOpenId(p.id); }}
-                onSubmitted={loadMine}
-              />
-            ))}
+            {myTab === 'FUNDING'
+              // Hide the proposal currently open in the editor above (avoids a confusing duplicate).
+              ? fundingMine.filter((p) => p.id !== editingId).map((p) => (
+                  <MineRow
+                    key={p.id}
+                    p={p}
+                    feeAddress={cfg?.submissionFeeAddress ?? undefined}
+                    onOpen={() => { setOpenInEditMode(false); setOpenId(p.id); }}
+                    onEdit={() => startEdit(p.id)}
+                    onDetailEdit={() => { setOpenInEditMode(true); setOpenId(p.id); }}
+                    onSubmitted={loadMine}
+                  />
+                ))
+              : internalMine.map((p) => (
+                  <InternalMineRow key={p.id} p={p} onOpen={() => setParams({ tab: 'internal', ip: p.id })} />
+                ))}
           </ul>
         </div>
       ) : null}
@@ -918,6 +964,28 @@ function FeePaymentsList({ fv }: { fv: FeeVerification }) {
         {fv.fullyPaid ? ' — fully paid ✓' : ` · ${fv.missingAda.toLocaleString()} ₳ still missing`}
       </div>
     </div>
+  );
+}
+
+/** A row in "My proposals" → Internal tab. Internal proposals aren't about a budget, so no ADA is
+ *  shown — except an internal SPENDING proposal, whose treasury payout is meaningful. Opening one
+ *  jumps to the Internal proposals tab, where its full detail + voting live. */
+function InternalMineRow({ p, onOpen }: { p: ProposalSummary; onOpen: () => void }) {
+  const amount = p.internalType === 'SPENDING' && p.spendingAmountAda != null ? p.spendingAmountAda : null;
+  return (
+    <li className="rounded border border-neutral-200 dark:border-neutral-800">
+      <div className="flex items-center justify-between px-3 py-1.5">
+        <button onClick={onOpen} className="flex-1 text-left hover:underline">
+          <span>
+            {p.title}
+            {amount != null ? <span className="font-semibold text-blue-600 dark:text-blue-400"> · {amount.toLocaleString()} ₳</span> : null}
+          </span>
+        </button>
+        <span className={`text-xs ${p.status === 'REJECTED' ? 'font-medium text-red-600' : p.status === 'APPROVED' ? 'text-emerald-600' : 'text-neutral-500'}`}>
+          {p.status}
+        </span>
+      </div>
+    </li>
   );
 }
 
@@ -990,7 +1058,10 @@ function MineRow({
       setVerifying(false);
     }
   };
-  const feeRejected = p.status === 'REJECTED' && !p.stage;
+  // A fee/admission rejection (stage null, never finalised) is still editable + resubmittable. A
+  // Debate & Vote rejection ALSO has stage null but has a finalised result — editing is closed for
+  // it (Debate is the last editable stage), so `resultFinalizedAt` is the discriminator.
+  const feeRejected = p.status === 'REJECTED' && !p.stage && !p.resultFinalizedAt;
   // Pre-public (DRAFT/PENDING/fee-rejected) → edit ALL fields in the full form.
   const fullFormEdit = isDraft || p.status === 'PENDING' || feeRejected;
   // §6/§8 — editing closes once the round reaches VOTE: Debate is the LAST editable stage. The

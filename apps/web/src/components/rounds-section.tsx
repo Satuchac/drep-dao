@@ -654,6 +654,10 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
             </div>
           </div>
         ))}
+        <p className="max-w-xl text-[11px] text-neutral-500">
+          Note: the minimum-word rationale requirements for YES / NO / ABSTAIN votes apply only to internal proposals,
+          not to this round&apos;s votes. They are configured in Platform setup.
+        </p>
       </div>
 
       {editing ? (

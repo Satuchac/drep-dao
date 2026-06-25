@@ -28,7 +28,7 @@ import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnchorService } from '../cardano/anchor.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
-import { CreateInternalProposalDto, VoteInternalDto } from './dto';
+import { CreateInternalProposalDto, SaveDraftDto, VoteInternalDto } from './dto';
 
 const LOVELACE = 1_000_000n;
 const DAY_MS = 86_400_000;
@@ -182,7 +182,78 @@ export class InternalProposalsService {
     });
     // Freeze the eligible-voter set + power now, so voting can start immediately.
     await this.buildSnapshot(proposal.id, scope, votingType);
+    // Submitted from a saved draft → remove the draft now that the live proposal exists.
+    if (dto.draftId) await this.deleteDraft(userId, dto.draftId).catch(() => undefined);
     return this.detail(proposal.id, userId);
+  }
+
+  // ---- drafts (§10) ---------------------------------------------------------
+  // A draft is an INTERNAL proposal with status DRAFT: no public id, no vote snapshot, no voting
+  // window. It is visible and editable only to its author and is removed once submitted.
+
+  async saveDraft(userId: string, dto: SaveDraftDto) {
+    const drep = await this.prisma.drep.findUnique({ where: { userId } });
+    if (!drep || drep.status !== 'ADMITTED') {
+      throw new ForbiddenException('only admitted DReps (board members included) can save drafts');
+    }
+    const draft = await this.prisma.proposal.create({
+      data: {
+        type: ProposalType.INTERNAL,
+        status: ProposalStatus.DRAFT,
+        submitterUserId: userId,
+        submitterDrepId: drep.id,
+        ...this.draftData(dto),
+      },
+    });
+    return this.detail(draft.id, userId);
+  }
+
+  async updateDraft(userId: string, draftId: string, dto: SaveDraftDto) {
+    await this.ownDraft(userId, draftId);
+    await this.prisma.proposal.update({ where: { id: draftId }, data: this.draftData(dto) });
+    return this.detail(draftId, userId);
+  }
+
+  async deleteDraft(userId: string, draftId: string) {
+    await this.ownDraft(userId, draftId);
+    await this.prisma.proposal.delete({ where: { id: draftId } });
+    return { id: draftId, deleted: true };
+  }
+
+  /** Assert the row is an INTERNAL DRAFT owned by the caller (throws otherwise). */
+  private async ownDraft(userId: string, draftId: string) {
+    const p = await this.prisma.proposal.findUnique({ where: { id: draftId } });
+    if (!p || p.type !== ProposalType.INTERNAL || p.status !== ProposalStatus.DRAFT) {
+      throw new NotFoundException('draft not found');
+    }
+    if (p.submitterUserId !== userId) throw new ForbiddenException('not your draft');
+    return p;
+  }
+
+  /** Map a (lenient) draft DTO to Proposal column values — shared by create + update. */
+  private draftData(dto: SaveDraftDto) {
+    const internalType = dto.internalType ?? InternalType.INFORMATIVE;
+    const poll = internalType === InternalType.POLL;
+    const spending = internalType === InternalType.SPENDING;
+    const instructive = internalType === InternalType.INSTRUCTIVE;
+    return {
+      title: (dto.title ?? '').trim(),
+      contentMd: dto.contentMd ?? '',
+      internalType,
+      votersScope: dto.isPrivate ? VotersScope.BOARD_ONLY : (dto.votersScope ?? VotersScope.BOTH),
+      thresholdKind: dto.thresholdKind ?? 'DEFAULT',
+      isPrivate: !!dto.isPrivate,
+      votingType: dto.votingType ?? VotingType.BALANCED,
+      pollOptions: poll
+        ? ({ multiple: !!dto.pollMultiple, options: dto.pollOptions ?? [] } as Prisma.InputJsonValue)
+        : Prisma.DbNull,
+      actors: instructive && dto.actors?.length ? (dto.actors as Prisma.InputJsonValue) : Prisma.DbNull,
+      deliveryDate: dto.deliveryDate ? new Date(dto.deliveryDate) : null,
+      votingEndAt: dto.votingEndAt ? new Date(dto.votingEndAt) : null,
+      spendingAmountAda: spending && dto.spendingAmountAda ? BigInt(Math.round(dto.spendingAmountAda * 1_000_000)) : null,
+      spendingSourceBucketId: spending ? dto.spendingSourceBucketId ?? null : null,
+      spendingDestAddress: spending ? dto.spendingDestAddress?.trim() ?? null : null,
+    };
   }
 
   /** "Internal 1", "Internal 2", … — the structured public id used in the UI + on-chain. */
@@ -219,11 +290,14 @@ export class InternalProposalsService {
   private async buildSnapshot(proposalId: string, scope: string, votingType: string) {
     const voters = await this.eligibleDreps(scope);
     const snapshot = await this.prisma.voteSnapshot.create({ data: { proposalId } });
-    const balanced = votingType === VotingType.BALANCED;
-    const power = balanced ? await this.realVotingPower(voters.map((v) => v.drepIdOnchain)) : new Map<string, bigint>();
+    const usesStake = votingType === VotingType.BALANCED || votingType === VotingType.ONCHAIN;
+    const power = usesStake ? await this.realVotingPower(voters.map((v) => v.drepIdOnchain)) : new Map<string, bigint>();
     for (const v of voters) {
-      if (balanced) {
-        await this.addBalancedEntry(snapshot.id, v.id, power.get(v.drepIdOnchain) ?? 0n);
+      const stake = power.get(v.drepIdOnchain) ?? 0n;
+      if (votingType === VotingType.BALANCED) {
+        await this.addBalancedEntry(snapshot.id, v.id, stake);
+      } else if (votingType === VotingType.ONCHAIN) {
+        await this.addOnchainEntry(snapshot.id, v.id, stake);
       } else {
         // 1 member = 1 vote: everyone carries equal weight 1.
         await this.prisma.voteSnapshotEntry.create({
@@ -258,6 +332,14 @@ export class InternalProposalsService {
     });
   }
 
+  private async addOnchainEntry(snapshotId: string, drepId: string, stakeLovelace: bigint) {
+    // On-chain (unadjusted): raw delegated voting power in ADA — no log compression, no merit.
+    const ada = Number(stakeLovelace) / Number(LOVELACE);
+    await this.prisma.voteSnapshotEntry.create({
+      data: { snapshotId, drepId, stakeLovelace, meritPoints: 0, basePower: ada, meritMultiplier: 1, finalPower: ada },
+    });
+  }
+
   private async meritMax(): Promise<number> {
     const row = await this.prisma.platformConfig.findUnique({ where: { key: 'MERIT_POINT_MAX' } });
     return typeof row?.value === 'number' ? row.value : PLATFORM_CONFIG_DEFAULTS.MERIT_POINT_MAX;
@@ -266,6 +348,52 @@ export class InternalProposalsService {
   private async currentMerit(drepId: string, max: number): Promise<number> {
     const rows = await this.prisma.meritLedger.aggregate({ where: { drepId }, _sum: { delta: true } });
     return clampMerit(rows._sum.delta ? Number(rows._sum.delta) : 0, max);
+  }
+
+  // Internal proposals only — per-choice minimum words required in the rationale (0 = not required).
+  private async rationaleMinWords(): Promise<{ YES: number; NO: number; ABSTAIN: number }> {
+    const keys = {
+      YES: 'MIN_LEN_OF_WORDS_IN_RATIONALE_FOR_VOTE_YES',
+      NO: 'MIN_LEN_OF_WORDS_IN_RATIONALE_FOR_VOTE_NO',
+      ABSTAIN: 'MIN_LEN_OF_WORDS_IN_RATIONALE_FOR_VOTE_ABSTAIN',
+    } as const;
+    const rows = await this.prisma.platformConfig.findMany({ where: { key: { in: Object.values(keys) } } });
+    const read = (key: string) => {
+      const row = rows.find((r) => r.key === key);
+      return typeof row?.value === 'number' ? row.value : ((PLATFORM_CONFIG_DEFAULTS as Record<string, unknown>)[key] as number);
+    };
+    return { YES: read(keys.YES), NO: read(keys.NO), ABSTAIN: read(keys.ABSTAIN) };
+  }
+
+  // Record a vote (or set of poll options) and supersede the voter's prior current vote instead of
+  // deleting it — every prior vote stays as read-only history (marked superseded). `castAt` defaults
+  // to now() so the history orders correctly.
+  private async castVotes(proposalId: string, drepId: string, rows: { choice: string; rationale: string | null }[]): Promise<void> {
+    const prior = await this.prisma.vote.findMany({
+      where: { proposalId, drepId, phase: VotePhase.INTERNAL, supersededBy: null },
+      select: { id: true },
+    });
+    const created: string[] = [];
+    for (const r of rows) {
+      const v = await this.prisma.vote.create({
+        data: { proposalId, drepId, phase: VotePhase.INTERNAL, choice: r.choice, rationale: r.rationale },
+      });
+      created.push(v.id);
+    }
+    if (prior.length) {
+      await this.prisma.vote.updateMany({ where: { id: { in: prior.map((p) => p.id) } }, data: { supersededBy: created[0] } });
+    }
+  }
+
+  // Enforce the per-choice rationale word minimum server-side (the UI also gates the buttons).
+  private async requireRationale(choice: string, rationale: string | null): Promise<void> {
+    const mins = await this.rationaleMinWords();
+    const min = mins[choice as keyof typeof mins] ?? 0;
+    if (min <= 0) return;
+    const words = (rationale ?? '').trim().split(/\s+/).filter(Boolean).length;
+    if (words < min) {
+      throw new BadRequestException(`voting ${choice} requires a rationale of at least ${min} word(s) (you wrote ${words}).`);
+    }
   }
 
   // ---- voting ---------------------------------------------------------------
@@ -286,13 +414,13 @@ export class InternalProposalsService {
     if (!entry) throw new ForbiddenException('you are not eligible to vote on this proposal');
 
     const rationale = dto.rationale?.trim() || null;
-    // Validate the selection BEFORE touching prior votes, so a rejected re-vote can't wipe a
-    // voter's existing valid vote. Vote change is allowed during the period.
+    // Validate the selection BEFORE casting, so a rejected re-vote leaves the existing vote intact.
+    // A vote change supersedes (never deletes) the prior vote so the full history stays viewable.
     if (fresh.internalType === InternalType.POLL) {
       // Voters may abstain on a poll (counted toward "voted" but no option). Exclusive with options.
       if (dto.choice === VoteChoice.ABSTAIN) {
-        await this.prisma.vote.deleteMany({ where: { proposalId, drepId: drep.id, phase: VotePhase.INTERNAL } });
-        await this.prisma.vote.create({ data: { proposalId, drepId: drep.id, phase: VotePhase.INTERNAL, choice: VoteChoice.ABSTAIN, rationale } });
+        await this.requireRationale(VoteChoice.ABSTAIN, rationale);
+        await this.castVotes(proposalId, drep.id, [{ choice: VoteChoice.ABSTAIN, rationale }]);
       } else {
         const cfg = (fresh.pollOptions ?? {}) as { multiple?: boolean; options?: string[] };
         const options = cfg.options ?? [];
@@ -300,18 +428,15 @@ export class InternalProposalsService {
         if (chosen.length === 0) throw new BadRequestException('select at least one option');
         if (!cfg.multiple && chosen.length !== 1) throw new BadRequestException('this poll allows exactly one option');
         for (const o of chosen) if (!options.includes(o)) throw new BadRequestException(`unknown option: ${o}`);
-        await this.prisma.vote.deleteMany({ where: { proposalId, drepId: drep.id, phase: VotePhase.INTERNAL } });
-        for (const o of chosen) {
-          await this.prisma.vote.create({ data: { proposalId, drepId: drep.id, phase: VotePhase.INTERNAL, choice: o, rationale } });
-        }
+        await this.castVotes(proposalId, drep.id, chosen.map((o) => ({ choice: o, rationale })));
       }
     } else {
       const choice = dto.choice;
       if (!choice || ![VoteChoice.YES, VoteChoice.NO, VoteChoice.ABSTAIN].includes(choice as VoteChoice)) {
         throw new BadRequestException('choice must be YES, NO or ABSTAIN');
       }
-      await this.prisma.vote.deleteMany({ where: { proposalId, drepId: drep.id, phase: VotePhase.INTERNAL } });
-      await this.prisma.vote.create({ data: { proposalId, drepId: drep.id, phase: VotePhase.INTERNAL, choice, rationale } });
+      await this.requireRationale(choice, rationale);
+      await this.castVotes(proposalId, drep.id, [{ choice, rationale }]);
     }
     return this.detail(proposalId, userId);
   }
@@ -376,7 +501,12 @@ export class InternalProposalsService {
     const out = [];
     for (const p of all) {
       await this.maybeFinalize(p);
-      if (p.isPrivate && !isBoard) continue; // PRIVATE → board only
+      const mine = p.submitterUserId === viewerUserId;
+      if (p.status === ProposalStatus.DRAFT) {
+        if (!mine) continue; // §10 — a draft is private work-in-progress, visible only to its author
+      } else if (p.isPrivate && !isBoard) {
+        continue; // PRIVATE submitted → board only
+      }
       out.push(await this.summary(p.id, { userId: viewerUserId, isBoard }));
     }
     return out;
@@ -398,7 +528,9 @@ export class InternalProposalsService {
     await this.maybeInstallElection(p.id);
     // §10.5 — make sure an approved spending proposal has its multisig action queued.
     await this.maybePrepareSpending(p.id).catch(() => undefined);
-    if (p.isPrivate && !ctx.isBoard) throw new ForbiddenException('this internal proposal is private to the board');
+    if (p.isPrivate && !ctx.isBoard && p.submitterUserId !== ctx.userId) {
+      throw new ForbiddenException('this internal proposal is private to the board');
+    }
 
     const fresh = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
     const tally = await this.tally(proposalId);
@@ -407,13 +539,16 @@ export class InternalProposalsService {
     const eligibleEntry = myDrep && snapshot
       ? await this.prisma.voteSnapshotEntry.findUnique({ where: { snapshotId_drepId: { snapshotId: snapshot.id, drepId: myDrep.id } } })
       : null;
-    const myVotes = myDrep
-      ? (await this.prisma.vote.findMany({ where: { proposalId, drepId: myDrep.id, phase: VotePhase.INTERNAL } })).map((v) => v.choice)
+    const myCurrentVotes = myDrep
+      ? await this.prisma.vote.findMany({ where: { proposalId, drepId: myDrep.id, phase: VotePhase.INTERNAL, supersededBy: null } })
       : [];
-    // Per-voter list with the on-chain DRep id, display name, choice (or option label), the
-    // voter's weight (final power), and the optional rationale — shown on the detail page so
-    // viewers can see exactly who voted how and why.
-    const voters = await this.voteList(proposalId);
+    const myVotes = myCurrentVotes.map((v) => v.choice);
+    const myRationale = myCurrentVotes[0]?.rationale ?? null;
+    // Full per-voter history (current + superseded) with the on-chain DRep id, display name, choice
+    // (or option label), weight, rationale, and cast time — the detail page renders the whole trail
+    // so viewers see who voted how, why, and how votes changed over time.
+    const voters = await this.voteHistory(proposalId);
+    const rationaleMinWords = await this.rationaleMinWords();
     const anchor = await this.prisma.anchor.findFirst({ where: { proposalId, kind: 'internal' }, orderBy: { createdAt: 'desc' } });
     const pollCfg = (p.pollOptions ?? null) as { multiple?: boolean; options?: string[] } | null;
 
@@ -461,7 +596,9 @@ export class InternalProposalsService {
       votingEndAt: p.votingEndAt,
       resultFinalizedAt: p.resultFinalizedAt,
       canVote: !!eligibleEntry && (fresh?.status ?? p.status) === ProposalStatus.ACTIVE,
+      rationaleMinWords,
       myVotes,
+      myRationale,
       voters,
       tally,
       anchorTxHash: anchor?.txHash ?? null,
@@ -470,6 +607,7 @@ export class InternalProposalsService {
       spending: p.internalType === 'SPENDING' ? {
         amountAda: Number(freshAfterInstall?.spendingAmountAda ?? 0n) / 1e6,
         destAddress: freshAfterInstall?.spendingDestAddress ?? null,
+        sourceBucketId: freshAfterInstall?.spendingSourceBucketId ?? null,
         sourceBucketLabel: spendingBucket?.label ?? null,
         action: spendingAction,
       } : null,
@@ -506,7 +644,7 @@ export class InternalProposalsService {
   private async tally(proposalId: string) {
     const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
     const snapshot = await this.prisma.voteSnapshot.findFirst({ where: { proposalId }, include: { entries: true } });
-    const votes = await this.prisma.vote.findMany({ where: { proposalId, phase: VotePhase.INTERNAL } });
+    const votes = await this.prisma.vote.findMany({ where: { proposalId, phase: VotePhase.INTERNAL, supersededBy: null } });
     const powerByDrep = new Map((snapshot?.entries ?? []).map((e) => [e.drepId, Number(e.finalPower ?? 0)]));
     const eligible = snapshot?.entries.length ?? 0;
     const thresholdPct = proposal?.approvalThresholdPct ? Number(proposal.approvalThresholdPct) : 67;
@@ -688,10 +826,16 @@ export class InternalProposalsService {
     const voteList = await this.voteList(proposalId);
     // Date-independent: hash the title + content only (the voting end can move).
     const docHash = sha256hex(`${p.title}\n${p.contentMd}`);
-    const balanced = p.votingType === VotingType.BALANCED;
+    const weighted = p.votingType !== VotingType.ONE_PERSON_ONE_VOTE;
+    const style =
+      p.votingType === VotingType.BALANCED
+        ? VotingStyle.BALANCED
+        : p.votingType === VotingType.ONCHAIN
+          ? VotingStyle.ONCHAIN
+          : VotingStyle.ONE_PERSON_ONE_VOTE;
     const outcome =
       t.kind === 'POLL'
-        ? `CONCLUDED — ${t.options.map((o) => `${o.option}: ${balanced ? o.power : o.voters}`).join(', ')}`
+        ? `CONCLUDED — ${t.options.map((o) => `${o.option}: ${weighted ? o.power : o.voters}`).join(', ')}`
         : status;
     // §14 — for a board-member election, include the elected candidates on-chain so anyone
     // parsing the anchor JSON can see who took the seats (the platform also installs them).
@@ -705,14 +849,14 @@ export class InternalProposalsService {
     await this.anchor.anchorResult({
       kind: 'internal',
       subject: GovSubject.INTERNAL,
-      style: balanced ? VotingStyle.BALANCED : VotingStyle.ONE_PERSON_ONE_VOTE,
+      style,
       ref: p.title,
       publicId: p.publicId,
       docHash,
       electedBoard,
       proposalId,
       roundId: null,
-      votes: voteList.map((v) => ({ drep: v.drep, vote: v.choice, power: balanced ? v.weight : undefined })),
+      votes: voteList.map((v) => ({ drep: v.drep, vote: v.choice, power: weighted ? v.weight : undefined })),
       preimageVotes: voteList,
       outcome,
       yes: t.kind === 'THRESHOLD' ? round2(t.yesPower) : 0,
@@ -722,12 +866,12 @@ export class InternalProposalsService {
     });
   }
 
-  /** Each internal vote: on-chain DRep id, the choice (or poll option), weight, rationale. */
+  /** The CURRENT internal votes only (superseded ones excluded) — used for the on-chain anchor. */
   private async voteList(proposalId: string) {
     const snapshot = await this.prisma.voteSnapshot.findFirst({ where: { proposalId }, include: { entries: true } });
     const powerByDrep = new Map((snapshot?.entries ?? []).map((e) => [e.drepId, Number(e.finalPower ?? 0)]));
     const votes = await this.prisma.vote.findMany({
-      where: { proposalId, phase: VotePhase.INTERNAL },
+      where: { proposalId, phase: VotePhase.INTERNAL, supersededBy: null },
       include: { drep: { select: { drepIdOnchain: true, user: { select: { displayName: true } } } } },
       orderBy: { castAt: 'asc' },
     });
@@ -737,6 +881,27 @@ export class InternalProposalsService {
       choice: v.choice,
       weight: round2(powerByDrep.get(v.drepId) ?? 0),
       rationale: v.rationale ?? null,
+    }));
+  }
+
+  /** The full internal-vote history (current + superseded), newest first — shown on the detail page.
+   *  Each superseded entry is flagged so the UI can cross it out; only the latest per voter is live. */
+  private async voteHistory(proposalId: string) {
+    const snapshot = await this.prisma.voteSnapshot.findFirst({ where: { proposalId }, include: { entries: true } });
+    const powerByDrep = new Map((snapshot?.entries ?? []).map((e) => [e.drepId, Number(e.finalPower ?? 0)]));
+    const votes = await this.prisma.vote.findMany({
+      where: { proposalId, phase: VotePhase.INTERNAL },
+      include: { drep: { select: { drepIdOnchain: true, user: { select: { displayName: true } } } } },
+      orderBy: { castAt: 'desc' },
+    });
+    return votes.map((v) => ({
+      drep: v.drep.drepIdOnchain,
+      displayName: v.drep.user?.displayName ?? null,
+      choice: v.choice,
+      weight: round2(powerByDrep.get(v.drepId) ?? 0),
+      rationale: v.rationale ?? null,
+      castAt: v.castAt.toISOString(),
+      superseded: v.supersededBy != null,
     }));
   }
 

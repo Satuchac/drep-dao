@@ -44,7 +44,10 @@ export function OnChainProofs() {
     setMsg(null);
     try {
       const r = await boardProofsApi.submitAll();
-      setMsg(`Submitted ${r.submitted}/${r.total} pending anchor${r.total === 1 ? '' : 's'}${r.failed ? ` (${r.failed} failed)` : ''}.`);
+      const text = `Submitted ${r.submitted}/${r.total} pending anchor${r.total === 1 ? '' : 's'}${r.failed ? ` (${r.failed} failed)` : ''}.${r.reason ? ` ${r.reason}.` : ''}`;
+      // Anything short of a clean full submission (failures, or a reason returned) is an error → red.
+      if (r.submitted === r.total && !r.reason) setMsg(text);
+      else setError(text);
       load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'submission failed');

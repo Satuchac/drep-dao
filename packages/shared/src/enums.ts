@@ -58,6 +58,7 @@ export type ProposalStage = (typeof ProposalStage)[keyof typeof ProposalStage];
 export const VotingType = {
   ONE_PERSON_ONE_VOTE: 'ONE_PERSON_ONE_VOTE',
   BALANCED: 'BALANCED',
+  ONCHAIN: 'ONCHAIN',
 } as const;
 export type VotingType = (typeof VotingType)[keyof typeof VotingType];
 

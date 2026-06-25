@@ -20,6 +20,7 @@ export const GOVERNANCE_METADATA_LABEL = 80808081;
 export const VotingStyle = {
   ONE_PERSON_ONE_VOTE: '1P1V', // admission, filtering jury, milestone review, board-only internal
   BALANCED: 'BAL', // debate & vote (funding), internal proposals, quick polls
+  ONCHAIN: 'ONCHAIN', // raw on-chain (unadjusted) DRep voting power
 } as const;
 export type VotingStyle = (typeof VotingStyle)[keyof typeof VotingStyle];
 
@@ -100,6 +101,7 @@ export const SUBJECT_TITLE: Record<GovSubject, string> = {
 export const STYLE_LABEL: Record<VotingStyle, string> = {
   '1P1V': '1 member, 1 vote',
   BAL: 'Balanced voting power',
+  ONCHAIN: 'On-chain voting power',
 };
 
 /**
@@ -110,7 +112,9 @@ export const STYLE_LABEL: Record<VotingStyle, string> = {
 export interface AnchorVote {
   drep: string;
   vote: string;
-  power?: number; // balanced voting power this DRep's vote carried (BAL only)
+  // weighted voting power this DRep's vote carried (BALANCED / ONCHAIN). A 2-decimal string so the
+  // precise fractional value survives on-chain (Cardano metadata forbids floats). Absent for 1P1V.
+  power?: number | string;
 }
 export interface AnchorResultMetadata {
   title: string;
@@ -121,10 +125,12 @@ export interface AnchorResultMetadata {
   voting: string; // human-readable voting style
   applicant: string; // subject DRep id (admission/removal) or proposal reference (filtering/dv/milestone)
   votes: AnchorVote[];
-  // For 1P1V: yes/no are vote counts, threshold is the count needed. For BAL:
-  // yes/no are summed voting power, threshold is the % of total power required,
-  // and totalPower is the snapshot's total eligible power.
-  tally: { yes: number; no: number; threshold: number; unit: 'votes' | 'power'; totalPower?: number };
+  // For 1P1V (unit "1 member - 1 vote"): yes/no are vote counts, threshold is the count needed.
+  // For BAL: yes/no are summed voting power, threshold is the % of total power required, and
+  // totalPower is the snapshot's total eligible power.
+  // yes/no/totalPower are integers for 1P1V (vote counts) and 2-decimal strings for BALANCED /
+  // ONCHAIN (fractional power); threshold is always whole (a count or a percentage).
+  tally: { yes: number | string; no: number | string; threshold: number; unit: '1 member - 1 vote' | 'power'; totalPower?: number | string };
   outcome: string;
   decidedAt: string;
   proofHash?: string;
@@ -147,11 +153,16 @@ export function buildResultMetadata(p: {
   proofHash?: string;
   verify?: string;
 }): Record<string, AnchorResultMetadata> {
-  const balanced = p.style === VotingStyle.BALANCED;
-  // Cardano tx metadata forbids floats, but balanced voting power is fractional, so
-  // round every numeric field to an integer here. The full-precision values live in
-  // the off-chain preimage that `proofHash` commits to; this is the readable summary.
+  const balanced = p.style !== VotingStyle.ONE_PERSON_ONE_VOTE;
+  // Cardano tx metadata forbids floats. 1P1V tallies are whole vote counts (kept as integers).
+  // BALANCED / ONCHAIN voting power is fractional, so emit it to 2 decimals as a STRING — this
+  // preserves the precise value on-chain (e.g. "6.09", not 6). The off-chain preimage that
+  // `proofHash` commits to carries the same precision.
   const r = (n: number) => Math.round(n);
+  const pow = (n: number | string): number | string => {
+    const x = typeof n === 'string' ? Number(n) : n;
+    return balanced ? x.toFixed(2) : r(x);
+  };
   const meta: AnchorResultMetadata = {
     title: SUBJECT_TITLE[p.subject],
     subject: p.subject,
@@ -160,13 +171,13 @@ export function buildResultMetadata(p: {
     ...(p.electedBoard && p.electedBoard.length ? { electedBoard: p.electedBoard } : {}),
     voting: STYLE_LABEL[p.style],
     applicant: p.applicant,
-    votes: p.votes.map((v) => (v.power == null ? v : { ...v, power: r(v.power) })),
+    votes: p.votes.map((v) => (v.power == null ? v : { ...v, power: pow(v.power) })),
     tally: {
-      yes: r(p.yes),
-      no: r(p.no),
-      threshold: r(p.threshold),
-      unit: balanced ? 'power' : 'votes',
-      ...(balanced && p.totalPower != null ? { totalPower: r(p.totalPower) } : {}),
+      yes: pow(p.yes),
+      no: pow(p.no),
+      threshold: r(p.threshold), // a vote count (1P1V) or a percentage (balanced) — always whole
+      unit: balanced ? 'power' : '1 member - 1 vote',
+      ...(balanced && p.totalPower != null ? { totalPower: pow(p.totalPower) } : {}),
     },
     outcome: p.outcome,
     decidedAt: new Date().toISOString(),

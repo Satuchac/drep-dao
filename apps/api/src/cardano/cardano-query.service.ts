@@ -110,13 +110,18 @@ export class CardanoQueryService {
     const khs = [...khToId.keys()];
     if (khs.length === 0) return out;
     const { rows } = await pool.query<{ kh: string; registered: boolean; amount: string | null; active_until: string | null; cur: string | null }>(
+      // A DRep is registered if its LATEST cert is a registration or a metadata update — NOT a
+      // deregistration. db-sync's drep_registration.deposit is positive for a registration, NULL
+      // for an update, and negative for a deregistration; so the old `deposit IS NOT NULL` test
+      // wrongly marked an *updated* DRep as unregistered (latest deposit is NULL) and a *retired*
+      // one as registered. Check the cert kind instead.
       `SELECT encode(dh.raw,'hex') AS kh,
-              (reg.deposit IS NOT NULL) AS registered,
+              COALESCE(reg.is_reg, false) AS registered,
               COALESCE(dd.amount,0)::text AS amount,
               dd.active_until::text AS active_until,
               (SELECT max(epoch_no) FROM block) AS cur
          FROM drep_hash dh
-         LEFT JOIN LATERAL (SELECT deposit FROM drep_registration r
+         LEFT JOIN LATERAL (SELECT (r.deposit IS NULL OR r.deposit >= 0) AS is_reg FROM drep_registration r
                             WHERE r.drep_hash_id = dh.id ORDER BY r.tx_id DESC, r.cert_index DESC LIMIT 1) reg ON true
          LEFT JOIN LATERAL (SELECT amount, active_until FROM drep_distr d
                             WHERE d.hash_id = dh.id ORDER BY d.epoch_no DESC LIMIT 1) dd ON true
@@ -997,19 +1002,34 @@ export class CardanoQueryService {
       active: boolean | null;
       amount: string | null;
     }[];
+    // Koios may echo a drep id in a different bech32 form (legacy CIP-105 vs CIP-129) than the
+    // CIP-129 id we sent, so matching the response by the exact id STRING can silently drop a
+    // genuinely-registered DRep (the symptom: a real DRep shows up as a plain "Viewer"). Match by
+    // KEY HASH instead — format-agnostic, the same way the db-sync path does.
+    const khToId = new Map<string, string>();
+    for (const id of misses) {
+      try { khToId.set(drepKeyHashFromId(id).toLowerCase(), id); } catch { /* malformed → skip */ }
+    }
+    const idForRow = (r: { drep_id: string; hex: string | null }): string | undefined => {
+      if (out.has(r.drep_id)) return r.drep_id; // exact match (already the common case)
+      const hex = (r.hex ?? '').toLowerCase();
+      const byHex = hex ? khToId.get(hex.length === 58 ? hex.slice(2) : hex) : undefined; // drop a CIP-129 header byte if present
+      if (byHex) return byHex;
+      try { return khToId.get(drepKeyHashFromId(r.drep_id).toLowerCase()); } catch { return undefined; }
+    };
     for (const r of rows) {
-      if (out.has(r.drep_id)) {
-        // §22.4 — a DRep counts as registered only if it exists on-chain AND is
-        // active (not retired, not expired). Koios omits unknown ids entirely.
-        const registered = r.drep_status === 'registered' && r.active === true;
-        let amountLovelace = 0n;
-        try {
-          amountLovelace = r.amount ? BigInt(r.amount) : 0n;
-        } catch {
-          /* non-numeric — leave 0 */
-        }
-        out.set(r.drep_id, { registered, keyHashHex: r.hex, amountLovelace });
+      const id = idForRow(r);
+      if (!id) continue;
+      // §22.4 — a DRep counts as registered only if it exists on-chain AND is
+      // active (not retired, not expired). Koios omits unknown ids entirely.
+      const registered = r.drep_status === 'registered' && r.active === true;
+      let amountLovelace = 0n;
+      try {
+        amountLovelace = r.amount ? BigInt(r.amount) : 0n;
+      } catch {
+        /* non-numeric — leave 0 */
       }
+      out.set(id, { registered, keyHashHex: r.hex, amountLovelace });
     }
     // Cache every miss we just resolved — including ids Koios omitted (left at the
     // not-registered default) so we don't re-query unknown DReps each login.

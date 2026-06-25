@@ -9,6 +9,15 @@ import { ConfirmDialog } from './confirm-dialog';
 import { notifyTreasuryChanged } from '@/lib/treasury-refresh';
 import { notifyTodoChanged } from '@/lib/use-todo-counts';
 
+/** Human label for a prepared action. Only milestone payouts (PROJECT_FUNDING) carry the
+ *  "Milestone #N payout" prefix; an internal-proposal spend (OPS with a proposal title) is
+ *  labelled "INTERNAL PROPOSAL" so it isn't confused with funding-round milestones. */
+function actionLabel(a: BoardAction): string {
+  if (a.kind === 'PROJECT_FUNDING') return `Milestone #${(a.milestoneIdx ?? 0) + 1} payout — ${a.proposalTitle ?? ''}`;
+  if (a.kind === 'OPS' && a.proposalTitle) return `INTERNAL PROPOSAL — ${a.proposalTitle}`;
+  return a.proposalTitle ?? a.description ?? a.kind;
+}
+
 /** §15.3 — pending board/treasury actions the platform prepared, awaiting 3-of-5 approval.
  *  `refreshKey` is a parent-controlled counter — bumping it triggers an
  *  immediate refetch so newly-queued actions (top-ups, sweeps, transfers)
@@ -19,8 +28,8 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
   const [actions, setActions] = useState<BoardAction[]>([]);
   const [past, setPast] = useState<BoardAction[]>([]);
   const [treasury, setTreasury] = useState<{ address: string | null; balanceAda: number } | null>(null);
-  // §15/§20 — TX_SIGNING_PROCESS. 1_PHASE: one Sign click per member (Eternl);
-  // 2_PHASE: Authorize → Sign ceremony. Server-decided; default to the stricter
+  // §15/§20 — TX_SIGNING_PROCESS. 1_PHASE (default): one Sign click per member (Eternl);
+  // 2_PHASE (backup): Authorize → Sign ceremony. Server-decided; default to the stricter
   // 2-phase until the first load answers.
   const [mode, setMode] = useState<'1_PHASE' | '2_PHASE'>('2_PHASE');
   const [busy, setBusy] = useState<string | null>(null);
@@ -70,10 +79,9 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
       else delete next[id];
       return next;
     });
-  /** §15 phase 1 — Authorize: board member CIP-30 data-signs a cheap commit
-   *  message so the platform knows they're committing to be one of the 3
-   *  signers. Once 3 commits are in, the action moves to phase 2 and those
-   *  same 3 sign the real tx body with their HW wallets. */
+  /** §15 phase 1 (2-phase backup) — Authorize: board member CIP-30 data-signs a cheap commit
+   *  message so the platform knows they're committing to be one of the 3 signers. Once 3 commits
+   *  are in, the action moves to phase 2 and those same 3 sign the real tx body with their HW wallets. */
   const COMMIT_MSG = (actionId: string, stake: string, ts: string) =>
     ['drep-dao | multisig commit', `action:${actionId}`, `signer:${stake}`, `ts:${ts}`].join('\n');
 
@@ -99,10 +107,9 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
     }
   };
 
-  /** §15 phase 2 — Sign: only available once 3 authorizations are in. The
-   *  cached tx body is built with the 3 committed keyhashes as
-   *  required_signers; each committed signer's wallet pops a sign prompt
-   *  because their key IS in required_signers. */
+  /** §15 — Sign: in 1-phase any board member signs the prepared tx directly; in the 2-phase backup
+   *  only the 3 who authorized may sign (their keyhashes are baked into required_signers). The
+   *  platform broadcasts on the Mth (3-of-5) witness. */
   const approve = async (a: BoardAction) => {
     setErr(a.id, null);
     setBusy(a.id);
@@ -158,14 +165,15 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
       {mode === '1_PHASE' ? (
         <p className="text-xs text-neutral-500">
           The platform prepared these treasury/hot-wallet actions. <strong>1-Phase signing</strong> is enabled
-          (requires the <strong>Eternl</strong> wallet): each board member signs the transaction once — the platform
+          (the default — requires the <strong>Eternl</strong> wallet): each board member signs the transaction once — the platform
           broadcasts as soon as the first {actions[0]?.threshold ?? past[0]?.threshold ?? 3} signatures are in.
           Threshold: {actions[0]?.threshold ?? past[0]?.threshold ?? 3}-of-
           {actions[0]?.totalKeys ?? past[0]?.totalKeys ?? '?'}.
         </p>
       ) : (
         <p className="text-xs text-neutral-500">
-          The platform prepared these treasury/hot-wallet actions. Each one runs a two-phase ceremony:{' '}
+          The platform prepared these treasury/hot-wallet actions. <strong>2-Phase signing</strong> (the backup mode) is enabled —
+          each one runs a two-phase ceremony:{' '}
           <strong>Authorize</strong> (cheap CIP-30 data-sig — once {actions[0]?.threshold ?? past[0]?.threshold ?? 3} board
           members authorize, the platform picks them as signers) → <strong>Sign</strong> (those same{' '}
           {actions[0]?.threshold ?? past[0]?.threshold ?? 3} sign the real tx with their HW wallets and the platform
@@ -196,11 +204,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
           <li key={a.id} className="rounded-md border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium">
-                {/* Prefer the structured proposal title for PROJECT_FUNDING; fall
-                    back to description (OPS / top-ups / reward payouts). */}
-                {a.proposalTitle
-                  ? <>Milestone #{(a.milestoneIdx ?? 0) + 1} payout — {a.proposalTitle}</>
-                  : (a.description ?? a.kind)}
+                {actionLabel(a)}
               </span>
               <span className="flex items-center gap-3">
                 {/* When several similar actions queue up, the timestamp tells them apart. */}
@@ -249,10 +253,10 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
                 Approval at threshold will be blocked until the treasury is topped up.
               </div>
             ) : null}
-            {/* §15 — 2-phase 3-of-5 progress: phase 1 collects 3 cheap CIP-30
-                authorizations; phase 2 collects 3 real tx witnesses from the
-                same 3 members chosen at phase-1 close (their keyhashes are
-                baked into required_signers). */}
+            {/* §15 — 3-of-5 progress. 1-phase: any 3 board members sign the tx directly.
+                2-phase backup: phase 1 collects 3 cheap CIP-30 authorizations; phase 2 collects 3
+                real tx witnesses from the same 3 members chosen at phase-1 close (their keyhashes
+                are baked into required_signers). */}
             <div className="mt-1 text-xs text-neutral-500">
               {mode === '1_PHASE' ? (
                 <>
@@ -355,7 +359,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
             {shownPast.map((a) => (
               <li key={a.id} className="rounded border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-medium">{a.proposalTitle ? `Milestone #${(a.milestoneIdx ?? 0) + 1} payout — ${a.proposalTitle}` : (a.description ?? a.kind)}</span>
+                  <span className="font-medium">{actionLabel(a)}</span>
                   <span className="text-xs text-neutral-400">prepared {new Date(a.createdAt).toLocaleString()}</span>
                   <span className="flex items-center gap-2 text-neutral-500">
                     {a.amountAda != null ? <span className="tabular-nums">{a.amountAda.toLocaleString()} ₳</span> : null}
@@ -420,7 +424,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
             </p>
             {cancelTarget ? (
               <p className="text-xs text-neutral-500">
-                <strong>{cancelTarget.proposalTitle ? `Milestone #${(cancelTarget.milestoneIdx ?? 0) + 1} — ${cancelTarget.proposalTitle}` : (cancelTarget.description ?? cancelTarget.kind)}</strong>
+                <strong>{actionLabel(cancelTarget)}</strong>
                 {cancelTarget.amountAda != null ? <> · {cancelTarget.amountAda.toLocaleString()} ₳</> : null}
               </p>
             ) : null}

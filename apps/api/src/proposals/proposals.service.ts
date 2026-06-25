@@ -1606,7 +1606,9 @@ export class ProposalsService {
       // §6 — the round's status, so the list can tell whether the submitter may still edit (editing
       // closes once the round reaches VOTE — Debate is the last editable stage).
       const roundStatus = (p as { round?: { status?: string } | null }).round?.status ?? null;
-      return { ...base, progress, rejectionReasons, milestoneReviewers, milestoneReviewerNames, milestoneBar: barsByProposal.get(p.id) ?? null, feeTopUpDue: topUpDue.has(p.id), myDvVote, roundStatus };
+      // §6/§8 — surfaced so the list can tell a fee rejection (stage null, never finalised) from a
+      // Debate & Vote rejection (stage null, result finalised). Only the former is still editable.
+      return { ...base, progress, rejectionReasons, milestoneReviewers, milestoneReviewerNames, milestoneBar: barsByProposal.get(p.id) ?? null, feeTopUpDue: topUpDue.has(p.id), myDvVote, roundStatus, resultFinalizedAt: p.resultFinalizedAt ?? null };
     });
   }
 
@@ -2021,6 +2023,8 @@ export class ProposalsService {
     roundId: string | null;
     isCommercial: boolean | null;
     requestedAmountAda: bigint | null;
+    internalType?: string | null; // INTERNAL proposals: INSTRUCTIVE | INFORMATIVE | POLL | SPENDING
+    spendingAmountAda?: bigint | null; // INTERNAL SPENDING proposals only (lovelace)
     submissionFeeTxHash?: string | null;
     createdAt: Date;
     category?: { name: string } | null;
@@ -2039,6 +2043,10 @@ export class ProposalsService {
       roundId: p.roundId,
       isCommercial: p.isCommercial,
       requestedAmountAda: toAda(p.requestedAmountAda),
+      // §10 — internal proposals aren't about a budget, so they carry no requested amount; only an
+      // internal SPENDING proposal has a meaningful ADA figure (the treasury payout on approval).
+      internalType: p.internalType ?? null,
+      spendingAmountAda: p.spendingAmountAda != null ? toAda(p.spendingAmountAda) : null,
       submissionFeeTxHash: p.submissionFeeTxHash ?? null,
       // Who submitted it — display name, else the DRep id, else (ADA-holder only) the stake id.
       submitter: submitterDisplay(p.submitterUser, p.submitterDrep),

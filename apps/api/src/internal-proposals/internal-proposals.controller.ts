@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { InternalProposalsService } from './internal-proposals.service';
-import { CreateInternalProposalDto, ExtendInternalDto, VoteInternalDto } from './dto';
+import { CreateInternalProposalDto, ExtendInternalDto, SaveDraftDto, VoteInternalDto } from './dto';
 
 // §10 — internal proposals (threshold voting / polls). Any authenticated user reads the public
 // ones; PRIVATE ones are filtered to board members inside the service.
@@ -20,6 +20,22 @@ export class InternalProposalsController {
   @Get('pending-count')
   pendingCount(@CurrentUser() c: AuthContext) {
     return this.internal.pendingCount(c.userId);
+  }
+
+  // §10 — drafts: author-only work-in-progress (status DRAFT, no voting). Create / update / delete.
+  @Post('drafts')
+  saveDraft(@CurrentUser() c: AuthContext, @Body() dto: SaveDraftDto) {
+    return this.internal.saveDraft(c.userId, dto);
+  }
+
+  @Patch('drafts/:id')
+  updateDraft(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SaveDraftDto) {
+    return this.internal.updateDraft(c.userId, id, dto);
+  }
+
+  @Delete('drafts/:id')
+  deleteDraft(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.internal.deleteDraft(c.userId, id);
   }
 
   @Get(':id')

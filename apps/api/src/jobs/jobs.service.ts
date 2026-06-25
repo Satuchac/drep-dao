@@ -27,6 +27,8 @@ const DAILY_MS = 10 * 60_000; // daily jobs gate themselves by date, ticked ever
 export class JobsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(JobsService.name);
   private timers: NodeJS.Timeout[] = [];
+  // Guards the pending-anchor sweep so a long batch (Koios propagation waits) can't overlap the next tick.
+  private anchorSweepRunning = false;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -104,6 +106,8 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
   async midTick() {
     // §9.2 — resolve quick polls whose window ended (extend / resolve / fail).
     await this.quickPolls.resolveDue();
+    // §24 — sweep up any anchors that were recorded but not submitted on-chain (see retryPendingAnchors).
+    await this.retryPendingAnchors().catch((e) => this.logger.warn(`anchor retry: ${e instanceof Error ? e.message : e}`));
     // §27 voting-deadline-check — stage windows that ended without auto-advance.
     if (this.rounds) {
       for (const o of await this.rounds.listOverdueStages()) {
@@ -113,6 +117,30 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
           roundId: o.roundId,
         });
       }
+    }
+  }
+
+  /**
+   * §24 — auto-submit anchors that were recorded but never made it on-chain (txHash null). The
+   * inline submit at finalize time fetches the hot wallet's UTxOs independently, so when several
+   * decisions conclude close together they race for the same UTxO and all but the first are left
+   * pending (the "1 passed, N failed" symptom). This mirrors the board's "Submit all pending"
+   * button — which chains each tx's change into the next — so every decision ends up anchored
+   * within a tick, without anyone clicking. No-op when nothing is pending or no hot wallet is set.
+   */
+  async retryPendingAnchors() {
+    if (this.anchorSweepRunning) return; // a previous sweep is still draining the queue
+    if (!this.anchor.walletConfigured()) return; // leave pending for manual submission
+    const pending = await this.prisma.anchor.count({ where: { txHash: null } });
+    if (pending === 0) return;
+    this.anchorSweepRunning = true;
+    try {
+      const r = await this.anchor.submitAllPending();
+      if (r.submitted || r.failed) {
+        this.logger.log(`auto-anchor sweep: submitted ${r.submitted}/${r.total}${r.failed ? `, ${r.failed} still pending` : ''}`);
+      }
+    } finally {
+      this.anchorSweepRunning = false;
     }
   }
 

@@ -50,6 +50,7 @@ export class AnchorService implements OnModuleInit {
   private mnemonic?: string; // mutable: an in-platform SEED rotation (admin) replaces it
   private readonly treasuryAddress?: string;
   private readonly submitApiUrl?: string; // optional cardano-submit-api; falls back to Koios /submittx
+  private submitting = false; // serializes submitAllPending: the auto-sweep and a manual click must not race the same UTxOs
 
   /**
    * On boot, resolve the anchor hot-wallet seed in priority order:
@@ -99,6 +100,11 @@ export class AnchorService implements OnModuleInit {
   /** Bech32 address of the configured anchor hot wallet (or null if unset). */
   hotWalletAddress(): string | null {
     return this.mnemonic ? this.anchorKeys(this.mnemonic).addr.to_bech32() : null;
+  }
+
+  /** Whether an anchor hot wallet seed is available to submit metadata txs. */
+  walletConfigured(): boolean {
+    return !!this.mnemonic;
   }
 
   /**
@@ -574,7 +580,16 @@ export class AnchorService implements OnModuleInit {
     if (!this.mnemonic) {
       throw new BadRequestException('no anchor hot wallet is configured — set or rotate the seed first');
     }
-    const txHash = await this.submitMetadataTx(this.metadataFromAnchor(a));
+    let txHash: string;
+    try {
+      txHash = await this.submitMetadataTx(this.metadataFromAnchor(a));
+    } catch (e) {
+      // Operational failures — an empty/under-funded hot wallet, a node rejection, or a malformed
+      // historical preimage — must surface as a readable message, not a bare 500.
+      const msg = e instanceof Error ? e.message : String(e);
+      this.logger.warn(`submit anchor ${anchorId} failed: ${msg}`);
+      throw new BadRequestException(msg);
+    }
     await this.prisma.anchor.update({ where: { id: anchorId }, data: { txHash, submittedAt: new Date() } });
     return { hash: a.hash, txHash, submitted: true };
   }
@@ -586,58 +601,84 @@ export class AnchorService implements OnModuleInit {
    * change output into the next input (otherwise every tx after the first reuses the
    * already-spent UTxO and is rejected — the "1 passed, 8 failed" symptom).
    */
-  async submitAllPending(): Promise<{ submitted: number; failed: number; total: number }> {
+  async submitAllPending(): Promise<{ submitted: number; failed: number; total: number; reason?: string }> {
     const pending = await this.prisma.anchor.findMany({ where: { txHash: null }, orderBy: { createdAt: 'asc' } });
     if (pending.length === 0) return { submitted: 0, failed: 0, total: 0 };
     if (!this.mnemonic) {
       throw new BadRequestException('no anchor hot wallet is configured — set or rotate the seed first');
     }
-    const { prv, addr } = this.anchorKeys(this.mnemonic);
-    const pp = await this.cardano.epochParams();
-    // Candidate UTxOs from db-sync. db-sync can lag the node — a UTxO it still
-    // reports as unspent may already be spent on-chain — so any input the node
-    // rejects is added to `bad` and the same anchor is retried with the rest.
-    const pool = await this.cardano.addressUtxos([addr.to_bech32()]);
-    const bad = new Set<string>(); // consumed (after success) or node-rejected input refs
-    const ref = (u: Utxo) => `${u.tx_hash}#${u.tx_index}`;
-
-    let submitted = 0;
-    let failed = 0;
-    for (let i = 0; i < pending.length; i++) {
-      const a = pending[i];
-      const event = this.metadataFromAnchor(a);
-      let ok = false;
-      // Try the largest spendable UTxO; if the node rejects it, drop it and retry.
-      while (!ok) {
-        const candidates = pool.filter((u) => !bad.has(ref(u)));
-        if (candidates.length === 0) break; // no spendable UTxO left for this anchor
-        let built: { fixedHex: string; txHash: string; change: Utxo | null; inputs: string[] };
-        try {
-          built = this.buildMetadataTx(event, candidates, pp, prv, addr);
-        } catch (e) {
-          this.logger.warn(`force-submit ${a.id} failed to build: ${e instanceof Error ? e.message : e}`);
-          break; // malformed anchor — skip it, keep the pool for the others
-        }
-        built.inputs.forEach((r) => bad.add(r)); // either spent (success) or rejected (failure)
-        try {
-          await this.submitTxHex(built.fixedHex);
-          await this.prisma.anchor.update({ where: { id: a.id }, data: { txHash: built.txHash, submittedAt: new Date() } });
-          this.logger.log(`anchored on-chain: ${built.txHash}`);
-          submitted++;
-          if (built.change) pool.push(built.change); // chain: the change funds later anchors
-          ok = true;
-          // A local cardano-submit-api has the change in its mempool instantly, so no
-          // wait is needed; only Koios's load-balanced relays need time to propagate.
-          if (i < pending.length - 1 && !this.submitApiUrl) await this.sleep(4000);
-        } catch (e) {
-          // The chosen input isn't really spendable (stale db-sync / already in-flight).
-          // It's now in `bad`; the loop retries this same anchor with the remaining UTxOs.
-          this.logger.warn(`force-submit ${a.id}: input rejected (${built.inputs.join(',')}), retrying with remaining UTxOs — ${e instanceof Error ? e.message : e}`);
-        }
-      }
-      if (!ok) failed++;
+    // Serialize submission: the 5-minute auto-sweep and a manual "Submit all" must not run at the
+    // same time, or they pick the same UTxOs and the node rejects all but one as double-spends.
+    if (this.submitting) {
+      return { submitted: 0, failed: 0, total: pending.length, reason: 'a submission is already in progress — retry in a moment' };
     }
-    return { submitted, failed, total: pending.length };
+    this.submitting = true;
+    try {
+      const { prv, addr } = this.anchorKeys(this.mnemonic);
+      const pp = await this.cardano.epochParams();
+      // Candidate UTxOs from db-sync. db-sync can lag the node — a UTxO it still
+      // reports as unspent may already be spent on-chain — so any input the node
+      // rejects is added to `bad` and the same anchor is retried with the rest.
+      const pool = await this.cardano.addressUtxos([addr.to_bech32()]);
+      // A representative reason for the failures, surfaced to the board so a stuck queue is actionable
+      // (the commonest cause is an empty/under-funded hot wallet — nothing to pay tx fees with).
+      let reason: string | undefined =
+        pool.length === 0 ? 'the anchor hot wallet has no UTxOs — top it up with ADA to cover tx fees, then retry' : undefined;
+      const bad = new Set<string>(); // consumed (after success) or node-rejected input refs
+      const ref = (u: Utxo) => `${u.tx_hash}#${u.tx_index}`;
+
+      let submitted = 0;
+      let failed = 0;
+      for (let i = 0; i < pending.length; i++) {
+        const a = pending[i];
+        // Rebuilding metadata from a malformed/legacy preimage can throw — count it as a failure
+        // (with a reason) instead of aborting the whole batch with a 500.
+        let event: ReturnType<AnchorService['metadataFromAnchor']>;
+        try {
+          event = this.metadataFromAnchor(a);
+        } catch (e) {
+          reason ??= e instanceof Error ? e.message : String(e);
+          this.logger.warn(`force-submit ${a.id}: cannot rebuild metadata — ${e instanceof Error ? e.message : e}`);
+          failed++;
+          continue;
+        }
+        let ok = false;
+        // Try the largest spendable UTxO; if the node rejects it, drop it and retry.
+        while (!ok) {
+          const candidates = pool.filter((u) => !bad.has(ref(u)));
+          if (candidates.length === 0) break; // no spendable UTxO left for this anchor
+          let built: { fixedHex: string; txHash: string; change: Utxo | null; inputs: string[] };
+          try {
+            built = this.buildMetadataTx(event, candidates, pp, prv, addr);
+          } catch (e) {
+            reason ??= e instanceof Error ? e.message : String(e);
+            this.logger.warn(`force-submit ${a.id} failed to build: ${e instanceof Error ? e.message : e}`);
+            break; // malformed anchor — skip it, keep the pool for the others
+          }
+          built.inputs.forEach((r) => bad.add(r)); // either spent (success) or rejected (failure)
+          try {
+            await this.submitTxHex(built.fixedHex);
+            await this.prisma.anchor.update({ where: { id: a.id }, data: { txHash: built.txHash, submittedAt: new Date() } });
+            this.logger.log(`anchored on-chain: ${built.txHash}`);
+            submitted++;
+            if (built.change) pool.push(built.change); // chain: the change funds later anchors
+            ok = true;
+            // A local cardano-submit-api has the change in its mempool instantly, so no
+            // wait is needed; only Koios's load-balanced relays need time to propagate.
+            if (i < pending.length - 1 && !this.submitApiUrl) await this.sleep(4000);
+          } catch (e) {
+            // The chosen input isn't really spendable (stale db-sync / already in-flight).
+            // It's now in `bad`; the loop retries this same anchor with the remaining UTxOs.
+            reason ??= e instanceof Error ? e.message : String(e);
+            this.logger.warn(`force-submit ${a.id}: input rejected (${built.inputs.join(',')}), retrying with remaining UTxOs — ${e instanceof Error ? e.message : e}`);
+          }
+        }
+        if (!ok) failed++;
+      }
+      return { submitted, failed, total: pending.length, ...(failed && reason ? { reason } : {}) };
+    } finally {
+      this.submitting = false;
+    }
   }
 
   private sleep(ms: number): Promise<void> {
@@ -790,7 +831,7 @@ export class AnchorService implements OnModuleInit {
     const txb = CSL.TransactionBuilder.new(this.builderCfg(pp));
     txb.add_json_metadatum_with_schema(
       CSL.BigNum.from_str(String(GOVERNANCE_METADATA_LABEL)),
-      JSON.stringify(event),
+      JSON.stringify(this.chunkLongStrings(event)),
       CSL.MetadataJsonSchema.NoConversions,
     );
     const unspent = CSL.TransactionUnspentOutputs.new();
@@ -828,6 +869,39 @@ export class AnchorService implements OnModuleInit {
       }
     }
     return { fixedHex: fixed.to_hex(), txHash, change, inputs: inputRefs };
+  }
+
+  /**
+   * Cardano tx metadata caps each text string at 64 BYTES. A long title/outcome (e.g. a 66-byte
+   * proposal name) would otherwise make encoding throw "Max metadata string too long". We split any
+   * over-long string into an array of ≤64-byte chunks (the standard, lossless approach — a reader
+   * concatenates the array), walking the whole metadata object recursively before encoding.
+   */
+  private chunkLongStrings(value: unknown): unknown {
+    if (typeof value === 'string') {
+      return Buffer.byteLength(value, 'utf8') <= 64 ? value : this.splitTo64Bytes(value);
+    }
+    if (Array.isArray(value)) return value.map((v) => this.chunkLongStrings(v));
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, this.chunkLongStrings(v)]));
+    }
+    return value;
+  }
+
+  /** Split a string into ≤64-byte UTF-8 chunks without cutting a multi-byte character in half. */
+  private splitTo64Bytes(s: string): string[] {
+    const chunks: string[] = [];
+    let buf = '';
+    for (const ch of s) {
+      if (Buffer.byteLength(buf + ch, 'utf8') > 64) {
+        chunks.push(buf);
+        buf = ch;
+      } else {
+        buf += ch;
+      }
+    }
+    if (buf) chunks.push(buf);
+    return chunks;
   }
 
   private async submitTxHex(hex: string): Promise<void> {

@@ -3,8 +3,10 @@ import {
   GOVERNANCE_METADATA_LABEL,
   GovSubject,
   SUBJECT_TITLE,
+  VotingStyle,
   buildSubmissionMetadata,
   buildDocHashMetadata,
+  buildResultMetadata,
 } from './governance-metadata';
 
 describe('buildSubmissionMetadata (§3 — slimmed accepted-proposal anchor)', () => {
@@ -96,5 +98,64 @@ describe('buildDocHashMetadata (§8.1 — post-debate content fingerprint)', () 
 
   it('has a human-readable subject title registered', () => {
     expect(SUBJECT_TITLE[GovSubject.PROPOSAL_DOC]).toBe('Proposal content fingerprint (post-debate)');
+  });
+});
+
+describe('buildResultMetadata (§4 — on-chain voting-power precision)', () => {
+  const base = {
+    subject: GovSubject.INTERNAL,
+    applicant: 'Internal proposal',
+    outcome: 'APPROVED',
+  };
+
+  it('BALANCED: keeps fractional power precise as 2-decimal strings (not rounded to integers)', () => {
+    const meta = buildResultMetadata({
+      ...base,
+      style: VotingStyle.BALANCED,
+      votes: [
+        { drep: 'drep1alice', vote: 'YES', power: 6.09 },
+        { drep: 'drep1dave', vote: 'YES', power: 5.85 },
+        { drep: 'drep1erin', vote: 'ABSTAIN', power: 4.23 },
+      ],
+      yes: 11.94,
+      no: 0,
+      threshold: 67,
+      totalPower: 25.08,
+    })[GOVERNANCE_METADATA_LABEL];
+    expect(meta.votes[0].power).toBe('6.09');
+    expect(meta.votes[1].power).toBe('5.85');
+    expect(meta.tally.yes).toBe('11.94');
+    expect(meta.tally.totalPower).toBe('25.08');
+    expect(meta.tally.threshold).toBe(67); // a percentage — stays a whole number
+    expect(meta.tally.unit).toBe('power');
+  });
+
+  it('ONCHAIN: also emits precise 2-decimal power strings', () => {
+    const meta = buildResultMetadata({
+      ...base,
+      style: VotingStyle.ONCHAIN,
+      votes: [{ drep: 'drep1alice', vote: 'YES', power: 67827.34 }],
+      yes: 67827.34,
+      no: 0,
+      threshold: 67,
+      totalPower: 67827.34,
+    })[GOVERNANCE_METADATA_LABEL];
+    expect(meta.votes[0].power).toBe('67827.34');
+    expect(meta.tally.yes).toBe('67827.34');
+  });
+
+  it('1P1V: tallies stay whole vote counts (integers, unit "1 member - 1 vote")', () => {
+    const meta = buildResultMetadata({
+      ...base,
+      style: VotingStyle.ONE_PERSON_ONE_VOTE,
+      votes: [{ drep: 'drep1alice', vote: 'YES' }],
+      yes: 3,
+      no: 1,
+      threshold: 3,
+    })[GOVERNANCE_METADATA_LABEL];
+    expect(meta.tally.yes).toBe(3);
+    expect(meta.tally.no).toBe(1);
+    expect(meta.tally.unit).toBe('1 member - 1 vote');
+    expect('totalPower' in meta.tally).toBe(false);
   });
 });

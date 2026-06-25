@@ -7,6 +7,12 @@ export const PLATFORM_CONFIG_DEFAULTS = {
   ADMISSION_APPROVAL_VOTES: 3, // §14.2 board YES votes needed to admit a DRep (3-of-5)
   INTERNAL_DEFAULT_THRESHOLD_PCT: 67,
   INTERNAL_IMPORTANT_THRESHOLD_PCT: 75,
+  // Internal proposals only — minimum words a voter must write in their rationale,
+  // per choice. 0 means a rationale is not required for that choice. These do NOT
+  // apply to funding-round votes (filtering, Debate & Vote, milestone review).
+  MIN_LEN_OF_WORDS_IN_RATIONALE_FOR_VOTE_YES: 0,
+  MIN_LEN_OF_WORDS_IN_RATIONALE_FOR_VOTE_NO: 0,
+  MIN_LEN_OF_WORDS_IN_RATIONALE_FOR_VOTE_ABSTAIN: 0,
   // §14.1 — DAO-entry gate, layer 1: a registered DRep may request to join only if it
   // meets the on-chain minimums. Two independent, separately-toggled groups (both OFF
   // by default so testnet entry is open; enable on mainnet).
@@ -27,10 +33,10 @@ export const PLATFORM_CONFIG_DEFAULTS = {
   ANCHOR_SCHEDULE_CRON: '0 2 * * *',
   // Block explorer used for all on-chain links (tx + address).
   CARDANO_EXPLORER: 'cardanoscan', // cardanoscan | cexplorer | adastat
-  // §15 — board multisig signing ceremony. 1_PHASE: every member signs the tx once
-  // (body built without required_signers — needs a wallet that signs native-script
-  // inputs without being named in the body, e.g. Eternl). 2_PHASE: Authorize → Sign
-  // ceremony that works with any CIP-30 wallet.
+  // §15 — board multisig signing ceremony. 1_PHASE (default): every member signs the tx once
+  // (body built without required_signers — needs a wallet that signs native-script inputs
+  // without being named in the body, e.g. Eternl). 2_PHASE: Authorize → Sign ceremony that
+  // works with any CIP-30 wallet — the backup when a member's wallet can't do 1-phase.
   TX_SIGNING_PROCESS: '1_PHASE', // 1_PHASE | 2_PHASE
 } as const;
 
@@ -49,6 +55,12 @@ export const PLATFORM_CONFIG_META: Record<PlatformConfigKey, string> = {
   ADMISSION_APPROVAL_VOTES: 'Board YES votes needed to admit a new DAO member (3-of-5).',
   INTERNAL_DEFAULT_THRESHOLD_PCT: 'Approval threshold (%) for ordinary internal proposals.',
   INTERNAL_IMPORTANT_THRESHOLD_PCT: 'Approval threshold (%) for internal proposals flagged as important.',
+  MIN_LEN_OF_WORDS_IN_RATIONALE_FOR_VOTE_YES:
+    'Internal proposals only: minimum words required in the rationale when a voter votes YES. 0 = no rationale required.',
+  MIN_LEN_OF_WORDS_IN_RATIONALE_FOR_VOTE_NO:
+    'Internal proposals only: minimum words required in the rationale when a voter votes NO. 0 = no rationale required.',
+  MIN_LEN_OF_WORDS_IN_RATIONALE_FOR_VOTE_ABSTAIN:
+    'Internal proposals only: minimum words required in the rationale when a voter abstains. 0 = no rationale required.',
   ENTRY_REQUIRE_VOTING_POWER:
     'Gate DAO entry on the DRep\'s on-chain voting power/delegators below. Turn OFF on testnet (entry stays open); ON for mainnet.',
   MIN_OWN_VOTING_POWER_ADA: "Entry: minimum OWN voting power (ADA the DRep self-delegated). Meeting this alone qualifies.",
@@ -65,7 +77,7 @@ export const PLATFORM_CONFIG_META: Record<PlatformConfigKey, string> = {
   ANCHOR_SCHEDULE_CRON: 'Cron schedule for the daily on-chain anchoring job (informational).',
   CARDANO_EXPLORER: 'Block explorer for on-chain links: cardanoscan, cexplorer, or adastat.',
   TX_SIGNING_PROCESS:
-    'Multisig signing ceremony. 1-Phase: each board member signs the tx once — requires the Eternl wallet (first 3 signatures broadcast). 2-Phase: Authorize → Sign, works with any CIP-30 wallet.',
+    'Multisig signing ceremony. 1-Phase (default): each board member signs the tx once — requires the Eternl wallet (broadcasts on the 3rd signature). 2-Phase: Authorize → Sign — the backup that works with any CIP-30 wallet.',
 };
 
 /**

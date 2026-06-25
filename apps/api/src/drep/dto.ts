@@ -41,6 +41,9 @@ export class DrepApplicationDto {
   @IsOptional() @IsString() @MaxLength(100) country?: string;
   @IsOptional() @IsBoolean() callsOptin?: boolean;
   @IsOptional() @IsBoolean() admissionCallOptin?: boolean;
+  // §2 — cross-wallet link to a submitter profile the applicant declares as the same entity
+  // (empty string = no link). Self-declared; can be set at join and edited later.
+  @IsOptional() @IsString() @MaxLength(64) linkedSubmitterUserId?: string;
 }
 
 export class UpdateDrepDto {

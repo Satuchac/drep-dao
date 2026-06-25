@@ -195,7 +195,7 @@ export const boardProofsApi = {
   submit: (id: string) =>
     request<{ hash: string; txHash: string | null; submitted: boolean }>(`/admin/proofs/${id}/submit`, { method: 'POST' }),
   submitAll: () =>
-    request<{ submitted: number; failed: number; total: number }>('/admin/proofs/submit-all', { method: 'POST' }),
+    request<{ submitted: number; failed: number; total: number; reason?: string }>('/admin/proofs/submit-all', { method: 'POST' }),
 };
 
 export interface WalletStatus {
@@ -1053,6 +1053,10 @@ export interface ProposalSummary {
   roundId: string | null;
   isCommercial: boolean | null;
   requestedAmountAda: number;
+  /** §10 — INTERNAL proposals only: INSTRUCTIVE | INFORMATIVE | POLL | SPENDING (null for funding). */
+  internalType?: string | null;
+  /** §10 — set only for an internal SPENDING proposal (ADA paid from the treasury on approval). */
+  spendingAmountAda?: number | null;
   submissionFeeTxHash: string | null;
   submitter: string | null;
   /** §26.2 — "what's needed now" for ACTIVE rows (filtering reviewers, D&V, milestones). */
@@ -1072,6 +1076,9 @@ export interface ProposalSummary {
   myDvVote?: string | null;
   /** §6 — the round's status, so lists can gate submitter editing (closes once VOTE starts). */
   roundStatus?: string | null;
+  /** §8 — set when a Debate & Vote tally was published. Distinguishes a fee rejection (stage null,
+   *  resultFinalizedAt null — still editable) from a D&V rejection (stage null, finalised — closed). */
+  resultFinalizedAt?: string | null;
 }
 export interface MilestoneSegment {
   idx: number;
@@ -1815,10 +1822,13 @@ export interface InternalProposalVoter {
   choice: string; // YES | NO | ABSTAIN | <poll option label>
   weight: number; // final voting power
   rationale: string | null;
+  castAt: string; // when this vote was cast
+  superseded: boolean; // true once the voter replaced it with a newer vote (kept as history)
 }
 export interface InternalProposalSpending {
   amountAda: number;
   destAddress: string | null;
+  sourceBucketId: string | null;
   sourceBucketLabel: string | null;
   action: { id: string; status: string; txHash: string | null; paidAt: string | null } | null;
 }
@@ -1836,6 +1846,10 @@ export interface InternalProposalDetail extends InternalProposalSummary {
   voters: InternalProposalVoter[]; // who voted how + their rationales
   anchorTxHash: string | null;
   anchorHash: string | null;
+  /** Minimum rationale words required per choice (0 = not required). Internal proposals only. */
+  rationaleMinWords: { YES: number; NO: number; ABSTAIN: number };
+  /** The viewer's current (live) rationale, shown read-only in the locked vote card. */
+  myRationale: string | null;
 }
 export interface CreateInternalInput {
   /** §10.5 SPENDING: amount + destination (+ optional source bucket). */
@@ -1860,7 +1874,11 @@ export interface CreateInternalInput {
   // the server (BOTH / BALANCED / IMPORTANT).
   isBoardElection?: boolean;
   candidates?: string[];
+  /** When submitting from a saved draft, the draft to remove once the live proposal is created. */
+  draftId?: string;
 }
+/** §10 — a draft is the same shape as a create, but every field is optional (work-in-progress). */
+export type DraftInput = Partial<CreateInternalInput>;
 export interface VoteInternalInput {
   choice?: 'YES' | 'NO' | 'ABSTAIN';
   options?: string[];
@@ -1872,6 +1890,12 @@ export const internalProposalsApi = {
   get: (id: string) => request<InternalProposalDetail>(`/internal-proposals/${id}`),
   submit: (input: CreateInternalInput) =>
     request<InternalProposalDetail>('/internal-proposals', { method: 'POST', body: JSON.stringify(input) }),
+  saveDraft: (input: DraftInput) =>
+    request<InternalProposalDetail>('/internal-proposals/drafts', { method: 'POST', body: JSON.stringify(input) }),
+  updateDraft: (id: string, input: DraftInput) =>
+    request<InternalProposalDetail>(`/internal-proposals/drafts/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  deleteDraft: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`/internal-proposals/drafts/${id}`, { method: 'DELETE' }),
   vote: (id: string, input: VoteInternalInput) =>
     request<InternalProposalDetail>(`/internal-proposals/${id}/vote`, { method: 'POST', body: JSON.stringify(input) }),
   extend: (id: string, votingEndAt: string) =>
