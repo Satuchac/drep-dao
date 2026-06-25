@@ -44,8 +44,17 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [savedSig, setSavedSig] = useState<string | null>(null);
 
   const isBoard = profile?.roles.includes('BOARD') ?? false;
+
+  // §2 — dirty-check: in profile mode, Save is enabled only when the form differs from the loaded
+  // profile. The baseline (savedSig) is pinned once the profile loads and re-pinned after each save.
+  const sig = (f: { displayName: string; bio: string; photo: string | null; x: string; linkedin: string; github: string; telegram: string; email: string; subs: string[]; conflict: string; country: string; noSelfVote: boolean; votesOnFunding: boolean; linkedSubmitterUserId: string }) =>
+    JSON.stringify({ displayName: f.displayName.trim(), bio: f.bio, photo: f.photo, x: f.x.trim(), linkedin: f.linkedin.trim(), github: f.github.trim(), telegram: f.telegram.trim(), email: f.email.trim(), subs: [...f.subs].sort(), conflict: f.conflict, country: f.country, noSelfVote: f.noSelfVote, votesOnFunding: f.votesOnFunding, linkedSubmitterUserId: f.linkedSubmitterUserId });
+  const formSig = sig({ displayName, bio, photo, x, linkedin, github, telegram, email, subs, conflict, country, noSelfVote, votesOnFunding, linkedSubmitterUserId: linkSubmitter ? linkedSubmitterUserId : '' });
+  // Join is always a fresh application (no baseline); only profile edits are gated by a change.
+  const dirty = mode === 'join' ? true : savedSig !== null && formSig !== savedSig;
 
   // Prefill from the existing profile (both modes — a re-applying DRep keeps prior data).
   useEffect(() => {
@@ -70,7 +79,16 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       setNoSelfVote(!!d.noSelfVotePledge);
       setLinkedSubmitterUserId(d.linkedSubmitterUserId ?? '');
       setLinkSubmitter(!!d.linkedSubmitterUserId);
+      // Pin the dirty-check baseline to exactly what was loaded.
+      setSavedSig(sig({
+        displayName: profile?.user.displayName ?? '', bio: d.bio ?? '', photo: d.photo ?? null,
+        x: s.x ?? '', linkedin: s.linkedin ?? '', github: s.github ?? '',
+        telegram: c.telegram ?? '', email: c.email ?? '', subs: d.subcategoryIds ?? [],
+        conflict: d.conflictOfInterest ?? '', country: d.country ?? '', noSelfVote: !!d.noSelfVotePledge,
+        votesOnFunding: d.votesOnFundingProposals, linkedSubmitterUserId: d.linkedSubmitterUserId ?? '',
+      }));
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // §2 — submitters to choose from when declaring "I'm also a submitter (different wallet)".
   useEffect(() => { submitterApi.directory().then(setSubmitters).catch(() => setSubmitters([])); }, []);
@@ -123,6 +141,7 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       if (mode === 'join') await drepApi.apply(input);
       else await drepApi.update(input);
       setSaved(true);
+      setSavedSig(formSig); // re-pin baseline → the button disables again until the next change
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
@@ -285,7 +304,7 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       ) : null}
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
-      {saved ? (
+      {saved && !dirty ? (
         <div className="text-sm text-emerald-600">
           {mode === 'join' ? 'Request submitted — awaiting board review.' : 'Profile saved.'}
         </div>
@@ -293,7 +312,7 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
 
       <button
         type="submit"
-        disabled={busy || !drepId || !!photoError}
+        disabled={busy || !drepId || !!photoError || !dirty}
         className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
       >
         {busy ? 'Saving…' : mode === 'join' ? 'Submit request to join' : 'Save profile'}

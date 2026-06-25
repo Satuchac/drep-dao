@@ -31,6 +31,12 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const [savedSig, setSavedSig] = useState<string | null>(null);
+
+  // §2 — dirty-check: when editing an existing application/profile, Save is enabled only when
+  // something changed. The baseline (savedSig) is pinned each time the record is (re)loaded.
+  const sig = (f: { name: string; bio: string; motivation: string; conflict: string; email: string; telegram: string; socials: string[]; photo: string | null; subs: string[] }) =>
+    JSON.stringify({ name: f.name.trim(), bio: f.bio.trim(), motivation: f.motivation.trim(), conflict: f.conflict.trim(), email: f.email.trim(), telegram: f.telegram.trim(), socials: f.socials.map((s) => s.trim()).filter(Boolean), photo: f.photo, subs: [...f.subs].sort() });
 
   const load = () =>
     expertApi.mine().then((e) => {
@@ -45,6 +51,7 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
         setSocials(e.socialLinks ?? []);
         setPhoto(e.logoDataUrl ?? null);
         setSubs(e.subcategoryIds ?? []);
+        setSavedSig(sig({ name: e.displayName, bio: e.bio ?? '', motivation: e.motivation ?? '', conflict: e.conflictOfInterest ?? '', email: e.email ?? '', telegram: e.telegram ?? '', socials: e.socialLinks ?? [], photo: e.logoDataUrl ?? null, subs: e.subcategoryIds ?? [] }));
       }
     });
   useEffect(() => {
@@ -57,6 +64,9 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
   // §2 — mandatory: display name, experience, conflict-of-interest, email, telegram.
   const emailOk = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
   const canSubmit = !!name.trim() && !!bio.trim() && !!conflict.trim() && emailOk && !!telegram.trim() && !busy;
+  // A new application (no saved baseline) always submits; an edit requires an actual change.
+  const formSig = sig({ name, bio, motivation, conflict, email, telegram, socials, photo, subs });
+  const dirty = savedSig === null || formSig !== savedSig;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,13 +208,13 @@ export function ExpertApplyForm({ onChange }: { onChange?: () => void } = {}) {
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"
-          disabled={!canSubmit}
+          disabled={!canSubmit || !dirty}
           className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
         >
           {busy ? 'Submitting…' : approved ? 'Save profile' : mine ? 'Update application' : 'Submit expert application'}
         </button>
         {mine && !approved && !saved ? <span className="text-xs text-neutral-500">Your application is under board review — you can update it anytime.</span> : null}
-        {saved ? <span className="text-xs font-medium text-emerald-600">✓ {saved}</span> : null}
+        {saved && !dirty ? <span className="text-xs font-medium text-emerald-600">✓ {saved}</span> : null}
       </div>
 
       {/* §2 — voluntarily leave: deletes the expert profile (and removes the role). */}

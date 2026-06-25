@@ -40,10 +40,16 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
+  const [savedSig, setSavedSig] = useState<string | null>(null);
   // §2.1 — persistence consent (required to apply) + leave flow.
   const [agreePersist, setAgreePersist] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
+
+  // §2 — dirty-check: when editing an existing record, Save is enabled only when something changed.
+  // The baseline (savedSig) is pinned each time the record is (re)loaded; consent isn't a profile field.
+  const sig = (f: { name: string; desc: string; githubs: string[]; socials: string[]; conflict: string; noSelfVote: boolean; telegram: string; prevFunding: string; email: string; logo: string; country: string; linkedDrepId: string }) =>
+    JSON.stringify({ name: f.name.trim(), desc: f.desc.trim(), githubs: f.githubs.map((s) => s.trim()).filter(Boolean), socials: f.socials.map((s) => s.trim()).filter(Boolean), conflict: f.conflict.trim(), noSelfVote: f.noSelfVote, telegram: f.telegram.trim(), prevFunding: f.prevFunding.trim(), email: f.email.trim(), logo: f.logo, country: f.country, linkedDrepId: f.linkedDrepId });
 
   const load = () =>
     submitterApi.mine().then((m) => {
@@ -57,6 +63,7 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
         setLinkedDrepId(m.linkedDrepIdOnchain ?? '');
         setLinkMember(!!m.linkedDrepIdOnchain);
         setLinkedDaoMember(m.linkedDaoMember ?? null);
+        setSavedSig(sig({ name: m.displayName, desc: m.description, githubs: m.githubUrls ?? [], socials: m.socialLinks ?? [], conflict: m.conflictOfInterest ?? '', noSelfVote: !!m.noSelfVotePledge, telegram: m.telegram ?? '', prevFunding: m.previousFunding ?? '', email: m.email ?? '', logo: m.logoDataUrl ?? '', country: m.country, linkedDrepId: m.linkedDrepIdOnchain ?? '' }));
       } else if (profile?.user.displayName) {
         // Convenience prefill for a NEW application — editable, fully independent.
         setName(profile.user.displayName);
@@ -83,6 +90,9 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const needsConsent = mine?.status !== 'APPROVED';
   const canSubmit = !!trimmedName && !!country && !!desc.trim() && !!conflict.trim() && !!telegram.trim() && emailOk && (!needsConsent || agreePersist) && (!needsFullDesc || words >= MIN_WORDS);
+  // A new application (no saved baseline) always submits; an edit requires an actual change.
+  const formSig = sig({ name, desc, githubs, socials, conflict, noSelfVote, telegram, prevFunding, email, logo, country, linkedDrepId: linkMember ? linkedDrepId : '' });
+  const dirty = savedSig === null || formSig !== savedSig;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,10 +278,10 @@ export function SubmitterApplyForm({ onChange }: { onChange?: () => void }) {
           </label>
         ) : null}
         <div className="flex flex-wrap items-center gap-3">
-          <button type="submit" disabled={busy} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
+          <button type="submit" disabled={busy || !dirty} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
             {busy ? 'Submitting…' : mine && mine.status !== 'REJECTED' ? 'Update application' : mine?.status === 'REJECTED' ? 'Re-apply' : 'Apply'}
           </button>
-          {saved ? <span className="text-xs font-medium text-emerald-600">✓ {saved}</span> : null}
+          {saved && !dirty ? <span className="text-xs font-medium text-emerald-600">✓ {saved}</span> : null}
         </div>
       </form>
 
