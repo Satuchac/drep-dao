@@ -595,14 +595,16 @@ export class TreasuryService implements OnModuleInit {
     const bks = active
       ? await this.prisma.treasuryBucket.findMany({ where: { configId: active.id }, select: { id: true, bech32Address: true } })
       : [];
-    // §15 — only the multisig + its labeled buckets. The low-balance hot/anchor wallet is
-    // deliberately excluded: its on-chain-proof txs are self-transfers (noise), and its many
-    // accumulated UTxOs are what made this history query time out → fall back to Koios. Real
-    // hot-wallet moves (top-ups) still appear here from the multisig side, and the hot wallet
-    // has its own dedicated history view.
+    // §15 — the multisig + its labeled buckets + the anchor hot wallet, so funds arriving at the
+    // hot wallet are visible too (e.g. an initial top-up before the multisig is even configured —
+    // otherwise the list looks empty even though the balance went up). The hot wallet's own
+    // on-chain-proof self-transfers are filtered out below as internal noise, and the SWR cache in
+    // addressTransactions keeps a slow db-sync query from ever blocking the request.
+    const hotAddr = this.anchor.hotWalletAddress();
     const addrSet = new Set<string>();
     if (active?.bech32Address) addrSet.add(active.bech32Address);
     for (const b of bks) if (b.bech32Address) addrSet.add(b.bech32Address);
+    if (hotAddr) addrSet.add(hotAddr);
     const addresses = [...addrSet];
     if (addresses.length === 0) return { transactions: [] as TreasuryTx[], total: 0, page: 1, pageSize: opts?.pageSize ?? 50 };
 
@@ -652,11 +654,9 @@ export class TreasuryService implements OnModuleInit {
       BOARD_TRANSFER: 'treasury transfer',
     };
 
-    // §15 — every wallet the DAO controls. A tx whose destination is one of
-    // these moved money around, not out — shown as INTERNAL, never red.
+    // §15 — every wallet the DAO controls (multisig + buckets + hot wallet, all already in
+    // `addresses`). A tx whose destination is one of these moved money around, not out — INTERNAL.
     const internalAddrs = new Set(addresses);
-    const hotAddr = this.anchor.hotWalletAddress();
-    if (hotAddr) internalAddrs.add(hotAddr);
     // Hot-wallet sweeps land at the multisig as plain incoming with no
     // MultisigAction — recognize them by their recorded tx hash.
     const sweeps = await this.prisma.hotWalletSweep.findMany({ select: { txHash: true } });
