@@ -142,6 +142,22 @@ describe('buildResultMetadata (§4 — on-chain voting-power precision)', () => 
     })[GOVERNANCE_METADATA_LABEL];
     expect(meta.votes[0].power).toBe('67827.34');
     expect(meta.tally.yes).toBe('67827.34');
+    expect(meta.tally.unit).toBe('on-chain power');
+  });
+
+  it('never rounds fractional power up to a whole number (4.8 stays "4.8", not "5")', () => {
+    const meta = buildResultMetadata({
+      ...base,
+      style: VotingStyle.BALANCED,
+      votes: [{ drep: 'drep1alice', vote: 'YES', power: 4.8 }],
+      yes: 4.8,
+      no: 0,
+      threshold: 51,
+      totalPower: 4.8,
+    })[GOVERNANCE_METADATA_LABEL];
+    expect(meta.votes[0].power).toBe('4.8');
+    expect(meta.tally.yes).toBe('4.8');
+    expect(meta.votes[0].power).not.toBe('5');
   });
 
   it('1P1V: tallies stay whole vote counts (integers, unit "1 vote")', () => {

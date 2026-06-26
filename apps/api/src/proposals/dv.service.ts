@@ -22,6 +22,7 @@ import {
   VotePhase,
 } from '@drep-dao/shared';
 import { GovSubject, VotingStyle } from '@drep-dao/cardano';
+import { classifyBudgetOutcome, voteRatio } from './dv-results';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnchorService } from '../cardano/anchor.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
@@ -681,24 +682,13 @@ export class DvService {
         else if (c === VoteChoice.ABSTAIN) abstainPower += fp;
       }
       const noPower = Math.max(0, totalPower - yesPower - abstainPower);
-      const denom = Math.max(0, totalPower - abstainPower);
       const thresholdPct = p.approvalThresholdPct ? Number(p.approvalThresholdPct) : ROUND_SETTING_DEFAULTS.dvApprovalThresholdPct;
-      const ratioPct = denom > 0 ? (yesPower / denom) * 100 : 0;
-      const passedThreshold = denom > 0 && ratioPct >= thresholdPct;
+      const { denom, ratioPct, passedThreshold } = voteRatio(yesPower, abstainPower, totalPower, thresholdPct);
       const outcome: Row['outcome'] =
         p.status === ProposalStatus.APPROVED || p.status === ProposalStatus.COMPLETE || p.status === ProposalStatus.FAILED ? 'APPROVED'
         : p.status === ProposalStatus.REJECTED ? 'REJECTED'
         : 'PENDING';
-      // The budget only decides the fate of proposals that passed the vote. A proposal that
-      // missed the threshold is rejected on votes regardless of how much budget was left; one
-      // that drew no decisive votes (no YES/NO power) failed for lack of voting power.
-      const noVotingPower = denom <= 0; // nobody cast a YES/NO vote (no votes, or all abstained)
-      const budgetOutcome: Row['budgetOutcome'] =
-        outcome === 'APPROVED' ? 'funded'
-        : outcome === 'PENDING' ? 'tie'
-        : passedThreshold ? 'cut' // REJECTED but passed the vote → the budget ran out
-        : noVotingPower ? 'nopower' // REJECTED with no decisive voting power
-        : 'votes';
+      const budgetOutcome = classifyBudgetOutcome(outcome, passedThreshold, denom);
       rows.push({
         id: p.id, publicId: p.publicId, title: p.title,
         requestedAmountAda: Number(p.requestedAmountAda ?? 0n) / 1e6,

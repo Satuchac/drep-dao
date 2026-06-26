@@ -487,11 +487,13 @@ in `tools/` (`test-all.cjs`, `test-anchor.cjs`, `test-dao.cjs`, …); see
 `tools/TESTS.md`. Automated suites `delete process.env.ANCHOR_MNEMONIC` so they
 don't submit real anchor txs.
 
-**Unit tests (`vitest`):** `pnpm test` (turbo) runs the package suites — currently
-`packages/cardano` (on-chain metadata builders: slim submission anchor + the
-post-debate content-fingerprint anchor) and `apps/api` (cross-wallet profile-link
-resolution; mandatory Telegram/email contact validation). Spec files live next to
-the code as `*.spec.ts` and are excluded from the build/typecheck tsconfigs.
+**Unit tests (`vitest`):** `pnpm test` (turbo) runs the package suites — `packages/cardano`
+(on-chain metadata builders: slim submission anchor, post-debate content fingerprint, and the
+result-anchor voting-power precision + `unit` naming), `packages/shared` (round stages,
+permissions, comments, search, …), and `apps/api` (cross-wallet profile-link resolution;
+mandatory Telegram/email contact validation; the pure Voting-Result classifiers
+`voteRatio` / `classifyBudgetOutcome` in `dv-results.ts`). Spec files live next to the code
+as `*.spec.ts` and are excluded from the build/typecheck tsconfigs.
 
 ## 12. Key environment config (`.env`)
 
@@ -647,3 +649,38 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
 **Notifications**
 - The to-do counts (Actions tab badges, My-area left-nav badge, login-box badge) are
   unified behind one shared hook (`lib/use-todo-counts.ts`) so they can't diverge.
+
+## 15. Recent additions (2026-06-26)
+
+**On-chain anchoring (§6)**
+- **Result anchor names the voting method precisely.** The tally `unit` in the result metadata
+  is now one of `"1 vote"` (1P1V — head count), `"on-chain power"` (ONCHAIN — raw delegated
+  power), or `"adjusted power"` (BALANCED — merit-adjusted), replacing the ambiguous `"power"` /
+  `"1 member - 1 vote"`. Voting power is emitted at full **2-decimal precision with no integer
+  rounding** (e.g. `"4.8"`, never `"5"`) as a string, since Cardano metadata forbids floats
+  (`buildResultMetadata`, unit-tested in `packages/cardano`).
+- **Spend anchors carry recipient + amount + tx.** A confirmed **funding-milestone**
+  (`PROJECT_FUNDING`) payout and an **internal-proposal spend** (`OPS` action carrying a
+  `proposalId` + `destAddress`) now write a payout anchor on confirmation recording the recipient
+  address, the lovelace amount, and the on-chain tx hash — matching the existing reward-payout
+  proof (`MultisigBroadcastService.submitWitness` → `AnchorService.anchorPayout`).
+
+**Funding rounds — Voting Result & category overview (§9)**
+- **Category overview shows allocation at Tally.** The *Debate & Vote & Tally* row in the
+  per-category breakdown now shows **Allocated** (budget committed to the approved proposals) and
+  **Unallocated** (remainder), so the funding outcome is visible before the round reaches Funding.
+- **Accurate Tally hint.** The row hint no longer says "tally in progress" once the tally has
+  settled: it reads **"tie-breaks running"** while quick polls are still deciding, and **"results
+  published"** when every proposal is decided.
+- **Rejection reason is explicit.** A rejected proposal now distinguishes **no voting power** (no
+  eligible DRep cast a decisive vote, so the threshold could never be met) from a **budget-cut**
+  (passed the vote but the category budget ran out at Tally) and a plain **below-threshold** loss.
+  The classification is the pure, unit-tested `classifyBudgetOutcome` / `voteRatio`
+  (`apps/api/src/proposals/dv-results.ts`). The Voting Result tab lists **every** proposal that
+  reached Debate & Vote in the selected category.
+
+**Round control (§6)**
+- **Header badge reflects the live stage.** A stage keeps the round's status until the next one
+  launches, so between stages (current window ended, next not yet started) the badge named a stale
+  stage. It now reads **"No active stage"** in that gap and only names a stage while it is actually
+  running (`RoundControl`, driven by the live `useNow` clock).
