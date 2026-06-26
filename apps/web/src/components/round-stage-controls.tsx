@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { boardRoundsApi, roundsApi, type RoundDetail } from '@/lib/api';
-import { ProposalCounts, StatusBadge, fmtDateTime, toLocalInput, DateField } from './round-ui';
+import { ProposalCounts, StatusBadge, fmtDateTime, toLocalInput, DateField, useNow } from './round-ui';
 import { CreateRoundForm } from './rounds-section';
 import { ConfirmDialog } from './confirm-dialog';
 import { useAuth } from '@/lib/auth-context';
@@ -145,6 +145,13 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
   // 'vote' so a pre-split round still shows a Vote control).
   const scheduleByKey = new Map(round.schedule.map((s) => [s.stageKey, s]));
   const legacyDv = round.schedule.find((s) => s.stageKey === 'debate_vote');
+  // §6 — the header badge names the stage that's actually running. A stage stays the round's
+  // status until the next one starts, so between stages (current window ended, next not yet
+  // launched) no stage is truly active — say so instead of naming the stale stage.
+  const now = useNow(30_000);
+  const currentStageKey = CURRENT_STAGE_KEY[round.status];
+  const currentRow = currentStageKey ? scheduleByKey.get(currentStageKey) : undefined;
+  const betweenStages = !!currentRow && new Date(currentRow.endsAt).getTime() <= now;
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // §6 — two sub-views: the stage timeline (advance the round) and the round setup
@@ -177,7 +184,13 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
           Round #{round.number}
           {round.name ? ` — ${round.name}` : ''}
         </span>
-        <StatusBadge status={round.status} />
+        {betweenStages ? (
+          <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+            No active stage
+          </span>
+        ) : (
+          <StatusBadge status={round.status} />
+        )}
       </div>
 
       {/* §6 — horizontal submenu: stage timeline vs. round setup. */}
