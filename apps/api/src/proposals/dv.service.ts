@@ -656,8 +656,10 @@ export class DvService {
       outcome: 'APPROVED' | 'PENDING' | 'REJECTED';
       // Why the budget mattered for this proposal:
       //  funded — won funding · cut — passed the vote but the category budget ran out (budget-cut)
-      //  tie    — tied at the budget cliff, a quick poll decides · votes — rejected on the vote (below threshold)
-      budgetOutcome: 'funded' | 'cut' | 'tie' | 'votes';
+      //  tie    — tied at the budget cliff, a quick poll decides · votes — got decisive votes but
+      //  fell below the approval threshold · nopower — no voting power: no eligible DRep cast a
+      //  decisive vote (no YES/NO power), so the threshold could never be met
+      budgetOutcome: 'funded' | 'cut' | 'tie' | 'votes' | 'nopower';
       yesPower: number; noPower: number; abstainPower: number; totalPower: number;
       thresholdPct: number; ratioPct: number; cast: number; eligible: number;
       inQuickPoll: boolean; quickPollPower: number;
@@ -688,11 +690,14 @@ export class DvService {
         : p.status === ProposalStatus.REJECTED ? 'REJECTED'
         : 'PENDING';
       // The budget only decides the fate of proposals that passed the vote. A proposal that
-      // missed the threshold is rejected on votes regardless of how much budget was left.
+      // missed the threshold is rejected on votes regardless of how much budget was left; one
+      // that drew no decisive votes (no YES/NO power) failed for lack of voting power.
+      const noVotingPower = denom <= 0; // nobody cast a YES/NO vote (no votes, or all abstained)
       const budgetOutcome: Row['budgetOutcome'] =
         outcome === 'APPROVED' ? 'funded'
         : outcome === 'PENDING' ? 'tie'
         : passedThreshold ? 'cut' // REJECTED but passed the vote → the budget ran out
+        : noVotingPower ? 'nopower' // REJECTED with no decisive voting power
         : 'votes';
       rows.push({
         id: p.id, publicId: p.publicId, title: p.title,

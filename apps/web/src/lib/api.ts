@@ -1346,8 +1346,9 @@ export interface VotingResultProposal {
   categoryName: string | null;
   outcome: 'APPROVED' | 'PENDING' | 'REJECTED';
   // funded — won funding · cut — passed the vote but the budget ran out · tie — tied at the cliff
-  // (quick poll decides) · votes — rejected on the vote (below threshold).
-  budgetOutcome: 'funded' | 'cut' | 'tie' | 'votes';
+  // (quick poll decides) · votes — got decisive votes but below threshold · nopower — no voting
+  // power (no eligible DRep cast a decisive vote).
+  budgetOutcome: 'funded' | 'cut' | 'tie' | 'votes' | 'nopower';
   yesPower: number;
   noPower: number;
   abstainPower: number;

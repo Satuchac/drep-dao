@@ -1022,7 +1022,10 @@ function CategoryStatsBar({ stats, roundStatus, allocatedAda }: { stats: Categor
       ) : null}
 
       {reachedVote ? (
-        <Row label="Debate & Vote & Tally" hint={voteFinal ? 'final' : tallyInProgress ? 'tally in progress' : 'in progress'}>
+        <Row
+          label="Debate & Vote & Tally"
+          hint={voteFinal ? 'final' : tallyInProgress ? (stats.inVoting > 0 ? 'tie-breaks running' : 'results published') : 'in progress'}
+        >
           {/* TO VOTING — total that reached voting while ballots are open; the still-undecided
               (tie-break) remainder during the Tally; none once the result is final. */}
           <Stat
@@ -1033,6 +1036,10 @@ function CategoryStatsBar({ stats, roundStatus, allocatedAda }: { stats: Categor
           {voteLive ? <Stat label="In voting" value={stats.inVoting.toLocaleString()} tone="text-amber-600 dark:text-amber-400" /> : null}
           <Stat label="Approved" value={stats.approved.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
           <Stat label="Rejected" value={stats.rejectedVote.toLocaleString()} tone="text-red-600 dark:text-red-400" />
+          {/* Budget committed to the approved proposals, and what's left for Funding. Shown once
+              the result is taking shape (Tally / final) — during live voting nothing is approved yet. */}
+          {!voteLive ? <Stat label="Allocated" value={ada(stats.fundedAllocatedAda)} /> : null}
+          {!voteLive ? <Stat label="Unallocated" value={ada(unallocated)} tone={unallocated > 0 ? 'text-blue-600 dark:text-blue-400' : undefined} /> : null}
         </Row>
       ) : null}
 
@@ -1131,10 +1138,12 @@ function RoundVotingResultsView({ roundId }: { roundId: string }) {
         remaining={selected.remainingAda}
       />
       <p className="text-xs text-neutral-500">
-        Ordered most-supported → least. <span className="font-medium text-emerald-700 dark:text-emerald-400">APPROVED</span> ·{' '}
+        Every proposal that reached Debate &amp; Vote in this category, ordered most-supported → least.{' '}
+        <span className="font-medium text-emerald-700 dark:text-emerald-400">APPROVED</span> ·{' '}
         <span className="font-medium text-amber-700 dark:text-amber-400">PENDING</span> (awaiting the tie-break quick poll) ·{' '}
-        <span className="font-medium text-red-700 dark:text-red-400">REJECTED</span>. Each proposal shows whether the
-        category budget was enough to fund it (green) or ran out (red).
+        <span className="font-medium text-red-700 dark:text-red-400">REJECTED</span>. Each card states why it landed there —
+        funded, <span className="font-medium">budget-cut</span> (passed the vote but the budget ran out at Tally),
+        below the approval <span className="font-medium">threshold</span>, or <span className="font-medium">no voting power</span> (no decisive vote cast).
       </p>
       <div className="space-y-3">
         {selected.proposals.map((p) => <VotingResultCard key={p.id} p={p} />)}
@@ -1180,9 +1189,10 @@ function CategoryBudgetBar({ budget, allocated, remaining }: { budget: number; a
 // Per-proposal budget signal — green when the budget funded it, red when it ran out.
 const BUDGET_NOTE: Record<string, { label: string; cls: string }> = {
   funded: { label: '✓ funded — within the category budget', cls: 'text-emerald-700 dark:text-emerald-400' },
-  cut: { label: '✗ budget-cut — passed the vote, but the category budget was exhausted', cls: 'text-red-700 dark:text-red-400' },
+  cut: { label: '✗ budget-cut — passed the vote, but the category budget was exhausted (Tally)', cls: 'text-red-700 dark:text-red-400' },
   tie: { label: '⏳ tie at the budget cliff — the quick poll allocates the remaining budget', cls: 'text-amber-700 dark:text-amber-400' },
-  votes: { label: '✗ rejected on the vote (below threshold) — budget not a factor', cls: 'text-neutral-500' },
+  votes: { label: '✗ rejected on the vote — YES power below the threshold (budget not a factor)', cls: 'text-neutral-500' },
+  nopower: { label: '✗ no voting power — no eligible DRep cast a decisive vote, so the threshold could not be met', cls: 'text-neutral-500' },
 };
 // The requested-amount colour mirrors the budget signal (green funded, red ran out).
 const AMOUNT_CLS: Record<string, string> = {
@@ -1190,6 +1200,7 @@ const AMOUNT_CLS: Record<string, string> = {
   cut: 'text-red-600 dark:text-red-400',
   tie: 'text-amber-600 dark:text-amber-400',
   votes: 'text-neutral-500',
+  nopower: 'text-neutral-500',
 };
 
 function VotingResultCard({ p }: { p: VotingResultProposal }) {
