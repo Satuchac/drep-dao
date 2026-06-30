@@ -41,6 +41,10 @@ export class CardanoQueryService {
   private readonly addrTxCache = new Map<string, { value: AddressTx[]; expiresAt: number }>();
   private readonly addrTxRefreshing = new Set<string>(); // keys with a background refresh in flight
   private readonly ADDR_TX_TTL_MS = 30 * 1000;
+  // How long a cold-cache request waits for the (possibly slow) db-sync query before giving up
+  // and returning empty — well under the frontend's 10s fetch timeout, so a slow query surfaces
+  // as a momentarily-empty list (the next auto-refresh fills it in) instead of "Cannot reach the API".
+  private readonly ADDR_TX_COLD_DEADLINE_MS = 6500;
   // Short balance cache so the Actions/Treasury polls (and concurrent badge + list fetches)
   // don't each pay a fresh remote db-sync round-trip; balances change slowly.
   private readonly addrBalCache = new Map<string, { value: Map<string, bigint>; expiresAt: number }>();
@@ -510,9 +514,24 @@ export class CardanoQueryService {
       return cached.value;
     }
     // Cold (nothing cached yet, e.g. just after a restart): fetch once, then it's always warm.
-    const result = await this.fetchAddressTransactions(addresses, limit);
-    this.addrTxCache.set(key, { value: result, expiresAt: Date.now() + this.ADDR_TX_TTL_MS });
-    return result;
+    // The db-sync query can be slow; never let it blow past the frontend's 10s timeout (which
+    // surfaced as "Cannot reach the API"). Kick off (or join) the fetch, then race it against a
+    // server deadline — if it lands in time, serve + cache it; otherwise return empty now and let
+    // it finish in the background so the next request / auto-refresh poll serves it instantly.
+    if (!this.addrTxRefreshing.has(key)) {
+      this.addrTxRefreshing.add(key);
+      void this.fetchAddressTransactions(addresses, limit)
+        .then((v) => this.addrTxCache.set(key, { value: v, expiresAt: Date.now() + this.ADDR_TX_TTL_MS }))
+        .catch(() => { /* leave the cache empty; a later request retries */ })
+        .finally(() => this.addrTxRefreshing.delete(key));
+    }
+    const deadline = Date.now() + this.ADDR_TX_COLD_DEADLINE_MS;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 100));
+      const ready = this.addrTxCache.get(key);
+      if (ready) return ready.value;
+    }
+    return [];
   }
 
   private async fetchAddressTransactions(addresses: string[], limit: number): Promise<AddressTx[]> {
