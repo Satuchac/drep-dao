@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { card } from '@/lib/ui';
 import { useAuth } from '@/lib/auth-context';
+import { useT } from '@/lib/prefs-context';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { useTodoCounts } from '@/lib/use-todo-counts';
 import { roundsApi, expertApi, drepApi, submitterApi, messagesApi, type MyExpert, type MySubmitter, type EntryEligibility, type ReviewMode } from '@/lib/api';
@@ -515,6 +516,7 @@ function ApplicationsTab() {
 function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.ReactNode; badge?: number }[] }) {
   // The active tab lives in the URL (?tab=) so My-area submenu links are shareable.
   const { get, setParams } = useUrlNav();
+  const tr = useT();
   const fromUrl = get('tab');
   const active = tabs.some((t) => t.key === fromUrl) ? fromUrl : tabs[0]?.key;
   const current = tabs.find((t) => t.key === active) ?? tabs[0];
@@ -538,7 +540,7 @@ function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.
                 : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
             }`}
           >
-            {t.label}
+            {tr(t.label)}
             {/* Red count of new items to process (Actions / Applications). */}
             {t.badge ? (
               <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white tabular-nums">
