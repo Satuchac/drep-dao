@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { SUBCAT_LABEL } from '@/lib/ui';
 import { daoApi, type DaoMember, type DaoExpert } from '@/lib/api';
+import { useT } from '@/lib/prefs-context';
 import { fmtDate } from './round-ui';
 import { MeritSystemTable } from './merit-system-table';
 import { useUrlNav } from '@/lib/use-url-nav';
@@ -39,6 +40,7 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
 
 /** §4 — all DAO members with balanced voting power: log10(stake) × (1 + merit/200). */
 export function DaoOverview() {
+  const t = useT();
   const { setParams } = useUrlNav();
   // Linear submenu: the members table (default) vs the experts list.
   const [sub, setSub] = useState<'members' | 'experts'>('members');
@@ -76,7 +78,7 @@ export function DaoOverview() {
     <div className="space-y-3">
       <div>
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-semibold">DAO Member overview</h2>
+          <h2 className="text-lg font-semibold">{t('DAO Member overview')}</h2>
           {members ? (
             <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
               <strong>{members.filter((m) => m.isBoard).length}</strong> board · <strong>{members.length}</strong> members total

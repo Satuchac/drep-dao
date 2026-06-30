@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { roundsApi, type RoundSummary } from '@/lib/api';
+import { useT } from '@/lib/prefs-context';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { ProposalList } from './proposal-list';
 
@@ -11,6 +12,7 @@ import { ProposalList } from './proposal-list';
  * defaulting to the active round when one isn't specified — so links are shareable.
  */
 export function ActiveProposals() {
+  const t = useT();
   const { get, setParams } = useUrlNav();
   const roundParam = get('round');
   const [rounds, setRounds] = useState<RoundSummary[] | null>(null);
@@ -37,12 +39,12 @@ export function ActiveProposals() {
     );
   }, [rounds, ordered, roundParam]);
 
-  if (!rounds) return <p className="text-sm text-neutral-500">Loading…</p>;
+  if (!rounds) return <p className="text-sm text-neutral-500">{t('Loading…')}</p>;
   if (rounds.length === 0)
     return (
       <div className="space-y-1">
-        <h2 className="text-lg font-semibold">Proposals</h2>
-        <p className="text-sm text-neutral-500">No rounds yet — proposals appear once a round opens.</p>
+        <h2 className="text-lg font-semibold">{t('Proposals')}</h2>
+        <p className="text-sm text-neutral-500">{t('No rounds yet — proposals appear once a round opens.')}</p>
       </div>
     );
 
@@ -51,15 +53,15 @@ export function ActiveProposals() {
   return (
     <div className="space-y-3">
       <div>
-        <h2 className="text-lg font-semibold">Proposals</h2>
+        <h2 className="text-lg font-semibold">{t('Proposals')}</h2>
         <p className="text-sm text-neutral-500">
-          {hasActive ? 'Proposals in the active round. Switch rounds to browse earlier ones.' : 'No active round right now — browse proposals from earlier rounds.'}
+          {hasActive ? t('Proposals in the active round. Switch rounds to browse earlier ones.') : t('No active round right now — browse proposals from earlier rounds.')}
         </p>
       </div>
 
       {/* Round picker — a combo box (scales to many rounds, unlike a horizontal row). */}
       <div className="flex items-center gap-2 border-b border-neutral-200 pb-2 dark:border-neutral-800">
-        <label htmlFor="round-picker" className="text-sm text-neutral-600 dark:text-neutral-400">Round</label>
+        <label htmlFor="round-picker" className="text-sm text-neutral-600 dark:text-neutral-400">{t('Round')}</label>
         <select
           id="round-picker"
           className="rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
@@ -67,7 +69,7 @@ export function ActiveProposals() {
           onChange={(e) => setParams({ round: e.target.value, proposal: null })}
         >
           {/* §26.2 — every proposal ever processed in the DAO, across all rounds. */}
-          <option value="all">All rounds</option>
+          <option value="all">{t('All rounds')}</option>
           {ordered.map((r) => (
             <option key={r.id} value={r.id}>
               Round #{r.number}

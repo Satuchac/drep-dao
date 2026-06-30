@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { boardProofsApi, daoApi, type OnChainProof } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { useT } from '@/lib/prefs-context';
 import { useExplorer } from '@/lib/explorer';
 import { fmtDateTime } from './round-ui';
 
 /** Everything the platform has anchored on-chain — human-readable + verifiable. */
 export function OnChainProofs() {
+  const t = useT();
   const { txUrl } = useExplorer();
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
@@ -60,7 +62,7 @@ export function OnChainProofs() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold">On-chain proofs</h2>
+          <h2 className="text-lg font-semibold">{t('On-chain proofs')}</h2>
           <p className="text-sm text-neutral-500">
             Decisions anchored on Cardano as transaction metadata. Each links to the explorer; the metadata
             itself lists the voters and outcome, so anyone can verify it independently.

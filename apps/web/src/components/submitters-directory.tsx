@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { submitterApi, daoApi, boardSubmittersApi, type ApprovedSubmitter, type SubmitterPortfolio, type DaoMember } from '@/lib/api';
+import { useT } from '@/lib/prefs-context';
 import { useAuth } from '@/lib/auth-context';
 import { card } from '@/lib/ui';
 import { FallbackAvatar } from './fallback-avatar';
@@ -18,6 +19,7 @@ import { ClampedMarkdown } from './clamped-markdown';
  * who is ALSO a DAO member is flagged prominently: they both submit and vote.
  */
 export function SubmittersDirectory() {
+  const t = useT();
   const { drepUrl } = useExplorer();
   const [rows, setRows] = useState<ApprovedSubmitter[] | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -32,7 +34,7 @@ export function SubmittersDirectory() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Submitters</h2>
+        <h2 className="text-lg font-semibold">{t('Submitters')}</h2>
         <p className="text-sm text-neutral-500">
           Approved submitters — accounts allowed to submit funding proposals. Click a row for the
           full profile. Submitters who are also DAO members (they vote, too) are flagged.

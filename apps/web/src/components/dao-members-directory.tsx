@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { daoApi, submitterApi, type DaoMember, type DaoMemberDetail, type ApprovedSubmitter } from '@/lib/api';
+import { useT } from '@/lib/prefs-context';
 import { useAuth } from '@/lib/auth-context';
 import { CopyButton } from './copy-button';
 import { useExplorer } from '@/lib/explorer';
@@ -15,6 +16,7 @@ import { ClampedMarkdown } from './clamped-markdown';
  * socials/contact) with a back link to the grid. Board members are shown first.
  */
 export function DaoMembersDirectory() {
+  const t = useT();
   const [rows, setRows] = useState<DaoMember[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -49,7 +51,7 @@ export function DaoMembersDirectory() {
         <>
           <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h2 className="text-lg font-semibold">DAO members</h2>
+              <h2 className="text-lg font-semibold">{t('DAO members')}</h2>
               <p className="text-xs text-neutral-500">
                 Board members first, then admitted DReps. Click a photo to open the full profile.
               </p>

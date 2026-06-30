@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { daoApi, type DaoExpert } from '@/lib/api';
+import { useT } from '@/lib/prefs-context';
 import { SUBCAT_LABEL } from '@/lib/ui';
 import { card } from '@/lib/ui';
 import { FallbackAvatar } from './fallback-avatar';
@@ -17,6 +18,7 @@ import { ClampedMarkdown } from './clamped-markdown';
  * wallet identity (DRep ID if they're a DRep, else the stake address).
  */
 export function ExpertsDirectory() {
+  const t = useT();
   const { drepUrl } = useExplorer();
   const { get, setParams } = useUrlNav();
   const [rows, setRows] = useState<DaoExpert[] | null>(null);
@@ -31,7 +33,7 @@ export function ExpertsDirectory() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Experts</h2>
+        <h2 className="text-lg font-semibold">{t('Experts')}</h2>
         <p className="text-sm text-neutral-500">
           Non-DRep ADA holders approved by the board to advise on proposals — feedback in the Filtering
           stage, advice in the Debate &amp; Vote stage, and milestone reviews. Click a row for the full profile.
