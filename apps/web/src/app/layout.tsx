@@ -1,11 +1,26 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
+import { PrefsProvider } from '@/lib/prefs-context';
+import { LanguageThemeSwitcher } from '@/components/language-theme-switcher';
 
 export const metadata: Metadata = {
   title: 'DRep DAO',
   description: 'Cardano governance DAO platform',
 };
+
+// Apply the saved theme + language to <html> BEFORE first paint, so there's no flash of the
+// wrong theme and no hydration mismatch. Defaults: light theme, English (LTR). Mirrors the
+// storage keys in prefs-context.tsx. Runs synchronously, ahead of React.
+const PREFS_BOOTSTRAP = `(function(){
+  try{
+    var t=localStorage.getItem('drepdao.theme');
+    if(t==='dark')document.documentElement.classList.add('dark');
+    var l=localStorage.getItem('drepdao.lang');
+    if(l){document.documentElement.setAttribute('lang',l);
+      document.documentElement.setAttribute('dir',l==='ar'?'rtl':'ltr');}
+  }catch(e){}
+})();`;
 
 // Swallow errors thrown by browser extensions (MetaMask, etc.) injected into the
 // page — they come from chrome-extension:// scripts, not our code, and would
@@ -28,7 +43,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       >
         {/* eslint-disable-next-line @next/next/no-before-interactive-script-outside-document */}
         <script dangerouslySetInnerHTML={{ __html: EXT_ERROR_GUARD }} />
-        <AuthProvider>{children}</AuthProvider>
+        {/* eslint-disable-next-line @next/next/no-before-interactive-script-outside-document */}
+        <script dangerouslySetInnerHTML={{ __html: PREFS_BOOTSTRAP }} />
+        <PrefsProvider>
+          <LanguageThemeSwitcher />
+          <AuthProvider>{children}</AuthProvider>
+        </PrefsProvider>
       </body>
     </html>
   );

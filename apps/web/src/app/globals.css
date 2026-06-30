@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Native controls (scrollbars, date/time pickers) follow the chosen theme, not the OS.
+   The theme switcher toggles `.dark` on <html> (default: light). */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+}
+:root.dark {
+  color-scheme: dark;
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { usePrefs } from '@/lib/prefs-context';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { ConnectWallet } from './connect-wallet';
 import { MemberArea } from './member-area';
@@ -41,6 +42,7 @@ const NAV: { key: View; label: string; boardOnly?: boolean }[] = [
 
 export function HomeShell() {
   const { profile, loading } = useAuth();
+  const { t } = usePrefs();
   const { get, setParams } = useUrlNav();
   // The active menu view + an optionally-open proposal come from the URL, so every screen
   // (and any open proposal) has its own shareable link. Switching the menu clears submenu state.
@@ -85,7 +87,7 @@ export function HomeShell() {
       <main className="mx-auto max-w-2xl px-6 py-16">
         <h1 className="text-3xl font-bold tracking-tight">DRep DAO</h1>
         <p className="mt-2 text-neutral-600 dark:text-neutral-400">
-          Cardano governance platform (Preprod).
+          {t('Cardano governance platform (Preprod).')}
         </p>
         <div className="mt-6 rounded-xl border border-neutral-300 bg-white p-5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
           <ConnectWallet />
@@ -124,7 +126,7 @@ export function HomeShell() {
                     : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
                 }`}
               >
-                <span>{n.label}</span>
+                <span>{t(n.label)}</span>
                 {badge ? (
                   <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white tabular-nums">
                     {badge}
@@ -171,8 +173,8 @@ export function HomeShell() {
         ) : null}
       </main>
 
-      {/* Right: login box (+ JOIN DAO). */}
-      <div className="space-y-2 lg:w-72 lg:shrink-0">
+      {/* Right: login box (+ JOIN DAO). lg:pt-10 clears the fixed top-right language/theme switcher. */}
+      <div className="space-y-2 lg:w-72 lg:shrink-0 lg:pt-10">
         <div className="space-y-2 rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
           <ConnectWallet />
           {/* Jump straight to My area → the tab that has work (Actions, then Applications, then Voting). */}
@@ -184,8 +186,8 @@ export function HomeShell() {
             <button
               type="button"
               onClick={() => setTodoRefresh((n) => n + 1)}
-              title="Refresh notifications / to-do counts"
-              aria-label="Refresh notifications"
+              title={t('Refresh notifications / to-do counts')}
+              aria-label={t('Refresh notifications')}
               className="rounded border border-neutral-300 px-2 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
             >
               ↻
@@ -195,7 +197,7 @@ export function HomeShell() {
             onClick={() => setView('me')}
             className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
           >
-            View profile →
+            {t('View profile')} →
           </button>
         </div>
         {/* §20 — persistent warning when the user is logged in but the wallet
