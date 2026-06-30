@@ -947,13 +947,13 @@ export class RoundsService {
 
   /**
    * P7 — schedule windows must be sensible: each stage ends after it starts, and the
-   * canonical stages (submission → filtering → debate → vote → funding) that are
+   * canonical stages (submission → filtering → debate → vote → tally → funding) that are
    * present must not overlap and must run in order. Legacy 'debate_vote' rows sort
    * between filtering and funding (where they used to live).
    */
   private assertScheduleOrdered(schedule?: ScheduleInput[]) {
     if (!schedule || schedule.length === 0) return;
-    const order = ['submission', 'filtering', 'debate_vote', 'debate', 'vote', 'funding'];
+    const order = ['submission', 'filtering', 'debate_vote', 'debate', 'vote', 'tally', 'funding'];
     const present = [...schedule].sort((a, b) => order.indexOf(a.stageKey) - order.indexOf(b.stageKey));
     let prevEnd: Date | null = null;
     let prevLabel = '';

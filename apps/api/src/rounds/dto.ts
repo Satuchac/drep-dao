@@ -75,9 +75,11 @@ export class RoundSettingsInput {
 // MVP schedule uses coarse operational windows rather than the 9 fine-grained
 // sub-periods in §6. Categories may be GRANT or RFP (§5.2). §8 — what was a
 // single 'debate_vote' window is split into 'debate' (comments + revisions, no
-// voting) and 'vote' (ballots open, proposal frozen). 'debate_vote' is kept as
-// an accepted alias for any pre-split rows; new schedules use the split.
-export const ROUND_STAGE_KEYS = ['submission', 'filtering', 'debate', 'vote', 'funding'] as const;
+// voting) and 'vote' (ballots open, proposal frozen). 'tally' sits between 'vote'
+// and 'funding' (voting closed, results published, tie-break quick polls only).
+// 'debate_vote' is kept as an accepted alias for any pre-split rows; new schedules
+// use the split.
+export const ROUND_STAGE_KEYS = ['submission', 'filtering', 'debate', 'vote', 'tally', 'funding'] as const;
 export const ROUND_STAGE_KEYS_LEGACY = [...ROUND_STAGE_KEYS, 'debate_vote'] as const;
 const CATEGORY_TYPES = Object.values(CategoryType) as string[]; // ['GRANT','RFP']
 
