@@ -8,6 +8,7 @@ import { HotWalletControls } from './hot-wallet-controls';
 import { TreasuryBucketsPanel } from './treasury-buckets-panel';
 import { TreasuryTransactions } from './treasury-transactions';
 import { useTreasuryAutoRefresh } from '@/lib/treasury-refresh';
+import { useT } from '@/lib/prefs-context';
 
 const ada = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 const BUCKET_COLOR: Record<string, string> = {
@@ -18,6 +19,7 @@ const roundColor = 'bg-violet-500';
 
 /** §15 — Treasury overview: budget buckets (allocated/spent/remaining) + balances. */
 export function TreasuryOverview() {
+  const t = useT();
   const [subTab, setSubTab] = useState<'overview' | 'transactions' | 'setup'>('overview');
   const [data, setData] = useState<Overview | null>(null);
   const [buckets, setBuckets] = useState<TreasuryBucket[]>([]);
@@ -43,10 +45,9 @@ export function TreasuryOverview() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Treasury</h2>
+        <h2 className="text-lg font-semibold">{t('Treasury')}</h2>
         <p className="text-sm text-neutral-500">
-          The DAO&apos;s 3-of-5 multisig holds the budget; a low-balance hot wallet pays tx fees. Budgets:
-          rewards, operations, and one per funding round.
+          {t("The DAO's 3-of-5 multisig holds the budget; a low-balance hot wallet pays tx fees. Budgets: rewards, operations, and one per funding round.")}
         </p>
       </div>
 
@@ -62,7 +63,7 @@ export function TreasuryOverview() {
                 : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
             }`}
           >
-            {label}
+            {t(label)}
           </button>
         ))}
       </div>

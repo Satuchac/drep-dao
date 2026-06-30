@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { useT } from '@/lib/prefs-context';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { ROUND_SETTING_DEFAULTS, ROUND_SETTING_META, ROUND_SETTING_BOOLEAN, computeRewardPoolsAda, dvDisplayPhase, roundReachedTally, roundStageIndex } from '@drep-dao/shared';
 import {
@@ -111,6 +112,7 @@ const SETTING_GROUPS: { title: string; fields: { key: SettingKey; label: string;
 ];
 
 export function RoundsSection() {
+  const t = useT();
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
   const { get, setParams } = useUrlNav();
@@ -137,7 +139,7 @@ export function RoundsSection() {
             Round #{open.number}
             {open.name ? ` — ${open.name}` : ''}
           </h2>
-          <span className="text-xs text-neutral-500">Round stage:</span>
+          <span className="text-xs text-neutral-500">{t('Round stage:')}</span>
           <StatusBadge status={open.status} />
           <ProposalCounts counts={open.proposalCounts} activeStage={open.activeStageCounts} />
         </div>
@@ -161,7 +163,7 @@ export function RoundsSection() {
                   : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
               }`}
             >
-              {label}
+              {t(label)}
             </button>
           ))}
         </div>
@@ -215,7 +217,7 @@ export function RoundsSection() {
                     <span className={`text-xs font-medium ${r.active ? 'text-emerald-600' : 'text-neutral-400'}`}>
                       {r.status === 'CLOSED' ? 'complete' : r.active ? 'active' : 'preparing'}
                     </span>
-                    <span className="text-xs text-neutral-500">Round stage:</span>
+                    <span className="text-xs text-neutral-500">{t('Round stage:')}</span>
                     <StatusBadge status={r.status} />
                   </span>
                 </div>
