@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useT } from '@/lib/prefs-context';
 
 /** Shared presentation bits for rounds & proposals (badges, colors, formatting). */
 
@@ -48,8 +49,9 @@ export const PROPOSAL_STATUS_CLS: Record<string, string> = {
 const STATUS_ORDER = ['DRAFT', 'PENDING', 'ACTIVE', 'APPROVED', 'REJECTED', 'COMPLETE', 'FAILED'];
 
 export function StatusBadge({ status, cls }: { status: string; cls?: Record<string, string> }) {
+  const t = useT();
   const map = cls ?? ROUND_STATUS_CLS;
-  return <span className={`rounded px-2 py-0.5 text-xs ${map[status] ?? 'bg-neutral-200 text-neutral-700'}`}>{status}</span>;
+  return <span className={`rounded px-2 py-0.5 text-xs ${map[status] ?? 'bg-neutral-200 text-neutral-700'}`}>{t(status)}</span>;
 }
 
 /**

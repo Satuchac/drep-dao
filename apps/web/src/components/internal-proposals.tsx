@@ -16,6 +16,7 @@ import {
   type PublicConfig,
 } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
+import { useT } from '@/lib/prefs-context';
 import { useExplorer } from '@/lib/explorer';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput, DateField, RationaleText, useNow, fmtCountdown } from './round-ui';
@@ -59,6 +60,7 @@ const STATUS_TABS = [
 const LIST_PAGE_SIZE = 50;
 
 export function InternalProposals() {
+  const tr = useT();
   const [items, setItems] = useState<InternalProposalSummary[] | null>(null);
   const [creating, setCreating] = useState(false);
   // §10 — editing a saved draft (its id) vs creating a fresh proposal (null).
@@ -139,21 +141,21 @@ export function InternalProposals() {
     <div className="space-y-4">
       {/* §14 — sub-menu inside the Internal proposals view. */}
       <div className="flex flex-wrap gap-1 border-b border-neutral-200 pb-2 dark:border-neutral-800">
-        {subTabBtn('regular', 'Internal proposals')}
-        {subTabBtn('election', 'Board member election')}
+        {subTabBtn('regular', tr('Internal proposals'))}
+        {subTabBtn('election', tr('Board member election'))}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h2 className="text-lg font-semibold">{isElection ? 'Board member election' : 'Internal proposals'}</h2>
+          <h2 className="text-lg font-semibold">{isElection ? tr('Board member election') : tr('Internal proposals')}</h2>
           <p className="text-sm text-neutral-500">
             {isElection
-              ? '§14 — propose a new 5-member board. Approval + the installation date trigger the platform to replace the board automatically.'
-              : 'DAO-governance decisions — process changes, parameter changes, polls. Not tied to a round; voting opens immediately.'}
+              ? tr('Propose a new 5-member board. Approval + the installation date trigger the platform to replace the board automatically.')
+              : tr('DAO-governance decisions — process changes, parameter changes, polls. Not tied to a round; voting opens immediately.')}
           </p>
         </div>
         <button onClick={() => { setEditingDraftId(null); setCreating(true); }} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-          {isElection ? 'New election' : 'New internal proposal'}
+          {isElection ? tr('New election') : tr('New internal proposal')}
         </button>
       </div>
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
@@ -171,25 +173,25 @@ export function InternalProposals() {
                   : 'bg-white text-neutral-600 hover:bg-neutral-100 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'
               }`}
             >
-              {t.label}
+              {tr(t.label)}
             </button>
           ))}
         </div>
         <input
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          placeholder="Search by proposal ID, title, or proposer…"
+          placeholder={tr('Search by proposal ID, title, or proposer…')}
           className="min-w-64 flex-1 rounded-md border border-neutral-300 px-2.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
         />
-        <span className="text-xs text-neutral-500">{filtered.length} proposal{filtered.length === 1 ? '' : 's'}</span>
+        <span className="text-xs text-neutral-500">{filtered.length} {filtered.length === 1 ? tr('proposal') : tr('proposals')}</span>
       </div>
 
       {items === null ? (
-        <p className="text-sm text-neutral-500">Loading…</p>
+        <p className="text-sm text-neutral-500">{tr('Loading…')}</p>
       ) : visible.length === 0 ? (
         <p className="text-sm text-neutral-500">{search.trim() || statusTab
-          ? 'No proposals match the filter.'
-          : (isElection ? 'No board-member elections yet.' : 'No internal proposals yet.')}</p>
+          ? tr('No proposals match the filter.')
+          : (isElection ? tr('No board-member elections yet.') : tr('No internal proposals yet.'))}</p>
       ) : (
         <ul className="space-y-2">
           {visible.map((p) => (
@@ -213,10 +215,10 @@ export function InternalProposals() {
                   </div>
                 </div>
                 <div className="mt-1 text-xs text-neutral-500">
-                  {TYPE_LABEL[p.internalType] ?? p.internalType} · {SCOPE_LABEL[p.votersScope] ?? p.votersScope} · {VTYPE_LABEL[p.votingType] ?? p.votingType}
-                  {p.tally.kind === 'THRESHOLD' ? ` · threshold ${p.thresholdPct ?? '?'}%` : ''}
-                  {p.submitter ? ` · by ${p.submitter}` : ''}
-                  {p.status === 'ACTIVE' && p.votingEndAt ? ` · ends ${fmtDateTime(p.votingEndAt)}` : ''}
+                  {tr(TYPE_LABEL[p.internalType] ?? p.internalType)} · {tr(SCOPE_LABEL[p.votersScope] ?? p.votersScope)} · {tr(VTYPE_LABEL[p.votingType] ?? p.votingType)}
+                  {p.tally.kind === 'THRESHOLD' ? ` · ${tr('threshold')} ${p.thresholdPct ?? '?'}%` : ''}
+                  {p.submitter ? ` · ${tr('by')} ${p.submitter}` : ''}
+                  {p.status === 'ACTIVE' && p.votingEndAt ? ` · ${tr('ends')} ${fmtDateTime(p.votingEndAt)}` : ''}
                 </div>
               </button>
             </li>
@@ -232,15 +234,15 @@ export function InternalProposals() {
             disabled={safePage <= 1}
             className="rounded border border-neutral-300 px-2.5 py-1 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
           >
-            ← Previous
+            ← {tr('Previous')}
           </button>
-          <span className="text-neutral-500">Page {safePage} of {pages}</span>
+          <span className="text-neutral-500">{tr('Page')} {safePage} {tr('of')} {pages}</span>
           <button
             onClick={() => setPage((p) => Math.min(pages, p + 1))}
             disabled={safePage >= pages}
             className="rounded border border-neutral-300 px-2.5 py-1 text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
           >
-            Next →
+            {tr('Next')} →
           </button>
         </div>
       ) : null}
@@ -250,8 +252,9 @@ export function InternalProposals() {
 
 /** Right-side chip on each list row: how the current DRep voted (if at all). */
 function MyVoteBadge({ p }: { p: InternalProposalSummary }) {
+  const tr = useT();
   if (!p.myVotes || p.myVotes.length === 0) return null;
-  const label = formatMyVote(p);
+  const label = formatMyVote(p, tr);
   // Colour the chip by the choice (YES green, NO red, ABSTAIN yellow); a multi-option poll pick stays blue.
   const single = p.myVotes.length === 1 ? p.myVotes[0] : null;
   const cls = single ? choiceBadgeCls(single) : 'bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300';
@@ -262,11 +265,12 @@ function MyVoteBadge({ p }: { p: InternalProposalSummary }) {
   );
 }
 
-function formatMyVote(p: { internalType: string; myVotes: string[] }): string {
+// YES/NO/Abstain are platform vote terms (translated); poll option labels are user content (kept as-is).
+function formatMyVote(p: { internalType: string; myVotes: string[] }, tr: (k: string) => string): string {
   const v = p.myVotes;
-  if (v.length === 1 && v[0] === 'ABSTAIN') return 'you abstained';
-  if (p.internalType === 'POLL') return `you chose ${v.join(', ')}`;
-  return `you voted ${v[0] === 'ABSTAIN' ? 'Abstain' : v[0]}`;
+  if (v.length === 1 && v[0] === 'ABSTAIN') return tr('you abstained');
+  if (p.internalType === 'POLL') return `${tr('you chose')} ${v.join(', ')}`;
+  return `${tr('you voted')} ${v[0] === 'ABSTAIN' ? tr('Abstain') : tr(v[0])}`;
 }
 
 function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false }: { onDone: () => void; onCancel: () => void; draftId?: string | null; election?: boolean }) {
