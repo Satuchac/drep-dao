@@ -5,7 +5,9 @@
 > changes, update the relevant section here in the same change. `DESIGN.md` is the
 > full spec (the "what we intend"); this file is the "what is built".
 >
-> **Last updated:** 2026-06-15 — profile & round-control polish (see §14): slimmed
+> **Last updated:** 2026-07-01 — **full 12-language UI + light/dark theme** and the
+> **board-election → treasury multisig hand-over** (see §16). Earlier: profile & round-control
+> polish (see §14): slimmed
 > on-chain submission anchor, **post-debate content fingerprint**, proposal **title
 > immutability**, **independent submitter vs DAO-member profiles** with **cross-wallet
 > linking**, mandatory member contact, DAO-member **Activity** vote stats, per-stage
@@ -684,3 +686,47 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
   launches, so between stages (current window ended, next not yet started) the badge named a stale
   stage. It now reads **"No active stage"** in that gap and only names a stage while it is actually
   running (`RoundControl`, driven by the live `useNow` clock).
+
+## 16. Recent additions (2026-07-01)
+
+**Internationalization + theme (`apps/web/src/i18n`, `lib/prefs-context.tsx`)**
+- **12-language UI + light/dark toggle** in a fixed top-right switcher. Default English + light;
+  the choice persists in `localStorage` and is applied before first paint by a bootstrap script in
+  `layout.tsx` (no flash, no hydration mismatch). Arabic switches the page to RTL. Tailwind moved to
+  class-based dark mode (`darkMode: 'class'`).
+- Languages: English, Spanish, Chinese (Simplified), Japanese, German, Russian, Italian, French,
+  Portuguese, Korean, Arabic, Hindi.
+- The engine (`prefs-context.tsx` `useT()` / `dictionaries.ts`) uses the **English source string as
+  the key** — a missing translation falls back to readable English. The dictionary is key-major
+  (each English string lists all its translations together) and holds **~2,280 keys**.
+- **Every platform string is translated** (all 63 components wired through `t()`); an extraction
+  audit reports **0 untranslated `t()` literals**. User-generated content (proposal titles, member
+  names, rationale, wallet addresses, tx hashes, amounts) is deliberately NOT translated — it stays
+  in the language the user wrote it in. Status labels are translated centrally in `StatusBadge`.
+  The bulk was produced by a multi-agent translation workflow and merged deterministically.
+
+**Board election → treasury multisig hand-over (§15.2)**
+- Electing a new board (internal "board member election") now drives a full treasury hand-over.
+  On install, the newly-elected members get a **`MULTISIG_KEY_NEEDED` notification** to submit their
+  signing key; once all keys are in, the new `MultisigConfig` assembles (existing) and the platform
+  **auto-creates the migration transactions** — one for the old main address plus one per labeled
+  bucket that holds funds — all moving funds to the **new multisig's primary address**. The OLD board
+  signs them in Approve & sign (nothing moves without their 3-of-N signatures); the new board
+  re-creates buckets and splits funds later if they want.
+- Migration txs are labelled **"FUND MIGRATION"** in the treasury history with the source name
+  (e.g. "Rewards bucket → new primary address"). Bucket migrations sign with the bucket's wrapped
+  script — `MultisigBroadcastService.resolveSource` checks `sourceBucketId` before the config branch.
+- The multisig setup shows big **OLD BOARD MULTISIG / NEW BOARD MULTISIG** banners during the
+  hand-over (the NEW banner disappears once the old wallet is empty), and the history lists
+  **created + terminated** dates. An old config reads as terminated only once its main address AND
+  every bucket are drained (`BoardMultisigService.status()` sums bucket balances; terminated date =
+  the migration tx's paid date, derived — no schema change). The hot wallet is platform
+  infrastructure and stays put across board rotations.
+- **Not yet verified on-chain** — run the flow end-to-end on Preprod before trusting real funds.
+
+**Rounds / treasury fixes**
+- Round schedule validation accepts the **Tally** stage (added to `ROUND_STAGE_KEYS` + the chronology
+  order in `assertScheduleOrdered`).
+- Treasury **Transactions** no longer surfaces "Cannot reach the API": the cold-cache path in
+  `addressTransactions` races the slow db-sync query against a 6.5 s deadline and returns empty (then
+  warms in the background) instead of blowing past the frontend's 10 s timeout.
