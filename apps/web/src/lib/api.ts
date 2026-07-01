@@ -407,6 +407,9 @@ export interface MultisigActiveConfig {
 }
 export interface MultisigHistoryEntry extends MultisigActiveConfig {
   replacedAt: string;
+  // Date the config's funds were emptied to its successor (migration tx paid), or when it was
+  // replaced if it never held funds. Null while it still holds a balance (migration pending).
+  terminatedAt: string | null;
   replacedByConfigId: string | null;
   keyHashes: string[];
 }

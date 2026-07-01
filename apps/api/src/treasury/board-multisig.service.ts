@@ -136,6 +136,15 @@ export class BoardMultisigService {
       include: { signatures: { select: { boardDrepId: true } } },
       orderBy: { createdAt: 'asc' },
     });
+    // Confirmed migrations — a predecessor config is "terminated" on the date its funds were
+    // last sent to the successor (the migration tx's paidAt). Newest paidAt per source config.
+    const migrationsDone = await this.prisma.multisigAction.findMany({
+      where: { kind: 'MIGRATION', status: 'CONFIRMED', fromConfigId: { not: null } },
+      select: { fromConfigId: true, paidAt: true },
+      orderBy: { paidAt: 'desc' },
+    });
+    const migratedAtByConfig = new Map<string, Date | null>();
+    for (const m of migrationsDone) if (m.fromConfigId && !migratedAtByConfig.has(m.fromConfigId)) migratedAtByConfig.set(m.fromConfigId, m.paidAt);
 
     return {
       threshold: this.threshold,
@@ -164,6 +173,9 @@ export class BoardMultisigService {
         replacedAt: h.replacedAt,
         replacedByConfigId: h.replacedByConfigId,
         balanceAda: adaOf(h.bech32Address),
+        // Terminated = funds emptied. Date the migration tx was paid; if it never held funds,
+        // it's terminated as of when it was replaced. Null while it still holds a balance.
+        terminatedAt: adaOf(h.bech32Address) === 0 ? (migratedAtByConfig.get(h.id) ?? h.replacedAt) : null,
         // Old script's key hashes — used by the UI to show "still-reachable
         // signers" when offering a migration.
         keyHashes: ((h.scriptJson as { scripts?: { keyHash: string }[] } | null)?.scripts ?? []).map((s) => s.keyHash),
@@ -283,6 +295,15 @@ export class BoardMultisigService {
       }
       return created;
     }).then(async (created) => {
+      // §15.2 — the platform takes care of the hand-over: as soon as the new multisig
+      // is assembled, auto-create the migration tx(s) that move the OLD board's funds
+      // to the new address. The OLD board just signs them in Approve & sign. Best-effort
+      // (never block assembly); the manual "Migrate funds" button remains as a fallback.
+      if (active) {
+        try { await this.ensureMigration(active, created); } catch { /* funds may be 0 / already queued */ }
+      }
+      return created;
+    }).then(async (created) => {
       // §13.2 — multisig READY: +1 to every board member who contributed a key (once per config).
       const contributors = await this.prisma.boardMultisigKey.findMany({
         where: { boardSeatId: { in: seats.map((s) => s.id) } },
@@ -321,25 +342,28 @@ export class BoardMultisigService {
     const to = await this.active();
     if (!to) throw new ConflictException('no active multisig to migrate to (assemble the new one first)');
 
-    // Is there already an open migration from this config? Reuse it.
+    const res = await this.ensureMigration(from, to);
+    if (res.reason === 'empty') throw new ConflictException('the old multisig has no on-chain funds — nothing to migrate');
+    return { id: res.action!.id, status: res.action!.status, amountAda: Number(res.action!.amountAda ?? 0n) / LOVELACE };
+  }
+
+  /**
+   * §15.2 — idempotently create the MIGRATION action that empties `from` into the active
+   * `to` multisig, signed by the OLD board (their keyhashes are in `from`'s script). Reuses an
+   * open migration if one exists; returns reason 'empty' when there's nothing on-chain to move.
+   * Used both by the manual prepareMigration and the auto-trigger on assembly.
+   */
+  private async ensureMigration(from: { id: string; bech32Address: string }, to: { id: string; bech32Address: string }) {
     const existing = await this.prisma.multisigAction.findFirst({
-      where: { kind: 'MIGRATION', fromConfigId, status: { in: ['PENDING_SIGS', 'READY', 'BROADCASTED'] } },
+      where: { kind: 'MIGRATION', fromConfigId: from.id, status: { in: ['PENDING_SIGS', 'READY', 'BROADCASTED'] } },
     });
-    if (existing) {
-      return {
-        id: existing.id,
-        status: existing.status,
-        amountAda: existing.amountAda ? Number(existing.amountAda) / LOVELACE : 0,
-      };
-    }
+    if (existing) return { action: existing, reason: 'existing' as const };
 
     const balMap = await this.cardano.addressBalance([from.bech32Address]).catch(() => new Map<string, bigint>());
     const balanceLovelace = balMap.get(from.bech32Address) ?? 0n;
-    if (balanceLovelace === 0n) {
-      throw new ConflictException('the old multisig has no on-chain funds — nothing to migrate');
-    }
+    if (balanceLovelace === 0n) return { action: null, reason: 'empty' as const };
 
-    const created = await this.prisma.multisigAction.create({
+    const action = await this.prisma.multisigAction.create({
       data: {
         kind: 'MIGRATION',
         status: 'PENDING_SIGS',
@@ -350,12 +374,7 @@ export class BoardMultisigService {
         toConfigId: to.id,
       },
     });
-    // Strip BigInt for JSON.
-    return {
-      id: created.id,
-      status: created.status,
-      amountAda: Number(balanceLovelace) / LOVELACE,
-    };
+    return { action, reason: 'created' as const };
   }
 
   /** Hash-only check (used by status() to detect rotation). */

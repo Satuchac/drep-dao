@@ -804,6 +804,30 @@ export class InternalProposalsService {
       }
       await tx.proposal.update({ where: { id: proposalId }, data: { boardInstalledAt: new Date() } });
     });
+    // §15.2 — notify the newly-elected board members to submit their treasury multisig key so
+    // the platform can assemble the new multisig (and then migrate funds to it). Those without an
+    // account yet simply see the rotation state once they log in. Deduped per (user, refId).
+    try {
+      const newUsers = await this.prisma.appUser.findMany({
+        where: { drepKeyHash: { in: candidates.map((c) => c.drepKeyHash) } },
+        select: { id: true },
+      });
+      for (const u of newUsers) {
+        const dup = await this.prisma.notification.findFirst({
+          where: { userId: u.id, kind: 'MULTISIG_KEY_NEEDED', payload: { path: ['refId'], equals: proposalId } },
+          select: { id: true },
+        });
+        if (dup) continue;
+        await this.prisma.notification.create({
+          data: {
+            userId: u.id,
+            kind: 'MULTISIG_KEY_NEEDED',
+            payload: { refId: proposalId, title: 'You were elected to the board — submit your treasury multisig signing key (Treasury → Treasury multisig setup) so the new multisig can be assembled.' },
+            channelsSent: ['inapp'],
+          },
+        });
+      }
+    } catch { /* notification is best-effort; never block the install */ }
     const fresh = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
     return { id: proposalId, publicId: fresh?.publicId ?? null, boardInstalledAt: fresh?.boardInstalledAt ?? null };
   }

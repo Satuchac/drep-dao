@@ -48,6 +48,11 @@ export function MultisigSetup({ onAssembled }: { onAssembled?: () => void }) {
   if (error) return <div className="text-sm text-red-600">{error}</div>;
   if (!status) return null;
 
+  // §15.2 — a board hand-over is in flight when an old multisig still holds funds (or a
+  // migration tx is queued). While migrating, the active config is the NEW board's wallet and
+  // the funded predecessors are the OLD board's — surfaced with big labels below.
+  const migrating = status.history.some((h) => h.balanceAda > 0) || status.migrationsPending.length > 0;
+
   return (
     <section className="rounded-lg border border-amber-300 bg-amber-50/40 p-4 dark:border-amber-900 dark:bg-amber-950/20">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -66,6 +71,13 @@ export function MultisigSetup({ onAssembled }: { onAssembled?: () => void }) {
           {status.allSubmitted
             ? t('All new keys collected — the platform will assemble the new multisig on the next status refresh.')
             : `${status.submitted}/${status.total} ${t('new keys collected. The current (old) multisig remains active until the new one is assembled.')}`}
+        </div>
+      ) : null}
+
+      {/* §15.2 — big NEW BOARD MULTISIG banner while a hand-over is in flight. */}
+      {migrating && status.active ? (
+        <div className="mt-3 rounded-md border-2 border-emerald-500 bg-emerald-100 px-3 py-1.5 text-center text-sm font-extrabold uppercase tracking-wide text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-200">
+          {t('NEW BOARD MULTISIG')}
         </div>
       ) : null}
 
@@ -218,11 +230,18 @@ function HistoryRow({ h, isBoard, pending, onChange }: { h: MultisigHistoryEntry
   };
   const hasFunds = h.balanceAda > 0;
   return (
-    <li className="rounded border border-neutral-200 bg-white p-2 text-xs dark:border-neutral-800 dark:bg-neutral-900">
+    <li className={`rounded border bg-white p-2 text-xs dark:bg-neutral-900 ${hasFunds ? 'border-2 border-amber-500 dark:border-amber-600' : 'border-neutral-200 dark:border-neutral-800'}`}>
+      {/* §15.2 — big OLD BOARD MULTISIG banner while this predecessor still holds funds. */}
+      {hasFunds ? (
+        <div className="mb-2 rounded-md border-2 border-amber-500 bg-amber-100 px-3 py-1 text-center text-sm font-extrabold uppercase tracking-wide text-amber-800 dark:border-amber-600 dark:bg-amber-950/60 dark:text-amber-200">
+          {t('OLD BOARD MULTISIG')}
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium">
           {h.threshold}-of-{h.totalKeys} {t('multisig')}
-          <span className="ml-2 text-neutral-500">{t('replaced')} {new Date(h.replacedAt).toLocaleDateString()}</span>
+          <span className="ml-2 text-neutral-500">{t('created')} {new Date(h.assembledAt).toLocaleDateString()} · {t('replaced')} {new Date(h.replacedAt).toLocaleDateString()}</span>
+          {h.terminatedAt && !hasFunds ? <span className="ml-2 text-neutral-500">· {t('terminated')} {new Date(h.terminatedAt).toLocaleDateString()}</span> : null}
         </span>
         <span className={`tabular-nums ${hasFunds ? 'text-amber-700 dark:text-amber-300' : 'text-neutral-500'}`}>
           {h.balanceAda.toLocaleString()} ₳ {t('on-chain')}
