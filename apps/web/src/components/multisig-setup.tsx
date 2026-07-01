@@ -129,6 +129,21 @@ export function MultisigSetup({ onAssembled }: { onAssembled?: () => void }) {
                 {t('Current treasury — holds the funds. It stays active until the new multisig is assembled, then the funds migrate to it automatically.')}
               </p>
               <ConfigCard cfg={status.active} />
+              {/* Old board roster — names + addresses of the signers on the current (old) multisig. */}
+              {status.active.signers && status.active.signers.length > 0 ? (
+                <ul className="mt-2 space-y-1 text-xs">
+                  {status.active.signers.map((s) => (
+                    <li key={s.keyHash} className="rounded border border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-900">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{s.displayName ?? '—'}</span>
+                        {s.drepId ? <span className="break-all font-mono text-[11px] text-neutral-500">{s.drepId}</span> : null}
+                      </div>
+                      {s.paymentBech32 ? <div className="mt-1 break-all font-mono text-[11px] text-neutral-500">{s.paymentBech32}</div> : null}
+                      <div className="mt-0.5 text-[11px] text-neutral-500">{t('key hash:')} <span className="font-mono">{s.keyHash}</span></div>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           ) : null}
         </>

@@ -396,6 +396,12 @@ export interface MultisigSeatRow {
   hardwareAttested: boolean;
   submittedAt: string | null;
 }
+export interface MultisigSigner {
+  keyHash: string;
+  displayName: string | null;
+  drepId: string | null;
+  paymentBech32: string | null;
+}
 export interface MultisigActiveConfig {
   id: string;
   scriptHash: string;
@@ -404,6 +410,9 @@ export interface MultisigActiveConfig {
   totalKeys: number;
   assembledAt: string;
   balanceAda: number;
+  // The on-chain signers of this multisig (its board), resolved name + address. Present on the
+  // active config (history entries expose keyHashes instead).
+  signers?: MultisigSigner[];
 }
 export interface MultisigHistoryEntry extends MultisigActiveConfig {
   replacedAt: string;

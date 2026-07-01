@@ -87,9 +87,23 @@ export class BoardMultisigService {
       this.prisma.boardSeat.findMany({ where: { removedAt: null }, include: { multisigKey: true }, orderBy: { addedAt: 'asc' } }),
       this.active(),
       this.history(),
-      this.prisma.boardMultisigKey.findMany({ include: { user: { select: { displayName: true } } } }),
+      this.prisma.boardMultisigKey.findMany({ include: { user: { select: { displayName: true } }, boardSeat: { select: { drepId: true, displayName: true } } } }),
     ]);
     const byUserId = new Map(keys.map((k) => [k.userId, k]));
+    // Resolve the ACTIVE multisig's on-chain signers → member name + address (by matching each of
+    // its script key hashes to a submitted key). Lets the UI show the old multisig's roster
+    // (names + addresses) during a hand-over, exactly like the new-board roster.
+    const keysByHash = new Map(keys.map((k) => [k.paymentKeyHash.toLowerCase(), k]));
+    const signersOf = (cfg: { scriptJson: unknown } | null) =>
+      (((cfg?.scriptJson as { scripts?: { keyHash: string }[] } | null)?.scripts ?? []).map((s) => {
+        const k = keysByHash.get(s.keyHash.toLowerCase());
+        return {
+          keyHash: s.keyHash,
+          displayName: k?.user.displayName ?? k?.boardSeat?.displayName ?? null,
+          drepId: k?.boardSeat?.drepId ?? null,
+          paymentBech32: k?.paymentBech32 ?? null,
+        };
+      }));
     const seatRows = await Promise.all(seats.map(async (s) => {
       const linked = await this.prisma.appUser.findFirst({ where: { drepKeyHash: s.drepKeyHash } }).catch(() => null);
       const key = s.multisigKey ?? (linked ? byUserId.get(linked.id) ?? null : null);
@@ -175,6 +189,7 @@ export class BoardMultisigService {
             totalKeys: active.totalKeys,
             assembledAt: active.assembledAt,
             balanceAda: adaOf(active.bech32Address),
+            signers: signersOf(active),
           }
         : null,
       history: hist.map((h) => ({
