@@ -35,12 +35,11 @@ export function ExpertsDirectory() {
       <div>
         <h2 className="text-lg font-semibold">{t('Experts')}</h2>
         <p className="text-sm text-neutral-500">
-          Non-DRep ADA holders approved by the board to advise on proposals — feedback in the Filtering
-          stage, advice in the Debate &amp; Vote stage, and milestone reviews. Click a row for the full profile.
+          {t('Non-DRep ADA holders approved by the board to advise on proposals — feedback in the Filtering stage, advice in the Debate & Vote stage, and milestone reviews. Click a row for the full profile.')}
         </p>
       </div>
-      {rows === null ? <p className="text-sm text-neutral-500">Loading…</p> : null}
-      {rows?.length === 0 ? <p className="text-sm text-neutral-500">No approved experts yet.</p> : null}
+      {rows === null ? <p className="text-sm text-neutral-500">{t('Loading…')}</p> : null}
+      {rows?.length === 0 ? <p className="text-sm text-neutral-500">{t('No approved experts yet.')}</p> : null}
       <div className="space-y-3">
         {rows?.map((x) => {
           const open = openId === x.id;
@@ -52,10 +51,10 @@ export function ExpertsDirectory() {
                     ? <img src={x.logoDataUrl} alt="" className="h-9 w-9 rounded object-cover" />
                     : <FallbackAvatar name={x.displayName} className="h-9 w-9 rounded" />}
                   <span className="font-medium">{x.displayName}</span>
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">Expert</span>
+                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">{t('Expert')}</span>
                   {x.isSubmitter ? (
-                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title="Also an approved submitter — can submit funding proposals">
-                      also a submitter
+                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title={t('Also an approved submitter — can submit funding proposals')}>
+                      {t('also a submitter')}
                     </span>
                   ) : null}
                 </span>
@@ -70,23 +69,23 @@ export function ExpertsDirectory() {
                   <div className="min-w-0 flex-1 space-y-2 text-sm">
                     {x.isSubmitter ? (
                       <div className="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1.5 text-xs font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
-                        ✓ Also a submitter — this expert can submit funding proposals.
+                        {t('✓ Also a submitter — this expert can submit funding proposals.')}
                       </div>
                     ) : null}
                     <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Experience / skills</div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Experience / skills')}</div>
                       <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{x.bio ?? ''}</ClampedMarkdown>
                     </div>
                     <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Motivation / area of help</div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Motivation / area of help')}</div>
                       <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{x.motivation ?? ''}</ClampedMarkdown>
                     </div>
                     <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Conflict of interest</div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Conflict of interest')}</div>
                       <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{x.conflictOfInterest ?? ''}</ClampedMarkdown>
                     </div>
                     <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Expertise</div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Expertise')}</div>
                       {x.subcategoryIds.length ? (
                         <div className="mt-1 flex flex-wrap gap-1">
                           {x.subcategoryIds.map((id) => (
@@ -95,35 +94,35 @@ export function ExpertsDirectory() {
                             </span>
                           ))}
                         </div>
-                      ) : <p className="mt-0.5 text-xs text-neutral-400">no expertise areas listed</p>}
+                      ) : <p className="mt-0.5 text-xs text-neutral-400">{t('no expertise areas listed')}</p>}
                     </div>
                     <div className="text-xs">
-                      <span className="font-medium">Contact:</span>{' '}
+                      <span className="font-medium">{t('Contact:')}</span>{' '}
                       {x.telegram ? <span className="font-mono">{x.telegram}</span> : '—'}
                       {' · '}
                       {x.email ? <a href={`mailto:${x.email}`} className="text-emerald-700 underline dark:text-emerald-400">{x.email}</a> : '—'}
                     </div>
                     {/* The platform knows the wallet — surface the on-chain identity. */}
                     <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                      <span className="font-medium">Wallet (stake):</span>
+                      <span className="font-medium">{t('Wallet (stake):')}</span>
                       <span className="break-all font-mono text-neutral-600 dark:text-neutral-300">{x.stakeAddress}</span>
-                      <CopyButton text={x.stakeAddress} label="Copy" />
+                      <CopyButton text={x.stakeAddress} label={t('Copy')} />
                     </div>
                     {x.drepIdOnchain ? (
                       <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                        <span className="font-medium">DRep ID:</span>
+                        <span className="font-medium">{t('DRep ID:')}</span>
                         <a href={drepUrl(x.drepIdOnchain)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">{x.drepIdOnchain}</a>
-                        <CopyButton text={x.drepIdOnchain} label="Copy" />
+                        <CopyButton text={x.drepIdOnchain} label={t('Copy')} />
                       </div>
                     ) : null}
                     <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Social media</div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Social media')}</div>
                       <div className="mt-0.5 text-xs">
                         {x.socialLinks.length
                           ? x.socialLinks.map((l, i) => (
                               <a key={i} href={l} target="_blank" rel="noreferrer" className="mr-2 break-all text-emerald-700 underline dark:text-emerald-400">{l}</a>
                             ))
-                          : <span className="text-neutral-400">not provided</span>}
+                          : <span className="text-neutral-400">{t('not provided')}</span>}
                       </div>
                     </div>
                   </div>

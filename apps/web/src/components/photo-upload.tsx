@@ -1,5 +1,7 @@
 'use client';
 
+import { useT } from '@/lib/prefs-context';
+
 /**
  * Shared profile-photo picker + resizer. Users can pick a normal, large photo (we accept up to
  * MAX_SOURCE_BYTES); the image is downscaled client-side to a STANDARD square-ish size before it
@@ -62,29 +64,31 @@ export function PhotoUpload({
   photo,
   onChange,
   error,
-  hint = 'PNG, JPEG, WebP or GIF · up to 12 MB (resized to 640px)',
+  hint,
 }: {
   photo: string | null;
   onChange: (next: string | null, error?: string) => void;
   error: string | null;
   hint?: string;
 }) {
+  const t = useT();
+  const resolvedHint = hint ?? t('PNG, JPEG, WebP or GIF · up to 12 MB (resized to 640px)');
   const onFile = async (file: File) => {
     try {
       onChange(await resizeImageFile(file));
     } catch (e) {
-      onChange(photo, e instanceof Error ? e.message : 'Could not process the image.');
+      onChange(photo, e instanceof Error ? e.message : t('Could not process the image.'));
     }
   };
   return (
     <div className="space-y-1">
-      <span className="text-sm font-medium">Profile photo</span>
+      <span className="text-sm font-medium">{t('Profile photo')}</span>
       <div className="flex items-center gap-3">
         {photo ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={photo} alt="profile" className="h-16 w-16 rounded-full object-cover ring-1 ring-neutral-300 dark:ring-neutral-700" />
+          <img src={photo} alt={t('profile')} className="h-16 w-16 rounded-full object-cover ring-1 ring-neutral-300 dark:ring-neutral-700" />
         ) : (
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-200 text-xs text-neutral-500 dark:bg-neutral-800">none</div>
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-neutral-200 text-xs text-neutral-500 dark:bg-neutral-800">{t('none')}</div>
         )}
         <div className="space-y-1">
           <input
@@ -94,9 +98,9 @@ export function PhotoUpload({
             className="text-xs file:mr-2 file:rounded-md file:border-0 file:bg-neutral-200 file:px-2 file:py-1 file:text-xs file:font-medium hover:file:bg-neutral-300 dark:file:bg-neutral-800 dark:hover:file:bg-neutral-700"
           />
           {photo ? (
-            <button type="button" onClick={() => onChange(null)} className="text-xs text-red-600 hover:underline">Remove</button>
+            <button type="button" onClick={() => onChange(null)} className="text-xs text-red-600 hover:underline">{t('Remove')}</button>
           ) : null}
-          <p className="text-[11px] text-neutral-500">{hint}</p>
+          <p className="text-[11px] text-neutral-500">{resolvedHint}</p>
         </div>
       </div>
       {error ? <p className="text-xs text-red-600">{error}</p> : null}

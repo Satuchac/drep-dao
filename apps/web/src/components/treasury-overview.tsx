@@ -53,7 +53,7 @@ export function TreasuryOverview() {
 
       {/* §15 — Overview | Transactions sub-menu. */}
       <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
-        {([['overview', 'Overview'], ['transactions', 'Transactions'], ['setup', 'Treasury multisig setup']] as const).map(([key, label]) => (
+        {([['overview', t('Overview')], ['transactions', t('Transactions')], ['setup', t('Treasury multisig setup')]] as const).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setSubTab(key)}
@@ -63,7 +63,7 @@ export function TreasuryOverview() {
                 : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
             }`}
           >
-            {t(label)}
+            {label}
           </button>
         ))}
       </div>
@@ -78,7 +78,7 @@ export function TreasuryOverview() {
         <>
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {!data ? (
-        <p className="text-sm text-neutral-500">Loading…</p>
+        <p className="text-sm text-neutral-500">{t('Loading…')}</p>
       ) : (
         <>
           {/* Balances */}
@@ -87,41 +87,41 @@ export function TreasuryOverview() {
                 breakdown (with Copy) lives in "Treasury buckets" below, so no
                 address is duplicated here. Highlighted in blue as the key figure. */}
             <div className="rounded-lg border border-blue-300 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/40">
-              <div className="text-xs text-neutral-500">Treasury (multisig) balance</div>
+              <div className="text-xs text-neutral-500">{t('Treasury (multisig) balance')}</div>
               <div className="text-lg font-semibold tabular-nums text-blue-800 dark:text-blue-200">
-                {data.treasury.configured ? `${ada(treasuryTotal)} ₳` : 'not configured'}
+                {data.treasury.configured ? `${ada(treasuryTotal)} ₳` : t('not configured')}
               </div>
               {/* Every sub-address with its label, on-chain address, live balance + copy. */}
               {buckets.length > 0 ? (
                 <div className="mt-2 border-t border-blue-200 pt-1 dark:border-blue-900">
                   <div className="flex items-baseline justify-between text-[10px] uppercase tracking-wide text-neutral-400">
-                    <span>Address</span>
-                    <span>Balance (on-chain)</span>
+                    <span>{t('Address')}</span>
+                    <span>{t('Balance (on-chain)')}</span>
                   </div>
                   <ul className="divide-y divide-blue-200 dark:divide-blue-900">
                     {buckets.map((b) => (
                       <li key={b.id} className="py-1.5 text-xs">
                         <div className="flex items-baseline justify-between gap-2">
-                          <span className="font-medium">{b.label}{b.isPrimary ? <span className="ml-1 rounded bg-blue-100 px-1 text-[10px] uppercase text-blue-700 dark:bg-blue-900 dark:text-blue-300">primary</span> : null}</span>
+                          <span className="font-medium">{b.label}{b.isPrimary ? <span className="ml-1 rounded bg-blue-100 px-1 text-[10px] uppercase text-blue-700 dark:bg-blue-900 dark:text-blue-300">{t('primary')}</span> : null}</span>
                           <span className="tabular-nums font-medium">{b.balanceAda.toLocaleString()} ₳</span>
                         </div>
                         <div className="mt-0.5 flex items-center gap-1.5">
                           <span className="min-w-0 truncate font-mono text-[10px] text-neutral-500" title={b.bech32Address}>{b.bech32Address}</span>
-                          <CopyButton text={b.bech32Address} label="Copy" />
+                          <CopyButton text={b.bech32Address} label={t('Copy')} />
                         </div>
                       </li>
                     ))}
                   </ul>
                 </div>
               ) : data.treasury.configured ? (
-                <div className="mt-0.5 text-[11px] text-neutral-500">see Treasury buckets below</div>
+                <div className="mt-0.5 text-[11px] text-neutral-500">{t('see Treasury buckets below')}</div>
               ) : null}
             </div>
             <Card
-              label="Anchor hot wallet"
+              label={t('Anchor hot wallet')}
               value={`${ada(data.hotWallet.balanceAda)} ₳`}
               addr={data.hotWallet.address}
-              warn={data.hotWallet.balanceAda < data.hotWallet.minAda ? `below ${data.hotWallet.minAda} ₳ — top-up needed` : undefined}
+              warn={data.hotWallet.balanceAda < data.hotWallet.minAda ? `${t('below')} ${data.hotWallet.minAda} ₳ ${t('— top-up needed')}` : undefined}
             />
           </div>
           {/* §15.5 — labeled buckets under the active multisig (with live
@@ -134,7 +134,7 @@ export function TreasuryOverview() {
 
           {/* Budget buckets — allocated, with spent overlaid as a bar. */}
           <div className="space-y-3">
-            <div className="text-sm font-medium">Budget allocation</div>
+            <div className="text-sm font-medium">{t('Budget allocation')}</div>
             {data.buckets.map((b) => {
               const pct = b.allocatedAda > 0 ? Math.min(100, (b.spentAda / b.allocatedAda) * 100) : 0;
               const color = BUCKET_COLOR[b.key] ?? roundColor;
@@ -143,7 +143,7 @@ export function TreasuryOverview() {
                   <div className="flex items-baseline justify-between">
                     <span className="font-medium">{b.name}</span>
                     <span className="text-xs text-neutral-500 tabular-nums">
-                      spent {ada(b.spentAda)} / {ada(b.allocatedAda)} ₳ · {ada(b.remainingAda)} left
+                      {t('spent')} {ada(b.spentAda)} / {ada(b.allocatedAda)} ₳ · {ada(b.remainingAda)} {t('left')}
                     </span>
                   </div>
                   <div className="mt-1 h-3 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-800">
@@ -156,25 +156,25 @@ export function TreasuryOverview() {
 
           <div className="space-y-1 rounded-lg border border-neutral-200 p-3 text-sm dark:border-neutral-800">
             <div className="flex justify-between">
-              <span className="text-neutral-500">Treasury total <span className="text-xs text-neutral-400">(all addresses, incl. hot wallet)</span></span>
+              <span className="text-neutral-500">{t('Treasury total')} <span className="text-xs text-neutral-400">{t('(all addresses, incl. hot wallet)')}</span></span>
               <span className="font-medium tabular-nums">{ada(data.totalAllocatedAda)} ₳</span>
             </div>
             <div className="flex justify-between pl-3 text-xs text-neutral-500">
-              <span>· of which hot wallet</span>
+              <span>{t('· of which hot wallet')}</span>
               <span className="tabular-nums">{ada(data.hotWallet.balanceAda)} ₳</span>
             </div>
             <div className="mt-1 flex justify-between border-t border-neutral-100 pt-1 dark:border-neutral-800">
-              <span className="text-neutral-500">Total spent</span>
+              <span className="text-neutral-500">{t('Total spent')}</span>
               <span className="font-medium tabular-nums">{ada(data.totalSpentAda)} ₳</span>
             </div>
             <div className="flex justify-between pl-3 text-xs text-neutral-500">
-              <span>· funding</span><span className="tabular-nums">{ada(data.spent.funding)} ₳</span>
+              <span>{t('· funding')}</span><span className="tabular-nums">{ada(data.spent.funding)} ₳</span>
             </div>
             <div className="flex justify-between pl-3 text-xs text-neutral-500">
-              <span>· rewards</span><span className="tabular-nums">{ada(data.spent.rewards)} ₳</span>
+              <span>{t('· rewards')}</span><span className="tabular-nums">{ada(data.spent.rewards)} ₳</span>
             </div>
             <div className="flex justify-between pl-3 text-xs text-neutral-500">
-              <span>· operations</span><span className="tabular-nums">{ada(data.spent.operations)} ₳</span>
+              <span>{t('· operations')}</span><span className="tabular-nums">{ada(data.spent.operations)} ₳</span>
             </div>
           </div>
         </>
@@ -186,6 +186,7 @@ export function TreasuryOverview() {
 }
 
 function Card({ label, value, addr, warn, note, tone = 'neutral' }: { label: string; value: string; addr?: string | null; warn?: string; note?: string; tone?: 'blue' | 'neutral' }) {
+  const t = useT();
   const wrap = tone === 'blue'
     ? 'rounded-lg border border-blue-300 bg-blue-50 p-3 dark:border-blue-800 dark:bg-blue-950/40'
     : 'rounded-lg border border-neutral-200 p-3 dark:border-neutral-800';
@@ -197,7 +198,7 @@ function Card({ label, value, addr, warn, note, tone = 'neutral' }: { label: str
       {addr ? (
         <div className="mt-0.5 flex items-start gap-2">
           <div className="flex-1 break-all font-mono text-[11px] text-neutral-400">{addr}</div>
-          <CopyButton text={addr} label="Copy" />
+          <CopyButton text={addr} label={t('Copy')} />
         </div>
       ) : null}
       {warn ? <div className="mt-1 text-xs text-amber-600">{warn}</div> : null}

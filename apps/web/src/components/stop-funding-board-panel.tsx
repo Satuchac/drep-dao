@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { boardMilestoneApi, milestonesApi, matchesProposalSearch, type ActiveStopFunding } from '@/lib/api';
 import { useUrlNav } from '@/lib/use-url-nav';
+import { useT } from '@/lib/prefs-context';
 import { fmtDateTime, StatusBadge, PROPOSAL_STATUS_CLS } from './round-ui';
 
 /**
@@ -12,6 +13,7 @@ import { fmtDateTime, StatusBadge, PROPOSAL_STATUS_CLS } from './round-ui';
  * Self-hides when there's nothing pending. Linking → the proposal detail still works.
  */
 export function StopFundingBoardPanel({ query }: { query?: string }) {
+  const t = useT();
   const { setParams } = useUrlNav();
   const [all, setAll] = useState<ActiveStopFunding[]>([]);
   const load = useCallback(() => {
@@ -26,9 +28,9 @@ export function StopFundingBoardPanel({ query }: { query?: string }) {
   return (
     <section className="space-y-2 rounded-lg border border-red-200 bg-red-50/40 p-4 dark:border-red-900 dark:bg-red-950/30">
       <div>
-        <h3 className="text-base font-semibold text-red-800 dark:text-red-200">⛔ Stop-funding votes ({items.length})</h3>
+        <h3 className="text-base font-semibold text-red-800 dark:text-red-200">⛔ {t('Stop-funding votes')} ({items.length})</h3>
         <p className="text-xs text-neutral-600 dark:text-neutral-400">
-          1 board member · 1 vote — 3 YES terminates the project (FAILED, on-chain anchor). NO requires rationale.
+          {t('1 board member · 1 vote — 3 YES terminates the project (FAILED, on-chain anchor). NO requires rationale.')}
         </p>
       </div>
       <ul className="space-y-2">
@@ -41,13 +43,14 @@ export function StopFundingBoardPanel({ query }: { query?: string }) {
 }
 
 function StopRow({ s, onChange, onOpen }: { s: ActiveStopFunding; onChange: () => void; onOpen: () => void }) {
+  const t = useT();
   const [rationale, setRationale] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const vote = async (choice: 'YES' | 'NO') => {
     setBusy(true); setError(null);
     try { await milestonesApi.voteStop(s.id, choice, rationale || undefined); onChange(); }
-    catch (e) { setError(e instanceof Error ? e.message : 'failed'); }
+    catch (e) { setError(e instanceof Error ? e.message : t('failed')); }
     finally { setBusy(false); }
   };
   return (
@@ -61,29 +64,29 @@ function StopRow({ s, onChange, onOpen }: { s: ActiveStopFunding; onChange: () =
           {s.roundLabel ? <span className="ml-2 text-xs text-neutral-500">· {s.roundLabel}</span> : null}
         </span>
         <span className="flex items-center gap-2 text-xs text-neutral-500">
-          {s.myChoice ? <StatusBadge status={`you voted ${s.myChoice}`} cls={PROPOSAL_STATUS_CLS} /> : null}
-          <span className="tabular-nums">{s.yes} YES / {s.no} NO (need {s.threshold})</span>
+          {s.myChoice ? <StatusBadge status={`${t('you voted')} ${s.myChoice}`} cls={PROPOSAL_STATUS_CLS} /> : null}
+          <span className="tabular-nums">{s.yes} YES / {s.no} NO ({t('need')} {s.threshold})</span>
         </span>
       </div>
       <div className="mt-1 text-xs text-neutral-500">
-        Proposed by <span className="font-medium">{s.proposerName ?? s.proposerDrep ?? 'unknown'}</span> ({s.proposerRole === 'BOARD' ? 'board' : 'reviewer'}) · {fmtDateTime(s.createdAt)}
+        {t('Proposed by')} <span className="font-medium">{s.proposerName ?? s.proposerDrep ?? t('unknown')}</span> ({s.proposerRole === 'BOARD' ? t('board') : t('reviewer')}) · {fmtDateTime(s.createdAt)}
       </div>
       <div className="mt-1 whitespace-pre-wrap rounded bg-neutral-50 p-1.5 text-xs text-neutral-700 dark:bg-neutral-800/50 dark:text-neutral-300">
-        <strong>Reason:</strong> {s.reason}
+        <strong>{t('Reason:')}</strong> {s.reason}
       </div>
       <div className="mt-2 space-y-1">
         <input
           value={rationale}
           onChange={(e) => setRationale(e.target.value)}
-          placeholder="rationale (required for NO)"
+          placeholder={t('rationale (required for NO)')}
           className="w-full rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
         />
         <div className="flex gap-2">
           <button disabled={busy} onClick={() => vote('YES')} className="rounded border border-red-500 px-2 py-0.5 text-xs text-red-700 disabled:opacity-40 dark:text-red-300">
-            YES — stop funding
+            {t('YES — stop funding')}
           </button>
           <button disabled={busy} onClick={() => vote('NO')} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">
-            NO — continue
+            {t('NO — continue')}
           </button>
         </div>
         {error ? <div className="text-xs text-red-600">{error}</div> : null}

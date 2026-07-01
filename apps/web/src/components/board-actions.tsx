@@ -8,6 +8,7 @@ import { useExplorer } from '@/lib/explorer';
 import { ConfirmDialog } from './confirm-dialog';
 import { notifyTreasuryChanged } from '@/lib/treasury-refresh';
 import { notifyTodoChanged } from '@/lib/use-todo-counts';
+import { useT } from '@/lib/prefs-context';
 
 /** Human label for a prepared action. Only milestone payouts (PROJECT_FUNDING) carry the
  *  "Milestone #N payout" prefix; an internal-proposal spend (OPS with a proposal title) is
@@ -23,6 +24,7 @@ function actionLabel(a: BoardAction): string {
  *  immediate refetch so newly-queued actions (top-ups, sweeps, transfers)
  *  appear without a page reload. */
 export function BoardActions({ onChange, history = false, refreshKey = 0, filter = 'all', query }: { onChange?: () => void; history?: boolean; refreshKey?: number; filter?: 'all' | 'rewards' | 'non-rewards'; query?: string }) {
+  const t = useT();
   const { profile, signTx, signMessage } = useAuth();
   const { txUrl } = useExplorer();
   const [actions, setActions] = useState<BoardAction[]>([]);
@@ -88,12 +90,12 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
   const authorize = async (a: BoardAction) => {
     setErr(a.id, null); setBusy(a.id);
     try {
-      if (!profile) { setErr(a.id, 'Connect your wallet to authorize.'); return; }
+      if (!profile) { setErr(a.id, t('Connect your wallet to authorize.')); return; }
       const ts = new Date().toISOString();
       const msg = COMMIT_MSG(a.id, profile.user.stakeAddress, ts);
       const s = await signMessage(msg);
       if (!s) {
-        setErr(a.id, 'Could not reach your wallet. Open the wallet extension and try again.');
+        setErr(a.id, t('Could not reach your wallet. Open the wallet extension and try again.'));
         return;
       }
       await treasuryApi.commitToAction(a.id, { signature: s.signature, key: s.key, ts });
@@ -101,7 +103,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
       onChange?.();
       notifyTodoChanged();
     } catch (e) {
-      setErr(a.id, e instanceof Error ? e.message : 'Authorization cancelled.');
+      setErr(a.id, e instanceof Error ? e.message : t('Authorization cancelled.'));
     } finally {
       setBusy(null);
     }
@@ -115,13 +117,13 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
     setBusy(a.id);
     try {
       if (!profile) {
-        setErr(a.id, 'Connect your wallet to sign this action.');
+        setErr(a.id, t('Connect your wallet to sign this action.'));
         return;
       }
       const { txBodyHex } = await treasuryApi.txBody(a.id);
       const witnessHex = await signTx(txBodyHex);
       if (!witnessHex) {
-        setErr(a.id, 'Could not reach the wallet you logged in with. Open the wallet extension (or re-connect from the login card on the right) and click Sign again.');
+        setErr(a.id, t('Could not reach the wallet you logged in with. Open the wallet extension (or re-connect from the login card on the right) and click Sign again.'));
         return;
       }
       const r = await treasuryApi.submitWitness(a.id, witnessHex);
@@ -136,7 +138,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
       onChange?.();
       notifyTodoChanged();
     } catch (e) {
-      setErr(a.id, e instanceof Error ? e.message : 'Sign cancelled — nothing was recorded.');
+      setErr(a.id, e instanceof Error ? e.message : t('Sign cancelled — nothing was recorded.'));
     } finally {
       setBusy(null);
     }
@@ -157,27 +159,22 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
     <section className="space-y-2 rounded-lg border border-amber-300 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
       {submitted ? (
         <div className="flex items-center justify-between gap-2 rounded border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
-          <span>✓ Transaction submitted on-chain — <a href={txUrl(submitted)} target="_blank" rel="noreferrer" className="underline">{submitted.slice(0, 12)}…</a>. The signed action has moved to history.</span>
-          <button onClick={() => setSubmitted(null)} className="shrink-0 font-medium hover:underline">Dismiss</button>
+          <span>✓ {t('Transaction submitted on-chain —')} <a href={txUrl(submitted)} target="_blank" rel="noreferrer" className="underline">{submitted.slice(0, 12)}…</a>. {t('The signed action has moved to history.')}</span>
+          <button onClick={() => setSubmitted(null)} className="shrink-0 font-medium hover:underline">{t('Dismiss')}</button>
         </div>
       ) : null}
-      <h3 className="text-base font-semibold">Actions to sign</h3>
+      <h3 className="text-base font-semibold">{t('Actions to sign')}</h3>
       {mode === '1_PHASE' ? (
         <p className="text-xs text-neutral-500">
-          The platform prepared these treasury/hot-wallet actions. <strong>1-Phase signing</strong> is enabled
-          (the default — requires the <strong>Eternl</strong> wallet): each board member signs the transaction once — the platform
-          broadcasts as soon as the first {actions[0]?.threshold ?? past[0]?.threshold ?? 3} signatures are in.
-          Threshold: {actions[0]?.threshold ?? past[0]?.threshold ?? 3}-of-
+          {t('The platform prepared these treasury/hot-wallet actions.')} <strong>{t('1-Phase signing')}</strong> {t('is enabled (the default — requires the')} <strong>Eternl</strong> {t('wallet): each board member signs the transaction once — the platform broadcasts as soon as the first')} {actions[0]?.threshold ?? past[0]?.threshold ?? 3} {t('signatures are in.')}
+          {' '}{t('Threshold:')} {actions[0]?.threshold ?? past[0]?.threshold ?? 3}-of-
           {actions[0]?.totalKeys ?? past[0]?.totalKeys ?? '?'}.
         </p>
       ) : (
         <p className="text-xs text-neutral-500">
-          The platform prepared these treasury/hot-wallet actions. <strong>2-Phase signing</strong> (the backup mode) is enabled —
-          each one runs a two-phase ceremony:{' '}
-          <strong>Authorize</strong> (cheap CIP-30 data-sig — once {actions[0]?.threshold ?? past[0]?.threshold ?? 3} board
-          members authorize, the platform picks them as signers) → <strong>Sign</strong> (those same{' '}
-          {actions[0]?.threshold ?? past[0]?.threshold ?? 3} sign the real tx with their HW wallets and the platform
-          broadcasts on the 3rd witness). Threshold: {actions[0]?.threshold ?? past[0]?.threshold ?? 3}-of-
+          {t('The platform prepared these treasury/hot-wallet actions.')} <strong>{t('2-Phase signing')}</strong> {t('(the backup mode) is enabled — each one runs a two-phase ceremony:')}{' '}
+          <strong>{t('Authorize')}</strong> {t('(cheap CIP-30 data-sig — once')} {actions[0]?.threshold ?? past[0]?.threshold ?? 3} {t('board members authorize, the platform picks them as signers) →')} <strong>{t('Sign')}</strong> {t('(those same')}{' '}
+          {actions[0]?.threshold ?? past[0]?.threshold ?? 3} {t('sign the real tx with their HW wallets and the platform broadcasts on the 3rd witness).')} {t('Threshold:')} {actions[0]?.threshold ?? past[0]?.threshold ?? 3}-of-
           {actions[0]?.totalKeys ?? past[0]?.totalKeys ?? '?'}.
         </p>
       )}
@@ -186,19 +183,19 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
       {treasury ? (
         <div className="rounded border border-neutral-200 bg-white p-2 text-xs dark:border-neutral-800 dark:bg-neutral-900">
           <div className="font-semibold text-neutral-700 dark:text-neutral-300">
-            Treasury balance: <span className="tabular-nums">{treasury.balanceAda.toLocaleString()} ₳</span>
+            {t('Treasury balance:')} <span className="tabular-nums">{treasury.balanceAda.toLocaleString()} ₳</span>
           </div>
           {treasury.address ? (
             <div className="mt-0.5 flex items-start gap-2">
               <div className="flex-1 break-all font-mono text-[11px] text-neutral-500">{treasury.address}</div>
-              <CopyButton text={treasury.address} label="Copy" />
+              <CopyButton text={treasury.address} label={t('Copy')} />
             </div>
           ) : (
-            <div className="mt-0.5 text-[11px] text-red-600">No TREASURY_ADDRESS configured.</div>
+            <div className="mt-0.5 text-[11px] text-red-600">{t('No TREASURY_ADDRESS configured.')}</div>
           )}
         </div>
       ) : null}
-      {shownActions.length === 0 ? <div className="text-xs text-neutral-500">Nothing awaiting signatures.</div> : null}
+      {shownActions.length === 0 ? <div className="text-xs text-neutral-500">{t('Nothing awaiting signatures.')}</div> : null}
       <ul className="space-y-2">
         {shownActions.map((a) => (
           <li key={a.id} className="rounded-md border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
@@ -208,7 +205,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
               </span>
               <span className="flex items-center gap-3">
                 {/* When several similar actions queue up, the timestamp tells them apart. */}
-                <span className="text-xs text-neutral-400" title="When this action was prepared">prepared {new Date(a.createdAt).toLocaleString()}</span>
+                <span className="text-xs text-neutral-400" title={t('When this action was prepared')}>{t('prepared')} {new Date(a.createdAt).toLocaleString()}</span>
                 {a.amountAda != null ? <span className="tabular-nums text-neutral-500">{a.amountAda.toLocaleString()} ₳</span> : null}
               </span>
             </div>
@@ -221,21 +218,21 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
             {a.destAddress ? (
               <div className="mt-1">
                 <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-                  {a.kind === 'PROJECT_FUNDING' ? 'Send to (team payout address)'
-                    : a.kind === 'OPS' ? 'Send to (anchor hot wallet)'
-                    : a.kind === 'REWARD_PAYOUT' ? 'Send to (DRep reward address)'
-                    : 'Send to (destination)'}
+                  {a.kind === 'PROJECT_FUNDING' ? t('Send to (team payout address)')
+                    : a.kind === 'OPS' ? t('Send to (anchor hot wallet)')
+                    : a.kind === 'REWARD_PAYOUT' ? t('Send to (DRep reward address)')
+                    : t('Send to (destination)')}
                 </div>
                 <div className="mt-0.5 flex items-start gap-2">
                   <div className="flex-1 break-all font-mono text-[11px] text-neutral-600 dark:text-neutral-400">{a.destAddress}</div>
-                  <CopyButton text={a.destAddress} label="Copy" />
+                  <CopyButton text={a.destAddress} label={t('Copy')} />
                 </div>
               </div>
             ) : null}
             {/* §12 — a reward payout pays many recipients in one tx; show the full list. */}
             {a.recipients.length > 0 ? (
               <div className="mt-1.5 rounded border border-neutral-200 p-2 dark:border-neutral-800">
-                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Recipients ({a.recipients.length})</div>
+                <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{t('Recipients')} ({a.recipients.length})</div>
                 <ul className="space-y-0.5 text-xs">
                   {a.recipients.map((r, i) => (
                     <li key={i} className="flex justify-between gap-2">
@@ -249,8 +246,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
             {/* Insufficient-funds warning — server-computed against live balance. */}
             {a.insufficient && a.amountAda != null && treasury ? (
               <div className="mt-1 rounded border border-red-300 bg-red-50 p-1.5 text-[11px] text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-                ⚠ Treasury currently holds {treasury.balanceAda.toLocaleString()} ₳ — not enough to cover this {a.amountAda.toLocaleString()} ₳ payout.
-                Approval at threshold will be blocked until the treasury is topped up.
+                ⚠ {t('Treasury currently holds')} {treasury.balanceAda.toLocaleString()} ₳ — {t('not enough to cover this')} {a.amountAda.toLocaleString()} ₳ {t('payout. Approval at threshold will be blocked until the treasury is topped up.')}
               </div>
             ) : null}
             {/* §15 — 3-of-5 progress. 1-phase: any 3 board members sign the tx directly.
@@ -260,18 +256,18 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
             <div className="mt-1 text-xs text-neutral-500">
               {mode === '1_PHASE' ? (
                 <>
-                  Signatures: {a.approvals} of {a.threshold} needed ({a.threshold}-of-{a.totalKeys} multisig — any {a.threshold} board members)
-                  {a.mineApproved ? ' · you signed ✓' : ''}
+                  {t('Signatures:')} {a.approvals} {t('of')} {a.threshold} {t('needed')} ({a.threshold}-of-{a.totalKeys} {t('multisig — any')} {a.threshold} {t('board members')})
+                  {a.mineApproved ? ' · ' + t('you signed') + ' ✓' : ''}
                 </>
               ) : a.phase === 'AUTHORIZE' ? (
                 <>
-                  Phase 1 — authorizations: {a.commitments} of {a.threshold} needed ({a.threshold}-of-{a.totalKeys} multisig)
-                  {a.mineCommitted ? ' · you authorized ✓' : ''}
+                  {t('Phase 1 — authorizations:')} {a.commitments} {t('of')} {a.threshold} {t('needed')} ({a.threshold}-of-{a.totalKeys} {t('multisig')})
+                  {a.mineCommitted ? ' · ' + t('you authorized') + ' ✓' : ''}
                 </>
               ) : (
                 <>
-                  Phase 2 — tx signatures: {a.approvals} of {a.threshold} needed ({a.threshold}-of-{a.totalKeys} multisig)
-                  {a.mineApproved ? ' · you signed ✓' : ''}
+                  {t('Phase 2 — tx signatures:')} {a.approvals} {t('of')} {a.threshold} {t('needed')} ({a.threshold}-of-{a.totalKeys} {t('multisig')})
+                  {a.mineApproved ? ' · ' + t('you signed') + ' ✓' : ''}
                 </>
               )}
             </div>
@@ -280,14 +276,14 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
             {mode === '1_PHASE' ? (
               a.signedBy.length > 0 ? (
                 <div className="mt-0.5 text-[11px] text-neutral-500">
-                  Signed: <span className="text-emerald-700 dark:text-emerald-400">{a.signedBy.join(', ')}</span>
+                  {t('Signed:')} <span className="text-emerald-700 dark:text-emerald-400">{a.signedBy.join(', ')}</span>
                 </div>
               ) : null
             ) : a.committedBy.length > 0 ? (
               <div className="mt-0.5 text-[11px] text-neutral-500">
-                {a.phase === 'AUTHORIZE' ? 'Authorized by' : 'Authorized signers'}: <span className="text-neutral-700 dark:text-neutral-300">{a.committedBy.join(', ')}</span>
+                {a.phase === 'AUTHORIZE' ? t('Authorized by') : t('Authorized signers')}: <span className="text-neutral-700 dark:text-neutral-300">{a.committedBy.join(', ')}</span>
                 {a.phase === 'SIGN' ? (
-                  <> · Signed: <span className="text-emerald-700 dark:text-emerald-400">{a.signedBy.length > 0 ? a.signedBy.join(', ') : '—'}</span></>
+                  <> · {t('Signed:')} <span className="text-emerald-700 dark:text-emerald-400">{a.signedBy.length > 0 ? a.signedBy.join(', ') : '—'}</span></>
                 ) : null}
               </div>
             ) : null}
@@ -297,9 +293,9 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
                   disabled={busy === a.id || a.mineCommitted}
                   onClick={() => authorize(a)}
                   className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
-                  title={`Authorize signing — cheap CIP-30 data-signature. Once ${a.threshold} board members authorize, the platform builds the real tx and asks those ${a.threshold} to sign it with their HW wallets.`}
+                  title={`${t('Authorize signing — cheap CIP-30 data-signature. Once')} ${a.threshold} ${t('board members authorize, the platform builds the real tx and asks those')} ${a.threshold} ${t('to sign it with their HW wallets.')}`}
                 >
-                  {a.mineCommitted ? 'Authorized' : busy === a.id ? 'Authorizing…' : 'Authorize'}
+                  {a.mineCommitted ? t('Authorized') : busy === a.id ? t('Authorizing…') : t('Authorize')}
                 </button>
               ) : mode === '1_PHASE' || a.mineCommitted ? (
                 <button
@@ -307,16 +303,16 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
                   onClick={() => approve(a)}
                   className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
                   title={mode === '1_PHASE'
-                    ? `Sign the prepared tx with your wallet (1-Phase signing requires Eternl). The platform broadcasts once ${a.threshold} board members have signed.`
-                    : `Sign the prepared tx with your HW wallet. Only the ${a.threshold} board members who authorized in phase 1 can sign.`}
+                    ? `${t('Sign the prepared tx with your wallet (1-Phase signing requires Eternl). The platform broadcasts once')} ${a.threshold} ${t('board members have signed.')}`
+                    : `${t('Sign the prepared tx with your HW wallet. Only the')} ${a.threshold} ${t('board members who authorized in phase 1 can sign.')}`}
                 >
-                  {a.mineApproved ? 'Signed' : busy === a.id ? 'Signing…' : mode === '1_PHASE' ? 'Sign tx' : 'Sign tx with HW wallet'}
+                  {a.mineApproved ? t('Signed') : busy === a.id ? t('Signing…') : mode === '1_PHASE' ? t('Sign tx') : t('Sign tx with HW wallet')}
                 </button>
               ) : (
                 /* §15 — only the phase-1 signers sign the tx; everyone else just waits. */
                 <span className="text-xs text-neutral-500">
-                  Only the {a.threshold} who authorized sign this tx — waiting for{' '}
-                  {a.committedBy.filter((n) => !a.signedBy.includes(n)).join(', ') || 'them'}.
+                  {t('Only the')} {a.threshold} {t('who authorized sign this tx — waiting for')}{' '}
+                  {a.committedBy.filter((n) => !a.signedBy.includes(n)).join(', ') || t('them')}.
                 </span>
               )}
               {/* §15.4 — any single board member can cancel a pending action.
@@ -328,7 +324,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
                   onClick={() => setCancelTarget(a)}
                   className="rounded border border-neutral-400 px-2.5 py-1 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
                 >
-                  Cancel
+                  {t('Cancel')}
                 </button>
               ) : null}
             </div>
@@ -345,7 +341,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
             ) : null}
             {a.status === 'CONFIRMED' && a.txHash ? (
               <div className="mt-2 rounded border border-emerald-300 bg-emerald-50 p-1.5 text-[11px] text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-                ✓ PAID on-chain — <a href={txUrl(a.txHash)} target="_blank" rel="noreferrer" className="font-mono underline">{a.txHash} ↗</a>
+                ✓ {t('PAID on-chain —')} <a href={txUrl(a.txHash)} target="_blank" rel="noreferrer" className="font-mono underline">{a.txHash} ↗</a>
               </div>
             ) : null}
           </li>
@@ -354,32 +350,32 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
       {/* History: past actions (executed / no longer awaiting signatures), read-only. */}
       {shownPast.length > 0 ? (
         <div className="mt-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">History</div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('History')}</div>
           <ul className="mt-1 space-y-1">
             {shownPast.map((a) => (
               <li key={a.id} className="rounded border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">{actionLabel(a)}</span>
-                  <span className="text-xs text-neutral-400">prepared {new Date(a.createdAt).toLocaleString()}</span>
+                  <span className="text-xs text-neutral-400">{t('prepared')} {new Date(a.createdAt).toLocaleString()}</span>
                   <span className="flex items-center gap-2 text-neutral-500">
                     {a.amountAda != null ? <span className="tabular-nums">{a.amountAda.toLocaleString()} ₳</span> : null}
-                    <span className="rounded bg-neutral-100 px-1.5 py-0.5 dark:bg-neutral-800">{a.status === 'CONFIRMED' ? 'PAID' : a.status}</span>
+                    <span className="rounded bg-neutral-100 px-1.5 py-0.5 dark:bg-neutral-800">{a.status === 'CONFIRMED' ? t('PAID') : a.status}</span>
                   </span>
                 </div>
                 {/* Consistent metadata on EVERY item: when · who signed · on-chain tx. */}
                 <div className="mt-1 text-[11px] text-neutral-500">
                   {new Date(a.createdAt).toLocaleString()}
                   {a.signedBy.length > 0
-                    ? <> · Signed by <span className="text-neutral-700 dark:text-neutral-300">{a.signedBy.join(', ')}</span></>
+                    ? <> · {t('Signed by')} <span className="text-neutral-700 dark:text-neutral-300">{a.signedBy.join(', ')}</span></>
                     : a.committedBy.length > 0
-                      ? <> · Authorized by {a.committedBy.join(', ')}</>
+                      ? <> · {t('Authorized by')} {a.committedBy.join(', ')}</>
                       : null}
                 </div>
                 <div className="mt-0.5 break-all text-[11px]">
                   {a.txHash ? (
-                    <span className="font-mono text-neutral-500">tx <a href={txUrl(a.txHash)} target="_blank" rel="noreferrer" className="underline">{a.txHash} ↗</a></span>
+                    <span className="font-mono text-neutral-500">{t('tx')} <a href={txUrl(a.txHash)} target="_blank" rel="noreferrer" className="underline">{a.txHash} ↗</a></span>
                   ) : (
-                    <span className="text-neutral-400">{a.status === 'FAILED' ? 'cancelled — no on-chain tx' : 'no on-chain tx recorded'}</span>
+                    <span className="text-neutral-400">{a.status === 'FAILED' ? t('cancelled — no on-chain tx') : t('no on-chain tx recorded')}</span>
                   )}
                 </div>
               </li>
@@ -391,10 +387,10 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
           and lands in the audit history alongside the cancelled action. */}
       <ConfirmDialog
         open={!!cancelTarget}
-        title="Cancel this action?"
+        title={t('Cancel this action?')}
         tone="danger"
-        confirmLabel="Cancel action"
-        cancelLabel="Keep it"
+        confirmLabel={t('Cancel action')}
+        cancelLabel={t('Keep it')}
         onCancel={() => { setCancelTarget(null); setCancelReason(''); }}
         onConfirm={async () => {
           if (!cancelTarget) return;
@@ -410,7 +406,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
             onChange?.();
             notifyTodoChanged();
           } catch (e) {
-            setErr(id, e instanceof Error ? e.message : 'cancel failed');
+            setErr(id, e instanceof Error ? e.message : t('cancel failed'));
           } finally {
             setBusy(null);
           }
@@ -418,9 +414,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
         message={
           <div className="space-y-2">
             <p>
-              This will mark the action as <strong>cancelled</strong> and move it to history. Any signatures
-              already collected are discarded. Once on-chain (broadcast), an action cannot be cancelled — only
-              pending ones.
+              {t('This will mark the action as')} <strong>{t('cancelled')}</strong> {t('and move it to history. Any signatures already collected are discarded. Once on-chain (broadcast), an action cannot be cancelled — only pending ones.')}
             </p>
             {cancelTarget ? (
               <p className="text-xs text-neutral-500">
@@ -429,16 +423,16 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
               </p>
             ) : null}
             <label className="block text-xs">
-              Reason (audit trail) — required, min 5 chars
+              {t('Reason (audit trail) — required, min 5 chars')}
               <textarea
                 value={cancelReason}
                 onChange={(e) => setCancelReason(e.target.value)}
-                placeholder="Why is this being cancelled?"
+                placeholder={t('Why is this being cancelled?')}
                 rows={2}
                 className="mt-1 block w-full resize-y rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
               />
               <span className={`text-[11px] ${cancelReason.trim().length >= 5 ? 'text-emerald-600' : 'text-neutral-500'}`}>
-                {cancelReason.trim().length}/5 min
+                {cancelReason.trim().length}/5 {t('min')}
               </span>
             </label>
           </div>
@@ -452,6 +446,7 @@ export function BoardActions({ onChange, history = false, refreshKey = 0, filter
  *  pledge/fee verify pattern: 700 ms debounce on a valid 64-hex paste, then a
  *  10 s poll until Koios returns paid=true and the backend flips CONFIRMED. */
 function PayoutTxVerify({ action, onChange }: { action: BoardAction; onChange: () => void }) {
+  const t = useT();
   const [tx, setTx] = useState(action.txHash ?? '');
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ status: string; paid?: boolean; found?: boolean; koiosAvailable?: boolean } | null>(null);
@@ -467,7 +462,7 @@ function PayoutTxVerify({ action, onChange }: { action: BoardAction; onChange: (
       setResult(r);
       if (r.status === 'CONFIRMED') { onChange(); notifyTreasuryChanged(); notifyTodoChanged(); }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'failed');
+      setError(e instanceof Error ? e.message : t('failed'));
     } finally {
       setBusy(false);
     }
@@ -484,31 +479,31 @@ function PayoutTxVerify({ action, onChange }: { action: BoardAction; onChange: (
 
   return (
     <div className="mt-2 rounded border border-neutral-300 bg-neutral-50 p-2 text-xs dark:border-neutral-700 dark:bg-neutral-900">
-      <div className="font-semibold text-neutral-700 dark:text-neutral-300">Broadcast tx hash</div>
+      <div className="font-semibold text-neutral-700 dark:text-neutral-300">{t('Broadcast tx hash')}</div>
       <div className="text-[11px] text-neutral-500">
-        After your wallet broadcasts the assembled multisig tx, paste the on-chain hash here. The platform verifies the payment and flips this action to PAID.
+        {t('After your wallet broadcasts the assembled multisig tx, paste the on-chain hash here. The platform verifies the payment and flips this action to PAID.')}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <input
           value={tx}
           onChange={(e) => { setTx(e.target.value); setResult(null); }}
-          placeholder="64-hex tx hash"
+          placeholder={t('64-hex tx hash')}
           className="flex-1 rounded border border-neutral-300 px-2 py-1 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900"
         />
         <button disabled={busy || !valid} onClick={submit} className="rounded border border-emerald-500 px-2 py-0.5 text-emerald-700 disabled:opacity-40 dark:text-emerald-300">
-          {busy ? '…' : 'Verify on-chain'}
+          {busy ? '…' : t('Verify on-chain')}
         </button>
       </div>
       {error ? <div className="mt-1 text-red-600">{error}</div> : null}
       {result ? (
         result.status === 'CONFIRMED' ? (
-          <div className="mt-1 text-emerald-700 dark:text-emerald-300">✓ Verified on-chain — milestone marked PAID.</div>
+          <div className="mt-1 text-emerald-700 dark:text-emerald-300">✓ {t('Verified on-chain — milestone marked PAID.')}</div>
         ) : !result.koiosAvailable ? (
-          <div className="mt-1 text-amber-700 dark:text-amber-300">⚠ Couldn&apos;t reach Koios. Re-checking every ~10 s.</div>
+          <div className="mt-1 text-amber-700 dark:text-amber-300">⚠ {t('Couldn\'t reach Koios. Re-checking every ~10 s.')}</div>
         ) : !result.found ? (
-          <div className="mt-1 text-amber-700 dark:text-amber-300">Tx not on-chain yet — re-checking every ~10 s.</div>
+          <div className="mt-1 text-amber-700 dark:text-amber-300">{t('Tx not on-chain yet — re-checking every ~10 s.')}</div>
         ) : (
-          <div className="mt-1 text-red-600">Tx didn&apos;t pay the destination address.</div>
+          <div className="mt-1 text-red-600">{t('Tx didn\'t pay the destination address.')}</div>
         )
       ) : null}
     </div>

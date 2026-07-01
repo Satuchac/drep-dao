@@ -133,10 +133,10 @@ export function RoundsSection() {
   if (open) {
     return (
       <section className="space-y-3">
-        <BackButton onBack={() => setParams({ round: null })} label="all rounds" />
+        <BackButton onBack={() => setParams({ round: null })} label={t('all rounds')} />
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-semibold">
-            Round #{open.number}
+            {t('Round')} #{open.number}
             {open.name ? ` — ${open.name}` : ''}
           </h2>
           <span className="text-xs text-neutral-500">{t('Round stage:')}</span>
@@ -185,13 +185,13 @@ export function RoundsSection() {
   return (
     <section className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Funding rounds (§5/§6)</h2>
+        <h2 className="text-lg font-semibold">{t('Funding rounds (§5/§6)')}</h2>
         {isBoard ? (
           <button
             onClick={() => setCreating((v) => !v)}
             className="rounded-md border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            {creating ? 'Cancel' : '+ Create round'}
+            {creating ? t('Cancel') : t('+ Create round')}
           </button>
         ) : null}
       </div>
@@ -200,7 +200,7 @@ export function RoundsSection() {
 
       <ul className="space-y-2">
         {rounds.length === 0 ? (
-          <li className="text-sm text-neutral-500">No rounds yet.</li>
+          <li className="text-sm text-neutral-500">{t('No rounds yet.')}</li>
         ) : (
           rounds.map((r) => (
             <li key={r.id}>
@@ -210,20 +210,20 @@ export function RoundsSection() {
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium">
-                    Round #{r.number}
+                    {t('Round')} #{r.number}
                     {r.name ? ` — ${r.name}` : ''}
                   </span>
                   <span className="flex items-center gap-2">
                     <span className={`text-xs font-medium ${r.active ? 'text-emerald-600' : 'text-neutral-400'}`}>
-                      {r.status === 'CLOSED' ? 'complete' : r.active ? 'active' : 'preparing'}
+                      {r.status === 'CLOSED' ? t('complete') : r.active ? t('active') : t('preparing')}
                     </span>
                     <span className="text-xs text-neutral-500">{t('Round stage:')}</span>
                     <StatusBadge status={r.status} />
                   </span>
                 </div>
                 <div className="mt-1 text-xs text-neutral-500">
-                  budget {r.budgetAda.toLocaleString()} ₳ · rewards {r.rewardsPoolAda.toLocaleString()} ₳ ·{' '}
-                  {r.categoryCount} categories · {r.eligibleCount} eligible DReps
+                  {t('budget')} {r.budgetAda.toLocaleString()} ₳ · {t('rewards')} {r.rewardsPoolAda.toLocaleString()} ₳ ·{' '}
+                  {r.categoryCount} {t('categories')} · {r.eligibleCount} {t('eligible DReps')}
                 </div>
                 <div className="mt-1.5">
                   <ProposalCounts counts={r.proposalCounts} activeStage={r.activeStageCounts} />
@@ -265,6 +265,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
  * or '' while incomplete — so the surrounding form logic is unchanged.
  */
 function DateTimeField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const tr = useT();
   const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value || '');
   // Local parts so a partial selection isn't lost before the whole value is valid.
   const [year, setYear] = useState(m ? m[1] : '');
@@ -291,15 +292,15 @@ function DateTimeField({ value, onChange }: { value: string; onChange: (v: strin
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
       <select className={field} value={month} onChange={(e) => { setMonth(e.target.value); emit(year, e.target.value, day, time); }}>
-        <option value="">Month</option>
-        {MONTHS.map((name, i) => <option key={name} value={pad(i + 1)}>{name}</option>)}
+        <option value="">{tr('Month')}</option>
+        {MONTHS.map((name, i) => <option key={name} value={pad(i + 1)}>{tr(name)}</option>)}
       </select>
       <select className={field} value={day} onChange={(e) => { setDay(e.target.value); emit(year, month, e.target.value, time); }}>
-        <option value="">Day</option>
+        <option value="">{tr('Day')}</option>
         {Array.from({ length: 31 }, (_, i) => pad(i + 1)).map((d) => <option key={d} value={d}>{Number(d)}</option>)}
       </select>
       <select className={field} value={year} onChange={(e) => { setYear(e.target.value); emit(e.target.value, month, day, time); }}>
-        <option value="">Year</option>
+        <option value="">{tr('Year')}</option>
         {years.map((y) => <option key={y} value={y}>{y}</option>)}
       </select>
       <input type="time" className={field} value={time} onChange={(e) => { setTime(e.target.value); emit(year, month, day, e.target.value); }} />
@@ -310,6 +311,7 @@ function DateTimeField({ value, onChange }: { value: string; onChange: (v: strin
 export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => void; initial?: RoundDetail; roundId?: string }) {
   // Edit mode when `roundId` is set: prefill from `initial`, keep category ids (update in place),
   // and don't touch the schedule (the round is mid-schedule; the stage-confirm flow handles dates).
+  const tr = useT();
   const editing = !!roundId;
   const s0 = initial?.settings;
   const sval = (k: keyof NonNullable<typeof s0>) => (s0 && s0[k] != null ? Number(s0[k]) : undefined);
@@ -385,8 +387,8 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
       if (!v?.startsAt || !v?.endsAt) continue;
       const start = new Date(v.startsAt).getTime();
       const end = new Date(v.endsAt).getTime();
-      if (end <= start) return `${s.label}: end must be after start.`;
-      if (prevEnd != null && start < prevEnd) return `${s.label} must start after the ${prevLabel} stage ends.`;
+      if (end <= start) return `${tr(s.label)}: ${tr('end must be after start.')}`;
+      if (prevEnd != null && start < prevEnd) return `${tr(s.label)} ${tr('must start after the')} ${tr(prevLabel)} ${tr('stage ends.')}`;
       prevEnd = end;
       prevLabel = s.label;
     }
@@ -399,10 +401,10 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
   const scheduleComplete = STAGE_DEFS.every((s) => !!sched[s.key]?.startsAt && !!sched[s.key]?.endsAt);
   const schedErr = scheduleError();
   const missing: string[] = [];
-  if (!nameOk) missing.push('round name');
-  if (!catsOk) missing.push('a name, description & allocation for every category');
-  if (!budgetMatches) missing.push('the full budget allocated');
-  if (!editing && !scheduleComplete) missing.push('all schedule dates');
+  if (!nameOk) missing.push(tr('round name'));
+  if (!catsOk) missing.push(tr('a name, description & allocation for every category'));
+  if (!budgetMatches) missing.push(tr('the full budget allocated'));
+  if (!editing && !scheduleComplete) missing.push(tr('all schedule dates'));
   if (!editing && schedErr) missing.push(schedErr);
   const canCreate = missing.length === 0;
 
@@ -410,7 +412,7 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
     e.preventDefault();
     setError(null);
     if (!budgetMatches) {
-      setError(`Categories must allocate the full budget (allocated ${allocated.toLocaleString()} ₳ of ${Number(budget).toLocaleString()} ₳).`);
+      setError(`${tr('Categories must allocate the full budget (allocated')} ${allocated.toLocaleString()} ₳ ${tr('of')} ${Number(budget).toLocaleString()} ₳).`);
       return;
     }
     if (!editing) {
@@ -422,12 +424,12 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
     }
     const fa = num('filterApprovalVotes');
     if (fa !== undefined && fa > filterReviewers) {
-      setError(`Filtering approvals (${fa}) can't exceed filtering reviewers (${filterReviewers}).`);
+      setError(`${tr('Filtering approvals')} (${fa}) ${tr("can't exceed filtering reviewers")} (${filterReviewers}).`);
       return;
     }
     const ma = num('milestoneApprovalVotes');
     if (ma !== undefined && ma > milestoneReviewers) {
-      setError(`Milestone approvals (${ma}) can't exceed milestone reviewers (${milestoneReviewers}).`);
+      setError(`${tr('Milestone approvals')} (${ma}) ${tr("can't exceed milestone reviewers")} (${milestoneReviewers}).`);
       return;
     }
     // §5.2 — a category's min ask must not exceed its max ask.
@@ -435,7 +437,7 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
       const mn = c.minAda != null && String(c.minAda) !== '' ? Number(c.minAda) : null;
       const mx = c.maxAda != null && String(c.maxAda) !== '' ? Number(c.maxAda) : null;
       if (mn != null && mx != null && mn > mx) {
-        setError(`Category "${c.name || '(unnamed)'}": min ask (${mn.toLocaleString()} ₳) can't exceed max ask (${mx.toLocaleString()} ₳).`);
+        setError(`${tr('Category')} "${c.name || tr('(unnamed)')}": ${tr('min ask')} (${mn.toLocaleString()} ₳) ${tr("can't exceed max ask")} (${mx.toLocaleString()} ₳).`);
         return;
       }
     }
@@ -478,7 +480,7 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
       }
       onDone();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'create failed');
+      setError(err instanceof Error ? err.message : tr('create failed'));
     } finally {
       setBusy(false);
     }
@@ -487,73 +489,73 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
   return (
     <form onSubmit={submit} className="space-y-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
       <div className="flex flex-wrap items-end gap-2">
-        <input className={field} placeholder="Round name" value={name} onChange={(e) => setName(e.target.value)} required />
-        <label className="text-sm">Budget ₳ <input type="number" className={`${field} w-32`} value={budget} onChange={(e) => setBudget(Number(e.target.value))} /></label>
-        <label className="text-sm">Rewards ₳ <input type="number" className={`${field} w-28`} value={rewards} onChange={(e) => setRewards(Number(e.target.value))} /></label>
+        <input className={field} placeholder={tr('Round name')} value={name} onChange={(e) => setName(e.target.value)} required />
+        <label className="text-sm">{tr('Budget')} ₳ <input type="number" className={`${field} w-32`} value={budget} onChange={(e) => setBudget(Number(e.target.value))} /></label>
+        <label className="text-sm">{tr('Rewards')} ₳ <input type="number" className={`${field} w-28`} value={rewards} onChange={(e) => setRewards(Number(e.target.value))} /></label>
       </div>
 
       <div>
         <div className="mb-1 flex items-center justify-between text-sm font-medium">
-          <span>Categories</span>
+          <span>{tr('Categories')}</span>
           <span className={`text-xs ${budgetMatches ? 'text-emerald-600' : 'text-amber-600'}`}>
-            allocated {allocated.toLocaleString()} / {Number(budget).toLocaleString()} ₳
-            {budgetMatches ? ' ✓' : ` (${(Number(budget) - allocated).toLocaleString()} ₳ unplanned)`}
+            {tr('allocated')} {allocated.toLocaleString()} / {Number(budget).toLocaleString()} ₳
+            {budgetMatches ? ' ✓' : ` (${(Number(budget) - allocated).toLocaleString()} ₳ ${tr('unplanned')})`}
           </span>
         </div>
         <div className="space-y-2">
           {cats.map((c, i) => (
             <div key={i} className="space-y-1 rounded border border-neutral-200 p-2 dark:border-neutral-800">
               <div className="flex flex-wrap items-center gap-2">
-                <input className={field} placeholder="category name" value={c.name} onChange={(e) => setCat(i, { name: e.target.value })} required />
+                <input className={field} placeholder={tr('category name')} value={c.name} onChange={(e) => setCat(i, { name: e.target.value })} required />
                 <select className={field} value={c.type ?? 'GRANT'} onChange={(e) => setCat(i, { type: e.target.value })}>
                   {CATEGORY_TYPES.map((t) => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
-                <label className="text-sm">alloc ₳ <input type="number" className={`${field} w-32`} value={c.allocatedAda} onChange={(e) => setCat(i, { allocatedAda: Number(e.target.value) })} /></label>
+                <label className="text-sm">{tr('alloc')} ₳ <input type="number" className={`${field} w-32`} value={c.allocatedAda} onChange={(e) => setCat(i, { allocatedAda: Number(e.target.value) })} /></label>
                 {cats.length > 1 ? (
-                  <button type="button" onClick={() => setCats((cs) => cs.filter((_, j) => j !== i))} className="text-xs text-red-600">remove</button>
+                  <button type="button" onClick={() => setCats((cs) => cs.filter((_, j) => j !== i))} className="text-xs text-red-600">{tr('remove')}</button>
                 ) : null}
               </div>
               {/* §5.2 — per-proposal funding-request bounds (blank = no bound). */}
               <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-                <label>min ask ₳ <input type="number" min={0} className={`${field} ml-1 w-28`} placeholder="no min" value={c.minAda ?? ''} onChange={(e) => setCat(i, { minAda: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
-                <label>max ask ₳ <input type="number" min={0} className={`${field} ml-1 w-28`} placeholder="no max" value={c.maxAda ?? ''} onChange={(e) => setCat(i, { maxAda: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
-                <span className="text-neutral-400">a proposal&apos;s requested amount must fit this range</span>
+                <label>{tr('min ask')} ₳ <input type="number" min={0} className={`${field} ml-1 w-28`} placeholder={tr('no min')} value={c.minAda ?? ''} onChange={(e) => setCat(i, { minAda: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
+                <label>{tr('max ask')} ₳ <input type="number" min={0} className={`${field} ml-1 w-28`} placeholder={tr('no max')} value={c.maxAda ?? ''} onChange={(e) => setCat(i, { maxAda: e.target.value === '' ? undefined : Number(e.target.value) })} /></label>
+                <span className="text-neutral-400">{tr("a proposal's requested amount must fit this range")}</span>
               </div>
               <MarkdownEditor
                 value={c.description ?? ''}
                 onChange={(val) => setCat(i, { description: val })}
-                title="Description"
-                subtitle="What this category funds. Supports bold, italics, headers, lists."
-                placeholder="description — what this category funds"
+                title={tr('Description')}
+                subtitle={tr('What this category funds. Supports bold, italics, headers, lists.')}
+                placeholder={tr('description — what this category funds')}
                 minRows={6}
                 required
               />
               <MarkdownEditor
                 value={c.conditions ?? ''}
                 onChange={(val) => setCat(i, { conditions: val })}
-                title="Conditions / restrictions"
-                hint="optional"
-                subtitle="Eligibility rules, who can apply, etc. Supports bold, italics, headers, lists."
-                placeholder="conditions / restrictions — eligibility rules, who can apply, etc."
+                title={tr('Conditions / restrictions')}
+                hint={tr('optional')}
+                subtitle={tr('Eligibility rules, who can apply, etc. Supports bold, italics, headers, lists.')}
+                placeholder={tr('conditions / restrictions — eligibility rules, who can apply, etc.')}
                 minRows={4}
               />
             </div>
           ))}
         </div>
-        <button type="button" onClick={() => setCats((cs) => [...cs, { name: '', type: 'GRANT', allocatedAda: 0, description: '' }])} className="mt-1 text-xs underline">+ add category</button>
+        <button type="button" onClick={() => setCats((cs) => [...cs, { name: '', type: 'GRANT', allocatedAda: 0, description: '' }])} className="mt-1 text-xs underline">{tr('+ add category')}</button>
       </div>
 
       {/* §12.2 — reward distribution: three sliders + a live visual of how the pool splits. */}
       <div className="space-y-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
-        <div className="text-sm font-medium">Reward distribution</div>
+        <div className="text-sm font-medium">{tr('Reward distribution')}</div>
 
         {/* Slider 1 — carve out the experts' direct cut first: DReps (left) vs Experts (right). */}
         <div>
           <div className="mb-1 flex items-center justify-between text-xs">
             <span className="font-medium text-emerald-700 dark:text-emerald-400">DReps {100 - rewardExpert}%</span>
-            <span className="font-medium text-purple-700 dark:text-purple-400">Experts {rewardExpert}%</span>
+            <span className="font-medium text-purple-700 dark:text-purple-400">{tr('Experts')} {rewardExpert}%</span>
           </div>
           <input
             type="range"
@@ -569,8 +571,8 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
         {/* Slider 2 — split the DReps' pool: Debate & Vote (left) vs Milestone review (right). */}
         <div>
           <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="font-medium text-emerald-700 dark:text-emerald-400">Debate &amp; Vote {rewardDvShare}%</span>
-            <span className="font-medium text-sky-700 dark:text-sky-400">Milestone review {100 - rewardDvShare}%</span>
+            <span className="font-medium text-emerald-700 dark:text-emerald-400">{tr('Debate & Vote')} {rewardDvShare}%</span>
+            <span className="font-medium text-sky-700 dark:text-sky-400">{tr('Milestone review')} {100 - rewardDvShare}%</span>
           </div>
           <input
             type="range"
@@ -586,9 +588,9 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
         {/* Slider 3 — within the Debate & Vote slice: Fixed (left) vs Bonus (right). */}
         <div>
           <div className="mb-1 flex items-center justify-between text-xs">
-            <span className="font-medium text-emerald-700 dark:text-emerald-400">Fixed {rewardFixed}%</span>
-            <span className="text-neutral-500">of the Debate &amp; Vote slice</span>
-            <span className="font-medium text-amber-700 dark:text-amber-400">Bonus {100 - rewardFixed}%</span>
+            <span className="font-medium text-emerald-700 dark:text-emerald-400">{tr('Fixed')} {rewardFixed}%</span>
+            <span className="text-neutral-500">{tr('of the Debate & Vote slice')}</span>
+            <span className="font-medium text-amber-700 dark:text-amber-400">{tr('Bonus')} {100 - rewardFixed}%</span>
           </div>
           <input
             type="range"
@@ -606,11 +608,11 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
 
       {/* §6/§12 — the rest of the per-round parameters, with an explanation under each. */}
       <div className="space-y-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
-        <div className="text-sm font-medium">Round parameters</div>
-        <p className="text-xs text-neutral-500">Leave a field blank to use the default (shown in each box).</p>
+        <div className="text-sm font-medium">{tr('Round parameters')}</div>
+        <p className="text-xs text-neutral-500">{tr('Leave a field blank to use the default (shown in each box).')}</p>
         {SETTING_GROUPS.map((g) => (
           <div key={g.title}>
-            <div className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">{g.title}</div>
+            <div className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">{tr(g.title)}</div>
             <div className="space-y-2">
               {g.fields.map((f) => {
                 const max = approvalMax(f.key);
@@ -618,7 +620,7 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
                 return (
                   <div key={f.key} className="flex items-start gap-2">
                     <label className="w-44 shrink-0 pt-1 text-xs text-neutral-600 dark:text-neutral-300" htmlFor={`rs-${f.key}`}>
-                      {f.label}{f.unit ? ` (${f.unit})` : ''}
+                      {tr(f.label)}{f.unit ? ` (${f.unit})` : ''}
                     </label>
                     <div className="min-w-0">
                       <span className="flex items-center gap-1">
@@ -630,9 +632,9 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
                             onChange={(e) => setSetting(f.key, e.target.value)}
                             className={`${field} w-28`}
                           >
-                            <option value="">default ({ROUND_SETTING_DEFAULTS[f.key] === 1 ? 'YES' : 'NO'})</option>
-                            <option value="1">YES</option>
-                            <option value="0">NO</option>
+                            <option value="">{tr('default')} ({ROUND_SETTING_DEFAULTS[f.key] === 1 ? tr('YES') : tr('NO')})</option>
+                            <option value="1">{tr('YES')}</option>
+                            <option value="0">{tr('NO')}</option>
                           </select>
                         ) : (
                           <input
@@ -646,7 +648,7 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
                             className={`${field} w-24`}
                           />
                         )}
-                        {!isBool && max !== undefined ? <span className="text-[10px] text-neutral-400">max {max}</span> : null}
+                        {!isBool && max !== undefined ? <span className="text-[10px] text-neutral-400">{tr('max')} {max}</span> : null}
                       </span>
                       <p className="mt-0.5 max-w-xl text-[11px] text-neutral-500">{ROUND_SETTING_META[f.key]}</p>
                     </div>
@@ -657,16 +659,15 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
           </div>
         ))}
         <p className="max-w-xl text-[11px] text-neutral-500">
-          Note: the minimum-word rationale requirements for YES / NO / ABSTAIN votes apply only to internal proposals,
-          not to this round&apos;s votes. They are configured in Platform setup.
+          {tr("Note: the minimum-word rationale requirements for YES / NO / ABSTAIN votes apply only to internal proposals, not to this round's votes. They are configured in Platform setup.")}
         </p>
       </div>
 
       {editing ? (
-        <p className="text-xs text-neutral-500">Schedule is managed via the per-stage confirm/launch controls above, so it isn&apos;t edited here.</p>
+        <p className="text-xs text-neutral-500">{tr("Schedule is managed via the per-stage confirm/launch controls above, so it isn't edited here.")}</p>
       ) : (
       <div>
-        <div className="mb-1 text-sm font-medium">Schedule (all stages, in order)</div>
+        <div className="mb-1 text-sm font-medium">{tr('Schedule (all stages, in order)')}</div>
         {STAGE_DEFS.map((s, idx) => {
           const v = sched[s.key];
           const startMs = v?.startsAt ? new Date(v.startsAt).getTime() : null;
@@ -679,8 +680,8 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
             if (pv?.endsAt) { prevEnd = new Date(pv.endsAt).getTime(); prevLabel = STAGE_DEFS[j].label; break; }
           }
           let warn: string | null = null;
-          if (startMs != null && endMs != null && endMs <= startMs) warn = 'End must be after the start.';
-          else if (startMs != null && prevEnd != null && startMs < prevEnd) warn = `Must start after the ${prevLabel} stage ends.`;
+          if (startMs != null && endMs != null && endMs <= startMs) warn = tr('End must be after the start.');
+          else if (startMs != null && prevEnd != null && startMs < prevEnd) warn = `${tr('Must start after the')} ${tr(prevLabel)} ${tr('stage ends.')}`;
           const dur = startMs != null && endMs != null && endMs > startMs ? durationLabel(endMs - startMs) : null;
           // §6 — when the user moves a stage so that it would overlap the next
           // one, cascade the shift forward (every later stage moves by the same
@@ -738,7 +739,7 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
           return (
             <div key={s.key} className={`py-2.5 text-sm ${idx > 0 ? 'border-t border-neutral-200 dark:border-neutral-800' : ''}`}>
               <div className="flex flex-wrap items-center gap-2">
-                <span className="w-28 shrink-0 font-medium text-neutral-600 dark:text-neutral-300">{s.label}</span>
+                <span className="w-28 shrink-0 font-medium text-neutral-600 dark:text-neutral-300">{tr(s.label)}</span>
                 <DateTimeField value={v?.startsAt ?? ''} onChange={(val) => setPart('startsAt', val)} />
                 <span className="text-neutral-400">→</span>
                 <DateTimeField value={v?.endsAt ?? ''} onChange={(val) => setPart('endsAt', val)} />
@@ -746,7 +747,7 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
               </div>
               {/* §6 — expected-days quick-set. */}
               <div className="ml-28 mt-1 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-                <span>Expected days</span>
+                <span>{tr('Expected days')}</span>
                 <input
                   type="number"
                   min={1}
@@ -754,12 +755,12 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
                   onChange={(e) => setDays((d) => ({ ...d, [s.key]: e.target.value }))}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyDays(); } }}
                   className="w-20 rounded border border-neutral-300 px-2 py-1 dark:border-neutral-700 dark:bg-neutral-900"
-                  placeholder="days"
+                  placeholder={tr('days')}
                 />
                 <button type="button" onClick={applyDays} className="rounded border border-emerald-500 px-2.5 py-1 font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950">
-                  Set
+                  {tr('Set')}
                 </button>
-                <span className="text-neutral-400">start = this stage&apos;s start (or the previous stage&apos;s end), end = start + days</span>
+                <span className="text-neutral-400">{tr("start = this stage's start (or the previous stage's end), end = start + days")}</span>
               </div>
               {warn ? <div className="ml-28 mt-0.5 text-xs font-medium text-red-600">{warn}</div> : null}
             </div>
@@ -770,7 +771,7 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {!canCreate ? (
-        <p className="text-xs text-amber-600">Still needed: {missing.join('; ')}.</p>
+        <p className="text-xs text-amber-600">{tr('Still needed:')} {missing.join('; ')}.</p>
       ) : null}
       <div className="flex items-center gap-3">
         <button
@@ -779,7 +780,7 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
           disabled={busy || !canCreate || (editing && !dirty)}
           className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
         >
-          {busy ? (editing ? 'Saving…' : 'Creating…') : editing ? 'Save changes' : 'Create round'}
+          {busy ? (editing ? tr('Saving…') : tr('Creating…')) : editing ? tr('Save changes') : tr('Create round')}
         </button>
         {/* §6 — Cancel discards unsaved edits (reverts to the last-saved baseline). */}
         {editing && dirty ? (
@@ -789,15 +790,15 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
             disabled={busy}
             className="rounded-md border border-neutral-300 px-3 py-2 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            Cancel
+            {tr('Cancel')}
           </button>
         ) : null}
         {/* §6 — saved/unsaved indicator (edit mode): "✓ Saved" while the form matches what's saved;
             it disappears the moment a field changes (replaced by "● Unsaved changes"). */}
         {editing ? (
           dirty
-            ? <span className="text-sm font-medium text-amber-600 dark:text-amber-400">● Unsaved changes</span>
-            : <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">✓ Saved</span>
+            ? <span className="text-sm font-medium text-amber-600 dark:text-amber-400">{tr('● Unsaved changes')}</span>
+            : <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{tr('✓ Saved')}</span>
         ) : null}
       </div>
     </form>
@@ -806,14 +807,15 @@ export function CreateRoundForm({ onDone, initial, roundId }: { onDone: () => vo
 
 /** §12.2 — live visual of how the reward pool splits across the three sliders. */
 function RewardBar({ pool, expertPct, dvShare, fixed }: { pool: number; expertPct: number; dvShare: number; fixed: number }) {
+  const tr = useT();
   // Single source of truth: the same computeRewardPoolsAda the backend's §12 computation
   // uses (experts carved out first → D&V fixed/bonus → milestone).
   const pools = computeRewardPoolsAda(pool, expertPct, dvShare, fixed);
   const segs = [
-    { label: 'Experts', ada: pools.expertAda, cls: 'bg-purple-500' },
-    { label: 'D&V fixed', ada: pools.dvFixedAda, cls: 'bg-emerald-500' },
-    { label: 'D&V bonus', ada: pools.dvBonusAda, cls: 'bg-amber-400' },
-    { label: 'Milestone review', ada: pools.milestoneAda, cls: 'bg-sky-500' },
+    { label: tr('Experts'), ada: pools.expertAda, cls: 'bg-purple-500' },
+    { label: tr('D&V fixed'), ada: pools.dvFixedAda, cls: 'bg-emerald-500' },
+    { label: tr('D&V bonus'), ada: pools.dvBonusAda, cls: 'bg-amber-400' },
+    { label: tr('Milestone review'), ada: pools.milestoneAda, cls: 'bg-sky-500' },
   ].map((s) => ({ ...s, pct: pool > 0 ? (s.ada / pool) * 100 : 0 }));
   const ada = (pct: number) => Math.round((pool * pct) / 100);
   return (
@@ -832,8 +834,7 @@ function RewardBar({ pool, expertPct, dvShare, fixed }: { pool: number; expertPc
         ))}
       </div>
       <p className="mt-1 text-[11px] text-neutral-500">
-        Distribution of the {pool.toLocaleString()} ₳ reward pool. Experts are paid directly (subtracted first);
-        milestone-review rewards are always fixed; the bonus applies only within Debate &amp; Vote.
+        {tr('Distribution of the')} {pool.toLocaleString()} ₳ {tr('reward pool. Experts are paid directly (subtracted first); milestone-review rewards are always fixed; the bonus applies only within Debate & Vote.')}
       </p>
     </div>
   );
@@ -863,6 +864,7 @@ function untilLabel(ms: number): string {
  *  A stage whose planned START has passed but which hasn't been started yet is
  *  OVERDUE — its date turns red and a banner tells the board to start it. */
 function StagesBar({ round }: { round: RoundDetail }) {
+  const tr = useT();
   const curIdx = STATUS_STAGE_IDX[round.status] ?? -1;
   const byKey = new Map(round.schedule.map((e) => [e.stageKey, e]));
   // Live clock so the countdown ticks (minute granularity is enough for days/hours).
@@ -893,12 +895,12 @@ function StagesBar({ round }: { round: RoundDetail }) {
         <div className="mb-1 text-sm">
           {curEnded ? (
             <span className="text-neutral-500">
-              <span className="font-medium text-amber-600 dark:text-amber-400">No stage active right now</span> · {curStage.label.toUpperCase()} ended {fmtShort(curEntry?.endsAt)}
+              <span className="font-medium text-amber-600 dark:text-amber-400">{tr('No stage active right now')}</span> · {tr(curStage.label).toUpperCase()} {tr('ended')} {fmtShort(curEntry?.endsAt)}
             </span>
           ) : (
             <>
-              <span className="font-medium text-neutral-700 dark:text-neutral-200">Current stage: {curStage.label.toUpperCase()}</span>
-              <span className="text-neutral-500"> · Ends in: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(curEndMs - now)}</span> <span className="text-xs">({fmtShort(curEntry?.endsAt)})</span></span>
+              <span className="font-medium text-neutral-700 dark:text-neutral-200">{tr('Current stage:')} {tr(curStage.label).toUpperCase()}</span>
+              <span className="text-neutral-500"> · {tr('Ends in:')} <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(curEndMs - now)}</span> <span className="text-xs">({fmtShort(curEntry?.endsAt)})</span></span>
             </>
           )}
         </div>
@@ -906,26 +908,26 @@ function StagesBar({ round }: { round: RoundDetail }) {
       {/* §6 — countdown to the next stage. */}
       {nextStage && nextStartMs != null ? (
         <div className="mb-1.5 text-sm">
-          <span className="font-medium text-neutral-700 dark:text-neutral-200">Next stage: {nextStage.label.toUpperCase()}</span>
+          <span className="font-medium text-neutral-700 dark:text-neutral-200">{tr('Next stage:')} {tr(nextStage.label).toUpperCase()}</span>
           {nextStartMs > now ? (
-            <span className="text-neutral-500"> · Starts in: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(nextStartMs - now)}</span> <span className="text-xs">({fmtShort(nextEntry?.startsAt)})</span></span>
+            <span className="text-neutral-500"> · {tr('Starts in:')} <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(nextStartMs - now)}</span> <span className="text-xs">({fmtShort(nextEntry?.startsAt)})</span></span>
           ) : (
-            <span className="font-medium text-red-600 dark:text-red-400"> · was due {fmtShort(nextEntry?.startsAt)} — overdue, start it now or move the date</span>
+            <span className="font-medium text-red-600 dark:text-red-400"> · {tr('was due')} {fmtShort(nextEntry?.startsAt)} {tr('— overdue, start it now or move the date')}</span>
           )}
         </div>
       ) : null}
       <div className="mb-1 flex flex-wrap items-center gap-2 text-xs font-medium text-neutral-600 dark:text-neutral-400">
-        <span>Stages</span>
+        <span>{tr('Stages')}</span>
         {curIdx === -1 ? (
-          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${overdueLabels.length ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' : 'bg-neutral-200 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-200'}`}>Preparation — not started yet</span>
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${overdueLabels.length ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300' : 'bg-neutral-200 text-neutral-600 dark:bg-neutral-700 dark:text-neutral-200'}`}>{tr('Preparation — not started yet')}</span>
         ) : curIdx >= STAGE_DEFS.length ? (
-          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">Closed</span>
+          <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{tr('Closed')}</span>
         ) : null}
       </div>
       {/* §6 — board alert: a stage is past its planned start but hasn't begun. */}
       {overdueLabels.length ? (
         <div className="mb-1.5 rounded-md border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-300">
-          ⚠ {overdueLabels.join(', ')} {overdueLabels.length === 1 ? 'was' : 'were'} due to start by the planned date but {overdueLabels.length === 1 ? 'hasn\'t' : 'haven\'t'} begun — the board should start {overdueLabels.length === 1 ? 'it' : 'them'} in Round control.
+          ⚠ {overdueLabels.map((l) => tr(l)).join(', ')} {overdueLabels.length === 1 ? tr('was') : tr('were')} {tr('due to start by the planned date but')} {overdueLabels.length === 1 ? tr("hasn't") : tr("haven't")} {tr('begun — the board should start')} {overdueLabels.length === 1 ? tr('it') : tr('them')} {tr('in Round control.')}
         </div>
       ) : null}
       <div className="flex flex-wrap gap-1.5">
@@ -947,7 +949,7 @@ function StagesBar({ round }: { round: RoundDetail }) {
             <div key={s.key} className={`min-w-[8.5rem] flex-1 rounded-md border px-2 py-1.5 ${cls}`}>
               <div className="flex items-center gap-1 text-xs font-semibold">
                 {state === 'current' ? <span className="text-emerald-600">●</span> : state === 'done' ? <span className="text-emerald-500">✓</span> : overdue ? <span className="text-red-600">⚠</span> : null}
-                {s.label}
+                {tr(s.label)}
               </div>
               {/* §6 — the date is red when the stage is overdue (should have started). */}
               <div className={`mt-0.5 text-[10px] leading-tight ${overdue ? 'font-semibold text-red-600 dark:text-red-400' : ''}`}>{fmtShort(e?.startsAt)} → {fmtShort(e?.endsAt)}</div>
@@ -968,6 +970,7 @@ const ada = (n: number) => `${n.toLocaleString()} ₳`;
  * (and switch from "in progress" to final) as the round advances through its stages.
  */
 function CategoryStatsBar({ stats, roundStatus, allocatedAda }: { stats: CategoryStats; roundStatus: string; allocatedAda: number }) {
+  const tr = useT();
   // Round stage order → which proposal stages have been reached, and whether each has ended.
   const idx = roundStageIndex(roundStatus);
   const reached = (stage: string) => idx >= roundStageIndex(stage);
@@ -1004,54 +1007,54 @@ function CategoryStatsBar({ stats, roundStatus, allocatedAda }: { stats: Categor
   return (
     <div className="mt-2 space-y-2">
       {/* SUBMISSION — always shown (zeros before anything is submitted). */}
-      <Row label="Submission">
-        <Stat label="Submitted" value={stats.submitted.toLocaleString()} />
-        <Stat label="Budget asked" value={ada(stats.totalRequestedAda)} />
-        <Stat label="Accepted" value={stats.accepted.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
-        <Stat label="Pending" value={stats.pending.toLocaleString()} tone="text-amber-600 dark:text-amber-400" />
+      <Row label={tr('Submission')}>
+        <Stat label={tr('Submitted')} value={stats.submitted.toLocaleString()} />
+        <Stat label={tr('Budget asked')} value={ada(stats.totalRequestedAda)} />
+        <Stat label={tr('Accepted')} value={stats.accepted.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
+        <Stat label={tr('Pending')} value={stats.pending.toLocaleString()} tone="text-amber-600 dark:text-amber-400" />
         {/* §3 — proposals that never entered the round: fee unpaid or board-rejected at the fee review. */}
-        <Stat label="Not accepted" value={stats.notAccepted.toLocaleString()} tone="text-red-600 dark:text-red-400" />
-        <Stat label="Submitters" value={stats.submitters.toLocaleString()} />
-        <Stat label="Fees collected" value={ada(stats.feesCollectedAda)} />
+        <Stat label={tr('Not accepted')} value={stats.notAccepted.toLocaleString()} tone="text-red-600 dark:text-red-400" />
+        <Stat label={tr('Submitters')} value={stats.submitters.toLocaleString()} />
+        <Stat label={tr('Fees collected')} value={ada(stats.feesCollectedAda)} />
       </Row>
 
       {reachedFiltering ? (
-        <Row label="Filtering" hint={filteringDone ? 'final' : 'in progress'}>
-          {!filteringDone ? <Stat label="Under review" value={stats.inFiltering.toLocaleString()} tone="text-amber-600 dark:text-amber-400" /> : null}
-          <Stat label={filteringDone ? 'Passed' : 'Passing'} value={stats.passedFiltering.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
-          <Stat label="Rejected" value={stats.rejectedFiltering.toLocaleString()} tone="text-red-600 dark:text-red-400" />
+        <Row label={tr('Filtering')} hint={filteringDone ? tr('final') : tr('in progress')}>
+          {!filteringDone ? <Stat label={tr('Under review')} value={stats.inFiltering.toLocaleString()} tone="text-amber-600 dark:text-amber-400" /> : null}
+          <Stat label={filteringDone ? tr('Passed') : tr('Passing')} value={stats.passedFiltering.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
+          <Stat label={tr('Rejected')} value={stats.rejectedFiltering.toLocaleString()} tone="text-red-600 dark:text-red-400" />
         </Row>
       ) : null}
 
       {reachedVote ? (
         <Row
-          label="Debate & Vote & Tally"
-          hint={voteFinal ? 'final' : tallyInProgress ? (stats.inVoting > 0 ? 'tie-breaks running' : 'results published') : 'in progress'}
+          label={tr('Debate & Vote & Tally')}
+          hint={voteFinal ? tr('final') : tallyInProgress ? (stats.inVoting > 0 ? tr('tie-breaks running') : tr('results published')) : tr('in progress')}
         >
           {/* TO VOTING — total that reached voting while ballots are open; the still-undecided
               (tie-break) remainder during the Tally; none once the result is final. */}
           <Stat
-            label="To voting"
+            label={tr('To voting')}
             value={(voteFinal ? 0 : tallyInProgress ? stats.inVoting : stats.passedFiltering).toLocaleString()}
             tone={tallyInProgress && stats.inVoting > 0 ? 'text-amber-600 dark:text-amber-400' : undefined}
           />
-          {voteLive ? <Stat label="In voting" value={stats.inVoting.toLocaleString()} tone="text-amber-600 dark:text-amber-400" /> : null}
-          <Stat label="Approved" value={stats.approved.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
-          <Stat label="Rejected" value={stats.rejectedVote.toLocaleString()} tone="text-red-600 dark:text-red-400" />
+          {voteLive ? <Stat label={tr('In voting')} value={stats.inVoting.toLocaleString()} tone="text-amber-600 dark:text-amber-400" /> : null}
+          <Stat label={tr('Approved')} value={stats.approved.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
+          <Stat label={tr('Rejected')} value={stats.rejectedVote.toLocaleString()} tone="text-red-600 dark:text-red-400" />
           {/* Budget committed to the approved proposals, and what's left for Funding. Shown once
               the result is taking shape (Tally / final) — during live voting nothing is approved yet. */}
-          {!voteLive ? <Stat label="Allocated" value={ada(stats.fundedAllocatedAda)} /> : null}
-          {!voteLive ? <Stat label="Unallocated" value={ada(unallocated)} tone={unallocated > 0 ? 'text-blue-600 dark:text-blue-400' : undefined} /> : null}
+          {!voteLive ? <Stat label={tr('Allocated')} value={ada(stats.fundedAllocatedAda)} /> : null}
+          {!voteLive ? <Stat label={tr('Unallocated')} value={ada(unallocated)} tone={unallocated > 0 ? 'text-blue-600 dark:text-blue-400' : undefined} /> : null}
         </Row>
       ) : null}
 
       {reachedFunding ? (
-        <Row label="Funding">
-          <Stat label="Funded" value={stats.approved.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
-          <Stat label="Allocated" value={ada(stats.fundedAllocatedAda)} />
-          <Stat label="Unallocated" value={ada(unallocated)} />
-          <Stat label="Milestones ✓" value={`${stats.milestonesApproved.toLocaleString()} / ${stats.milestonesTotal.toLocaleString()}`} />
-          <Stat label="Paid" value={stats.milestonesPaid.toLocaleString()} />
+        <Row label={tr('Funding')}>
+          <Stat label={tr('Funded')} value={stats.approved.toLocaleString()} tone="text-emerald-600 dark:text-emerald-400" />
+          <Stat label={tr('Allocated')} value={ada(stats.fundedAllocatedAda)} />
+          <Stat label={tr('Unallocated')} value={ada(unallocated)} />
+          <Stat label={tr('Milestones ✓')} value={`${stats.milestonesApproved.toLocaleString()} / ${stats.milestonesTotal.toLocaleString()}`} />
+          <Stat label={tr('Paid')} value={stats.milestonesPaid.toLocaleString()} />
         </Row>
       ) : null}
     </div>
@@ -1065,26 +1068,26 @@ function CategoryStatsBar({ stats, roundStatus, allocatedAda }: { stats: Categor
  * begins only once every quick poll has resolved.
  */
 function RoundTallyView({ roundId, roundStatus }: { roundId: string; roundStatus: string }) {
+  const tr = useT();
   const isFinal = dvDisplayPhase(roundStatus) === 'final'; // FUNDING / CLOSED
   return (
     <div className="space-y-4">
       <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-base font-semibold">Tally</h3>
+          <h3 className="text-base font-semibold">{tr('Tally')}</h3>
           <span className={`rounded px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${
             isFinal
               ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
               : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
           }`}>
-            {isFinal ? 'Results final' : 'Tally in progress'}
+            {isFinal ? tr('Results final') : tr('Tally in progress')}
           </span>
         </div>
         <p className="mt-1 text-xs text-neutral-500">
-          Voting has closed and the result is published. Only tie-break quick polls run in the
-          Tally — the board launches each one and eligible DReps pick the winner.{' '}
+          {tr('Voting has closed and the result is published. Only tie-break quick polls run in the Tally — the board launches each one and eligible DReps pick the winner.')}{' '}
           {isFinal
-            ? 'Every poll has resolved and the round has advanced to Funding, so this tally is final.'
-            : 'Funding begins only once every quick poll below has resolved.'}
+            ? tr('Every poll has resolved and the round has advanced to Funding, so this tally is final.')
+            : tr('Funding begins only once every quick poll below has resolved.')}
         </p>
       </section>
       {/* §9.2 — tie-break polls at the budget cliff (self-hides when the round had no ties). */}
@@ -1101,6 +1104,7 @@ function RoundTallyView({ roundId, roundStatus }: { roundId: string; roundStatus
  * red REJECTED. PENDING bars are shown too, so a tie at the budget cliff is visible.
  */
 function RoundVotingResultsView({ roundId }: { roundId: string }) {
+  const tr = useT();
   const [data, setData] = useState<VotingResults | null>(null);
   const [catId, setCatId] = useState<string | null>(null);
   // Poll so the view tracks live votes + the ongoing quick poll without a manual refresh.
@@ -1112,16 +1116,16 @@ function RoundVotingResultsView({ roundId }: { roundId: string }) {
     return () => { alive = false; clearInterval(id); };
   }, [roundId]);
 
-  if (!data) return <p className="text-sm text-neutral-500">Loading voting results…</p>;
+  if (!data) return <p className="text-sm text-neutral-500">{tr('Loading voting results…')}</p>;
   if (data.categories.length === 0) {
-    return <p className="text-sm text-neutral-500">No voting results yet — they appear once proposals reach Debate &amp; Vote.</p>;
+    return <p className="text-sm text-neutral-500">{tr('No voting results yet — they appear once proposals reach Debate & Vote.')}</p>;
   }
   const selected = data.categories.find((c) => (c.id ?? '') === (catId ?? '')) ?? data.categories[0];
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <label className="text-xs text-neutral-500">Category</label>
+        <label className="text-xs text-neutral-500">{tr('Category')}</label>
         <select
           value={selected.id ?? ''}
           onChange={(e) => setCatId(e.target.value)}
@@ -1129,7 +1133,7 @@ function RoundVotingResultsView({ roundId }: { roundId: string }) {
         >
           {data.categories.map((c) => (
             <option key={c.id ?? 'uncat'} value={c.id ?? ''}>
-              {c.name ?? 'Uncategorised'} ({c.proposals.length})
+              {c.name ?? tr('Uncategorised')} ({c.proposals.length})
             </option>
           ))}
         </select>
@@ -1140,12 +1144,12 @@ function RoundVotingResultsView({ roundId }: { roundId: string }) {
         remaining={selected.remainingAda}
       />
       <p className="text-xs text-neutral-500">
-        Every proposal that reached Debate &amp; Vote in this category, ordered most-supported → least.{' '}
-        <span className="font-medium text-emerald-700 dark:text-emerald-400">APPROVED</span> ·{' '}
-        <span className="font-medium text-amber-700 dark:text-amber-400">PENDING</span> (awaiting the tie-break quick poll) ·{' '}
-        <span className="font-medium text-red-700 dark:text-red-400">REJECTED</span>. Each card states why it landed there —
-        funded, <span className="font-medium">budget-cut</span> (passed the vote but the budget ran out at Tally),
-        below the approval <span className="font-medium">threshold</span>, or <span className="font-medium">no voting power</span> (no decisive vote cast).
+        {tr('Every proposal that reached Debate & Vote in this category, ordered most-supported → least.')}{' '}
+        <span className="font-medium text-emerald-700 dark:text-emerald-400">{tr('APPROVED')}</span> ·{' '}
+        <span className="font-medium text-amber-700 dark:text-amber-400">{tr('PENDING')}</span> {tr('(awaiting the tie-break quick poll)')} ·{' '}
+        <span className="font-medium text-red-700 dark:text-red-400">{tr('REJECTED')}</span>. {tr('Each card states why it landed there —')}
+        {' '}{tr('funded,')} <span className="font-medium">{tr('budget-cut')}</span> {tr('(passed the vote but the budget ran out at Tally),')}
+        {' '}{tr('below the approval')} <span className="font-medium">{tr('threshold')}</span>, {tr('or')} <span className="font-medium">{tr('no voting power')}</span> {tr('(no decisive vote cast).')}
       </p>
       <div className="space-y-3">
         {selected.proposals.map((p) => <VotingResultCard key={p.id} p={p} />)}
@@ -1167,21 +1171,22 @@ const OUTCOME_CHIP: Record<string, string> = {
 
 /** §9 — category budget: total, what's committed to funded proposals, and the unallocated remainder. */
 function CategoryBudgetBar({ budget, allocated, remaining }: { budget: number; allocated: number; remaining: number }) {
+  const tr = useT();
   const usedPct = budget > 0 ? Math.min(100, (allocated / budget) * 100) : 0;
   const overspent = remaining < 0;
   return (
     <div className="rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-        <span className="font-medium">Category budget</span>
+        <span className="font-medium">{tr('Category budget')}</span>
         <span className="tabular-nums font-semibold text-blue-600 dark:text-blue-400">{ada(budget)}</span>
       </div>
       <div className="mt-2 h-3 w-full overflow-hidden rounded bg-neutral-200 dark:bg-neutral-800">
         <div className={`h-full ${overspent ? 'bg-red-500' : 'bg-emerald-500'}`} style={{ width: `${usedPct}%` }} />
       </div>
       <div className="mt-1 flex flex-wrap justify-between gap-2 text-xs">
-        <span className="text-emerald-700 dark:text-emerald-400">Allocated {ada(allocated)} ({Math.round(usedPct)}%)</span>
+        <span className="text-emerald-700 dark:text-emerald-400">{tr('Allocated')} {ada(allocated)} ({Math.round(usedPct)}%)</span>
         <span className={remaining > 0 ? 'text-neutral-500' : 'text-neutral-400'}>
-          {overspent ? `Over budget by ${ada(-remaining)}` : `Unallocated ${ada(remaining)}`}
+          {overspent ? `${tr('Over budget by')} ${ada(-remaining)}` : `${tr('Unallocated')} ${ada(remaining)}`}
         </span>
       </div>
     </div>
@@ -1206,22 +1211,23 @@ const AMOUNT_CLS: Record<string, string> = {
 };
 
 function VotingResultCard({ p }: { p: VotingResultProposal }) {
+  const tr = useT();
   const note = BUDGET_NOTE[p.budgetOutcome] ?? BUDGET_NOTE.votes;
   return (
     <section className={`rounded-lg border p-3 ${OUTCOME_BG[p.outcome] ?? 'border-neutral-200'}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="flex items-center gap-2">
-          <span className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${OUTCOME_CHIP[p.outcome]}`}>{p.outcome}</span>
+          <span className={`rounded px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${OUTCOME_CHIP[p.outcome]}`}>{tr(p.outcome)}</span>
           <span className="font-medium">{p.publicId ? `${p.publicId} · ` : ''}{p.title}</span>
         </span>
         <span className={`text-xs font-semibold ${AMOUNT_CLS[p.budgetOutcome] ?? 'text-blue-600 dark:text-blue-400'}`}>{ada(p.requestedAmountAda)}</span>
       </div>
       <div className="mt-1 text-xs text-neutral-500">
-        {p.cast}/{p.eligible} eligible DReps voted · {p.ratioPct}% of participating power (threshold {p.thresholdPct}%)
-        {p.inQuickPoll ? <span className="ml-1 text-amber-600 dark:text-amber-400">· tie-break quick poll in progress</span> : null}
+        {p.cast}/{p.eligible} {tr('eligible DReps voted')} · {p.ratioPct}% {tr('of participating power (threshold')} {p.thresholdPct}%)
+        {p.inQuickPoll ? <span className="ml-1 text-amber-600 dark:text-amber-400">· {tr('tie-break quick poll in progress')}</span> : null}
       </div>
       {/* §9 — budget verdict: was the category budget enough to fund this proposal? */}
-      <div className={`mt-1 text-xs font-medium ${note.cls}`}>{note.label}</div>
+      <div className={`mt-1 text-xs font-medium ${note.cls}`}>{tr(note.label)}</div>
       <PowerBar
         yes={p.yesPower}
         no={p.noPower}
@@ -1236,18 +1242,19 @@ function VotingResultCard({ p }: { p: VotingResultProposal }) {
 
 /** §6 — read-only Categories tab: allocation, min/max ask, and description. */
 function RoundCategoriesView({ roundId }: { roundId: string }) {
+  const tr = useT();
   const [round, setRound] = useState<RoundDetail | null>(null);
   useEffect(() => {
     roundsApi.get(roundId).then(setRound).catch(() => setRound(null));
   }, [roundId]);
   if (!round) return null;
-  if (round.categories.length === 0) return <p className="text-sm text-neutral-500">No categories defined for this round.</p>;
+  if (round.categories.length === 0) return <p className="text-sm text-neutral-500">{tr('No categories defined for this round.')}</p>;
   const totalAlloc = round.categories.reduce((s, c) => s + c.allocatedAda, 0);
   return (
     <div className="space-y-3">
       <p className="text-xs text-neutral-500">
-        {round.categories.length} categor{round.categories.length === 1 ? 'y' : 'ies'} · allocated{' '}
-        {totalAlloc.toLocaleString()} ₳ of {round.budgetAda.toLocaleString()} ₳ budget.
+        {round.categories.length} {round.categories.length === 1 ? tr('category') : tr('categories')} · {tr('allocated')}{' '}
+        {totalAlloc.toLocaleString()} ₳ {tr('of')} {round.budgetAda.toLocaleString()} ₳ {tr('budget.')}
       </p>
       {round.categories.map((c) => (
         <section key={c.id} className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
@@ -1256,23 +1263,23 @@ function RoundCategoriesView({ roundId }: { roundId: string }) {
               <span className="font-medium">{c.name}</span>
               <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{c.type}</span>
             </span>
-            <span className="text-sm tabular-nums text-neutral-600 dark:text-neutral-300">{c.allocatedAda.toLocaleString()} ₳ allocated</span>
+            <span className="text-sm tabular-nums text-neutral-600 dark:text-neutral-300">{c.allocatedAda.toLocaleString()} ₳ {tr('allocated')}</span>
           </div>
           <div className="mt-1 text-xs text-neutral-500">
-            Ask range:{' '}
+            {tr('Ask range:')}{' '}
             {c.minAda != null || c.maxAda != null
-              ? `${c.minAda != null ? `${c.minAda.toLocaleString()} ₳` : 'no min'} – ${c.maxAda != null ? `${c.maxAda.toLocaleString()} ₳` : 'no max'}`
-              : 'any amount'}
+              ? `${c.minAda != null ? `${c.minAda.toLocaleString()} ₳` : tr('no min')} – ${c.maxAda != null ? `${c.maxAda.toLocaleString()} ₳` : tr('no max')}`
+              : tr('any amount')}
           </div>
           <CategoryStatsBar stats={c.stats} roundStatus={round.status} allocatedAda={c.allocatedAda} />
           {/* — description / conditions follow — */}
           <div className="mt-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Description</div>
+            <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{tr('Description')}</div>
             <ClampedMarkdown className="mt-0.5 text-sm text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{c.description ?? ''}</ClampedMarkdown>
           </div>
           {c.conditions ? (
             <div className="mt-2">
-              <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Conditions</div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{tr('Conditions')}</div>
               <ClampedMarkdown className="mt-0.5 text-sm text-neutral-700 dark:text-neutral-300" maxLines={15}>{c.conditions}</ClampedMarkdown>
             </div>
           ) : null}
@@ -1283,6 +1290,7 @@ function RoundCategoriesView({ roundId }: { roundId: string }) {
 }
 
 function RoundSettingsView({ roundId }: { roundId: string }) {
+  const tr = useT();
   const [round, setRound] = useState<RoundDetail | null>(null);
   useEffect(() => {
     roundsApi.get(roundId).then(setRound).catch(() => setRound(null));
@@ -1296,30 +1304,30 @@ function RoundSettingsView({ roundId }: { roundId: string }) {
     <div className="space-y-3 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
       {/* §6 — stages bar on top: where the round currently is. */}
       <StagesBar round={round} />
-      <div className="border-t border-neutral-200 pt-3 text-sm font-medium dark:border-neutral-800">Round setup</div>
+      <div className="border-t border-neutral-200 pt-3 text-sm font-medium dark:border-neutral-800">{tr('Round setup')}</div>
       <div className="text-xs text-neutral-500">
-        budget {round.budgetAda.toLocaleString()} ₳ · rewards {round.rewardsPoolAda.toLocaleString()} ₳ ·{' '}
-        {round.categories.length} categories · {round.eligibleCount} eligible DReps
+        {tr('budget')} {round.budgetAda.toLocaleString()} ₳ · {tr('rewards')} {round.rewardsPoolAda.toLocaleString()} ₳ ·{' '}
+        {round.categories.length} {tr('categories')} · {round.eligibleCount} {tr('eligible DReps')}
       </div>
 
       <div>
-        <div className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">Reward distribution</div>
+        <div className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">{tr('Reward distribution')}</div>
         <RewardBar pool={round.rewardsPoolAda} expertPct={resolved('rewardExpertSharePct')} dvShare={resolved('rewardDvSharePct')} fixed={resolved('rewardFixedPct')} />
       </div>
 
       {SETTING_GROUPS.map((g) => (
         <div key={g.title}>
-          <div className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">{g.title}</div>
+          <div className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-400">{tr(g.title)}</div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
             {g.fields.map((f) => (
               <span key={f.key} className="text-neutral-600 dark:text-neutral-300" title={ROUND_SETTING_META[f.key]}>
-                {f.label}:{' '}
+                {tr(f.label)}:{' '}
                 <span className="font-medium">
                   {ROUND_SETTING_BOOLEAN.has(f.key)
-                    ? (resolved(f.key) === 1 ? 'YES' : 'NO')
+                    ? (resolved(f.key) === 1 ? tr('YES') : tr('NO'))
                     : `${resolved(f.key).toLocaleString()}${f.unit === '%' ? '%' : f.unit === '₳' ? ' ₳' : ''}`}
                 </span>
-                {s[f.key] == null ? <span className="ml-0.5 text-[10px] text-neutral-400">(default)</span> : null}
+                {s[f.key] == null ? <span className="ml-0.5 text-[10px] text-neutral-400">{tr('(default)')}</span> : null}
               </span>
             ))}
           </div>

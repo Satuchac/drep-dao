@@ -72,9 +72,9 @@ export function ActiveProposals() {
           <option value="all">{t('All rounds')}</option>
           {ordered.map((r) => (
             <option key={r.id} value={r.id}>
-              Round #{r.number}
+              {t('Round')} #{r.number}
               {r.name ? ` — ${r.name}` : ''}
-              {r.status === 'SUBMISSION' ? ' · submission' : r.active ? ' · active' : ''}
+              {r.status === 'SUBMISSION' ? ` · ${t('submission')}` : r.active ? ` · ${t('active')}` : ''}
             </option>
           ))}
         </select>

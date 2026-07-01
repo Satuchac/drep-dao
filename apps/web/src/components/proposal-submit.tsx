@@ -14,6 +14,7 @@ import {
 } from '@/lib/api';
 import { useExplorer } from '@/lib/explorer';
 import { useUrlNav } from '@/lib/use-url-nav';
+import { useT } from '@/lib/prefs-context';
 import { ProposalDetail } from './proposal-detail';
 import { MarkdownEditor, MarkdownCollapseContext } from './markdown';
 import { CopyButton } from './copy-button';
@@ -21,6 +22,7 @@ import { CopyButton } from './copy-button';
 type Cat = { id: string; name: string; minAda: number | null; maxAda: number | null; conditions: string | null };
 
 export function ProposalSubmit() {
+  const tr = useT();
   const { cfg } = useExplorer();
   const { setParams } = useUrlNav();
   // §10 — "My proposals" is split by type: Funding vs the user's own Internal proposals.
@@ -95,25 +97,25 @@ export function ProposalSubmit() {
     if (!triedSubmit || minTitleChars <= 0) return null;
     const n = text.trim().length;
     if (n >= minTitleChars) return null;
-    return <span className="ml-2 text-[11px] font-semibold text-red-600 dark:text-red-400">needs {minTitleChars - n} more character{minTitleChars - n === 1 ? '' : 's'}</span>;
+    return <span className="ml-2 text-[11px] font-semibold text-red-600 dark:text-red-400">{tr('needs')} {minTitleChars - n} {minTitleChars - n === 1 ? tr('more character') : tr('more characters')}</span>;
   };
   const msTitleHint = (text: string) => {
     if (!triedSubmit || minMsTitleWords <= 0) return null;
     const n = wc(text);
     if (n >= minMsTitleWords) return null;
-    return <span className="ml-2 text-[11px] font-semibold text-red-600 dark:text-red-400">needs {minMsTitleWords - n} more word{minMsTitleWords - n === 1 ? '' : 's'}</span>;
+    return <span className="ml-2 text-[11px] font-semibold text-red-600 dark:text-red-400">{tr('needs')} {minMsTitleWords - n} {minMsTitleWords - n === 1 ? tr('more word') : tr('more words')}</span>;
   };
   // §3 — mandatory text fields governed by the word min/max (titles are checked separately:
   // proposal title by chars, milestone titles by minimumMilestoneTitleLen words).
   const mandatoryFields: [string, string][] = [
-    ['Pitch / summary', content],
-    ['Expected ecosystem impact', ecosystemImpact],
-    ['Success metrics / KPIs', successMetrics],
-    ['Cost breakdown', costBreakdown],
-    ['Team info', teamInfo],
+    [tr('Pitch / summary'), content],
+    [tr('Expected ecosystem impact'), ecosystemImpact],
+    [tr('Success metrics / KPIs'), successMetrics],
+    [tr('Cost breakdown'), costBreakdown],
+    [tr('Team info'), teamInfo],
     ...ms.flatMap((m, i): [string, string][] => [
-      [`Milestone ${i + 1} description`, m.description ?? ''],
-      [`Milestone ${i + 1} acceptance criteria`, m.acceptanceCriteria ?? ''],
+      [`${tr('Milestone')} ${i + 1} ${tr('description')}`, m.description ?? ''],
+      [`${tr('Milestone')} ${i + 1} ${tr('acceptance criteria')}`, m.acceptanceCriteria ?? ''],
     ]),
   ];
   const shortFields = minWords > 0 ? mandatoryFields.filter(([, t]) => wc(t) < minWords) : [];
@@ -180,23 +182,23 @@ export function ProposalSubmit() {
   const belowMin = selectedCat?.minAda != null && Number(amount) < selectedCat.minAda;
   const aboveMax = selectedCat?.maxAda != null && Number(amount) > selectedCat.maxAda;
   const draftMissing: string[] = [];
-  if (!roundId) draftMissing.push('select a round');
-  if (!categoryId) draftMissing.push('select a category');
-  if (!title.trim()) draftMissing.push('add a title');
-  if (!content.trim()) draftMissing.push('write the pitch');
-  if (!(Number(amount) > 0)) draftMissing.push('set a requested amount');
-  if (belowMin) draftMissing.push(`requested amount is below the category minimum (${selectedCat!.minAda!.toLocaleString()} ₳)`);
-  if (aboveMax) draftMissing.push(`requested amount is above the category maximum (${selectedCat!.maxAda!.toLocaleString()} ₳)`);
-  if (ms.some((m) => !(m.title ?? '').trim())) draftMissing.push('give every milestone a title');
-  if (ms.some((m) => !m.description.trim())) draftMissing.push('describe every milestone');
-  if (!milestonesMatch) draftMissing.push(`milestones must sum to the requested amount (now ${msSum.toLocaleString()} of ${Number(amount).toLocaleString()} ₳)`);
+  if (!roundId) draftMissing.push(tr('select a round'));
+  if (!categoryId) draftMissing.push(tr('select a category'));
+  if (!title.trim()) draftMissing.push(tr('add a title'));
+  if (!content.trim()) draftMissing.push(tr('write the pitch'));
+  if (!(Number(amount) > 0)) draftMissing.push(tr('set a requested amount'));
+  if (belowMin) draftMissing.push(`${tr('requested amount is below the category minimum')} (${selectedCat!.minAda!.toLocaleString()} ₳)`);
+  if (aboveMax) draftMissing.push(`${tr('requested amount is above the category maximum')} (${selectedCat!.maxAda!.toLocaleString()} ₳)`);
+  if (ms.some((m) => !(m.title ?? '').trim())) draftMissing.push(tr('give every milestone a title'));
+  if (ms.some((m) => !m.description.trim())) draftMissing.push(tr('describe every milestone'));
+  if (!milestonesMatch) draftMissing.push(`${tr('milestones must sum to the requested amount')} (${tr('now')} ${msSum.toLocaleString()} ${tr('of')} ${Number(amount).toLocaleString()} ₳)`);
   // §3 — when the team opts in to a pledge, the amount must clear the round's
   // threshold and a return-method description is required.
   if (pledgeEnabled) {
     const minPledge = roundSettings?.pledgeThresholdAda ?? ROUND_SETTING_DEFAULTS.pledgeThresholdAda;
-    if (!(pledgeAmount > 0)) draftMissing.push('set the pledge amount');
-    else if (minPledge > 0 && pledgeAmount < minPledge) draftMissing.push(`pledge must be ≥ ${minPledge.toLocaleString()} ₳ (round minimum)`);
-    if (!pledgeReturnMethod.trim()) draftMissing.push('describe how the pledge will be returned');
+    if (!(pledgeAmount > 0)) draftMissing.push(tr('set the pledge amount'));
+    else if (minPledge > 0 && pledgeAmount < minPledge) draftMissing.push(`${tr('pledge must be ≥')} ${minPledge.toLocaleString()} ₳ (${tr('round minimum')})`);
+    if (!pledgeReturnMethod.trim()) draftMissing.push(tr('describe how the pledge will be returned'));
   }
   const draftReady = draftMissing.length === 0;
 
@@ -239,15 +241,15 @@ export function ProposalSubmit() {
   const inputsOk = () => {
     const sum = ms.reduce((a, m) => a + Number(m.amountAda), 0);
     if (sum !== Number(amount)) {
-      setError(`milestones (${sum}) must sum to requested amount (${amount})`);
+      setError(`${tr('milestones')} (${sum}) ${tr('must sum to requested amount')} (${amount})`);
       return false;
     }
     if (selectedCat?.minAda != null && Number(amount) < selectedCat.minAda) {
-      setError(`requested ${Number(amount).toLocaleString()} ₳ is below "${selectedCat.name}" minimum ask of ${selectedCat.minAda.toLocaleString()} ₳`);
+      setError(`${tr('requested')} ${Number(amount).toLocaleString()} ₳ ${tr('is below')} "${selectedCat.name}" ${tr('minimum ask of')} ${selectedCat.minAda.toLocaleString()} ₳`);
       return false;
     }
     if (selectedCat?.maxAda != null && Number(amount) > selectedCat.maxAda) {
-      setError(`requested ${Number(amount).toLocaleString()} ₳ exceeds "${selectedCat.name}" maximum ask of ${selectedCat.maxAda.toLocaleString()} ₳`);
+      setError(`${tr('requested')} ${Number(amount).toLocaleString()} ₳ ${tr('exceeds')} "${selectedCat.name}" ${tr('maximum ask of')} ${selectedCat.maxAda.toLocaleString()} ₳`);
       return false;
     }
     return true;
@@ -328,7 +330,7 @@ export function ProposalSubmit() {
       setPledgeReturnMethod(p.pledgeReturnMethod ?? '');
       setOpen(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'could not load draft');
+      setError(err instanceof Error ? err.message : tr('could not load draft'));
     }
   };
 
@@ -342,14 +344,14 @@ export function ProposalSubmit() {
       const d = editingId ? await proposalsApi.update(editingId, updatePayload()) : await proposalsApi.create(buildInput());
       setMsg(
         editingStatus && editingStatus !== 'DRAFT'
-          ? `Saved your changes to "${d.title}".`
-          : `Saved draft "${d.title}" — it stays private until you submit and a board member confirms your fee.`,
+          ? `${tr('Saved your changes to')} "${d.title}".`
+          : `${tr('Saved draft')} "${d.title}" — ${tr('it stays private until you submit and a board member confirms your fee.')}`,
       );
       setOpen(false);
       reset();
       loadMine();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'save failed');
+      setError(err instanceof Error ? err.message : tr('save failed'));
     } finally {
       setBusy(false);
     }
@@ -368,7 +370,7 @@ export function ProposalSubmit() {
     // word-count summary below the form drive the fix, updating as they edit.
     if (shortFields.length > 0 || overFields.length > 0) return;
     if (feeRequired && !fee.trim()) {
-      setError('Paste the submission-fee transaction hash to submit (or use Save Draft).');
+      setError(tr('Paste the submission-fee transaction hash to submit (or use Save Draft).'));
       return;
     }
     setBusy(true);
@@ -377,14 +379,14 @@ export function ProposalSubmit() {
       const submitted = await proposalsApi.submit(draft.id, fee.trim());
       setMsg(
         feeRequired
-          ? `Submitted "${submitted.title}" — fee ${submitted.submissionFeeAda} ₳. A board member verifies your payment on-chain; it becomes public once confirmed.`
-          : `Submitted "${submitted.title}" — no submission fee for this proposal type, so it's now live and public.`,
+          ? `${tr('Submitted')} "${submitted.title}" — ${tr('fee')} ${submitted.submissionFeeAda} ₳. ${tr('A board member verifies your payment on-chain; it becomes public once confirmed.')}`
+          : `${tr('Submitted')} "${submitted.title}" — ${tr("no submission fee for this proposal type, so it's now live and public.")}`,
       );
       setOpen(false);
       reset();
       loadMine();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'submission failed');
+      setError(err instanceof Error ? err.message : tr('submission failed'));
     } finally {
       setBusy(false);
     }
@@ -423,16 +425,16 @@ export function ProposalSubmit() {
   // address is mandatory to submit (refunds + budget payout go there); when the
   // round charges a fee, the on-chain check must have come back fully-paid.
   const submitMissing: string[] = [];
-  if (!payoutAddress.trim()) submitMissing.push('add a payout / refund address (Cardano)');
+  if (!payoutAddress.trim()) submitMissing.push(tr('add a payout / refund address (Cardano)'));
   if (feeRequired && !feeVerification?.fullyPaid) {
-    submitMissing.push('verify the submission-fee payment on-chain (paste the tx hash, click Verify, and wait for the ✓)');
+    submitMissing.push(tr('verify the submission-fee payment on-chain (paste the tx hash, click Verify, and wait for the ✓)'));
   }
   const submitReady = draftReady && submitMissing.length === 0;
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-base font-semibold">Funding proposals</h3>
+        <h3 className="text-base font-semibold">{tr('Funding proposals')}</h3>
         {/* §3/§19 — a NEW proposal can only be created while a round's Submission stage is open
             (`rounds` holds only SUBMISSION rounds). Once it closes the button is hidden — the
             backend rejects late creation too. The Cancel state stays available to close an open form. */}
@@ -441,25 +443,25 @@ export function ProposalSubmit() {
             onClick={() => { if (open) { setOpen(false); reset(); } else { reset(); setOpen(true); } }}
             className="rounded-md border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            {open ? 'Cancel' : '+ New proposal'}
+            {open ? tr('Cancel') : tr('+ New proposal')}
           </button>
         ) : myTab === 'FUNDING' ? (
           // Funding-only note — internal proposals aren't tied to a round, so it'd be misleading on
           // the Internal tab (DReps can submit those any time from the Internal proposals tab).
-          <span className="text-xs text-neutral-500">New proposals open during a round&apos;s Submission stage.</span>
+          <span className="text-xs text-neutral-500">{tr('New proposals open during a round’s Submission stage.')}</span>
         ) : null}
       </div>
 
       {msg ? <div className="mt-2 text-sm text-emerald-600">{msg}</div> : null}
       {open && editingId && editingStatus === 'REJECTED' ? (
         <div className="mt-2 rounded border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/30">
-          <div className="text-sm font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Rejected</div>
+          <div className="text-sm font-bold uppercase tracking-wide text-red-700 dark:text-red-400">{tr('Rejected')}</div>
           <div className="text-xs text-red-800 dark:text-red-300">
-            Fix the proposal — including the fee tx — then <strong>Re-submit</strong> to send it back for review.
+            {tr('Fix the proposal — including the fee tx — then')} <strong>{tr('Re-submit')}</strong> {tr('to send it back for review.')}
           </div>
           {editingFeedback ? (
             <div className="mt-1 border-t border-red-200 pt-1 dark:border-red-900">
-              <span className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Feedback from the reviewer:</span>
+              <span className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">{tr('Feedback from the reviewer:')}</span>
               <div className="whitespace-pre-wrap text-xs text-red-800 dark:text-red-300">{editingFeedback}</div>
             </div>
           ) : null}
@@ -467,15 +469,14 @@ export function ProposalSubmit() {
       ) : open && editingId ? (
         <div className="mt-2 text-sm font-medium text-neutral-600 dark:text-neutral-400">
           {editingStatus === 'PENDING'
-            ? 'Editing a submitted proposal (awaiting fee confirmation) — change any field, then Save changes.'
-            : 'Editing your draft — save your changes below.'}
+            ? tr('Editing a submitted proposal (awaiting fee confirmation) — change any field, then Save changes.')
+            : tr('Editing your draft — save your changes below.')}
         </div>
       ) : null}
 
       {open && rounds.length === 0 ? (
         <p className="mt-3 text-sm text-neutral-500">
-          No round is currently open for submissions. Proposals can only be submitted while a board
-          member has a round in the <strong>Submission</strong> stage.
+          {tr('No round is currently open for submissions. Proposals can only be submitted while a board member has a round in the')} <strong>{tr('Submission')}</strong> {tr('stage.')}
         </p>
       ) : null}
 
@@ -488,16 +489,16 @@ export function ProposalSubmit() {
               type="button"
               onClick={() => { if (allOpen) { setCollapseSig((n) => n + 1); setAllOpen(false); } else { setExpandSig((n) => n + 1); setAllOpen(true); } }}
               className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-              title="Expand or collapse all the collapsible text fields below"
+              title={tr('Expand or collapse all the collapsible text fields below')}
             >
-              {allOpen ? '▣ Collapse all fields' : '▾ Expand all fields'}
+              {allOpen ? tr('▣ Collapse all fields') : tr('▾ Expand all fields')}
             </button>
           </div>
           <div className="flex flex-wrap items-end gap-4">
             <label className="flex flex-col gap-0.5 text-xs font-medium text-neutral-600 dark:text-neutral-400">
-              Round{editingId ? <span className="font-normal text-neutral-400"> (fixed once created)</span> : null}
+              {tr('Round')}{editingId ? <span className="font-normal text-neutral-400"> {tr('(fixed once created)')}</span> : null}
               <select className={field} value={roundId} onChange={(e) => setRoundId(e.target.value)} required disabled={!!editingId}>
-                <option value="">Select round…</option>
+                <option value="">{tr('Select round…')}</option>
                 {rounds.map((r) => (
                   <option key={r.id} value={r.id}>#{r.number} {r.name ?? ''} ({r.status})</option>
                 ))}
@@ -506,9 +507,9 @@ export function ProposalSubmit() {
             {/* §5.2 — category picker appears only after a round is chosen (its categories are known then). */}
             {roundId ? (
               <label className="flex flex-col gap-0.5 text-xs font-medium text-neutral-600 dark:text-neutral-400">
-                Category
+                {tr('Category')}
                 <select className={field} value={categoryId} onChange={(e) => setCategoryId(e.target.value)} required>
-                  <option value="">Select category…</option>
+                  <option value="">{tr('Select category…')}</option>
                   {cats.map((c) => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
@@ -517,18 +518,18 @@ export function ProposalSubmit() {
             ) : null}
           </div>
           <label className="block">
-            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title{titleCharHint(title)}</span>
-            <input className={`${field} mt-0.5 w-full disabled:opacity-60 ${triedSubmit && title.trim().length < minTitleChars ? 'border-red-400 dark:border-red-700' : ''}`} placeholder="Proposal title" value={title} onChange={(e) => setTitle(e.target.value)} disabled={amountLocked} required />
+            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{tr('Title')}{titleCharHint(title)}</span>
+            <input className={`${field} mt-0.5 w-full disabled:opacity-60 ${triedSubmit && title.trim().length < minTitleChars ? 'border-red-400 dark:border-red-700' : ''}`} placeholder={tr('Proposal title')} value={title} onChange={(e) => setTitle(e.target.value)} disabled={amountLocked} required />
             <span className="mt-0.5 block text-[11px] italic text-neutral-500 dark:text-neutral-400">
-              {amountLocked ? 'The title is locked — it cannot be changed once the proposal is submitted.' : 'Title cannot be changed once the proposal is submitted.'}
+              {amountLocked ? tr('The title is locked — it cannot be changed once the proposal is submitted.') : tr('Title cannot be changed once the proposal is submitted.')}
             </span>
           </label>
           {/* Requested amount + commercial flag sit right under the title (they set the
               fee + cap the proposal's category fit) so the submitter sees the cost of
               the ask before writing the pitch. */}
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <label>Requested ₳ <input type="number" className={`${field} w-32 disabled:opacity-60`} value={amount} onChange={(e) => setAmount(Number(e.target.value))} disabled={amountLocked} /></label>
-            <label className="flex items-center gap-1"><input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} disabled={amountLocked} /> Commercial / for profit</label>
+            <label>{tr('Requested')} ₳ <input type="number" className={`${field} w-32 disabled:opacity-60`} value={amount} onChange={(e) => setAmount(Number(e.target.value))} disabled={amountLocked} /></label>
+            <label className="flex items-center gap-1"><input type="checkbox" checked={commercial} onChange={(e) => setCommercial(e.target.checked)} disabled={amountLocked} /> {tr('Commercial / for profit')}</label>
             {/* §12 — live submission-fee preview: updates as the user toggles commercial or
                 changes the requested amount, so the fee is never a surprise at submit time. */}
             <span
@@ -536,18 +537,17 @@ export function ProposalSubmit() {
                 ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
                 : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'}`}
               title={feeRequired
-                ? `${feePct}% of the requested amount (capped at ${feeCap.toLocaleString()} ₳).`
-                : 'No fee for this proposal type — it goes live immediately on submit.'}
+                ? `${feePct}% ${tr('of the requested amount (capped at')} ${feeCap.toLocaleString()} ₳).`
+                : tr('No fee for this proposal type — it goes live immediately on submit.')}
             >
               {feeRequired
-                ? `Submission fee: ${feeEstimate.toLocaleString()} ₳ (${feePct}%${amount * feePct / 100 > feeCap ? ', capped' : ''})`
-                : 'No submission fee'}
+                ? `${tr('Submission fee:')} ${feeEstimate.toLocaleString()} ₳ (${feePct}%${amount * feePct / 100 > feeCap ? tr(', capped') : ''})`
+                : tr('No submission fee')}
             </span>
           </div>
           {amountLocked ? (
             <div className="text-xs text-neutral-500">
-              The requested amount + commercial flag are <strong>locked after submission</strong> (they set the fee). To change
-              the budget, use <strong>Request a budget change</strong> on the proposal once it&apos;s active.
+              {tr('The requested amount + commercial flag are')} <strong>{tr('locked after submission')}</strong> {tr('(they set the fee). To change the budget, use')} <strong>{tr('Request a budget change')}</strong> {tr('on the proposal once it’s active.')}
             </div>
           ) : null}
           {/* §5.2 — the selected category's per-proposal ask range + conditions, right below the
@@ -556,18 +556,18 @@ export function ProposalSubmit() {
             <div className="rounded border border-neutral-200 p-2 text-xs dark:border-neutral-800">
               {selectedCat.minAda != null || selectedCat.maxAda != null ? (
                 <div className={(selectedCat.minAda != null && Number(amount) < selectedCat.minAda) || (selectedCat.maxAda != null && Number(amount) > selectedCat.maxAda) ? 'font-medium text-red-600' : 'text-neutral-600 dark:text-neutral-400'}>
-                  Allowed ask for “{selectedCat.name}”: {selectedCat.minAda != null ? `min ${selectedCat.minAda.toLocaleString()} ₳` : 'no min'} · {selectedCat.maxAda != null ? `max ${selectedCat.maxAda.toLocaleString()} ₳` : 'no max'}
+                  {tr('Allowed ask for')} “{selectedCat.name}”: {selectedCat.minAda != null ? `${tr('min')} ${selectedCat.minAda.toLocaleString()} ₳` : tr('no min')} · {selectedCat.maxAda != null ? `${tr('max')} ${selectedCat.maxAda.toLocaleString()} ₳` : tr('no max')}
                 </div>
               ) : null}
-              {selectedCat.conditions ? <div className="mt-0.5 whitespace-pre-wrap text-neutral-500">Conditions: {selectedCat.conditions}</div> : null}
+              {selectedCat.conditions ? <div className="mt-0.5 whitespace-pre-wrap text-neutral-500">{tr('Conditions:')} {selectedCat.conditions}</div> : null}
             </div>
           ) : null}
           <MarkdownEditor
             value={content}
             onChange={setContent}
-            title="Pitch / summary"
-            subtitle="What are you proposing to build, and why? Who is it for, what does it solve, and what makes it the right project at the right time?"
-            placeholder="What you'll build and why (markdown)"
+            title={tr('Pitch / summary')}
+            subtitle={tr('What are you proposing to build, and why? Who is it for, what does it solve, and what makes it the right project at the right time?')}
+            placeholder={tr("What you'll build and why (markdown)")}
             minRows={5}
             required
             minWords={minWords}
@@ -578,9 +578,9 @@ export function ProposalSubmit() {
           <MarkdownEditor
             value={ecosystemImpact}
             onChange={setEcosystemImpact}
-            title="Expected ecosystem impact"
-            subtitle="What specific benefit will the project have for the ecosystem? Who will the result serve, what problem does it solve and why should it be funded from community funds?"
-            placeholder="Who benefits, what changes — short-term and longer-term."
+            title={tr('Expected ecosystem impact')}
+            subtitle={tr('What specific benefit will the project have for the ecosystem? Who will the result serve, what problem does it solve and why should it be funded from community funds?')}
+            placeholder={tr('Who benefits, what changes — short-term and longer-term.')}
             minRows={3}
             defaultCollapsed={!ecosystemImpact.trim()}
             minWords={minWords}
@@ -590,9 +590,9 @@ export function ProposalSubmit() {
           <MarkdownEditor
             value={successMetrics}
             onChange={setSuccessMetrics}
-            title="Success metrics / KPIs"
-            subtitle="What measurable indicators will you use to evaluate the success of the project? Specify the target values, time frame and method of verification."
-            placeholder="e.g. number of users, txs, integrations, on-chain volume — with targets where you can."
+            title={tr('Success metrics / KPIs')}
+            subtitle={tr('What measurable indicators will you use to evaluate the success of the project? Specify the target values, time frame and method of verification.')}
+            placeholder={tr('e.g. number of users, txs, integrations, on-chain volume — with targets where you can.')}
             minRows={3}
             defaultCollapsed={!successMetrics.trim()}
             minWords={minWords}
@@ -600,7 +600,7 @@ export function ProposalSubmit() {
             showShortfall={triedSubmit}
           />
           <div>
-            <div className="text-sm font-medium">Milestones (budgets must sum to requested)</div>
+            <div className="text-sm font-medium">{tr('Milestones (budgets must sum to requested)')}</div>
             <div className="mt-1 space-y-2">
               {ms.map((m, i) => {
                 const set = (patch: Partial<ProposalMilestoneInput>) =>
@@ -608,43 +608,43 @@ export function ProposalSubmit() {
                 return (
                   <div key={i} className="rounded-md border border-neutral-200 p-2 dark:border-neutral-800">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-neutral-500">Milestone {i + 1}</span>
+                      <span className="text-xs font-semibold text-neutral-500">{tr('Milestone')} {i + 1}</span>
                       {ms.length > 1 ? (
-                        <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => setMs((p) => p.filter((_, j) => j !== i))}>remove</button>
+                        <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => setMs((p) => p.filter((_, j) => j !== i))}>{tr('remove')}</button>
                       ) : null}
                     </div>
                     {/* 1. Title · 2. Requested budget (right below the title) · 3. Description · 4. Acceptance criteria */}
                     <div className="mt-1 flex flex-wrap items-end gap-2">
                       <label className="flex-1">
-                        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title{msTitleHint(m.title ?? '')}</span>
-                        <input className={`${field} mt-0.5 w-full ${triedSubmit && wc(m.title ?? '') < minMsTitleWords ? 'border-red-400 dark:border-red-700' : ''}`} placeholder="Milestone title" value={m.title ?? ''} onChange={(e) => set({ title: e.target.value })} />
+                        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{tr('Title')}{msTitleHint(m.title ?? '')}</span>
+                        <input className={`${field} mt-0.5 w-full ${triedSubmit && wc(m.title ?? '') < minMsTitleWords ? 'border-red-400 dark:border-red-700' : ''}`} placeholder={tr('Milestone title')} value={m.title ?? ''} onChange={(e) => set({ title: e.target.value })} />
                       </label>
                       <label>
-                        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Requested budget (₳)</span>
+                        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{tr('Requested budget (₳)')}</span>
                         <input type="number" className={`${field} mt-0.5 w-32`} value={m.amountAda} onChange={(e) => set({ amountAda: Number(e.target.value) })} />
                       </label>
                     </div>
                     <div className="mt-2">
-                      <MarkdownEditor value={m.description} onChange={(v) => set({ description: v })} title="Description" placeholder="What is delivered in this milestone" minRows={3} required minWords={minWords} maxWords={maxWords} showShortfall={triedSubmit} />
+                      <MarkdownEditor value={m.description} onChange={(v) => set({ description: v })} title={tr('Description')} placeholder={tr('What is delivered in this milestone')} minRows={3} required minWords={minWords} maxWords={maxWords} showShortfall={triedSubmit} />
                     </div>
                     <div className="mt-2">
-                      <MarkdownEditor value={m.acceptanceCriteria ?? ''} onChange={(v) => set({ acceptanceCriteria: v })} title="Acceptance criteria" hint="how completion is judged" placeholder="How completion will be verified" minRows={3} defaultCollapsed={!(m.acceptanceCriteria ?? '').trim()} minWords={minWords} maxWords={maxWords} showShortfall={triedSubmit} />
+                      <MarkdownEditor value={m.acceptanceCriteria ?? ''} onChange={(v) => set({ acceptanceCriteria: v })} title={tr('Acceptance criteria')} hint={tr('how completion is judged')} placeholder={tr('How completion will be verified')} minRows={3} defaultCollapsed={!(m.acceptanceCriteria ?? '').trim()} minWords={minWords} maxWords={maxWords} showShortfall={triedSubmit} />
                     </div>
                   </div>
                 );
               })}
             </div>
-            <button type="button" className="mt-1 text-xs underline" onClick={() => setMs((p) => [...p, { title: '', description: '', acceptanceCriteria: '', amountAda: 0 }])}>+ add milestone</button>
+            <button type="button" className="mt-1 text-xs underline" onClick={() => setMs((p) => [...p, { title: '', description: '', acceptanceCriteria: '', amountAda: 0 }])}>{tr('+ add milestone')}</button>
             {/* Live milestone-budget check — must equal the requested amount. */}
             <div className={`mt-1 text-xs ${milestonesMatch ? 'text-emerald-600' : 'font-medium text-red-600'}`}>
               {milestonesMatch
-                ? `✓ Milestones sum to ${msSum.toLocaleString()} ₳ (matches requested).`
-                : `⚠ Milestones sum to ${msSum.toLocaleString()} ₳ but the requested amount is ${Number(amount).toLocaleString()} ₳ — they must be equal (off by ${Math.abs(msSum - Number(amount)).toLocaleString()} ₳).`}
+                ? `✓ ${tr('Milestones sum to')} ${msSum.toLocaleString()} ${tr('₳ (matches requested).')}`
+                : `⚠ ${tr('Milestones sum to')} ${msSum.toLocaleString()} ${tr('₳ but the requested amount is')} ${Number(amount).toLocaleString()} ${tr('₳ — they must be equal (off by')} ${Math.abs(msSum - Number(amount)).toLocaleString()} ₳).`}
             </div>
           </div>
           {/* §3.4 — funding-specific detail (all optional, collapsed by default to keep the form short). */}
-          <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title="Cost breakdown" hint="how the budget is spent" placeholder="How the budget is spent" minRows={3} defaultCollapsed={!costBreakdown.trim()} minWords={minWords} maxWords={maxWords} showShortfall={triedSubmit} />
-          <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title="Team info" hint="who is delivering this" placeholder="Who is delivering this, and why you're best suited" minRows={3} defaultCollapsed={!teamInfo.trim()} minWords={minWords} maxWords={maxWords} showShortfall={triedSubmit} />
+          <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title={tr('Cost breakdown')} hint={tr('how the budget is spent')} placeholder={tr('How the budget is spent')} minRows={3} defaultCollapsed={!costBreakdown.trim()} minWords={minWords} maxWords={maxWords} showShortfall={triedSubmit} />
+          <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title={tr('Team info')} hint={tr('who is delivering this')} placeholder={tr("Who is delivering this, and why you're best suited")} minRows={3} defaultCollapsed={!teamInfo.trim()} minWords={minWords} maxWords={maxWords} showShortfall={triedSubmit} />
           <RevenueSharingBlock
             required={revenueSharingRequired}
             onRequiredChange={setRevenueSharingRequired}
@@ -671,7 +671,7 @@ export function ProposalSubmit() {
           ) : null}
           {/* §5.3/§7.1 — expertise tags drive which DReps are drawn to filter this proposal. */}
           <div>
-            <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Expertise areas (helps match filtering reviewers)</div>
+            <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{tr('Expertise areas (helps match filtering reviewers)')}</div>
             <div className="mt-1 flex flex-wrap gap-1.5">
               {DEFAULT_SUBCATEGORIES.map((s) => {
                 const on = subcatIds.includes(s.id);
@@ -691,19 +691,19 @@ export function ProposalSubmit() {
           {/* Cardano address the submitter receives funds at — fee refunds + the budget payout if funded. */}
           <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-950/30">
             <label className="block">
-              <span className="text-xs font-medium text-blue-900 dark:text-blue-200">Payout / refund address (Cardano)</span>
-              <input className={`${field} mt-0.5 w-full font-mono text-xs`} placeholder="addr_test1… — where the DAO sends refunds and the funded budget" value={payoutAddress} onChange={(e) => setPayoutAddress(e.target.value)} />
+              <span className="text-xs font-medium text-blue-900 dark:text-blue-200">{tr('Payout / refund address (Cardano)')}</span>
+              <input className={`${field} mt-0.5 w-full font-mono text-xs`} placeholder={tr('addr_test1… — where the DAO sends refunds and the funded budget')} value={payoutAddress} onChange={(e) => setPayoutAddress(e.target.value)} />
             </label>
             {/* §3 — live validity + own-wallet check. A foreign address is allowed, just flagged. */}
             {payoutAddress.trim() && addrCheck ? (
               !addrCheck.valid ? (
-                <p className="mt-1 text-[11px] font-medium text-red-600 dark:text-red-400">✗ Not a valid Cardano address.</p>
+                <p className="mt-1 text-[11px] font-medium text-red-600 dark:text-red-400">{tr('✗ Not a valid Cardano address.')}</p>
               ) : !addrCheck.networkOk ? (
-                <p className="mt-1 text-[11px] font-medium text-red-600 dark:text-red-400">✗ Valid address, but on the wrong network for this platform.</p>
+                <p className="mt-1 text-[11px] font-medium text-red-600 dark:text-red-400">{tr('✗ Valid address, but on the wrong network for this platform.')}</p>
               ) : addrCheck.mine ? (
-                <p className="mt-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">✓ Valid · your own wallet (same stake key as your login).</p>
+                <p className="mt-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">{tr('✓ Valid · your own wallet (same stake key as your login).')}</p>
               ) : (
-                <p className="mt-1 text-[11px] font-medium text-blue-700 dark:text-blue-300">✓ Valid · a different wallet than your login{addrCheck.hasStakePart ? '' : ' (no stake part)'} — that&apos;s allowed, just double-check it&apos;s yours.</p>
+                <p className="mt-1 text-[11px] font-medium text-blue-700 dark:text-blue-300">{tr('✓ Valid · a different wallet than your login')}{addrCheck.hasStakePart ? '' : tr(' (no stake part)')} {tr('— that’s allowed, just double-check it’s yours.')}</p>
               )
             ) : null}
           </div>
@@ -713,14 +713,12 @@ export function ProposalSubmit() {
             <div className="space-y-2 rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-950/30">
               <div className="text-xs text-blue-900 dark:text-blue-200">
                 <div>
-                  Submission fee: <strong>{feePct}% ({commercial ? 'commercial' : 'open-source'})</strong> of the requested
-                  amount ≈ <strong>{feeEstimate.toLocaleString()} ₳</strong>. To <strong>submit</strong>, pay it to the
-                  address below and paste the transaction hash; the platform verifies it on-chain and a board member confirms.
+                  {tr('Submission fee:')} <strong>{feePct}% ({commercial ? tr('commercial') : tr('open-source')})</strong> {tr('of the requested amount ≈')} <strong>{feeEstimate.toLocaleString()} ₳</strong>. {tr('To')} <strong>{tr('submit')}</strong>, {tr('pay it to the address below and paste the transaction hash; the platform verifies it on-chain and a board member confirms.')}
                 </div>
                 {cfg?.submissionFeeAddress ? (
                   <div className="mt-1 flex items-start gap-2">
                     <div className="flex-1 break-all font-mono text-[11px] text-blue-700/80 dark:text-blue-300/80">{cfg.submissionFeeAddress}</div>
-                    <CopyButton text={cfg.submissionFeeAddress} label="Copy address" />
+                    <CopyButton text={cfg.submissionFeeAddress} label={tr('Copy address')} />
                   </div>
                 ) : null}
               </div>
@@ -757,7 +755,7 @@ export function ProposalSubmit() {
                       let id = editingId;
                       if (!id) {
                         if (!draftReady) {
-                          setError('Fill in the proposal fields above first — the hash is recorded with the saved draft.');
+                          setError(tr('Fill in the proposal fields above first — the hash is recorded with the saved draft.'));
                           return;
                         }
                         const created = await proposalsApi.create({ ...buildInput(), submissionFeeTxHash: trimmed });
@@ -776,7 +774,7 @@ export function ProposalSubmit() {
                         setFee('');
                       }
                     } catch (e) {
-                      setError(e instanceof Error ? e.message : 'verification failed');
+                      setError(e instanceof Error ? e.message : tr('verification failed'));
                     } finally {
                       setVerifying(false);
                     }
@@ -797,31 +795,30 @@ export function ProposalSubmit() {
                 >
                   {feeVerification.fullyPaid ? (
                     <span>
-                      <strong>✓ Fully paid</strong> — {feeVerification.paidAda.toLocaleString()} ₳ received at the fee address (required {feeVerification.requiredAda.toLocaleString()} ₳). You can now submit.
+                      <strong>{tr('✓ Fully paid')}</strong> — {feeVerification.paidAda.toLocaleString()} {tr('₳ received at the fee address (required')} {feeVerification.requiredAda.toLocaleString()} {tr('₳). You can now submit.')}
                     </span>
                   ) : !feeVerification.koiosAvailable ? (
                     <span>
-                      <strong>⚠ Couldn&apos;t reach the chain right now</strong> — Koios is throttling our requests. Your hash is saved; the platform will keep retrying every ~10 s and the answer will appear here as soon as it gets through. (This is an external service issue, not a problem with your tx.)
+                      <strong>{tr('⚠ Couldn’t reach the chain right now')}</strong> {tr('— Koios is throttling our requests. Your hash is saved; the platform will keep retrying every ~10 s and the answer will appear here as soon as it gets through. (This is an external service issue, not a problem with your tx.)')}
                     </span>
                   ) : feeVerification.paidAda > 0 ? (
                     <span>
-                      <strong>Partial payment:</strong> {feeVerification.paidAda.toLocaleString()} ₳ received,{' '}
-                      <strong>{feeVerification.missingAda.toLocaleString()} ₳ still missing</strong>{' '}
-                      (required {feeVerification.requiredAda.toLocaleString()} ₳).
-                      Send the rest in a new tx and paste the new hash in the box above — every tx is counted.
+                      <strong>{tr('Partial payment:')}</strong> {feeVerification.paidAda.toLocaleString()} {tr('₳ received,')}{' '}
+                      <strong>{feeVerification.missingAda.toLocaleString()} {tr('₳ still missing')}</strong>{' '}
+                      ({tr('required')} {feeVerification.requiredAda.toLocaleString()} ₳).{' '}
+                      {tr('Send the rest in a new tx and paste the new hash in the box above — every tx is counted.')}
                     </span>
                   ) : feeVerification.txs.every((t) => t.koiosAvailable && !t.found) ? (
-                    <span>✗ The tx hash wasn&apos;t found on-chain yet. The platform re-checks every ~10 s — leave the form open and the answer will update as soon as the next block lands.</span>
+                    <span>{tr('✗ The tx hash wasn’t found on-chain yet. The platform re-checks every ~10 s — leave the form open and the answer will update as soon as the next block lands.')}</span>
                   ) : (
-                    <span>✗ This tx didn&apos;t pay the fee address. Did you send to the right address?</span>
+                    <span>{tr('✗ This tx didn’t pay the fee address. Did you send to the right address?')}</span>
                   )}
                 </div>
               ) : null}
             </div>
           ) : (
             <div className="rounded border border-emerald-200 bg-emerald-50 p-2 text-xs text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
-              No submission fee for {commercial ? 'commercial' : 'open-source'} proposals in this round — your proposal
-              goes <strong>live immediately</strong> when you submit (no payment, no board fee confirmation).
+              {tr('No submission fee for')} {commercial ? tr('commercial') : tr('open-source')} {tr('proposals in this round — your proposal goes')} <strong>{tr('live immediately')}</strong> {tr('when you submit (no payment, no board fee confirmation).')}
             </div>
           )}
           {error ? <div className="text-sm text-red-600">{error}</div> : null}
@@ -830,17 +827,17 @@ export function ProposalSubmit() {
           {triedSubmit && (shortFields.length > 0 || overFields.length > 0) ? (
             <div className="text-sm text-red-600">
               {shortFields.length > 0 ? (
-                <div>Each mandatory field needs at least {minWords} word{minWords === 1 ? '' : 's'}. Still too short: {shortFields.map(([l, t]) => `${l} (${wc(t)}/${minWords})`).join(', ')}.</div>
+                <div>{tr('Each mandatory field needs at least')} {minWords} {minWords === 1 ? tr('word') : tr('words')}. {tr('Still too short:')} {shortFields.map(([l, t]) => `${l} (${wc(t)}/${minWords})`).join(', ')}.</div>
               ) : null}
               {overFields.length > 0 ? (
-                <div>Each mandatory field allows at most {maxWords} words. Too long: {overFields.map(([l, t]) => `${l} (${wc(t)}/${maxWords})`).join(', ')}.</div>
+                <div>{tr('Each mandatory field allows at most')} {maxWords} {tr('words. Too long:')} {overFields.map(([l, t]) => `${l} (${wc(t)}/${maxWords})`).join(', ')}.</div>
               ) : null}
             </div>
           ) : null}
           {/* What's still missing before this can be saved/submitted (so a disabled button is never a mystery). */}
           {!draftReady ? (
             <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-              <div className="font-medium">Still needed before you can save the draft (and submit):</div>
+              <div className="font-medium">{tr('Still needed before you can save the draft (and submit):')}</div>
               <ul className="mt-0.5 list-disc pl-4">
                 {draftMissing.map((m) => (
                   <li key={m}>{m}</li>
@@ -849,7 +846,7 @@ export function ProposalSubmit() {
             </div>
           ) : submitMissing.length > 0 ? (
             <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-              <div className="font-medium">Ready to save as a draft. Still needed before you can <strong>submit</strong>:</div>
+              <div className="font-medium">{tr('Ready to save as a draft. Still needed before you can')} <strong>{tr('submit')}</strong>:</div>
               <ul className="mt-0.5 list-disc pl-4">
                 {submitMissing.map((m) => (
                   <li key={m}>{m}</li>
@@ -859,27 +856,26 @@ export function ProposalSubmit() {
           ) : null}
           {/* §3 — privacy + the two ways out of the form. */}
           <p className="text-xs text-neutral-500">
-            <strong>Drafts are private</strong> — visible only to you, not to DReps or the board. A proposal becomes
-            public only after you submit and a board member confirms the fee.
+            <strong>{tr('Drafts are private')}</strong> {tr('— visible only to you, not to DReps or the board. A proposal becomes public only after you submit and a board member confirms the fee.')}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             {editingStatus === 'PENDING' ? (
               // Already submitted — only save the edits (re-submitting isn't meaningful).
               <button type="button" onClick={saveDraft} disabled={busy || !draftReady} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-                {busy ? 'Working…' : 'Save changes'}
+                {busy ? tr('Working…') : tr('Save changes')}
               </button>
             ) : (
               <>
                 <button
                   type="submit"
                   disabled={busy || !submitReady}
-                  title={submitMissing.length > 0 ? `Still needed: ${submitMissing.join(' · ')}` : undefined}
+                  title={submitMissing.length > 0 ? `${tr('Still needed:')} ${submitMissing.join(' · ')}` : undefined}
                   className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
-                  {busy ? 'Working…' : editingStatus === 'REJECTED' ? 'Re-submit' : feeRequired ? 'Submit' : 'Submit (no fee)'}
+                  {busy ? tr('Working…') : editingStatus === 'REJECTED' ? tr('Re-submit') : feeRequired ? tr('Submit') : tr('Submit (no fee)')}
                 </button>
                 <button type="button" onClick={saveDraft} disabled={busy || !draftReady} className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
-                  {editingStatus === 'REJECTED' ? 'Save changes' : 'Save Draft'}
+                  {editingStatus === 'REJECTED' ? tr('Save changes') : tr('Save Draft')}
                 </button>
               </>
             )}
@@ -891,13 +887,13 @@ export function ProposalSubmit() {
       {mine.length > 0 ? (
         <div className="mt-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="text-sm font-medium">My proposals</div>
+            <div className="text-sm font-medium">{tr('My proposals')}</div>
             {/* §10 — Funding vs Internal split (with counts). Only shown when the user actually has
                 internal proposals; a submitter who isn't a DRep can only have funding ones, so they
                 never see (or need) this filter. Empty tabs are disabled. */}
             {internalMine.length > 0 ? (
               <div className="flex overflow-hidden rounded-md border border-neutral-300 dark:border-neutral-700">
-                {([['FUNDING', 'Funding', fundingMine.length], ['INTERNAL', 'Internal', internalMine.length]] as const).map(([key, label, count]) => (
+                {([['FUNDING', tr('Funding'), fundingMine.length], ['INTERNAL', tr('Internal'), internalMine.length]] as const).map(([key, label, count]) => (
                   <button
                     key={key}
                     onClick={() => setMyTab(key)}
@@ -916,8 +912,8 @@ export function ProposalSubmit() {
           </div>
           <p className="text-xs text-neutral-500">
             {myTab === 'FUNDING'
-              ? 'Drafts are private. Open one to read/edit it; submit a draft when you’re ready (pay the fee + paste the tx).'
-              : 'Your DAO-governance internal proposals. Open one in the Internal proposals tab.'}
+              ? tr('Drafts are private. Open one to read/edit it; submit a draft when you’re ready (pay the fee + paste the tx).')
+              : tr('Your DAO-governance internal proposals. Open one in the Internal proposals tab.')}
           </p>
           <ul className="mt-1 space-y-1 text-sm">
             {myTab === 'FUNDING'
@@ -948,20 +944,21 @@ export function ProposalSubmit() {
  * running total vs. the required fee. Shared by the create form and the inline submit panel.
  */
 function FeePaymentsList({ fv }: { fv: FeeVerification }) {
+  const tr = useT();
   return (
     <div className="space-y-1">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300">Submitted fee payments</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300">{tr('Submitted fee payments')}</div>
       {fv.txs.map((t) => (
         <div key={t.hash} className="flex flex-wrap items-center gap-2 rounded border border-blue-200 bg-white/70 px-2 py-1 text-[11px] dark:border-blue-900 dark:bg-neutral-900/50">
           <span className="flex-1 break-all font-mono text-neutral-600 dark:text-neutral-400">{t.hash}</span>
           <span className={t.paidAda > 0 ? 'whitespace-nowrap font-medium text-emerald-700 dark:text-emerald-400' : 'whitespace-nowrap text-neutral-500'}>
-            {!t.koiosAvailable ? 'chain check failed' : t.paidAda > 0 ? `${t.paidAda.toLocaleString()} ₳ paid` : t.found ? '0 ₳ to fee address' : 'not found yet'}
+            {!t.koiosAvailable ? tr('chain check failed') : t.paidAda > 0 ? `${t.paidAda.toLocaleString()} ${tr('₳ paid')}` : t.found ? tr('0 ₳ to fee address') : tr('not found yet')}
           </span>
         </div>
       ))}
       <div className="text-[11px] text-blue-900 dark:text-blue-200">
-        Total: <strong>{fv.paidAda.toLocaleString()} ₳</strong> of {fv.requiredAda.toLocaleString()} ₳
-        {fv.fullyPaid ? ' — fully paid ✓' : ` · ${fv.missingAda.toLocaleString()} ₳ still missing`}
+        {tr('Total:')} <strong>{fv.paidAda.toLocaleString()} ₳</strong> {tr('of')} {fv.requiredAda.toLocaleString()} ₳
+        {fv.fullyPaid ? tr(' — fully paid ✓') : ` · ${fv.missingAda.toLocaleString()} ${tr('₳ still missing')}`}
       </div>
     </div>
   );
@@ -1009,6 +1006,7 @@ function MineRow({
   onDetailEdit: () => void;
   onSubmitted: () => void;
 }) {
+  const tr = useT();
   const [submitting, setSubmitting] = useState(false);
   const [fee, setFee] = useState(p.submissionFeeTxHash ?? '');
   const [busy, setBusy] = useState(false);
@@ -1053,7 +1051,7 @@ function MineRow({
       const thisTx = v.txs.find((t) => t.hash.toLowerCase() === trimmed.toLowerCase());
       if (!v.fullyPaid && thisTx?.found && thisTx.koiosAvailable && thisTx.paidAda > 0) setFee('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'verification failed');
+      setError(e instanceof Error ? e.message : tr('verification failed'));
     } finally {
       setVerifying(false);
     }
@@ -1085,7 +1083,7 @@ function MineRow({
       setFee('');
       onSubmitted();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'submit failed');
+      setError(e instanceof Error ? e.message : tr('submit failed'));
     } finally {
       setBusy(false);
     }
@@ -1099,7 +1097,7 @@ function MineRow({
         </button>
         <span className="flex items-center gap-2">
           <span className={`text-xs ${p.status === 'REJECTED' ? 'font-medium text-red-600' : isDraft ? 'text-amber-600' : 'text-neutral-500'}`}>
-            {p.status}{p.stage ? ` · ${p.stage}` : ''}{isDraft ? ' · private' : ''}
+            {p.status}{p.stage ? ` · ${p.stage}` : ''}{isDraft ? ` · ${tr('private')}` : ''}
           </span>
           {p.progress ? (
             <>
@@ -1122,17 +1120,17 @@ function MineRow({
           {fullFormEdit ? (
             <>
               <button onClick={onEdit} className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800">
-                Edit
+                {tr('Edit')}
               </button>
               {isDraft ? (
                 <button onClick={() => setSubmitting((v) => !v)} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950">
-                  {submitting ? 'Close' : 'Submit'}
+                  {submitting ? tr('Close') : tr('Submit')}
                 </button>
               ) : null}
             </>
           ) : detailEdit ? (
             <button onClick={onDetailEdit} className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800">
-              Edit
+              {tr('Edit')}
             </button>
           ) : null}
         </span>
@@ -1144,14 +1142,14 @@ function MineRow({
             <>
               <div className="rounded border border-emerald-300 bg-emerald-50 p-2 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
                 {noFee ? (
-                  <span><strong>✓ No submission fee</strong> for this proposal — you can submit it directly.</span>
+                  <span><strong>{tr('✓ No submission fee')}</strong> {tr('for this proposal — you can submit it directly.')}</span>
                 ) : (
-                  <span><strong>✓ Submission fee paid</strong> — {fv!.paidAda.toLocaleString()} ₳ received at the fee address (required {fv!.requiredAda.toLocaleString()} ₳). You can submit.</span>
+                  <span><strong>{tr('✓ Submission fee paid')}</strong> — {fv!.paidAda.toLocaleString()} {tr('₳ received at the fee address (required')} {fv!.requiredAda.toLocaleString()} {tr('₳). You can submit.')}</span>
                 )}
               </div>
               {!noFee && fv ? <FeePaymentsList fv={fv} /> : null}
               <button onClick={submit} disabled={busy} className="rounded bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-                {busy ? 'Submitting…' : 'Submit'}
+                {busy ? tr('Submitting…') : tr('Submit')}
               </button>
             </>
           ) : (
@@ -1159,33 +1157,33 @@ function MineRow({
             // the earlier hashes in the list and clears the box for the next tx → repeat → submit.
             <>
               <div className="text-blue-900 dark:text-blue-200">
-                Pay the submission fee on-chain to the address below, paste the transaction hash, and verify it. A board member then confirms.
+                {tr('Pay the submission fee on-chain to the address below, paste the transaction hash, and verify it. A board member then confirms.')}
               </div>
               {feeAddress ? (
                 <div className="flex items-start gap-2">
                   <div className="flex-1 break-all font-mono text-[11px] text-blue-700/80 dark:text-blue-300/80">{feeAddress}</div>
-                  <CopyButton text={feeAddress} label="Copy address" />
+                  <CopyButton text={feeAddress} label={tr('Copy address')} />
                 </div>
               ) : null}
               {fv && fv.txs.length > 0 ? <FeePaymentsList fv={fv} /> : null}
               <label className="block">
-                <span className="text-blue-900 dark:text-blue-200">Submission fee transaction hash{fv && fv.paidAda > 0 ? ' (next payment)' : ''}</span>
-                <input className={`${field} mt-0.5 w-full`} placeholder="64-character on-chain tx hash" value={fee} onChange={(e) => setFee(e.target.value)} />
+                <span className="text-blue-900 dark:text-blue-200">{tr('Submission fee transaction hash')}{fv && fv.paidAda > 0 ? tr(' (next payment)') : ''}</span>
+                <input className={`${field} mt-0.5 w-full`} placeholder={tr('64-character on-chain tx hash')} value={fee} onChange={(e) => setFee(e.target.value)} />
               </label>
               {/* Verify result (partial / not found / chain unreachable). */}
               {fv && !fv.fullyPaid ? (
                 <div className={`rounded border p-1.5 ${!fv.koiosAvailable ? 'border-neutral-300 bg-neutral-50 text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300' : fv.paidAda > 0 ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200' : 'border-red-300 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300'}`}>
-                  {!fv.koiosAvailable ? 'Couldn’t reach the chain — the platform keeps retrying; check back shortly.'
-                    : fv.paidAda > 0 ? `Partial: ${fv.paidAda.toLocaleString()} ₳ received, ${fv.missingAda.toLocaleString()} ₳ still missing (required ${fv.requiredAda.toLocaleString()} ₳). Send the rest in a new tx and paste the new hash above.`
-                      : 'Not found / didn’t pay the fee address yet — re-checks every ~10 s.'}
+                  {!fv.koiosAvailable ? tr('Couldn’t reach the chain — the platform keeps retrying; check back shortly.')
+                    : fv.paidAda > 0 ? `${tr('Partial:')} ${fv.paidAda.toLocaleString()} ${tr('₳ received,')} ${fv.missingAda.toLocaleString()} ${tr('₳ still missing (required')} ${fv.requiredAda.toLocaleString()} ${tr('₳). Send the rest in a new tx and paste the new hash above.')}`
+                      : tr('Not found / didn’t pay the fee address yet — re-checks every ~10 s.')}
                 </div>
               ) : null}
               <div className="flex flex-wrap items-center gap-2">
                 <button onClick={verify} disabled={verifying || !feeHexOk} className="rounded border border-emerald-500 px-2.5 py-1 font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950">
-                  {verifying ? 'Verifying…' : 'Verify on-chain'}
+                  {verifying ? tr('Verifying…') : tr('Verify on-chain')}
                 </button>
                 <button onClick={submit} disabled={busy} className="rounded bg-emerald-600 px-3 py-1 font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-                  {busy ? 'Submitting…' : 'Submit'}
+                  {busy ? tr('Submitting…') : tr('Submit')}
                 </button>
               </div>
             </>
@@ -1221,19 +1219,20 @@ function PledgeSection({
   onAmount: (v: number) => void;
   onReturnMethod: (v: string) => void;
 }) {
+  const t = useT();
   const field = 'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
   return (
     <div className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={enabled} onChange={(e) => onEnabled(e.target.checked)} />
-        <span className="font-medium">Skin in the game (refundable pledge — optional)</span>
-        <span className="text-xs text-neutral-500">— minimum {minAda.toLocaleString()} ₳ (round setting)</span>
+        <span className="font-medium">{t('Skin in the game (refundable pledge — optional)')}</span>
+        <span className="text-xs text-neutral-500">— {t('minimum')} {minAda.toLocaleString()} ₳ ({t('round setting')})</span>
       </label>
       {enabled ? (
         <div className="mt-2 space-y-2">
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <label className="flex items-center gap-1">
-              Pledge ₳
+              {t('Pledge')} ₳
               <input
                 type="number"
                 className={`${field} w-32`}
@@ -1245,31 +1244,31 @@ function PledgeSection({
             </label>
             {amount > 0 && amount < minAda ? (
               <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 dark:bg-red-950 dark:text-red-300">
-                Below round minimum ({minAda.toLocaleString()} ₳)
+                {t('Below round minimum')} ({minAda.toLocaleString()} ₳)
               </span>
             ) : amount >= minAda ? (
               <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
-                Meets minimum
+                {t('Meets minimum')}
               </span>
             ) : null}
           </div>
           <MarkdownEditor
             value={returnMethod}
             onChange={onReturnMethod}
-            title="Pledge return method"
-            subtitle="How and when will the pledge be returned? Common patterns: a slice with each milestone, or the full amount only after the final milestone. The team may propose another scheme — describe it here."
-            placeholder="Example: 25% returned after milestone 1, 25% after milestone 2, the rest after the final milestone."
+            title={t('Pledge return method')}
+            subtitle={t('How and when will the pledge be returned? Common patterns: a slice with each milestone, or the full amount only after the final milestone. The team may propose another scheme — describe it here.')}
+            placeholder={t('Example: 25% returned after milestone 1, 25% after milestone 2, the rest after the final milestone.')}
             minRows={3}
             defaultCollapsed={!returnMethod.trim()}
             required
           />
           <div className="text-[11px] text-neutral-500">
-            You commit here. The pledge is paid on-chain <strong>after</strong> the proposal is approved (FUNDING stage): the platform shows the pledge address + you paste the tx hash, a board member confirms it. While unpaid/unconfirmed the proposal stays <strong>PENDING</strong> and milestone POAs are blocked.
+            {t('You commit here. The pledge is paid on-chain')} <strong>{t('after')}</strong> {t('the proposal is approved (FUNDING stage): the platform shows the pledge address + you paste the tx hash, a board member confirms it. While unpaid/unconfirmed the proposal stays')} <strong>PENDING</strong> {t('and milestone POAs are blocked.')}
           </div>
         </div>
       ) : (
         <div className="mt-1 text-xs text-neutral-500">
-          No pledge by default. If you opt in, you commit here and pay on-chain later in the FUNDING stage.
+          {t('No pledge by default. If you opt in, you commit here and pay on-chain later in the FUNDING stage.')}
         </div>
       )}
     </div>
@@ -1310,26 +1309,27 @@ function FeeTxInput({
   hasResult: boolean;
   onVerify: () => Promise<void> | void;
 }) {
+  const tr = useT();
   const fld = 'rounded-md border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
   const trimmed = fee.trim();
   const validFormat = /^[0-9a-f]{64}$/i.test(trimmed);
   let hint: { text: string; tone: 'neutral' | 'red' | 'emerald' } | null = null;
   if (locked) {
-    hint = { text: '✓ fully paid — locked', tone: 'emerald' };
+    hint = { text: tr('✓ fully paid — locked'), tone: 'emerald' };
   } else if (verifying) {
-    hint = { text: 'verifying on-chain…', tone: 'neutral' };
+    hint = { text: tr('verifying on-chain…'), tone: 'neutral' };
   } else if (fee.length === 0) {
-    hint = { text: 'Paste your fee-payment tx hash (64 hex characters).', tone: 'neutral' };
+    hint = { text: tr('Paste your fee-payment tx hash (64 hex characters).'), tone: 'neutral' };
   } else if (fee !== trimmed) {
-    hint = { text: 'Remove the leading/trailing whitespace.', tone: 'red' };
+    hint = { text: tr('Remove the leading/trailing whitespace.'), tone: 'red' };
   } else if (/\s/.test(fee)) {
-    hint = { text: 'Tx hashes don\'t contain spaces — paste a single hex string.', tone: 'red' };
+    hint = { text: tr('Tx hashes don\'t contain spaces — paste a single hex string.'), tone: 'red' };
   } else if (!/^[0-9a-fA-F]*$/.test(fee)) {
-    hint = { text: 'Contains non-hex characters — a tx hash is hex only (0-9, a-f).', tone: 'red' };
+    hint = { text: tr('Contains non-hex characters — a tx hash is hex only (0-9, a-f).'), tone: 'red' };
   } else if (fee.length !== 64) {
-    hint = { text: `${fee.length} characters (need 64). Did the paste cut something off?`, tone: 'red' };
+    hint = { text: `${fee.length} ${tr('characters (need 64). Did the paste cut something off?')}`, tone: 'red' };
   } else if (validFormat) {
-    hint = { text: '✓ looks like a valid tx hash — checking on-chain…', tone: 'emerald' };
+    hint = { text: tr('✓ looks like a valid tx hash — checking on-chain…'), tone: 'emerald' };
   }
 
   // Auto-verify cadence:
@@ -1356,7 +1356,7 @@ function FeeTxInput({
       <div className="flex flex-wrap items-stretch gap-2">
         <input
           className={`${fld} flex-1 disabled:bg-emerald-50 disabled:text-emerald-700 dark:disabled:bg-emerald-950/30 dark:disabled:text-emerald-300`}
-          placeholder="Submission fee TX hash (64 hex chars — paste, the platform verifies it on-chain)"
+          placeholder={tr('Submission fee TX hash (64 hex chars — paste, the platform verifies it on-chain)')}
           value={fee}
           onChange={(e) => onChange(e.target.value)}
           disabled={locked}
@@ -1367,12 +1367,12 @@ function FeeTxInput({
           onClick={() => { void onVerify(); }}
           className="rounded-md border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
           title={
-            locked ? 'Already fully paid — the field is locked.'
-              : validFormat ? 'Re-check on-chain now (auto-fires shortly after paste).'
-              : 'A Cardano tx hash is 64 hex characters — fix the format first.'
+            locked ? tr('Already fully paid — the field is locked.')
+              : validFormat ? tr('Re-check on-chain now (auto-fires shortly after paste).')
+              : tr('A Cardano tx hash is 64 hex characters — fix the format first.')
           }
         >
-          {verifying ? 'Verifying…' : 'Verify on-chain'}
+          {verifying ? tr('Verifying…') : tr('Verify on-chain')}
         </button>
       </div>
       {hint ? (
@@ -1419,13 +1419,14 @@ export function RevenueSharingBlock({
   onTextChange: (v: string) => void;
   pledgeAddress: string | null;
 }) {
+  const t = useT();
   return (
     <div className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={required} onChange={(e) => onRequiredChange(e.target.checked)} />
-        <span className="font-medium">Revenue sharing</span>
+        <span className="font-medium">{t('Revenue sharing')}</span>
         <span className="text-xs text-neutral-500">
-          — check this if your proposal involves a token contribution or other one-off action the board needs to verify before funding starts
+          {t('— check this if your proposal involves a token contribution or other one-off action the board needs to verify before funding starts')}
         </span>
       </label>
       {required ? (
@@ -1433,21 +1434,19 @@ export function RevenueSharingBlock({
           <MarkdownEditor
             value={text}
             onChange={onTextChange}
-            title="Conditions"
-            subtitle="What will the team do, and by when? Example: send 10% of token supply to the DAO Treasury within 14 days of approval."
-            placeholder="Describe the action and any verification details (tx hash, on-chain address, etc.)"
+            title={t('Conditions')}
+            subtitle={t('What will the team do, and by when? Example: send 10% of token supply to the DAO Treasury within 14 days of approval.')}
+            placeholder={t('Describe the action and any verification details (tx hash, on-chain address, etc.)')}
             minRows={3}
           />
           {pledgeAddress ? (
             <div className="rounded border border-amber-200 bg-amber-50/60 p-2 text-xs dark:border-amber-900 dark:bg-amber-950/30">
               <div className="text-amber-800 dark:text-amber-200">
-                <strong>Do not send anything now.</strong> If this proposal is <strong>approved</strong> and you committed to
-                sharing tokens, the team will be asked — <strong>only after approval</strong>, before funding starts — to send
-                the tokens to the platform&apos;s <strong>Pledge</strong> address below. Sending earlier won&apos;t count.
+                <strong>{t('Do not send anything now.')}</strong> {t('If this proposal is')} <strong>{t('approved')}</strong> {t('and you committed to sharing tokens, the team will be asked —')} <strong>{t('only after approval')}</strong>{t(', before funding starts — to send the tokens to the platform’s')} <strong>{t('Pledge')}</strong> {t('address below. Sending earlier won’t count.')}
               </div>
               <div className="mt-1 flex items-center gap-2">
                 <div className="flex-1 break-all font-mono text-[11px] text-amber-700/90 dark:text-amber-300/90">{pledgeAddress}</div>
-                <CopyButton text={pledgeAddress} label="Copy address" />
+                <CopyButton text={pledgeAddress} label={t('Copy address')} />
               </div>
             </div>
           ) : null}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { useT } from '@/lib/prefs-context';
 
 /**
  * §20 — in-platform modal that replaces native `window.confirm`. Styled to
@@ -24,8 +25,8 @@ export function ConfirmDialog({
   open,
   title,
   message,
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   tone = 'default',
   hideCancel = false,
   onConfirm,
@@ -43,6 +44,7 @@ export function ConfirmDialog({
   onConfirm: () => void | Promise<void>;
   onCancel: () => void;
 }) {
+  const t = useT();
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
   // Callbacks live in refs so the open-effect below depends ONLY on `open`.
   // Call sites pass inline arrows (new identity every render); if the effect
@@ -102,11 +104,11 @@ export function ConfirmDialog({
               onClick={onCancel}
               className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
             >
-              {cancelLabel}
+              {cancelLabel ?? t('Cancel')}
             </button>
           )}
           <button ref={confirmBtnRef} type="button" onClick={() => { void onConfirm(); }} className={confirmCls}>
-            {confirmLabel}
+            {confirmLabel ?? t('Confirm')}
           </button>
         </div>
       </div>

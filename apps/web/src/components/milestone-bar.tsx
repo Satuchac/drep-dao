@@ -2,6 +2,9 @@
 
 import { useState } from 'react';
 import type { MilestoneSegment } from '@/lib/api';
+import { useT } from '@/lib/prefs-context';
+
+type TFn = (s: string) => string;
 
 /**
  * §11 — milestone progress bar. One coloured part per milestone:
@@ -27,15 +30,16 @@ const STATE: Record<MilestoneSegment['state'], { bar: string; dot: string; label
 const ada = (n: number) => `${n.toLocaleString(undefined, { maximumFractionDigits: 0 })} ₳`;
 const fmtDate = (s: string | null) => (s ? new Date(s).toLocaleDateString() : null);
 
-function tooltip(seg: MilestoneSegment): string {
-  const parts = [`Milestone #${seg.idx + 1}${seg.title ? ` — ${seg.title}` : ''}`, `${ada(seg.amountAda)} · ${STATE[seg.state].label}`];
-  if (seg.state === 'UNDER_REVIEW') parts.push(`${seg.reviewYes}/${seg.reviewThreshold} YES`);
-  if (seg.poaAttempts > 1) parts.push(`POA attempt ${seg.poaAttempts}`);
-  if (seg.deadlineAt) parts.push(`deadline ${fmtDate(seg.deadlineAt)}`);
+function tooltip(seg: MilestoneSegment, t: TFn): string {
+  const parts = [`${t('Milestone')} #${seg.idx + 1}${seg.title ? ` — ${seg.title}` : ''}`, `${ada(seg.amountAda)} · ${t(STATE[seg.state].label)}`];
+  if (seg.state === 'UNDER_REVIEW') parts.push(`${seg.reviewYes}/${seg.reviewThreshold} ${t('YES')}`);
+  if (seg.poaAttempts > 1) parts.push(`${t('POA attempt')} ${seg.poaAttempts}`);
+  if (seg.deadlineAt) parts.push(`${t('deadline')} ${fmtDate(seg.deadlineAt)}`);
   return parts.join(' · ');
 }
 
 export function MilestoneBar({ segments, interactive = false }: { segments: MilestoneSegment[]; interactive?: boolean }) {
+  const t = useT();
   const [open, setOpen] = useState<number | null>(null);
   if (!segments || segments.length === 0) return null;
   const total = segments.reduce((s, m) => s + m.amountAda, 0);
@@ -44,17 +48,17 @@ export function MilestoneBar({ segments, interactive = false }: { segments: Mile
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-[11px] text-neutral-500">
-        <span>Milestones — {paid}/{segments.length} paid</span>
-        <span className="tabular-nums">{ada(total)} total</span>
+        <span>{t('Milestones')} — {paid}/{segments.length} {t('paid')}</span>
+        <span className="tabular-nums">{ada(total)} {t('total')}</span>
       </div>
       {/* The bar: equal parts, one per milestone. */}
       <div className="flex h-3 w-full gap-0.5 overflow-hidden rounded">
         {segments.map((seg) => {
           const cls = `h-full flex-1 ${STATE[seg.state].bar} ${interactive ? 'cursor-pointer transition-opacity hover:opacity-80' : ''} ${open === seg.idx ? 'ring-2 ring-neutral-700 dark:ring-neutral-200' : ''}`;
           return interactive ? (
-            <button key={seg.idx} type="button" title={tooltip(seg)} onClick={() => setOpen(open === seg.idx ? null : seg.idx)} className={cls} aria-label={tooltip(seg)} />
+            <button key={seg.idx} type="button" title={tooltip(seg, t)} onClick={() => setOpen(open === seg.idx ? null : seg.idx)} className={cls} aria-label={tooltip(seg, t)} />
           ) : (
-            <div key={seg.idx} title={tooltip(seg)} className={cls} />
+            <div key={seg.idx} title={tooltip(seg, t)} className={cls} />
           );
         })}
       </div>
@@ -63,49 +67,50 @@ export function MilestoneBar({ segments, interactive = false }: { segments: Mile
       {interactive && open !== null ? (
         <MilestoneDetail seg={segments.find((s) => s.idx === open)!} />
       ) : interactive ? (
-        <p className="text-[11px] text-neutral-400">Click a milestone part for its budget, POA status, reviewers and deadline.</p>
+        <p className="text-[11px] text-neutral-400">{t('Click a milestone part for its budget, POA status, reviewers and deadline.')}</p>
       ) : null}
     </div>
   );
 }
 
 function MilestoneDetail({ seg }: { seg: MilestoneSegment }) {
+  const t = useT();
   const st = STATE[seg.state];
   return (
     <div className="rounded-md border border-neutral-200 bg-neutral-50 p-2 text-xs dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-medium">Milestone #{seg.idx + 1}{seg.title ? ` — ${seg.title}` : ''}</span>
+        <span className="font-medium">{t('Milestone')} #{seg.idx + 1}{seg.title ? ` — ${seg.title}` : ''}</span>
         <span className="flex items-center gap-1.5">
           <span className={`h-2.5 w-2.5 rounded-full ${st.dot}`} />
-          <span className="font-medium">{st.label}</span>
+          <span className="font-medium">{t(st.label)}</span>
         </span>
       </div>
       <dl className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
-        <Field label="Budget" value={ada(seg.amountAda)} />
+        <Field label={t('Budget')} value={ada(seg.amountAda)} />
         <Field
-          label="Proof of achievement"
+          label={t('Proof of achievement')}
           value={
-            seg.poaAttempts === 0 ? 'not submitted yet'
-              : `submitted${seg.poaSubmittedAt ? ` ${fmtDate(seg.poaSubmittedAt)}` : ''}${seg.poaAttempts > 1 ? ` · attempt ${seg.poaAttempts}` : ''}`
+            seg.poaAttempts === 0 ? t('not submitted yet')
+              : `${t('submitted')}${seg.poaSubmittedAt ? ` ${fmtDate(seg.poaSubmittedAt)}` : ''}${seg.poaAttempts > 1 ? ` · ${t('attempt')} ${seg.poaAttempts}` : ''}`
           }
         />
         <Field
-          label="Review"
+          label={t('Review')}
           value={
-            seg.state === 'UNDER_REVIEW' ? `pending · ${seg.reviewYes}/${seg.reviewThreshold} YES`
-              : seg.state === 'REJECTED' ? 'rejected — resubmit needed'
-                : seg.state === 'PAYMENT_PENDING' || seg.state === 'PAID' ? 'approved'
+            seg.state === 'UNDER_REVIEW' ? `${t('pending')} · ${seg.reviewYes}/${seg.reviewThreshold} ${t('YES')}`
+              : seg.state === 'REJECTED' ? t('rejected — resubmit needed')
+                : seg.state === 'PAYMENT_PENDING' || seg.state === 'PAID' ? t('approved')
                   : '—'
           }
         />
-        <Field label="Planned until" value={fmtDate(seg.deadlineAt) ?? 'no deadline set'} />
-        <Field label="Reviewers" value={seg.reviewers.length ? seg.reviewers.join(', ') : 'not assigned yet'} />
+        <Field label={t('Planned until')} value={fmtDate(seg.deadlineAt) ?? t('no deadline set')} />
+        <Field label={t('Reviewers')} value={seg.reviewers.length ? seg.reviewers.join(', ') : t('not assigned yet')} />
         <Field
-          label="Payment"
+          label={t('Payment')}
           value={
-            seg.state === 'PAID' ? 'sent ✓'
-              : seg.state === 'PAYMENT_PENDING' ? 'payment pending'
-                : seg.state === 'LOST' ? 'not payable (proposal cancelled)'
+            seg.state === 'PAID' ? t('sent ✓')
+              : seg.state === 'PAYMENT_PENDING' ? t('payment pending')
+                : seg.state === 'LOST' ? t('not payable (proposal cancelled)')
                   : '—'
           }
         />

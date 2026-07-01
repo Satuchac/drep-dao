@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/lib/auth-context';
+import { useT } from '@/lib/prefs-context';
 import type { Cip30WalletEntry } from '@/lib/cip30';
 
 /** Reject after `ms` so a wallet popup that never appears (e.g. the user switched
@@ -18,6 +19,7 @@ function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
 
 /** Primary login — Cardano wallet. Recognizes the wallet and shows the role. */
 export function ConnectWallet() {
+  const t = useT();
   const { profile, loading, wallets, login, logout, refreshWallets } = useAuth();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,16 +35,16 @@ export function ConnectWallet() {
     // DAO is a "Registered DRep" (eligible to request membership), distinct from
     // a plain ADA-holder Viewer.
     const base = profile.roles.includes('BOARD')
-      ? 'Board member'
+      ? t('Board member')
       : profile.roles.includes('DAO_MEMBER')
-        ? 'DAO member'
+        ? t('DAO member')
         : profile.onchainDrep.registered
-          ? 'Registered DRep'
-          : 'Viewer';
+          ? t('Registered DRep')
+          : t('Viewer');
     const status = [
       base,
-      ...(profile.roles.includes('EXPERT') ? ['Expert'] : []),
-      ...(profile.roles.includes('SUBMITTER') ? ['Submitter'] : []),
+      ...(profile.roles.includes('EXPERT') ? [t('Expert')] : []),
+      ...(profile.roles.includes('SUBMITTER') ? [t('Submitter')] : []),
     ].join(' | ');
     return (
       <div className="space-y-1.5 text-sm">
@@ -52,7 +54,7 @@ export function ConnectWallet() {
         <div className="flex items-center gap-2">
           <span className="text-emerald-600 dark:text-emerald-400">●</span>
           <span className="font-medium">
-            {profile.user.displayName ?? 'Signed in'}
+            {profile.user.displayName ?? t('Signed in')}
             {(profile.roles.includes('DAO_MEMBER') || profile.roles.includes('BOARD')) &&
             profile.roles.includes('SUBMITTER') &&
             profile.submitterName &&
@@ -72,7 +74,7 @@ export function ConnectWallet() {
           onClick={() => logout()}
           className="mt-1 rounded-md border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
         >
-          Log out
+          {t('Log out')}
         </button>
       </div>
     );
@@ -85,7 +87,7 @@ export function ConnectWallet() {
     try {
       await withTimeout(login(entry), 90_000);
     } catch (e) {
-      if (myAttempt === attemptRef.current) setError(e instanceof Error ? e.message : 'Login failed');
+      if (myAttempt === attemptRef.current) setError(e instanceof Error ? e.message : t('Login failed'));
     } finally {
       // Ignore a stale attempt the user already cancelled (or superseded).
       if (myAttempt === attemptRef.current) setBusy(null);
@@ -103,20 +105,20 @@ export function ConnectWallet() {
   return (
     <div className="space-y-3">
       <div>
-        <div className="text-sm font-medium">Sign in with your Cardano wallet</div>
+        <div className="text-sm font-medium">{t('Sign in with your Cardano wallet')}</div>
         <div className="text-xs text-neutral-500">
-          The platform reads your stake key and grants your role automatically.
-          {loading ? ' Checking existing session…' : ''}
+          {t('The platform reads your stake key and grants your role automatically.')}
+          {loading ? ` ${t('Checking existing session…')}` : ''}
         </div>
       </div>
 
       {wallets.length === 0 ? (
         <div className="text-sm text-neutral-500">
-          No CIP-30 wallet detected.{' '}
+          {t('No CIP-30 wallet detected.')}{' '}
           <button onClick={refreshWallets} className="underline">
-            Re-scan
+            {t('Re-scan')}
           </button>{' '}
-          after installing/enabling Eternl, Lace, etc. (set the wallet to <strong>Preprod</strong>).
+          {t('after installing/enabling Eternl, Lace, etc. (set the wallet to')} <strong>Preprod</strong>).
         </div>
       ) : (
         <div className="space-y-2">
@@ -132,7 +134,7 @@ export function ConnectWallet() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={w.icon} alt="" width={18} height={18} />
                 ) : null}
-                {busy === w.key ? 'Check your wallet…' : `Connect ${w.name}`}
+                {busy === w.key ? t('Check your wallet…') : `${t('Connect')} ${w.name}`}
               </button>
             ))}
           </div>
@@ -141,14 +143,14 @@ export function ConnectWallet() {
               leave every button disabled with no recovery. */}
           {busy !== null ? (
             <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-              <span>Approve the connection in your wallet popup.</span>
+              <span>{t('Approve the connection in your wallet popup.')}</span>
               <button onClick={cancelAttempt} className="rounded-md border border-neutral-300 px-2 py-1 font-medium text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800">
-                Cancel &amp; try again
+                {t('Cancel & try again')}
               </button>
             </div>
           ) : (
             <button onClick={refreshWallets} className="text-xs text-neutral-400 underline hover:text-neutral-600">
-              Switched account or wallet? Re-scan wallets
+              {t('Switched account or wallet? Re-scan wallets')}
             </button>
           )}
         </div>
@@ -157,15 +159,15 @@ export function ConnectWallet() {
         <div className="space-y-1 text-sm text-red-600">
           <div>{error}</div>
           <button onClick={() => { setError(null); refreshWallets(); }} className="text-xs font-medium underline">
-            Try again
+            {t('Try again')}
           </button>
         </div>
       ) : null}
 
       <div className="pt-1 text-xs text-neutral-400">
-        Platform operator?{' '}
+        {t('Platform operator?')}{' '}
         <Link href="/admin/login" className="underline hover:text-neutral-600">
-          Admin login
+          {t('Admin login')}
         </Link>
       </div>
     </div>

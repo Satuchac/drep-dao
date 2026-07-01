@@ -3,15 +3,23 @@
 import { useEffect, useState } from 'react';
 import { drepApi, type MyDrep } from '@/lib/api';
 import { useExplorer } from '@/lib/explorer';
+import { useT } from '@/lib/prefs-context';
 
-const LABEL: Record<string, { text: string; cls: string }> = {
-  PENDING_ADMISSION: { text: 'Membership request under board review', cls: 'text-amber-600' },
-  ADMITTED: { text: 'You are a DAO member ✅', cls: 'text-emerald-600' },
-  REJECTED: { text: 'Membership request rejected', cls: 'text-red-600' },
-  REMOVED: { text: 'DAO membership removed', cls: 'text-red-600' },
+const LABEL_CLS: Record<string, string> = {
+  PENDING_ADMISSION: 'text-amber-600',
+  ADMITTED: 'text-emerald-600',
+  REJECTED: 'text-red-600',
+  REMOVED: 'text-red-600',
 };
 
 export function MyDrepStatus() {
+  const t = useT();
+  const LABEL_TEXT: Record<string, string> = {
+    PENDING_ADMISSION: t('Membership request under board review'),
+    ADMITTED: t('You are a DAO member ✅'),
+    REJECTED: t('Membership request rejected'),
+    REMOVED: t('DAO membership removed'),
+  };
   const { txUrl } = useExplorer();
   const [drep, setDrep] = useState<MyDrep | null>(null);
 
@@ -20,39 +28,39 @@ export function MyDrepStatus() {
   }, []);
 
   if (!drep) return null;
-  const label = LABEL[drep.status] ?? { text: drep.status, cls: '' };
+  const label = { text: LABEL_TEXT[drep.status] ?? drep.status, cls: LABEL_CLS[drep.status] ?? '' };
   const pending = drep.status === 'PENDING_ADMISSION';
 
   return (
     <div className="space-y-2 text-sm">
-      <h3 className="text-base font-semibold">DAO membership</h3>
+      <h3 className="text-base font-semibold">{t('DAO membership')}</h3>
       <div className={label.cls}>{label.text}</div>
       <div className="font-mono text-xs text-neutral-500 break-all">{drep.drepIdOnchain}</div>
       {drep.anchorTxHash ? (
         <div className="text-xs text-neutral-500">
-          Decision anchored on-chain ✓{' '}
+          {t('Decision anchored on-chain ✓')}{' '}
           <a
             href={txUrl(drep.anchorTxHash)}
             target="_blank"
             rel="noreferrer"
             className="underline"
           >
-            view tx
+            {t('view tx')}
           </a>
         </div>
       ) : null}
 
       {pending ? (
         <div className="text-sm">
-          <span className="font-medium text-emerald-600">{drep.yes}</span> of{' '}
-          <span className="font-medium">{drep.threshold}</span> required YES votes
+          <span className="font-medium text-emerald-600">{drep.yes}</span> {t('of')}{' '}
+          <span className="font-medium">{drep.threshold}</span> {t('required YES votes')}
           {drep.no ? <span className="text-red-600"> · {drep.no} NO</span> : null}
         </div>
       ) : null}
 
       {drep.admissionVotesReceived.length > 0 ? (
         <div className="space-y-1">
-          <div className="text-xs font-medium text-neutral-500">Board votes</div>
+          <div className="text-xs font-medium text-neutral-500">{t('Board votes')}</div>
           <ul className="space-y-1">
             {drep.admissionVotesReceived.map((v, i) => (
               <li
@@ -69,7 +77,7 @@ export function MyDrepStatus() {
           </ul>
         </div>
       ) : pending ? (
-        <p className="text-xs text-neutral-500">No board votes cast yet.</p>
+        <p className="text-xs text-neutral-500">{t('No board votes cast yet.')}</p>
       ) : null}
     </div>
   );

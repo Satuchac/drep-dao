@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { treasuryApi, treasuryBucketsApi, type TreasuryOverview, type HotWalletHistoryItem, type TreasuryBucket } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useExplorer } from '@/lib/explorer';
+import { useT } from '@/lib/prefs-context';
 import { ConfirmDialog } from './confirm-dialog';
 
 /**
@@ -17,6 +18,7 @@ import { ConfirmDialog } from './confirm-dialog';
  * Self-hides for non-board users.
  */
 export function HotWalletControls({ onChange }: { onChange?: () => void }) {
+  const t = useT();
   const { profile } = useAuth();
   const { txUrl } = useExplorer();
   const isBoard = !!profile?.roles.includes('BOARD');
@@ -49,8 +51,8 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
   if (!overview.hotWallet.address) {
     return (
       <section className="rounded-lg border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="font-semibold">Hot wallet</div>
-        <div className="mt-1 text-xs text-amber-700">No anchor hot wallet is configured.</div>
+        <div className="font-semibold">{t('Hot wallet')}</div>
+        <div className="mt-1 text-xs text-amber-700">{t('No anchor hot wallet is configured.')}</div>
       </section>
     );
   }
@@ -63,7 +65,7 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
     setError(null); setSuccess(null); setBusy('topup');
     try {
       await treasuryApi.prepareTopUp(num, sourceBucketId || undefined);
-      setSuccess(`Top-up of ${num.toLocaleString()} ₳ prepared — awaiting 3-of-5 board signatures in Actions.`);
+      setSuccess(`${t('Top-up of')} ${num.toLocaleString()} ₳ ${t('prepared — awaiting 3-of-5 board signatures in Actions.')}`);
       setAmount('');
       load();
       onChange?.();
@@ -78,7 +80,7 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
     setError(null); setSuccess(null); setBusy('sweep');
     try {
       const r = await treasuryApi.sweepHotWallet();
-      setSuccess(`Hot wallet swept to treasury — tx ${r.txHash.slice(0, 12)}…`);
+      setSuccess(`${t('Hot wallet swept to treasury — tx')} ${r.txHash.slice(0, 12)}…`);
       // Refresh history so the new sweep appears at the top.
       load();
       onChange?.();
@@ -93,20 +95,18 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
     <>
       <section className="space-y-3 rounded-lg border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="font-semibold">Hot wallet — board controls</div>
+          <div className="font-semibold">{t('Hot wallet — board controls')}</div>
           <span className={`text-xs tabular-nums ${low ? 'text-amber-700 dark:text-amber-300' : 'text-neutral-500'}`}>
-            balance {balance.toLocaleString()} ₳ {low ? `(below ${policy.minAda} ₳)` : ''}
+            {t('balance')} {balance.toLocaleString()} ₳ {low ? `(${t('below')} ${policy.minAda} ₳)` : ''}
           </span>
         </div>
         <p className="text-xs text-neutral-500">
-          Top-ups go through the standard 3-of-5 board signing flow (they appear in <strong>Actions to sign</strong>).
-          A sweep moves the full hot-wallet balance back into the treasury immediately (no threshold).
-          A few ADA may remain at the hot wallet after a sweep due to the Cardano tx fee and minUTxO requirement.
+          {t('Top-ups go through the standard 3-of-5 board signing flow (they appear in')} <strong>{t('Actions to sign')}</strong>{t(').')}
+          {t('A sweep moves the full hot-wallet balance back into the treasury immediately (no threshold). A few ADA may remain at the hot wallet after a sweep due to the Cardano tx fee and minUTxO requirement.')}
         </p>
         {low ? (
           <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-            ⚠ Hot wallet is below {policy.minAda} ₳ — the platform also auto-prepares a {policy.autoTopUpAda} ₳ top-up
-            when this happens. You can prepare a different amount below.
+            {t('⚠ Hot wallet is below')} {policy.minAda} ₳ — {t('the platform also auto-prepares a')} {policy.autoTopUpAda} ₳ {t('top-up when this happens. You can prepare a different amount below.')}
           </div>
         ) : null}
         <div className="flex flex-wrap items-end gap-2">
@@ -114,7 +114,7 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
               than one bucket; defaults to the Operations-flagged one. */}
           {buckets.length > 1 ? (
             <label className="block text-xs">
-              Source bucket
+              {t('Source bucket')}
               <select
                 value={sourceBucketId}
                 onChange={(e) => setSourceBucketId(e.target.value)}
@@ -122,14 +122,14 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
               >
                 {buckets.map((b) => (
                   <option key={b.id} value={b.id}>
-                    {b.label}{b.isDefaultOperations ? ' (Operations)' : ''} — {b.balanceAda.toLocaleString()} ₳
+                    {b.label}{b.isDefaultOperations ? ` ${t('(Operations)')}` : ''} — {b.balanceAda.toLocaleString()} ₳
                   </option>
                 ))}
               </select>
             </label>
           ) : null}
           <label className="block text-xs">
-            Top-up amount (₳, max {policy.topUpMaxAda.toLocaleString()})
+            {t('Top-up amount (₳, max')} {policy.topUpMaxAda.toLocaleString()})
             <input
               type="number"
               min={1}
@@ -145,15 +145,15 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
             onClick={topup}
             className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300"
           >
-            {busy === 'topup' ? '…' : 'Prepare top-up'}
+            {busy === 'topup' ? '…' : t('Prepare top-up')}
           </button>
           <button
             disabled={balance <= 0 || busy !== null}
             onClick={() => setConfirmSweep(true)}
-            title={balance <= 0 ? 'Hot wallet is empty.' : 'Move all hot-wallet funds back to the multisig treasury.'}
+            title={balance <= 0 ? t('Hot wallet is empty.') : t('Move all hot-wallet funds back to the multisig treasury.')}
             className="rounded border border-neutral-400 px-2.5 py-1 text-xs text-neutral-700 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
           >
-            {busy === 'sweep' ? '…' : 'Sweep hot wallet → treasury'}
+            {busy === 'sweep' ? '…' : t('Sweep hot wallet → treasury')}
           </button>
         </div>
         {successMsg ? <div className="text-xs text-emerald-700 dark:text-emerald-300">{successMsg}</div> : null}
@@ -167,12 +167,12 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
             onClick={() => setShowHistory((v) => !v)}
             className="flex w-full items-center justify-between px-2 py-1 text-xs font-semibold text-neutral-700 dark:text-neutral-300"
           >
-            <span>Hot wallet ↔ treasury history ({history.length})</span>
-            <span>{showHistory ? '▾ hide' : '▸ show'}</span>
+            <span>{t('Hot wallet ↔ treasury history')} ({history.length})</span>
+            <span>{showHistory ? t('▾ hide') : t('▸ show')}</span>
           </button>
           {showHistory ? (
             history.length === 0 ? (
-              <div className="px-2 pb-2 text-[11px] text-neutral-500">No transactions yet.</div>
+              <div className="px-2 pb-2 text-[11px] text-neutral-500">{t('No transactions yet.')}</div>
             ) : (
               <ul className="space-y-1 px-2 pb-2 text-xs">
                 {history.map((h) => (
@@ -184,7 +184,7 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
                             ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-200'
                             : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
                         }`}>
-                          {h.direction === 'TOP_UP' ? 'TOP-UP · treasury → hot' : 'SWEEP · hot → treasury'}
+                          {h.direction === 'TOP_UP' ? t('TOP-UP · treasury → hot') : t('SWEEP · hot → treasury')}
                         </span>
                         <span className="tabular-nums">{h.amountAda.toLocaleString()} ₳</span>
                         {/* §15.3 — status badge so the user sees WHERE in the
@@ -196,10 +196,10 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
                     </div>
                     {h.txHash ? (
                       <div className="mt-0.5 break-all">
-                        tx <a href={txUrl(h.txHash)} target="_blank" rel="noreferrer" className="font-mono text-emerald-700 underline dark:text-emerald-400">{h.txHash} ↗</a>
+                        {t('tx')} <a href={txUrl(h.txHash)} target="_blank" rel="noreferrer" className="font-mono text-emerald-700 underline dark:text-emerald-400">{h.txHash} ↗</a>
                       </div>
                     ) : null}
-                    {h.initiatedBy ? <div className="text-[11px] text-neutral-500">initiated by {h.initiatedBy}</div> : null}
+                    {h.initiatedBy ? <div className="text-[11px] text-neutral-500">{t('initiated by')} {h.initiatedBy}</div> : null}
                     {/* §15.3 — once a top-up reaches READY, a board member must
                         broadcast the assembled tx from the wallet that controls
                         the treasury (we don't hold that key) and paste the hash
@@ -218,14 +218,12 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
 
       <ConfirmDialog
         open={confirmSweep}
-        title="Sweep hot wallet?"
+        title={t('Sweep hot wallet?')}
         tone="danger"
-        confirmLabel="Sweep to treasury"
+        confirmLabel={t('Sweep to treasury')}
         message={
           <>
-            Move <strong>{balance.toLocaleString()} ₳</strong> from the hot wallet back to the treasury multisig.
-            This runs immediately (no multisig threshold). A small amount may remain at the hot wallet because of the
-            Cardano tx fee and minUTxO requirement.
+            {t('Move')} <strong>{balance.toLocaleString()} ₳</strong> {t('from the hot wallet back to the treasury multisig. This runs immediately (no multisig threshold). A small amount may remain at the hot wallet because of the Cardano tx fee and minUTxO requirement.')}
           </>
         }
         onConfirm={sweep}
@@ -237,6 +235,7 @@ export function HotWalletControls({ onChange }: { onChange?: () => void }) {
 
 /** Per-row status pill in the history list. */
 function StatusChip({ h }: { h: HotWalletHistoryItem }) {
+  const t = useT();
   const cls: Record<string, string> = {
     PENDING_SIGS: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200',
     READY:        'bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100',
@@ -246,11 +245,11 @@ function StatusChip({ h }: { h: HotWalletHistoryItem }) {
     SWEPT:        'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200',
   };
   const label = h.status === 'PENDING_SIGS' && h.threshold
-    ? `pending sigs · ${h.approvals ?? 0}/${h.threshold}`
-    : h.status === 'READY' ? 'authorized · awaiting broadcast'
-    : h.status === 'BROADCASTED' ? 'broadcast · awaiting on-chain'
-    : h.status === 'CONFIRMED' ? '✓ PAID'
-    : h.status === 'SWEPT' ? '✓ SWEPT'
+    ? `${t('pending sigs')} · ${h.approvals ?? 0}/${h.threshold}`
+    : h.status === 'READY' ? t('authorized · awaiting broadcast')
+    : h.status === 'BROADCASTED' ? t('broadcast · awaiting on-chain')
+    : h.status === 'CONFIRMED' ? t('✓ PAID')
+    : h.status === 'SWEPT' ? t('✓ SWEPT')
     : h.status;
   return (
     <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${cls[h.status] ?? cls.PENDING_SIGS}`}>
@@ -267,6 +266,7 @@ function StatusChip({ h }: { h: HotWalletHistoryItem }) {
  * We verify against the hot wallet address via Koios and flip to CONFIRMED.
  */
 function TopUpBroadcastPanel({ id, onChange }: { id: string; onChange: () => void }) {
+  const t = useT();
   const [tx, setTx] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -280,16 +280,15 @@ function TopUpBroadcastPanel({ id, onChange }: { id: string; onChange: () => voi
   };
   return (
     <div className="mt-1 rounded border border-amber-300 bg-amber-50 p-1.5 text-[11px] dark:border-amber-900 dark:bg-amber-950/40">
-      <div className="font-semibold text-amber-800 dark:text-amber-200">Manual broadcast needed</div>
+      <div className="font-semibold text-amber-800 dark:text-amber-200">{t('Manual broadcast needed')}</div>
       <div className="mt-0.5 text-neutral-700 dark:text-neutral-300">
-        The platform doesn&apos;t hold the treasury signing key. Sign + broadcast this tx from the wallet that
-        controls the treasury address, then paste the on-chain tx hash here so the platform can verify and mark it PAID.
+        {t('The platform doesn’t hold the treasury signing key. Sign + broadcast this tx from the wallet that controls the treasury address, then paste the on-chain tx hash here so the platform can verify and mark it PAID.')}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <input
           value={tx}
           onChange={(e) => { setTx(e.target.value); setError(null); }}
-          placeholder="64-hex broadcast tx hash"
+          placeholder={t('64-hex broadcast tx hash')}
           className="flex-1 rounded border border-neutral-300 px-2 py-1 font-mono text-[11px] dark:border-neutral-700 dark:bg-neutral-900"
         />
         <button
@@ -297,7 +296,7 @@ function TopUpBroadcastPanel({ id, onChange }: { id: string; onChange: () => voi
           onClick={submit}
           className="rounded border border-emerald-500 px-2 py-0.5 text-[11px] text-emerald-700 disabled:opacity-40 dark:text-emerald-300"
         >
-          {busy ? '…' : 'Verify on-chain'}
+          {busy ? '…' : t('Verify on-chain')}
         </button>
       </div>
       {error ? <div className="mt-1 text-red-600">{error}</div> : null}

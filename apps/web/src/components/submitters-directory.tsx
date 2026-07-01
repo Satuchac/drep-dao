@@ -36,16 +36,15 @@ export function SubmittersDirectory() {
       <div>
         <h2 className="text-lg font-semibold">{t('Submitters')}</h2>
         <p className="text-sm text-neutral-500">
-          Approved submitters — accounts allowed to submit funding proposals. Click a row for the
-          full profile. Submitters who are also DAO members (they vote, too) are flagged.
+          {t('Approved submitters — accounts allowed to submit funding proposals. Click a row for the full profile. Submitters who are also DAO members (they vote, too) are flagged.')}
         </p>
       </div>
       <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
         <input type="checkbox" checked={showLeft} onChange={(e) => setShowLeft(e.target.checked)} />
-        Show deleted accounts (submitters who left — profiles are kept in the history)
+        {t('Show deleted accounts (submitters who left — profiles are kept in the history)')}
       </label>
-      {rows === null ? <p className="text-sm text-neutral-500">Loading…</p> : null}
-      {rows?.length === 0 ? <p className="text-sm text-neutral-500">No approved submitters yet.</p> : null}
+      {rows === null ? <p className="text-sm text-neutral-500">{t('Loading…')}</p> : null}
+      {rows?.length === 0 ? <p className="text-sm text-neutral-500">{t('No approved submitters yet.')}</p> : null}
       <div className="space-y-3">
         {rows?.map((s) => {
           const open = openId === s.id;
@@ -59,19 +58,19 @@ export function SubmittersDirectory() {
                   <span className="font-medium">{s.displayName}</span>
                   {s.country ? <span className="text-xs text-neutral-500">{s.country}</span> : null}
                   {s.status === 'LEFT' ? (
-                    <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300" title={s.leftAt ? `left ${new Date(s.leftAt).toLocaleDateString()}` : 'left the platform'}>
-                      left{s.leftAt ? ` ${new Date(s.leftAt).toLocaleDateString()}` : ''}
+                    <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[11px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300" title={s.leftAt ? `${t('left')} ${new Date(s.leftAt).toLocaleDateString()}` : t('left the platform')}>
+                      {t('left')}{s.leftAt ? ` ${new Date(s.leftAt).toLocaleDateString()}` : ''}
                     </span>
                   ) : null}
                   {s.isDaoMember ? (
-                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200" title="This submitter also votes on funding proposals">
-                      ⚠ also a DAO member{s.daoMemberName ? ` (${s.daoMemberName})` : ''}
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200" title={t('This submitter also votes on funding proposals')}>
+                      {t('⚠ also a DAO member')}{s.daoMemberName ? ` (${s.daoMemberName})` : ''}
                     </span>
                   ) : null}
-                  {s.noSelfVotePledge ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">✓ no self-vote pledge</span> : null}
+                  {s.noSelfVotePledge ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[11px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{t('✓ no self-vote pledge')}</span> : null}
                 </span>
                 <span className="flex items-center gap-2 text-xs text-neutral-400">
-                  {s.since ? <span>approved {new Date(s.since).toLocaleDateString()}</span> : null}
+                  {s.since ? <span>{t('approved')} {new Date(s.since).toLocaleDateString()}</span> : null}
                   <span>{open ? '▴' : '▾'}</span>
                 </span>
               </button>
@@ -83,60 +82,60 @@ export function SubmittersDirectory() {
                     : <FallbackAvatar name={s.displayName} className="h-24 w-24 rounded-lg" />}
                   <div className="min-w-0 flex-1 space-y-2 text-sm">
                     <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Description</div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Description')}</div>
                       <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{s.description}</ClampedMarkdown>
                     </div>
                     <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Previous funding</div>
-                      <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty="— none declared —" maxLines={15}>{s.previousFunding}</ClampedMarkdown>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Previous funding')}</div>
+                      <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty={t('— none declared —')} maxLines={15}>{s.previousFunding}</ClampedMarkdown>
                     </div>
                     <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Conflict of interest</div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Conflict of interest')}</div>
                       <ClampedMarkdown className="mt-0.5 text-neutral-700 dark:text-neutral-300" empty="—" maxLines={15}>{s.conflictOfInterest}</ClampedMarkdown>
                     </div>
                     <div className="text-xs text-neutral-600 dark:text-neutral-300">
-                      <span className="font-medium">Pledge:</span> {s.noSelfVotePledge ? '✓ will not vote for own proposals' : 'no self-vote pledge given (informative)'}
-                      {s.isDaoMember ? <span className="ml-2 font-medium text-amber-700 dark:text-amber-300">⚠ this submitter is also a DAO member and votes on funding</span> : null}
+                      <span className="font-medium">{t('Pledge:')}</span> {s.noSelfVotePledge ? t('✓ will not vote for own proposals') : t('no self-vote pledge given (informative)')}
+                      {s.isDaoMember ? <span className="ml-2 font-medium text-amber-700 dark:text-amber-300">{t('⚠ this submitter is also a DAO member and votes on funding')}</span> : null}
                     </div>
                     {/* §2 (board) — override this submitter's cross-wallet link to a DAO member. */}
                     <SubmitterLinkEditor s={s} onSaved={reload} />
                     <div className="text-xs">
-                      <span className="font-medium">Contact:</span>{' '}
+                      <span className="font-medium">{t('Contact:')}</span>{' '}
                       {s.telegram ? <span className="font-mono">{s.telegram}</span> : '—'}
                       {' · '}
                       {s.email ? <a href={`mailto:${s.email}`} className="text-emerald-700 underline dark:text-emerald-400">{s.email}</a> : '—'}
                     </div>
                     {/* The platform knows the wallet — surface the on-chain identity. */}
                     <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                      <span className="font-medium">Wallet (stake):</span>
+                      <span className="font-medium">{t('Wallet (stake):')}</span>
                       <span className="break-all font-mono text-neutral-600 dark:text-neutral-300">{s.stakeAddress}</span>
-                      <CopyButton text={s.stakeAddress} label="Copy" />
+                      <CopyButton text={s.stakeAddress} label={t('Copy')} />
                     </div>
                     {s.drepIdOnchain ? (
                       <div className="flex flex-wrap items-center gap-1.5 text-xs">
-                        <span className="font-medium">DRep ID:</span>
+                        <span className="font-medium">{t('DRep ID:')}</span>
                         <a href={drepUrl(s.drepIdOnchain)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">{s.drepIdOnchain}</a>
-                        <CopyButton text={s.drepIdOnchain} label="Copy" />
+                        <CopyButton text={s.drepIdOnchain} label={t('Copy')} />
                       </div>
                     ) : null}
                     <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Links</div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Links')}</div>
                       <div className="mt-0.5 space-y-0.5 text-xs">
                         <div>
-                          <span className="font-medium">GitHub:</span>{' '}
+                          <span className="font-medium">{t('GitHub:')}</span>{' '}
                           {s.githubUrls.length
                             ? s.githubUrls.map((l, i) => (
                                 <a key={i} href={l} target="_blank" rel="noreferrer" className="mr-2 break-all text-emerald-700 underline dark:text-emerald-400">{l}</a>
                               ))
-                            : <span className="text-neutral-400">not provided</span>}
+                            : <span className="text-neutral-400">{t('not provided')}</span>}
                         </div>
                         <div>
-                          <span className="font-medium">Social media:</span>{' '}
+                          <span className="font-medium">{t('Social media:')}</span>{' '}
                           {s.socialLinks.length
                             ? s.socialLinks.map((l, i) => (
                                 <a key={i} href={l} target="_blank" rel="noreferrer" className="mr-2 break-all text-emerald-700 underline dark:text-emerald-400">{l}</a>
                               ))
-                            : <span className="text-neutral-400">not provided</span>}
+                            : <span className="text-neutral-400">{t('not provided')}</span>}
                         </div>
                       </div>
                     </div>
@@ -159,6 +158,7 @@ export function SubmittersDirectory() {
  *  how many submitted, total requested, granted budget, paid so far, completed,
  *  in-progress + milestones still missing. Lazy-loaded when the profile opens. */
 function SubmitterPortfolioSection({ submitterId }: { submitterId: string }) {
+  const t = useT();
   const { setParams } = useUrlNav();
   const [data, setData] = useState<SubmitterPortfolio | null>(null);
   const [error, setError] = useState(false);
@@ -168,40 +168,40 @@ function SubmitterPortfolioSection({ submitterId }: { submitterId: string }) {
     return () => { alive = false; };
   }, [submitterId]);
 
-  if (error) return <p className="text-xs text-red-600">Couldn&apos;t load this submitter&apos;s proposals.</p>;
-  if (!data) return <p className="text-xs text-neutral-500">Loading proposals…</p>;
+  if (error) return <p className="text-xs text-red-600">{t('Couldn’t load this submitter’s proposals.')}</p>;
+  if (!data) return <p className="text-xs text-neutral-500">{t('Loading proposals…')}</p>;
 
   const { stats, proposals } = data;
   const ada = (n: number) => `${n.toLocaleString(undefined, { maximumFractionDigits: 0 })} ₳`;
 
   return (
     <div className="space-y-2">
-      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Funding proposals</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Funding proposals')}</div>
 
       {/* Headline stats. */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
-        <Stat label="Submitted" value={String(stats.submitted)} />
-        <Stat label="Requested" value={ada(stats.requestedAda)} />
-        <Stat label="Granted budget" value={ada(stats.approvedAda)} hint="proposals that were approved for funding" />
-        <Stat label="Paid so far" value={ada(stats.paidAda)} hint="sent after delivered milestones" />
-        <Stat label="Completed" value={String(stats.completed)} />
+        <Stat label={t('Submitted')} value={String(stats.submitted)} />
+        <Stat label={t('Requested')} value={ada(stats.requestedAda)} />
+        <Stat label={t('Granted budget')} value={ada(stats.approvedAda)} hint={t('proposals that were approved for funding')} />
+        <Stat label={t('Paid so far')} value={ada(stats.paidAda)} hint={t('sent after delivered milestones')} />
+        <Stat label={t('Completed')} value={String(stats.completed)} />
         <Stat
-          label="In progress"
+          label={t('In progress')}
           value={String(stats.inProgress)}
-          hint={`${stats.missingMilestones} milestone${stats.missingMilestones === 1 ? '' : 's'} still to deliver`}
+          hint={`${stats.missingMilestones} ${stats.missingMilestones === 1 ? t('milestone still to deliver') : t('milestones still to deliver')}`}
         />
-        <Stat label="Rejected" value={String(stats.rejected)} hint="proposals turned down at filtering or Debate & Vote" />
+        <Stat label={t('Rejected')} value={String(stats.rejected)} hint={t('proposals turned down at filtering or Debate & Vote')} />
       </div>
       {stats.inProgress > 0 ? (
         <p className="text-[11px] text-neutral-500">
-          {stats.inProgress} funded proposal{stats.inProgress === 1 ? '' : 's'} not yet completed —{' '}
-          <span className="font-medium text-amber-700 dark:text-amber-300">{stats.missingMilestones} milestone{stats.missingMilestones === 1 ? '' : 's'} still missing</span>.
+          {stats.inProgress} {stats.inProgress === 1 ? t('funded proposal not yet completed —') : t('funded proposals not yet completed —')}{' '}
+          <span className="font-medium text-amber-700 dark:text-amber-300">{stats.missingMilestones} {stats.missingMilestones === 1 ? t('milestone still missing') : t('milestones still missing')}</span>.
         </p>
       ) : null}
 
       {/* Per-proposal list. */}
       {proposals.length === 0 ? (
-        <p className="text-xs text-neutral-500">No funding proposals submitted yet.</p>
+        <p className="text-xs text-neutral-500">{t('No funding proposals submitted yet.')}</p>
       ) : (
         <ul className="space-y-1.5">
           {proposals.map((p) => (
@@ -217,15 +217,15 @@ function SubmitterPortfolioSection({ submitterId }: { submitterId: string }) {
                   </span>
                   <span className="flex items-center gap-2 text-xs text-neutral-500">
                     {p.roundNumber != null ? (
-                      <span>Round #{p.roundNumber}{p.roundName ? ` — ${p.roundName}` : ''}</span>
-                    ) : <span className="italic text-neutral-400">no round</span>}
+                      <span>{t('Round #')}{p.roundNumber}{p.roundName ? ` — ${p.roundName}` : ''}</span>
+                    ) : <span className="italic text-neutral-400">{t('no round')}</span>}
                     <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} />
                   </span>
                 </div>
                 <div className="mt-1 text-xs text-neutral-500">
-                  {p.requestedAda > 0 ? `Requested ${ada(p.requestedAda)}` : 'no budget set'}
-                  {p.milestonesTotal > 0 ? ` · milestones ${p.milestonesPaid}/${p.milestonesTotal} paid · ${ada(p.paidAda)} received` : ''}
-                  {p.stage ? ` · stage ${p.stage}` : ''}
+                  {p.requestedAda > 0 ? `${t('Requested')} ${ada(p.requestedAda)}` : t('no budget set')}
+                  {p.milestonesTotal > 0 ? ` · ${t('milestones')} ${p.milestonesPaid}/${p.milestonesTotal} ${t('paid')} · ${ada(p.paidAda)} ${t('received')}` : ''}
+                  {p.stage ? ` · ${t('stage')} ${p.stage}` : ''}
                 </div>
               </button>
             </li>
@@ -247,6 +247,7 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 
 /** §2 (board) — set/clear this submitter's cross-wallet link to a DAO-member profile. Board-only. */
 function SubmitterLinkEditor({ s, onSaved }: { s: ApprovedSubmitter; onSaved: () => void }) {
+  const t = useT();
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
   const [members, setMembers] = useState<DaoMember[]>([]);
@@ -261,13 +262,13 @@ function SubmitterLinkEditor({ s, onSaved }: { s: ApprovedSubmitter; onSaved: ()
   };
   return (
     <div className="mt-1 rounded border border-dashed border-neutral-300 p-2 text-xs dark:border-neutral-700">
-      <div className="font-medium text-neutral-500">Board override: link to a DAO-member profile</div>
+      <div className="font-medium text-neutral-500">{t('Board override: link to a DAO-member profile')}</div>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <select value={sel} onChange={(e) => setSel(e.target.value)} disabled={busy} className="rounded border border-neutral-300 px-1.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900">
-          <option value="">— none —</option>
+          <option value="">{t('— none —')}</option>
           {members.map((m) => <option key={m.drepId} value={m.drepId}>{m.displayName}</option>)}
         </select>
-        <button type="button" disabled={busy || sel === (s.daoMemberDrepId ?? '')} onClick={save} className="rounded bg-emerald-600 px-2 py-1 font-medium text-white disabled:opacity-50">Save</button>
+        <button type="button" disabled={busy || sel === (s.daoMemberDrepId ?? '')} onClick={save} className="rounded bg-emerald-600 px-2 py-1 font-medium text-white disabled:opacity-50">{t('Save')}</button>
       </div>
     </div>
   );

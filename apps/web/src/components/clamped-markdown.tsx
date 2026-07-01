@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useT } from '@/lib/prefs-context';
 import { Markdown } from './markdown';
 
 /**
@@ -20,6 +21,7 @@ export function ClampedMarkdown({
   maxLines?: number;
   empty?: string;
 }) {
+  const t = useT();
   const ref = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
@@ -59,7 +61,7 @@ export function ClampedMarkdown({
           onClick={() => setExpanded((v) => !v)}
           className="mt-1 text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
         >
-          {expanded ? 'Show less' : 'Show more'}
+          {expanded ? t('Show less') : t('Show more')}
         </button>
       ) : null}
     </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { useT } from '@/lib/prefs-context';
 
 /**
  * §20 — warns the user when they're logged in but the wallet extension that
@@ -17,6 +18,7 @@ import { useAuth } from '@/lib/auth-context';
  *     wasn't remembered — better to suggest re-connect than to nag).
  */
 export function WalletStatusBanner() {
+  const t = useT();
   const { profile, refreshWallets, wallets } = useAuth();
   const [storedKey, setStoredKey] = useState<string | null>(null);
   const [present, setPresent] = useState<boolean>(true);
@@ -41,11 +43,11 @@ export function WalletStatusBanner() {
   if (present) return null;
   return (
     <div className="rounded-md border border-amber-400 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-700 dark:bg-amber-950/60 dark:text-amber-100">
-      <strong>Wallet extension not available.</strong>{' '}
+      <strong>{t('Wallet extension not available.')}</strong>{' '}
       {storedKey
-        ? <>You&apos;re logged in but the &quot;{storedKey}&quot; wallet isn&apos;t injected right now (disabled, uninstalled, or a different browser profile). Any action that needs a signature — board approvals, votes, milestone POAs — will not work until you re-enable the extension.</>
-        : <>You&apos;re logged in but no Cardano wallet is currently injected. Re-enable your wallet extension and refresh.</>}
-      {' '}({wallets.length} wallet{wallets.length === 1 ? '' : 's'} detected)
+        ? <>{t('You’re logged in but the')} &quot;{storedKey}&quot; {t('wallet isn’t injected right now (disabled, uninstalled, or a different browser profile). Any action that needs a signature — board approvals, votes, milestone POAs — will not work until you re-enable the extension.')}</>
+        : <>{t('You’re logged in but no Cardano wallet is currently injected. Re-enable your wallet extension and refresh.')}</>}
+      {' '}({wallets.length} {wallets.length === 1 ? t('wallet') : t('wallets')} {t('detected')})
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { drepApi, type EntryEligibility } from '@/lib/api';
+import { useT } from '@/lib/prefs-context';
 
 /**
  * §14.1 — the "Join DAO" button, gated on the configurable on-chain entry
@@ -9,6 +10,7 @@ import { drepApi, type EntryEligibility } from '@/lib/api';
  * when enabled and unmet, it is disabled with a note listing what's missing.
  */
 export function JoinDaoButton({ onJoin }: { onJoin: () => void }) {
+  const t = useT();
   const [elig, setElig] = useState<EntryEligibility | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -27,10 +29,10 @@ export function JoinDaoButton({ onJoin }: { onJoin: () => void }) {
       <button
         onClick={onJoin}
         disabled={loading || blocked}
-        title={blocked ? 'You do not meet the minimum entry requirements' : undefined}
+        title={blocked ? t('You do not meet the minimum entry requirements') : undefined}
         className="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-neutral-400 disabled:opacity-70"
       >
-        {loading ? 'Checking eligibility…' : 'JOIN DAO'}
+        {loading ? t('Checking eligibility…') : t('JOIN DAO')}
       </button>
       {blocked ? <EntryRequirementsNotice requirements={elig!.requirements} /> : null}
     </div>
@@ -43,11 +45,12 @@ export function JoinDaoButton({ onJoin }: { onJoin: () => void }) {
  * shows it in place of the application form when the gate is enabled and unmet).
  */
 export function EntryRequirementsNotice({ requirements }: { requirements: EntryEligibility['requirements'] }) {
+  const t = useT();
   const unmet = requirements.filter((r) => !r.met);
   if (unmet.length === 0) return null;
   return (
     <div className="rounded-md border border-amber-300 bg-amber-50/60 p-2 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
-      <div className="font-medium">You don&apos;t meet the minimum entry requirements:</div>
+      <div className="font-medium">{t('You don’t meet the minimum entry requirements:')}</div>
       <ul className="mt-0.5 list-disc space-y-0.5 pl-4">
         {unmet.map((r, i) => (
           <li key={i}>

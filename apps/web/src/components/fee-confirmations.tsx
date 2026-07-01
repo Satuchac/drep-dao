@@ -5,6 +5,7 @@ import { boardFeeApi, boardProposalsApi, matchesProposalSearch, type FeeHistoryP
 import { useExplorer } from '@/lib/explorer';
 import { fmtDateTime } from './round-ui';
 import { useUrlNav } from '@/lib/use-url-nav';
+import { useT } from '@/lib/prefs-context';
 
 const HISTORY_PAGE = 20;
 
@@ -19,6 +20,7 @@ const HISTORY_PAGE = 20;
  * decisions without scrolling the live proposal pages.
  */
 export function FeeConfirmations({ onChange, history = false, query }: { onChange?: () => void; history?: boolean; query?: string }) {
+  const t = useT();
   const [all, setAll] = useState<PendingFee[]>([]);
 
   const load = useCallback(() => {
@@ -34,11 +36,10 @@ export function FeeConfirmations({ onChange, history = false, query }: { onChang
     <>
       {pending.length > 0 ? (
         <section className="space-y-2 rounded-lg border border-amber-300 bg-amber-50/50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
-          <h3 className="text-base font-semibold">Submission fees to confirm</h3>
+          <h3 className="text-base font-semibold">{t('Submission fees to confirm')}</h3>
           <p className="text-xs text-neutral-500">
-            The platform checks each fee tx <strong>on-chain</strong> (did the paid amount reach the fee address?).
-            <strong> Approve</strong> to admit the proposal into Filtering (public), or <strong>Reject</strong> with a
-            reason the submitter will see.
+            {t('The platform checks each fee tx')} <strong>{t('on-chain')}</strong> {t('(did the paid amount reach the fee address?).')}
+            <strong> {t('Approve')}</strong> {t('to admit the proposal into Filtering (public), or')} <strong>{t('Reject')}</strong> {t('with a reason the submitter will see.')}
           </p>
           <ul className="space-y-2">
             {pending.map((p) => (
@@ -57,6 +58,7 @@ export function FeeConfirmations({ onChange, history = false, query }: { onChang
  * page size is 20 (matches the user's request); pager appears once total > 20.
  */
 function FeeHistory({ query }: { query?: string }) {
+  const t = useT();
   const { setParams } = useUrlNav();
   const { txUrl } = useExplorer();
   const [page, setPage] = useState<FeeHistoryPage | null>(null);
@@ -75,9 +77,9 @@ function FeeHistory({ query }: { query?: string }) {
   return (
     <section className="space-y-2 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold">Submission-fee history</h3>
+        <h3 className="text-base font-semibold">{t('Submission-fee history')}</h3>
         <span className="text-xs text-neutral-500">
-          {page.total === 0 ? 'No decisions yet.' : `Showing ${start}–${end} of ${page.total}`}
+          {page.total === 0 ? t('No decisions yet.') : `${t('Showing')} ${start}–${end} ${t('of')} ${page.total}`}
         </span>
       </div>
       {rows.length === 0 ? null : (
@@ -95,12 +97,12 @@ function FeeHistory({ query }: { query?: string }) {
       {page.total > HISTORY_PAGE ? (
         <div className="flex items-center justify-between text-xs">
           <div className="flex gap-1">
-            <button onClick={() => setOffset(0)} disabled={offset === 0} className="rounded border border-neutral-300 px-2 py-0.5 disabled:opacity-40 dark:border-neutral-700">⏮ First</button>
-            <button onClick={() => setOffset(Math.max(0, offset - HISTORY_PAGE))} disabled={offset === 0} className="rounded border border-neutral-300 px-2 py-0.5 disabled:opacity-40 dark:border-neutral-700">◀ Previous</button>
+            <button onClick={() => setOffset(0)} disabled={offset === 0} className="rounded border border-neutral-300 px-2 py-0.5 disabled:opacity-40 dark:border-neutral-700">{t('⏮ First')}</button>
+            <button onClick={() => setOffset(Math.max(0, offset - HISTORY_PAGE))} disabled={offset === 0} className="rounded border border-neutral-300 px-2 py-0.5 disabled:opacity-40 dark:border-neutral-700">{t('◀ Previous')}</button>
           </div>
           <div className="flex gap-1">
-            <button onClick={() => setOffset(Math.min(last, offset + HISTORY_PAGE))} disabled={offset >= last} className="rounded border border-neutral-300 px-2 py-0.5 disabled:opacity-40 dark:border-neutral-700">Next ▶</button>
-            <button onClick={() => setOffset(last)} disabled={offset >= last} className="rounded border border-neutral-300 px-2 py-0.5 disabled:opacity-40 dark:border-neutral-700">Last ⏭</button>
+            <button onClick={() => setOffset(Math.min(last, offset + HISTORY_PAGE))} disabled={offset >= last} className="rounded border border-neutral-300 px-2 py-0.5 disabled:opacity-40 dark:border-neutral-700">{t('Next ▶')}</button>
+            <button onClick={() => setOffset(last)} disabled={offset >= last} className="rounded border border-neutral-300 px-2 py-0.5 disabled:opacity-40 dark:border-neutral-700">{t('Last ⏭')}</button>
           </div>
         </div>
       ) : null}
@@ -109,6 +111,7 @@ function FeeHistory({ query }: { query?: string }) {
 }
 
 function PendingFeeRow({ p, onReviewed }: { p: PendingFee; onReviewed: () => void }) {
+  const t = useT();
   const { txUrl } = useExplorer();
   const [feedback, setFeedback] = useState('');
   const [busy, setBusy] = useState(false);
@@ -117,7 +120,7 @@ function PendingFeeRow({ p, onReviewed }: { p: PendingFee; onReviewed: () => voi
   const review = async (decision: 'APPROVE' | 'REJECT') => {
     setError(null);
     if (decision === 'REJECT' && !feedback.trim()) {
-      setError('A reason is required to reject — the submitter will see it.');
+      setError(t('A reason is required to reject — the submitter will see it.'));
       return;
     }
     setBusy(true);
@@ -125,7 +128,7 @@ function PendingFeeRow({ p, onReviewed }: { p: PendingFee; onReviewed: () => voi
       await boardProposalsApi.reviewFee(p.id, decision, feedback.trim() || undefined);
       onReviewed();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'review failed');
+      setError(e instanceof Error ? e.message : t('review failed'));
     } finally {
       setBusy(false);
     }
@@ -133,8 +136,8 @@ function PendingFeeRow({ p, onReviewed }: { p: PendingFee; onReviewed: () => voi
 
   // A fee may be split across several txs (none alone reaches the amount, but
   // together they do). Sum what reached the fee address across all confirmed txs.
-  const foundTxs = p.txs.filter((t) => t.found);
-  const foundTotal = foundTxs.reduce((s, t) => s + t.paidAda, 0);
+  const foundTxs = p.txs.filter((tx) => tx.found);
+  const foundTotal = foundTxs.reduce((s, tx) => s + tx.paidAda, 0);
   const aggregateCovers = !p.feeVerified.paid && foundTotal >= p.submissionFeeAda;
 
   return (
@@ -142,35 +145,35 @@ function PendingFeeRow({ p, onReviewed }: { p: PendingFee; onReviewed: () => voi
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="font-medium">{p.title}</span>
         <span className="text-xs text-neutral-500">
-          round #{p.roundNumber} · {p.isCommercial ? 'commercial' : 'open-source'}
+          {t('round')} #{p.roundNumber} · {p.isCommercial ? t('commercial') : t('open-source')}
         </span>
       </div>
       <div className="mt-1 text-xs text-neutral-500">
-        fee {p.submissionFeeAda.toLocaleString()} ₳ of {p.requestedAmountAda.toLocaleString()} ₳ requested
-        {p.submitter ? ` · by ${p.submitter}` : ''}
+        {t('fee')} {p.submissionFeeAda.toLocaleString()} ₳ {t('of')} {p.requestedAmountAda.toLocaleString()} ₳ {t('requested')}
+        {p.submitter ? ` · ${t('by')} ${p.submitter}` : ''}
       </div>
 
       {/* All tx hashes the submitter entered, each verified on-chain (latest last). */}
       <div className="mt-2 space-y-1">
         <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">
-          Submission fee tx{p.txs.length > 1 ? `s (${p.txs.length} entered)` : ''}:
+          {t('Submission fee tx')}{p.txs.length > 1 ? `s (${p.txs.length} ${t('entered')})` : ''}:
         </div>
         {p.txs.length === 0 ? (
-          <div className="text-xs text-amber-600">no tx hash provided</div>
+          <div className="text-xs text-amber-600">{t('no tx hash provided')}</div>
         ) : (
-          p.txs.map((t, i) => (
-            <div key={t.hash} className="text-xs">
-              <a href={txUrl(t.hash)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">
-                {t.hash} ↗
+          p.txs.map((tx, i) => (
+            <div key={tx.hash} className="text-xs">
+              <a href={txUrl(tx.hash)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">
+                {tx.hash} ↗
               </a>
-              {i === p.txs.length - 1 ? <span className="ml-1 text-[10px] uppercase text-neutral-400">latest</span> : null}
+              {i === p.txs.length - 1 ? <span className="ml-1 text-[10px] uppercase text-neutral-400">{t('latest')}</span> : null}
               <span className="ml-1 font-medium">
-                {t.paid ? (
-                  <span className="text-emerald-600">✓ paid {t.paidAda.toLocaleString()} ₳</span>
-                ) : t.found ? (
-                  <span className="text-red-600">✗ only {t.paidAda.toLocaleString()} ₳ to the fee address</span>
+                {tx.paid ? (
+                  <span className="text-emerald-600">{t('✓ paid')} {tx.paidAda.toLocaleString()} ₳</span>
+                ) : tx.found ? (
+                  <span className="text-red-600">{t('✗ only')} {tx.paidAda.toLocaleString()} ₳ {t('to the fee address')}</span>
                 ) : (
-                  <span className="text-amber-600">⏳ not found on-chain</span>
+                  <span className="text-amber-600">{t('⏳ not found on-chain')}</span>
                 )}
               </span>
             </div>
@@ -188,8 +191,8 @@ function PendingFeeRow({ p, onReviewed }: { p: PendingFee; onReviewed: () => voi
           }`}
         >
           {aggregateCovers
-            ? `✓ Paid across ${foundTxs.length} transaction${foundTxs.length === 1 ? '' : 's'}: ${foundTotal.toLocaleString()} ₳ total reached the fee address — this covers the ${p.submissionFeeAda.toLocaleString()} ₳ fee.`
-            : `Across ${foundTxs.length} confirmed tx${foundTxs.length === 1 ? '' : 's'}: ${foundTotal.toLocaleString()} ₳ of ${p.submissionFeeAda.toLocaleString()} ₳ reached the fee address — short by ${(p.submissionFeeAda - foundTotal).toLocaleString()} ₳.`}
+            ? `${t('✓ Paid across')} ${foundTxs.length} ${foundTxs.length === 1 ? t('transaction') : t('transactions')}: ${foundTotal.toLocaleString()} ₳ ${t('total reached the fee address — this covers the')} ${p.submissionFeeAda.toLocaleString()} ₳ ${t('fee.')}`
+            : `${t('Across')} ${foundTxs.length} ${foundTxs.length === 1 ? t('confirmed tx') : t('confirmed txs')}: ${foundTotal.toLocaleString()} ₳ ${t('of')} ${p.submissionFeeAda.toLocaleString()} ₳ ${t('reached the fee address — short by')} ${(p.submissionFeeAda - foundTotal).toLocaleString()} ₳.`}
         </div>
       ) : null}
 
@@ -197,7 +200,7 @@ function PendingFeeRow({ p, onReviewed }: { p: PendingFee; onReviewed: () => voi
       <textarea
         className="mt-2 w-full rounded-md border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
         rows={2}
-        placeholder="Feedback for the submitter (required to reject, optional to approve)"
+        placeholder={t('Feedback for the submitter (required to reject, optional to approve)')}
         value={feedback}
         onChange={(e) => setFeedback(e.target.value)}
       />
@@ -208,14 +211,14 @@ function PendingFeeRow({ p, onReviewed }: { p: PendingFee; onReviewed: () => voi
           onClick={() => review('APPROVE')}
           className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
         >
-          {busy ? 'Working…' : p.feeVerified.paid ? 'Approve — fee verified' : aggregateCovers ? 'Approve — fee covered (across txs)' : 'Approve anyway'}
+          {busy ? t('Working…') : p.feeVerified.paid ? t('Approve — fee verified') : aggregateCovers ? t('Approve — fee covered (across txs)') : t('Approve anyway')}
         </button>
         <button
           disabled={busy}
           onClick={() => review('REJECT')}
           className="rounded border border-red-500 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-40 dark:text-red-300 dark:hover:bg-red-950"
         >
-          Reject
+          {t('Reject')}
         </button>
       </div>
     </li>
@@ -230,6 +233,7 @@ function PendingFeeRow({ p, onReviewed }: { p: PendingFee; onReviewed: () => voi
  * latest on-chain proof matches the latest decision.
  */
 function HistoryRow({ r, onOpen, onChanged }: { r: FeeHistoryRow; onOpen: () => void; onChanged: () => void }) {
+  const t = useT();
   const { txUrl } = useExplorer();
   const [open, setOpen] = useState(false);
   const [feedback, setFeedback] = useState('');
@@ -239,7 +243,7 @@ function HistoryRow({ r, onOpen, onChanged }: { r: FeeHistoryRow; onOpen: () => 
   const flip = async (decision: 'APPROVE' | 'REJECT') => {
     setError(null);
     if (decision === 'REJECT' && !feedback.trim()) {
-      setError('A reason is required when rejecting.');
+      setError(t('A reason is required when rejecting.'));
       return;
     }
     setBusy(true);
@@ -249,7 +253,7 @@ function HistoryRow({ r, onOpen, onChanged }: { r: FeeHistoryRow; onOpen: () => 
       setFeedback('');
       onChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'failed');
+      setError(e instanceof Error ? e.message : t('failed'));
     } finally {
       setBusy(false);
     }
@@ -267,13 +271,13 @@ function HistoryRow({ r, onOpen, onChanged }: { r: FeeHistoryRow; onOpen: () => 
         </button>
         <span className="flex items-center gap-2 text-xs text-neutral-500">
           {r.publicId ? <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{r.publicId}</span> : null}
-          {r.roundNumber != null ? <span>round #{r.roundNumber}</span> : null}
+          {r.roundNumber != null ? <span>{t('round')} #{r.roundNumber}</span> : null}
           <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${
             r.decision === 'APPROVED'
               ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
               : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
           }`}>
-            {r.decision === 'APPROVED' ? '✓ APPROVED' : '✗ REJECTED'}
+            {r.decision === 'APPROVED' ? t('✓ APPROVED') : t('✗ REJECTED')}
           </span>
           {r.canChange ? (
             <button
@@ -281,24 +285,24 @@ function HistoryRow({ r, onOpen, onChanged }: { r: FeeHistoryRow; onOpen: () => 
               onClick={() => { setOpen((v) => !v); setError(null); }}
               className="rounded-md border border-neutral-400 px-2 py-0.5 text-[11px] text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
               title={r.decision === 'APPROVED'
-                ? 'Round is still in SUBMISSION — you can undo this approval (changes to REJECTED).'
-                : 'Round is still in SUBMISSION — you can change this rejection to APPROVED.'}
+                ? t('Round is still in SUBMISSION — you can undo this approval (changes to REJECTED).')
+                : t('Round is still in SUBMISSION — you can change this rejection to APPROVED.')}
             >
-              {open ? 'Cancel change' : r.decision === 'APPROVED' ? '↩ Undo / change to REJECT' : '✓ Change to APPROVE'}
+              {open ? t('Cancel change') : r.decision === 'APPROVED' ? t('↩ Undo / change to REJECT') : t('✓ Change to APPROVE')}
             </button>
           ) : (
-            <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400" title="Round has moved past SUBMISSION — decisions are now frozen.">locked</span>
+            <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-400" title={t('Round has moved past SUBMISSION — decisions are now frozen.')}>{t('locked')}</span>
           )}
         </span>
       </div>
       <div className="mt-1 text-xs text-neutral-500">
-        fee {r.submissionFeeAda.toLocaleString()} ₳ · {r.isCommercial ? 'commercial' : 'open-source'}
-        {r.submitter ? ` · by ${r.submitter}` : ''}
-        {r.submittedAt ? ` · submitted ${fmtDateTime(r.submittedAt)}` : ''}
+        {t('fee')} {r.submissionFeeAda.toLocaleString()} ₳ · {r.isCommercial ? t('commercial') : t('open-source')}
+        {r.submitter ? ` · ${t('by')} ${r.submitter}` : ''}
+        {r.submittedAt ? ` · ${t('submitted')} ${fmtDateTime(r.submittedAt)}` : ''}
       </div>
       {r.submissionFeeTxHash ? (
         <div className="mt-1 text-xs">
-          <span className="text-neutral-500">tx: </span>
+          <span className="text-neutral-500">{t('tx:')} </span>
           <a href={txUrl(r.submissionFeeTxHash)} target="_blank" rel="noreferrer" className="break-all font-mono text-emerald-700 underline dark:text-emerald-400">
             {r.submissionFeeTxHash} ↗
           </a>
@@ -307,7 +311,7 @@ function HistoryRow({ r, onOpen, onChanged }: { r: FeeHistoryRow; onOpen: () => 
       {r.feedback ? (
         <div className="mt-2 rounded border border-neutral-200 bg-white/60 p-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900/60">
           <div className="text-[10px] font-bold uppercase tracking-wide text-neutral-500">
-            {r.decision === 'APPROVED' ? 'Approval note' : 'Rejection reason'}
+            {r.decision === 'APPROVED' ? t('Approval note') : t('Rejection reason')}
           </div>
           <div className="mt-0.5 whitespace-pre-wrap text-neutral-700 dark:text-neutral-300">{r.feedback}</div>
         </div>
@@ -315,15 +319,15 @@ function HistoryRow({ r, onOpen, onChanged }: { r: FeeHistoryRow; onOpen: () => 
       {open && r.canChange ? (
         <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs dark:border-amber-900 dark:bg-amber-950/40">
           <div className="font-semibold text-amber-800 dark:text-amber-200">
-            {r.decision === 'APPROVED' ? 'Change this approval to a REJECTION?' : 'Change this rejection to an APPROVAL?'}
+            {r.decision === 'APPROVED' ? t('Change this approval to a REJECTION?') : t('Change this rejection to an APPROVAL?')}
           </div>
           <p className="mt-0.5 text-amber-700 dark:text-amber-300">
-            The proposal will move {r.decision === 'APPROVED' ? 'back to REJECTED (stage cleared)' : 'into FILTERING (the public stage)'}. A fresh on-chain acceptance anchor is written on every approval so the latest decision is what shows on-chain. Allowed only while the round hasn&apos;t moved past SUBMISSION.
+            {t('The proposal will move')} {r.decision === 'APPROVED' ? t('back to REJECTED (stage cleared)') : t('into FILTERING (the public stage)')}. {t('A fresh on-chain acceptance anchor is written on every approval so the latest decision is what shows on-chain. Allowed only while the round hasn\'t moved past SUBMISSION.')}
           </p>
           <textarea
             className="mt-2 w-full rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
             rows={2}
-            placeholder={r.decision === 'APPROVED' ? 'Reason for changing to REJECTED (required)' : 'Optional approval note'}
+            placeholder={r.decision === 'APPROVED' ? t('Reason for changing to REJECTED (required)') : t('Optional approval note')}
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
           />
@@ -338,7 +342,7 @@ function HistoryRow({ r, onOpen, onChanged }: { r: FeeHistoryRow; onOpen: () => 
                   : 'border-emerald-500 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950'
               }`}
             >
-              {busy ? 'Working…' : r.decision === 'APPROVED' ? 'Reject now' : 'Approve now'}
+              {busy ? t('Working…') : r.decision === 'APPROVED' ? t('Reject now') : t('Approve now')}
             </button>
           </div>
         </div>

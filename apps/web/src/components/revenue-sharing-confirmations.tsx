@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { boardRevenueApi, messagesApi, matchesProposalSearch, type PendingRevenueSharing } from '@/lib/api';
 import { ConfirmDialog } from './confirm-dialog';
 import { ProposalMessageInfo } from './proposal-messages';
+import { useT } from '@/lib/prefs-context';
 
 /**
  * §3.4 — board to-do: funded proposals that declared commercial/revenue-sharing terms must have
@@ -11,6 +12,7 @@ import { ProposalMessageInfo } from './proposal-messages';
  * the team is blocked with "the revenue-sharing conditions must be verified by the board…".
  */
 export function RevenueSharingConfirmations({ onChange, query }: { onChange?: () => void; query?: string }) {
+  const t = useT();
   const [all, setAll] = useState<PendingRevenueSharing[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -40,10 +42,9 @@ export function RevenueSharingConfirmations({ onChange, query }: { onChange?: ()
 
   return (
     <section className="space-y-2 rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
-      <h3 className="text-base font-semibold">Revenue-sharing to verify ({pending.length})</h3>
+      <h3 className="text-base font-semibold">{t('Revenue-sharing to verify')} ({pending.length})</h3>
       <p className="text-xs text-neutral-500">
-        §3.4 — these funded proposals declared commercial / revenue-sharing terms. Verify the
-        conditions so the team can start submitting milestone POAs.
+        {t('§3.4 — these funded proposals declared commercial / revenue-sharing terms. Verify the conditions so the team can start submitting milestone POAs.')}
       </p>
       <ul className="space-y-2">
         {pending.map((p) => (
@@ -56,31 +57,31 @@ export function RevenueSharingConfirmations({ onChange, query }: { onChange?: ()
                   disabled={busy === p.id}
                   className="rounded border border-neutral-300 px-3 py-1 text-xs font-medium hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700"
                 >
-                  Send message
+                  {t('Send message')}
                 </button>
                 <button
                   onClick={() => setConfirmId(p.id)}
                   disabled={busy === p.id}
                   className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
-                  {busy === p.id ? '…' : 'Verify revenue-sharing'}
+                  {busy === p.id ? '…' : t('Verify revenue-sharing')}
                 </button>
               </div>
             </div>
             <div className="text-xs text-neutral-500">
-              by {p.submitter ?? '—'}{p.categoryName ? ` · ${p.categoryName}` : ''}{p.roundNumber != null ? ` · Round #${p.roundNumber}` : ''}
+              {t('by')} {p.submitter ?? '—'}{p.categoryName ? ` · ${p.categoryName}` : ''}{p.roundNumber != null ? ` · ${t('Round')} #${p.roundNumber}` : ''}
             </div>
             <div className="mt-1"><ProposalMessageInfo proposalId={p.id} /></div>
             {composeId === p.id ? (
               <div className="mt-2 space-y-1">
-                <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} placeholder="Ask the submitter to do something — e.g. send the promised tokens to the Treasury…" className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" />
+                <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={2} placeholder={t('Ask the submitter to do something — e.g. send the promised tokens to the Treasury…')} className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" />
                 <div className="flex gap-2">
-                  <button onClick={() => sendMessage(p.id)} disabled={busy === p.id || !draft.trim()} className="rounded bg-emerald-600 px-3 py-1 text-xs text-white hover:bg-emerald-700 disabled:opacity-50">Send</button>
-                  <button onClick={() => { setComposeId(null); setDraft(''); }} className="rounded border border-neutral-300 px-3 py-1 text-xs dark:border-neutral-700">Cancel</button>
+                  <button onClick={() => sendMessage(p.id)} disabled={busy === p.id || !draft.trim()} className="rounded bg-emerald-600 px-3 py-1 text-xs text-white hover:bg-emerald-700 disabled:opacity-50">{t('Send')}</button>
+                  <button onClick={() => { setComposeId(null); setDraft(''); }} className="rounded border border-neutral-300 px-3 py-1 text-xs dark:border-neutral-700">{t('Cancel')}</button>
                 </div>
               </div>
             ) : null}
-            {sent === p.id ? <div className="mt-1 text-xs text-emerald-600">✓ Message sent — the submitter will see it under Messages and can respond.</div> : null}
+            {sent === p.id ? <div className="mt-1 text-xs text-emerald-600">✓ {t('Message sent — the submitter will see it under Messages and can respond.')}</div> : null}
             {p.revenueSharingMd ? (
               <div className="mt-1 whitespace-pre-wrap rounded bg-neutral-50 p-2 text-xs text-neutral-600 dark:bg-neutral-900/40 dark:text-neutral-300">
                 {p.revenueSharingMd}
@@ -91,10 +92,10 @@ export function RevenueSharingConfirmations({ onChange, query }: { onChange?: ()
       </ul>
       <ConfirmDialog
         open={!!confirmId}
-        title="Verify revenue-sharing conditions?"
-        message="Confirm the proposal's commercial / revenue-sharing terms are acceptable. This unblocks the team to submit milestone POAs. It can't be undone."
-        confirmLabel="Verify"
-        cancelLabel="Cancel"
+        title={t('Verify revenue-sharing conditions?')}
+        message={t("Confirm the proposal's commercial / revenue-sharing terms are acceptable. This unblocks the team to submit milestone POAs. It can't be undone.")}
+        confirmLabel={t('Verify')}
+        cancelLabel={t('Cancel')}
         onCancel={() => setConfirmId(null)}
         onConfirm={() => { if (confirmId) void verify(confirmId); }}
       />

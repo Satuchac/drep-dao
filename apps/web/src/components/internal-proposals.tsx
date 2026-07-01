@@ -101,7 +101,7 @@ export function InternalProposals() {
   if (creating) {
     return (
       <div className="space-y-3">
-        <button onClick={closeEditor} className="text-sm text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200">← back to internal proposals</button>
+        <button onClick={closeEditor} className="text-sm text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200">← {tr('back to internal proposals')}</button>
         <section className={card}>
           <SubmitInternalForm
             election={isElection}
@@ -204,10 +204,10 @@ export function InternalProposals() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-medium">
                     {p.publicId ? <span className="mr-2 font-mono text-xs text-neutral-500">{p.publicId}</span> : null}
-                    {p.title || <span className="italic text-neutral-400">(untitled draft)</span>}
+                    {p.title || <span className="italic text-neutral-400">{tr('(untitled draft)')}</span>}
                     {/* §10.5 — show the treasury payout amount for SPENDING proposals. */}
                     {p.internalType === 'SPENDING' && p.spendingAmountAda != null ? <span className="ml-1 font-semibold text-blue-600 dark:text-blue-400">· {p.spendingAmountAda.toLocaleString()} ₳</span> : null}
-                    {p.isPrivate ? <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">PRIVATE · board</span> : null}
+                    {p.isPrivate ? <span className="ml-2 rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{tr('PRIVATE · board')}</span> : null}
                   </span>
                   <div className="flex items-center gap-2">
                     <MyVoteBadge p={p} />
@@ -274,6 +274,7 @@ function formatMyVote(p: { internalType: string; myVotes: string[] }, tr: (k: st
 }
 
 function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false }: { onDone: () => void; onCancel: () => void; draftId?: string | null; election?: boolean }) {
+  const t = useT();
   const editingDraft = !!draftId;
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -341,14 +342,14 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
   const msLeft = new Date(votingEnd).getTime() - Date.now();
   const votingDuration = (() => {
     const mins = Math.floor(msLeft / 60_000);
-    if (mins < 1) return 'less than a minute';
+    if (mins < 1) return t('less than a minute');
     const d = Math.floor(mins / 1440);
     const h = Math.floor((mins % 1440) / 60);
     const m = mins % 60;
     const parts: string[] = [];
-    if (d) parts.push(`${d} day${d === 1 ? '' : 's'}`);
-    if (h) parts.push(`${h} hour${h === 1 ? '' : 's'}`);
-    if (m) parts.push(`${m} minute${m === 1 ? '' : 's'}`);
+    if (d) parts.push(`${d} ${d === 1 ? t('day') : t('days')}`);
+    if (h) parts.push(`${h} ${h === 1 ? t('hour') : t('hours')}`);
+    if (m) parts.push(`${m} ${m === 1 ? t('minute') : t('minutes')}`);
     return parts.slice(0, 2).join(' ');
   })();
   const dThresh = cfg?.internalThresholds.default;
@@ -377,13 +378,13 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
     e.preventDefault();
     setError(null);
     const end = new Date(votingEnd);
-    if (Number.isNaN(end.getTime()) || end.getTime() <= Date.now()) { setError('Pick a voting-end date in the future.'); return; }
+    if (Number.isNaN(end.getTime()) || end.getTime() <= Date.now()) { setError(t('Pick a voting-end date in the future.')); return; }
 
     if (election) {
-      if (candidates.length !== 5) { setError('Pick exactly 5 candidates.'); return; }
+      if (candidates.length !== 5) { setError(t('Pick exactly 5 candidates.')); return; }
       const install = new Date(installDate);
       if (Number.isNaN(install.getTime()) || install.getTime() <= end.getTime()) {
-        setError('The installation date must be later than the voting end.'); return;
+        setError(t('The installation date must be later than the voting end.')); return;
       }
       const input: CreateInternalInput = {
         title: title.trim(),
@@ -406,7 +407,7 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
     }
 
     const cleanOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
-    if (isPoll && cleanOptions.length < 2) { setError('A poll needs at least two options.'); return; }
+    if (isPoll && cleanOptions.length < 2) { setError(t('A poll needs at least two options.')); return; }
     // Submitting from a draft passes its id so the server removes the draft once the live proposal exists.
     const input: CreateInternalInput = { ...buildRegularInput(), votingEndAt: end.toISOString(), ...(draftId ? { draftId } : {}) };
     setBusy(true);
@@ -423,7 +424,7 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
   // §10 — save the current form as a draft (create or update). Lenient: only a title is required.
   const saveDraft = async () => {
     setError(null);
-    if (!title.trim()) { setError('Add a title before saving a draft.'); return; }
+    if (!title.trim()) { setError(t('Add a title before saving a draft.')); return; }
     setBusy(true);
     try {
       const input = buildRegularInput();
@@ -448,75 +449,75 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <h3 className="text-base font-semibold">{editingDraft ? 'Edit draft' : election ? 'New board-member election' : 'New internal proposal'}</h3>
+      <h3 className="text-base font-semibold">{editingDraft ? t('Edit draft') : election ? t('New board-member election') : t('New internal proposal')}</h3>
 
       <label className="block space-y-1">
-        <span className="text-sm font-medium">Title</span>
+        <span className="text-sm font-medium">{t('Title')}</span>
         <input className={field} value={title} onChange={(e) => setTitle(e.target.value)} required />
       </label>
 
       {/* Content is always present, even for polls. */}
-      <MarkdownEditor value={content} onChange={setContent} title="Content" placeholder="Describe the proposal (markdown)" minRows={5} required />
+      <MarkdownEditor value={content} onChange={setContent} title={t('Content')} placeholder={t('Describe the proposal (markdown)')} minRows={5} required />
 
       <div className="grid gap-3 sm:grid-cols-2">
         {election ? (
           // §14 — for an election the type is fixed (an INSTRUCTIVE proposal); show it as info.
           <div className="space-y-1">
-            <span className="text-sm font-medium">Type</span>
-            <div className={`${field} bg-neutral-50 text-neutral-600 dark:bg-neutral-950 dark:text-neutral-400`}>Instructive — board-member election</div>
+            <span className="text-sm font-medium">{t('Type')}</span>
+            <div className={`${field} bg-neutral-50 text-neutral-600 dark:bg-neutral-950 dark:text-neutral-400`}>{t('Instructive — board-member election')}</div>
           </div>
         ) : (
           <label className="block space-y-1">
-            <span className="text-sm font-medium">Type</span>
+            <span className="text-sm font-medium">{t('Type')}</span>
             <select className={field} value={internalType} onChange={(e) => setInternalType(e.target.value)}>
-              {Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              {Object.entries(TYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{t(v)}</option>)}
             </select>
           </label>
         )}
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Voting ends</span>
+          <span className="text-sm font-medium">{t('Voting ends')}</span>
           <DateField value={votingEnd} onChange={setVotingEnd} min={toLocalInput(new Date().toISOString())} required />
-          <span className="text-xs text-neutral-500">{msLeft > 0 ? `voting will run for ${votingDuration}` : 'pick a future date'}</span>
+          <span className="text-xs text-neutral-500">{msLeft > 0 ? `${t('voting will run for')} ${votingDuration}` : t('pick a future date')}</span>
         </label>
       </div>
 
       {!election && isSpending ? (
             <div className="space-y-2 rounded border border-emerald-200 p-2 dark:border-emerald-900">
-              <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300">§10.5 — if approved, the platform prepares a treasury multisig transaction the board signs.</div>
+              <div className="text-xs font-medium text-emerald-700 dark:text-emerald-300">{t('§10.5 — if approved, the platform prepares a treasury multisig transaction the board signs.')}</div>
               <label className="block text-sm">
-                Amount (₳) <span className="text-red-500">*</span>
+                {t('Amount (₳)')} <span className="text-red-500">*</span>
                 <input className={field} value={spendAmount} onChange={(e) => setSpendAmount(e.target.value)} placeholder="100" />
               </label>
               <label className="block text-sm">
-                From treasury address
+                {t('From treasury address')}
                 <select className={field} value={spendBucket} onChange={(e) => setSpendBucket(e.target.value)}>
-                  <option value="">Operations (default)</option>
+                  <option value="">{t('Operations (default)')}</option>
                   {buckets.map((b) => (
                     <option key={b.id} value={b.id}>{b.label} · {b.balanceAda.toLocaleString()} ₳</option>
                   ))}
                 </select>
               </label>
               <label className="block text-sm">
-                Destination address <span className="text-red-500">*</span>
+                {t('Destination address')} <span className="text-red-500">*</span>
                 <input className={field} value={spendDest} onChange={(e) => setSpendDest(e.target.value)} placeholder="addr…" />
               </label>
             </div>
           ) : null}
           {!election && isPoll ? (
         <div className="space-y-2 rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
-          <div className="text-sm font-medium">Poll options</div>
+          <div className="text-sm font-medium">{t('Poll options')}</div>
           {pollOptions.map((o, i) => (
             <div key={i} className="flex items-center gap-2">
-              <input className={field} value={o} placeholder={`Option ${i + 1}`} onChange={(e) => setPollOptions((opts) => opts.map((x, j) => (j === i ? e.target.value : x)))} />
+              <input className={field} value={o} placeholder={`${t('Option')} ${i + 1}`} onChange={(e) => setPollOptions((opts) => opts.map((x, j) => (j === i ? e.target.value : x)))} />
               {pollOptions.length > 2 ? (
-                <button type="button" onClick={() => setPollOptions((opts) => opts.filter((_, j) => j !== i))} className="text-xs text-red-600 hover:underline">remove</button>
+                <button type="button" onClick={() => setPollOptions((opts) => opts.filter((_, j) => j !== i))} className="text-xs text-red-600 hover:underline">{t('remove')}</button>
               ) : null}
             </div>
           ))}
-          <button type="button" onClick={() => setPollOptions((opts) => [...opts, ''])} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">+ add option</button>
+          <button type="button" onClick={() => setPollOptions((opts) => [...opts, ''])} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">{t('+ add option')}</button>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={pollMultiple} onChange={(e) => setPollMultiple(e.target.checked)} />
-            Allow voters to choose more than one option
+            {t('Allow voters to choose more than one option')}
           </label>
         </div>
       ) : null}
@@ -524,11 +525,11 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
       {!election && isInstructive ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
-            <span className="text-sm font-medium">Actors <span className="font-normal text-neutral-400">(optional — who must act if approved)</span></span>
+            <span className="text-sm font-medium">{t('Actors')} <span className="font-normal text-neutral-400">{t('(optional — who must act if approved)')}</span></span>
             {/* Pick the DReps expected to act from the DAO member list. */}
             <div className="max-h-36 space-y-1 overflow-y-auto rounded-md border border-neutral-300 p-2 dark:border-neutral-700">
               {members.length === 0 ? (
-                <span className="text-xs text-neutral-400">No DAO members to choose from.</span>
+                <span className="text-xs text-neutral-400">{t('No DAO members to choose from.')}</span>
               ) : (
                 members.map((m) => (
                   <label key={m.drepId} className="flex items-center gap-2 text-sm">
@@ -537,7 +538,7 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
                       checked={actors.includes(m.displayName)}
                       onChange={() => setActors((s) => (s.includes(m.displayName) ? s.filter((x) => x !== m.displayName) : [...s, m.displayName]))}
                     />
-                    {m.displayName}{m.isBoard ? <span className="text-[10px] text-neutral-400"> (board)</span> : null}
+                    {m.displayName}{m.isBoard ? <span className="text-[10px] text-neutral-400"> {t('(board)')}</span> : null}
                   </label>
                 ))
               )}
@@ -545,7 +546,7 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
             {actors.length ? <span className="text-xs text-neutral-500">{actors.join(', ')}</span> : null}
           </div>
           <label className="block space-y-1">
-            <span className="text-sm font-medium">Delivery date <span className="font-normal text-neutral-400">(optional)</span></span>
+            <span className="text-sm font-medium">{t('Delivery date')} <span className="font-normal text-neutral-400">{t('(optional)')}</span></span>
             <DateField value={deliveryDate} onChange={setDeliveryDate} type="date" />
           </label>
         </div>
@@ -554,11 +555,11 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
       {election ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
-            <span className="text-sm font-medium">Candidates (pick exactly 5 DReps)</span>
+            <span className="text-sm font-medium">{t('Candidates (pick exactly 5 DReps)')}</span>
             {/* §14 — the 5 candidates who will become the new board on approval + installation date. */}
             <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-neutral-300 p-2 dark:border-neutral-700">
               {members.length === 0 ? (
-                <span className="text-xs text-neutral-400">No DAO members to choose from.</span>
+                <span className="text-xs text-neutral-400">{t('No DAO members to choose from.')}</span>
               ) : (
                 members.map((m) => {
                   const picked = candidates.includes(m.drepId);
@@ -570,21 +571,21 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
                         disabled={!picked && candidates.length >= 5}
                         onChange={() => setCandidates((s) => (s.includes(m.drepId) ? s.filter((x) => x !== m.drepId) : [...s, m.drepId]))}
                       />
-                      {m.displayName}{m.isBoard ? <span className="text-[10px] text-neutral-400"> (board)</span> : null}
+                      {m.displayName}{m.isBoard ? <span className="text-[10px] text-neutral-400"> {t('(board)')}</span> : null}
                     </label>
                   );
                 })
               )}
             </div>
             <span className={`text-xs ${candidates.length === 5 ? 'text-emerald-600' : 'text-neutral-500'}`}>
-              {candidates.length} / 5 selected
+              {candidates.length} {t('/ 5 selected')}
             </span>
           </div>
           <label className="block space-y-1">
-            <span className="text-sm font-medium">Installation date <span className="font-normal text-neutral-400">(when the new board takes seats — must be after voting ends)</span></span>
+            <span className="text-sm font-medium">{t('Installation date')} <span className="font-normal text-neutral-400">{t('(when the new board takes seats — must be after voting ends)')}</span></span>
             <DateField value={installDate} onChange={setInstallDate} min={votingEnd || toLocalInput(new Date().toISOString())} required />
             {installDate && votingEnd && new Date(installDate).getTime() <= new Date(votingEnd).getTime() ? (
-              <span className="text-xs text-red-600">⚠ the installation date must be later than the voting end ({fmtDateTime(votingEnd)})</span>
+              <span className="text-xs text-red-600">{t('⚠ the installation date must be later than the voting end')} ({fmtDateTime(votingEnd)})</span>
             ) : null}
           </label>
         </div>
@@ -592,13 +593,13 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
 
       {election ? (
         <div className="rounded-md border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400">
-          Election defaults are fixed:
+          {t('Election defaults are fixed:')}
           <ul className="mt-1 list-disc pl-5">
-            <li><span className="font-medium">Who can vote:</span> all DReps (board + others)</li>
-            <li><span className="font-medium">Voting type:</span> adjusted voting power</li>
-            <li><span className="font-medium">Threshold:</span> IMPORTANT{iThresh != null ? ` (${iThresh}%)` : ''}</li>
-            <li><span className="font-medium">Visibility:</span> public</li>
-            <li>When approved + the installation date hits, the platform replaces the board with the 5 elected candidates automatically. Any current board member can also install them earlier from the proposal page.</li>
+            <li><span className="font-medium">{t('Who can vote:')}</span> {t('all DReps (board + others)')}</li>
+            <li><span className="font-medium">{t('Voting type:')}</span> {t('adjusted voting power')}</li>
+            <li><span className="font-medium">{t('Threshold:')}</span> IMPORTANT{iThresh != null ? ` (${iThresh}%)` : ''}</li>
+            <li><span className="font-medium">{t('Visibility:')}</span> {t('public')}</li>
+            <li>{t('When approved + the installation date hits, the platform replaces the board with the 5 elected candidates automatically. Any current board member can also install them earlier from the proposal page.')}</li>
           </ul>
         </div>
       ) : null}
@@ -606,22 +607,22 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
       {!election ? (
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Who can vote</span>
+          <span className="text-sm font-medium">{t('Who can vote')}</span>
           <select className={field} value={isPrivate ? 'BOARD_ONLY' : votersScope} disabled={isPrivate} onChange={(e) => setVotersScope(e.target.value)}>
-            {Object.entries(SCOPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {Object.entries(SCOPE_LABEL).map(([k, v]) => <option key={k} value={k}>{t(v)}</option>)}
           </select>
         </label>
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Voting type</span>
+          <span className="text-sm font-medium">{t('Voting type')}</span>
           <select className={field} value={votingType} onChange={(e) => setVotingType(e.target.value)}>
-            {Object.entries(VTYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {Object.entries(VTYPE_LABEL).map(([k, v]) => <option key={k} value={k}>{t(v)}</option>)}
           </select>
         </label>
         <label className="block space-y-1">
-          <span className="text-sm font-medium">Threshold</span>
+          <span className="text-sm font-medium">{t('Threshold')}</span>
           <select className={field} value={thresholdKind} onChange={(e) => setThresholdKind(e.target.value)}>
-            <option value="DEFAULT">Default{dThresh != null ? ` (${dThresh}%)` : ''}</option>
-            <option value="IMPORTANT">Important{iThresh != null ? ` (${iThresh}%)` : ''}</option>
+            <option value="DEFAULT">{t('Default')}{dThresh != null ? ` (${dThresh}%)` : ''}</option>
+            <option value="IMPORTANT">{t('Important')}{iThresh != null ? ` (${iThresh}%)` : ''}</option>
           </select>
         </label>
       </div>
@@ -630,7 +631,7 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
       {!election ? (
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
-        Private — visible &amp; votable to board members only
+        {t('Private — visible & votable to board members only')}
       </label>
       ) : null}
 
@@ -638,26 +639,26 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
       {(() => {
         // Tell the user exactly what's still missing — and disable the button until it's fixed.
         const missing: string[] = [];
-        if (!title.trim()) missing.push('title');
-        if (!content.trim()) missing.push('content');
+        if (!title.trim()) missing.push(t('title'));
+        if (!content.trim()) missing.push(t('content'));
         const endMs = new Date(votingEnd).getTime();
-        if (!votingEnd || Number.isNaN(endMs) || endMs <= Date.now()) missing.push('voting end must be in the future');
+        if (!votingEnd || Number.isNaN(endMs) || endMs <= Date.now()) missing.push(t('voting end must be in the future'));
         if (election) {
-          if (candidates.length !== 5) missing.push(`pick exactly 5 candidates (${candidates.length} so far)`);
-          if (!installDate) missing.push('installation date');
+          if (candidates.length !== 5) missing.push(`${t('pick exactly 5 candidates')} (${candidates.length} ${t('so far')})`);
+          if (!installDate) missing.push(t('installation date'));
           else if (!Number.isNaN(new Date(installDate).getTime()) && !Number.isNaN(endMs) && new Date(installDate).getTime() <= endMs) {
-            missing.push('installation date must be later than the voting end');
+            missing.push(t('installation date must be later than the voting end'));
           }
         } else if (isPoll) {
           const opts = pollOptions.map((o) => o.trim()).filter(Boolean);
-          if (opts.length < 2) missing.push('at least two poll options');
+          if (opts.length < 2) missing.push(t('at least two poll options'));
         }
         const ready = missing.length === 0;
         return (
           <div className="space-y-1">
             {!ready ? (
               <div className="text-xs text-neutral-500">
-                Still needed before submit: <span className="text-amber-600">{missing.join(' · ')}</span>
+                {t('Still needed before submit:')} <span className="text-amber-600">{missing.join(' · ')}</span>
               </div>
             ) : null}
             <div className="flex flex-wrap items-center gap-2">
@@ -666,7 +667,7 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
                 disabled={busy || !ready}
                 className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {busy ? 'Submitting…' : 'Submit (opens voting now)'}
+                {busy ? t('Submitting…') : t('Submit (opens voting now)')}
               </button>
               {/* §10 — drafts (regular internal proposals only; elections submit directly). */}
               {!election ? (
@@ -676,7 +677,7 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
                   disabled={busy || !title.trim()}
                   className="rounded-md border border-emerald-500 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-300 dark:hover:bg-emerald-950"
                 >
-                  {editingDraft ? 'Save draft' : 'Save as draft'}
+                  {editingDraft ? t('Save draft') : t('Save as draft')}
                 </button>
               ) : null}
               <button
@@ -685,7 +686,7 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
                 disabled={busy}
                 className="rounded-md border border-neutral-300 px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
               >
-                Cancel
+                {t('Cancel')}
               </button>
               {editingDraft ? (
                 <button
@@ -694,7 +695,7 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
                   disabled={busy}
                   className="ml-auto rounded-md border border-red-400 px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950"
                 >
-                  Delete draft
+                  {t('Delete draft')}
                 </button>
               ) : null}
             </div>
@@ -706,6 +707,7 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
 }
 
 function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
+  const t = useT();
   const { profile } = useAuth();
   const isBoard = !!profile?.roles.includes('BOARD');
   const { txUrl } = useExplorer();
@@ -743,7 +745,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
 
   // Only a load failure (no proposal yet) replaces the page; a failed vote shows inline below
   // so the voter stays on the proposal page.
-  if (!p) return <div className="space-y-3"><BackBtn onBack={onBack} />{error ? <div className="text-sm text-red-600">{error}</div> : <p className="text-sm text-neutral-500">Loading…</p>}</div>;
+  if (!p) return <div className="space-y-3"><BackBtn onBack={onBack} />{error ? <div className="text-sm text-red-600">{error}</div> : <p className="text-sm text-neutral-500">{t('Loading…')}</p>}</div>;
 
   const isPoll = p.internalType === 'POLL';
   const hasVoted = p.myVotes.length > 0;
@@ -753,7 +755,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const minWords = p.rationaleMinWords;
   const meets = (choice: 'YES' | 'NO' | 'ABSTAIN') => wordCount >= (minWords[choice] ?? 0);
   const reqChoices: ('YES' | 'NO' | 'ABSTAIN')[] = isPoll ? ['ABSTAIN'] : ['YES', 'NO', 'ABSTAIN'];
-  const reqParts = reqChoices.filter((c) => (minWords[c] ?? 0) > 0).map((c) => `${c} needs ${minWords[c]}`);
+  const reqParts = reqChoices.filter((c) => (minWords[c] ?? 0) > 0).map((c) => `${c} ${t('needs')} ${minWords[c]}`);
   const act = async (fn: () => Promise<unknown>) => {
     setError(null); setBusy(true);
     try { await fn(); load(); } catch (e) { setError(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
@@ -763,7 +765,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const voteThreshold = (choice: 'YES' | 'NO' | 'ABSTAIN') =>
     act(async () => { await internalProposalsApi.vote(id, { choice, rationale: rationale.trim() || undefined }); afterVote(); });
   const votePoll = () => {
-    if (picked.length === 0) { setError('Select an option or Abstain.'); return; }
+    if (picked.length === 0) { setError(t('Select an option or Abstain.')); return; }
     // Abstain on a poll is its own choice — sent as { choice: 'ABSTAIN' }, never mixed with options.
     const body = picked.length === 1 && picked[0] === 'ABSTAIN'
       ? { choice: 'ABSTAIN' as const, rationale: rationale.trim() || undefined }
@@ -787,29 +789,29 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
       {error ? <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{error}</div> : null}
       {p.status === 'ACTIVE' && expired ? (
         <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300">
-          ⏱ Voting has ended — finalizing the result…
+          {t('⏱ Voting has ended — finalizing the result…')}
         </div>
       ) : null}
       <div className={card}>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h2 className="text-lg font-semibold">
             {p.title}
-            {p.submitter ? <span className="ml-2 text-sm font-normal text-neutral-500">by {p.submitter}</span> : null}
+            {p.submitter ? <span className="ml-2 text-sm font-normal text-neutral-500">{t('by')} {p.submitter}</span> : null}
           </h2>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
-            {p.publicId ? <span>ID: <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{p.publicId}</span></span> : null}
-            {p.isPrivate ? <span className="rounded bg-neutral-200 px-1.5 py-0.5 font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">PRIVATE · board</span> : null}
-            <span className="flex items-center gap-1">Status: <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} /></span>
+            {p.publicId ? <span>{t('ID:')} <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{p.publicId}</span></span> : null}
+            {p.isPrivate ? <span className="rounded bg-neutral-200 px-1.5 py-0.5 font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{t('PRIVATE · board')}</span> : null}
+            <span className="flex items-center gap-1">{t('Status:')} <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} /></span>
           </div>
         </div>
         <div className="mt-1 text-xs text-neutral-500">
-          {TYPE_LABEL[p.internalType] ?? p.internalType} · {SCOPE_LABEL[p.votersScope] ?? p.votersScope} · {VTYPE_LABEL[p.votingType] ?? p.votingType}
-          {p.tally.kind === 'THRESHOLD' ? ` · threshold ${p.thresholdPct ?? '?'}%` : ''}
+          {t(TYPE_LABEL[p.internalType] ?? p.internalType)} · {t(SCOPE_LABEL[p.votersScope] ?? p.votersScope)} · {t(VTYPE_LABEL[p.votingType] ?? p.votingType)}
+          {p.tally.kind === 'THRESHOLD' ? ` · ${t('threshold')} ${p.thresholdPct ?? '?'}%` : ''}
           {' · '}{p.status === 'ACTIVE'
             ? (expired
-                ? <span className="font-medium text-amber-600">voting ended — finalizing…</span>
-                : <>voting ends in <span className={endMs != null && endMs - now <= 2 * 3600_000 ? 'font-semibold text-red-600' : 'font-medium text-neutral-700 dark:text-neutral-300'}>{fmtCountdown((endMs ?? now) - now)}</span></>)
-            : `voting ${fmtDateTime(p.votingStartAt)} → ${fmtDateTime(p.votingEndAt)}`}
+                ? <span className="font-medium text-amber-600">{t('voting ended — finalizing…')}</span>
+                : <>{t('voting ends in')} <span className={endMs != null && endMs - now <= 2 * 3600_000 ? 'font-semibold text-red-600' : 'font-medium text-neutral-700 dark:text-neutral-300'}>{fmtCountdown((endMs ?? now) - now)}</span></>)
+            : `${t('voting')} ${fmtDateTime(p.votingStartAt)} → ${fmtDateTime(p.votingEndAt)}`}
         </div>
 
         <div className="mt-3">
@@ -818,37 +820,37 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
 
         {p.isBoardElection ? (
           <div className="mt-3 space-y-1 rounded-md border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
-            <div><span className="font-medium">Candidates (5):</span> {p.candidates?.map((c) => c.displayName).join(', ') ?? '—'}</div>
-            <div><span className="font-medium">Installation date:</span> {fmtDateTime(p.deliveryDate)}</div>
+            <div><span className="font-medium">{t('Candidates (5):')}</span> {p.candidates?.map((c) => c.displayName).join(', ') ?? '—'}</div>
+            <div><span className="font-medium">{t('Installation date:')}</span> {fmtDateTime(p.deliveryDate)}</div>
             {p.boardInstalledAt ? (
-              <div className="text-emerald-700 dark:text-emerald-400">✓ Board installed {fmtDateTime(p.boardInstalledAt)}</div>
+              <div className="text-emerald-700 dark:text-emerald-400">{t('✓ Board installed')} {fmtDateTime(p.boardInstalledAt)}</div>
             ) : null}
           </div>
         ) : p.internalType === 'INSTRUCTIVE' && (p.actors?.length || p.deliveryDate) ? (
           <div className="mt-3 rounded-md border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
-            {p.actors?.length ? <div><span className="font-medium">Actors:</span> {p.actors.join(', ')}</div> : null}
-            {p.deliveryDate ? <div><span className="font-medium">Delivery date:</span> {fmtDateTime(p.deliveryDate)}</div> : null}
+            {p.actors?.length ? <div><span className="font-medium">{t('Actors:')}</span> {p.actors.join(', ')}</div> : null}
+            {p.deliveryDate ? <div><span className="font-medium">{t('Delivery date:')}</span> {fmtDateTime(p.deliveryDate)}</div> : null}
           </div>
         ) : null}
         {/* §10.5 — spending parameters + the multisig action's progress once approved. */}
         {p.spending ? (
           <div className="mt-3 rounded-md border border-emerald-200 bg-emerald-50/40 px-3 py-2 text-xs dark:border-emerald-900 dark:bg-emerald-950/20">
-            <div className="font-medium text-emerald-800 dark:text-emerald-200">Treasury spending (on approval)</div>
-            <div className="mt-1"><span className="font-medium">Amount:</span> {p.spending.amountAda.toLocaleString()} ₳</div>
-            <div><span className="font-medium">From:</span> {p.spending.sourceBucketLabel ?? 'Operations (default)'}</div>
-            <div className="break-all"><span className="font-medium">To:</span> <span className="font-mono">{p.spending.destAddress}</span></div>
+            <div className="font-medium text-emerald-800 dark:text-emerald-200">{t('Treasury spending (on approval)')}</div>
+            <div className="mt-1"><span className="font-medium">{t('Amount:')}</span> {p.spending.amountAda.toLocaleString()} ₳</div>
+            <div><span className="font-medium">{t('From:')}</span> {p.spending.sourceBucketLabel ?? t('Operations (default)')}</div>
+            <div className="break-all"><span className="font-medium">{t('To:')}</span> <span className="font-mono">{p.spending.destAddress}</span></div>
             {p.spending.action ? (
               p.spending.action.status === 'CONFIRMED' ? (
-                <div className="mt-1 text-emerald-700 dark:text-emerald-300">✓ Executed on-chain{p.spending.action.txHash ? ` — ${p.spending.action.txHash.slice(0, 16)}…` : ''}{p.spending.action.paidAt ? ` (${new Date(p.spending.action.paidAt).toLocaleDateString()})` : ''}</div>
+                <div className="mt-1 text-emerald-700 dark:text-emerald-300">{t('✓ Executed on-chain')}{p.spending.action.txHash ? ` — ${p.spending.action.txHash.slice(0, 16)}…` : ''}{p.spending.action.paidAt ? ` (${new Date(p.spending.action.paidAt).toLocaleDateString()})` : ''}</div>
               ) : p.spending.action.status === 'FAILED' ? (
-                <div className="mt-1 text-red-600">✗ The prepared multisig action was cancelled — the board can review it under Treasury history.</div>
+                <div className="mt-1 text-red-600">{t('✗ The prepared multisig action was cancelled — the board can review it under Treasury history.')}</div>
               ) : (
-                <div className="mt-1 text-amber-600">⏳ Multisig transaction prepared — awaiting board signatures (Treasury → Actions).</div>
+                <div className="mt-1 text-amber-600">{t('⏳ Multisig transaction prepared — awaiting board signatures (Treasury → Actions).')}</div>
               )
             ) : p.status === 'APPROVED' ? (
-              <div className="mt-1 text-amber-600">Preparing the multisig transaction…</div>
+              <div className="mt-1 text-amber-600">{t('Preparing the multisig transaction…')}</div>
             ) : (
-              <div className="mt-1 text-neutral-500">If the vote passes, a multisig transaction is created for the board to sign.</div>
+              <div className="mt-1 text-neutral-500">{t('If the vote passes, a multisig transaction is created for the board to sign.')}</div>
             )}
           </div>
         ) : null}
@@ -856,14 +858,14 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
 
       {/* Tally */}
       <div className={card}>
-        <h3 className="text-base font-semibold">Result</h3>
+        <h3 className="text-base font-semibold">{t('Result')}</h3>
         {p.tally.kind === 'THRESHOLD' ? (
           <div className="mt-1 space-y-1 text-sm">
             <div className="text-neutral-600 dark:text-neutral-300">
-              YES {p.tally.yesPower} / {p.tally.denominator} ({p.tally.ratioPct}%) · threshold {p.tally.thresholdPct}% ·{' '}
-              <span className={p.tally.approved ? 'font-semibold text-emerald-600' : 'font-semibold text-red-600'}>{p.tally.approved ? 'passing' : 'not passing'}</span>
+              YES {p.tally.yesPower} / {p.tally.denominator} ({p.tally.ratioPct}%) · {t('threshold')} {p.tally.thresholdPct}% ·{' '}
+              <span className={p.tally.approved ? 'font-semibold text-emerald-600' : 'font-semibold text-red-600'}>{p.tally.approved ? t('passing') : t('not passing')}</span>
             </div>
-            <div className="text-xs text-neutral-500">{p.tally.cast} of {p.tally.eligible} eligible voted · abstain {p.tally.abstainPower} · total power {p.tally.totalPower}</div>
+            <div className="text-xs text-neutral-500">{p.tally.cast} {t('of')} {p.tally.eligible} {t('eligible voted')} · {t('abstain')} {p.tally.abstainPower} · {t('total power')} {p.tally.totalPower}</div>
             {/* §4.4 — YES/NO/abstain over the full eligible voting power (0 → max), with the threshold marker. */}
             <ThresholdBar
               yes={p.tally.yesPower}
@@ -876,8 +878,8 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
         ) : (
           <div className="mt-1 space-y-1 text-sm">
             <div className="text-xs text-neutral-500">
-              {p.tally.voted} of {p.tally.eligible} eligible voted{p.poll?.multiple ? ' · multiple choice' : ' · single choice'}
-              {p.tally.abstain.voters > 0 ? ` · ${p.tally.abstain.voters} abstain` : ''}
+              {p.tally.voted} {t('of')} {p.tally.eligible} {t('eligible voted')}{p.poll?.multiple ? ` · ${t('multiple choice')}` : ` · ${t('single choice')}`}
+              {p.tally.abstain.voters > 0 ? ` · ${p.tally.abstain.voters} ${t('abstain')}` : ''}
             </div>
             <ul className="space-y-1">
               {p.tally.options.map((o) => {
@@ -885,7 +887,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
                 const pct = Math.round((o.power / max) * 100);
                 return (
                   <li key={o.option} className="text-sm">
-                    <div className="flex justify-between"><span>{o.option}</span><span className="text-neutral-500">{o.voters} vote(s){p.votingType !== 'ONE_PERSON_ONE_VOTE' ? ` · ${o.power} power` : ''}</span></div>
+                    <div className="flex justify-between"><span>{o.option}</span><span className="text-neutral-500">{o.voters} {t('vote(s)')}{p.votingType !== 'ONE_PERSON_ONE_VOTE' ? ` · ${o.power} ${t('power')}` : ''}</span></div>
                     <div className="h-1.5 w-full rounded bg-neutral-200 dark:bg-neutral-800"><div className="h-1.5 rounded bg-emerald-500" style={{ width: `${pct}%` }} /></div>
                   </li>
                 );
@@ -894,29 +896,29 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
           </div>
         )}
         {p.anchorTxHash ? (
-          <div className="mt-2 text-xs"><a href={txUrl(p.anchorTxHash)} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">on-chain record ↗</a></div>
+          <div className="mt-2 text-xs"><a href={txUrl(p.anchorTxHash)} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{t('on-chain record ↗')}</a></div>
         ) : p.status !== 'ACTIVE' && p.anchorHash ? (
-          <div className="mt-2 text-xs text-neutral-400">on-chain anchor recorded (pending submission)</div>
+          <div className="mt-2 text-xs text-neutral-400">{t('on-chain anchor recorded (pending submission)')}</div>
         ) : null}
       </div>
 
       {/* Per-voter breakdown — who voted how + their rationale. */}
       {p.voters.length > 0 ? (
         <div className={card}>
-          <h3 className="text-base font-semibold">Votes ({p.voters.length})</h3>
-          <p className="text-xs text-neutral-500">Full history, newest first. A member&apos;s earlier votes are crossed out; only their latest counts.</p>
+          <h3 className="text-base font-semibold">{t('Votes')} ({p.voters.length})</h3>
+          <p className="text-xs text-neutral-500">{t('Full history, newest first. A member\'s earlier votes are crossed out; only their latest counts.')}</p>
           <ul className="mt-2 space-y-2">
             {p.voters.map((v, i) => (
               <li key={`${v.drep}-${i}`} className={`rounded-md border p-2 text-sm ${v.superseded ? 'border-neutral-200/60 opacity-60 dark:border-neutral-800/60' : 'border-neutral-200 dark:border-neutral-800'}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className={v.superseded ? 'line-through' : ''}>
-                    <span className="font-medium">{v.displayName ?? '(unknown)'}</span>
+                    <span className="font-medium">{v.displayName ?? t('(unknown)')}</span>
                     <span className="ml-2 break-all font-mono text-[10px] text-neutral-400">{v.drep}</span>
                   </span>
                   <span className="flex items-center gap-2">
                     <span className="text-[10px] text-neutral-400">{fmtDateTime(v.castAt)}</span>
-                    {v.superseded ? <span className="text-[10px] font-medium text-neutral-400">changed</span> : null}
-                    {p.votingType !== 'ONE_PERSON_ONE_VOTE' ? <span className="text-[11px] text-neutral-500">{v.weight} power</span> : null}
+                    {v.superseded ? <span className="text-[10px] font-medium text-neutral-400">{t('changed')}</span> : null}
+                    {p.votingType !== 'ONE_PERSON_ONE_VOTE' ? <span className="text-[11px] text-neutral-500">{v.weight} {t('power')}</span> : null}
                     <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${choiceBadgeCls(v.choice)} ${v.superseded ? 'line-through' : ''}`}>{v.choice}</span>
                   </span>
                 </div>
@@ -930,10 +932,10 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
       {/* §14 — election install: board members can trigger early; otherwise the platform auto-installs at the installation date. */}
       {p.isBoardElection && p.status === 'APPROVED' && !p.boardInstalledAt ? (
         <div className={card}>
-          <h3 className="text-base font-semibold">New board ready to install</h3>
+          <h3 className="text-base font-semibold">{t('New board ready to install')}</h3>
           <p className="text-xs text-neutral-500">
-            Installation date: {fmtDateTime(p.deliveryDate)}. The platform will install the new board automatically when that date arrives.
-            {isBoard ? ' As a current board member, you can install them earlier:' : ''}
+            {t('Installation date:')} {fmtDateTime(p.deliveryDate)}. {t('The platform will install the new board automatically when that date arrives.')}
+            {isBoard ? ` ${t('As a current board member, you can install them earlier:')}` : ''}
           </p>
           {isBoard ? (
             <button
@@ -941,7 +943,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
               onClick={() => act(() => internalProposalsApi.installBoard(id))}
               className="mt-2 rounded-md border border-emerald-500 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
             >
-              {busy ? 'Installing…' : 'Install new board members now'}
+              {busy ? t('Installing…') : t('Install new board members now')}
             </button>
           ) : null}
         </div>
@@ -950,26 +952,26 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
       {/* Voting */}
       {p.status === 'ACTIVE' && p.canVote && !expired ? (
         <div className={card}>
-          <h3 className="text-base font-semibold">Cast your vote</h3>
+          <h3 className="text-base font-semibold">{t('Cast your vote')}</h3>
           {hasVoted && !changing ? (
             // §10 — locked summary of the voter's current vote; the form is reopened via "Change vote".
             <div className="mt-2 space-y-2">
               <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="text-neutral-500">Your vote:</span>
+                <span className="text-neutral-500">{t('Your vote:')}</span>
                 {p.myVotes.map((c) => (
-                  <span key={c} className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${choiceBadgeCls(c)}`}>{c === 'ABSTAIN' ? 'Abstain' : c}</span>
+                  <span key={c} className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${choiceBadgeCls(c)}`}>{c === 'ABSTAIN' ? t('Abstain') : c}</span>
                 ))}
               </div>
               {p.myRationale ? (
                 <div className="rounded-md border border-neutral-200 p-2 dark:border-neutral-800">
                   <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.myRationale}</Markdown>
                 </div>
-              ) : <p className="text-xs text-neutral-500">No rationale provided.</p>}
-              <button disabled={busy} onClick={startChange} className="rounded border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800">Change vote</button>
+              ) : <p className="text-xs text-neutral-500">{t('No rationale provided.')}</p>}
+              <button disabled={busy} onClick={startChange} className="rounded border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800">{t('Change vote')}</button>
             </div>
           ) : (
             <>
-              <p className="text-xs text-neutral-500">You can change your vote until voting ends.</p>
+              <p className="text-xs text-neutral-500">{t('You can change your vote until voting ends.')}</p>
               {isPoll ? (
                 <div className="mt-2 space-y-1.5">
                   {p.poll?.options.map((o) => (
@@ -981,35 +983,35 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
                   {/* §10 — voters may also abstain on a poll (exclusive with the options). */}
                   <label className="flex items-center gap-2 text-sm">
                     <input type="radio" name="pollopt" checked={picked.length === 1 && picked[0] === 'ABSTAIN'} onChange={() => togglePick('ABSTAIN')} />
-                    <span className="text-neutral-500">Abstain</span>
+                    <span className="text-neutral-500">{t('Abstain')}</span>
                   </label>
                 </div>
               ) : null}
               <div className="mt-2">
-                <MarkdownEditor value={rationale} onChange={setRationale} title="Rationale" hint={reqParts.length > 0 ? 'Markdown supported' : 'optional — Markdown supported'} placeholder={reqParts.length > 0 ? 'Why you voted this way' : 'Why you voted this way (optional)'} minRows={3} />
+                <MarkdownEditor value={rationale} onChange={setRationale} title={t('Rationale')} hint={reqParts.length > 0 ? t('Markdown supported') : t('optional — Markdown supported')} placeholder={reqParts.length > 0 ? t('Why you voted this way') : t('Why you voted this way (optional)')} minRows={3} />
               </div>
               {reqParts.length > 0 ? (
                 <p className="mt-1 text-xs text-neutral-500">
-                  Rationale: {wordCount} word(s) · minimum required — {reqParts.join(' · ')}
+                  {t('Rationale:')} {wordCount} {t('word(s) · minimum required —')} {reqParts.join(' · ')}
                 </p>
               ) : null}
               <div className="mt-2 flex flex-wrap gap-2">
                 {isPoll ? (
-                  <button disabled={busy || (picked.length === 1 && picked[0] === 'ABSTAIN' && !meets('ABSTAIN'))} onClick={votePoll} className="rounded border border-emerald-500 px-3 py-1 text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950">Submit vote</button>
+                  <button disabled={busy || (picked.length === 1 && picked[0] === 'ABSTAIN' && !meets('ABSTAIN'))} onClick={votePoll} className="rounded border border-emerald-500 px-3 py-1 text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950">{t('Submit vote')}</button>
                 ) : (
                   <>
                     <button disabled={busy || !meets('YES')} onClick={() => voteThreshold('YES')} className={`rounded border px-3 py-1 text-sm disabled:opacity-40 ${p.myVotes.includes('YES') ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200' : 'border-emerald-500 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950'}`}>{p.myVotes.includes('YES') ? '✓ YES' : 'YES'}</button>
                     <button disabled={busy || !meets('NO')} onClick={() => voteThreshold('NO')} className={`rounded border px-3 py-1 text-sm disabled:opacity-40 ${p.myVotes.includes('NO') ? 'border-red-400 bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200' : 'border-red-400 text-red-700 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950'}`}>{p.myVotes.includes('NO') ? '✓ NO' : 'NO'}</button>
-                    <button disabled={busy || !meets('ABSTAIN')} onClick={() => voteThreshold('ABSTAIN')} className={`rounded border px-3 py-1 text-sm disabled:opacity-40 ${p.myVotes.includes('ABSTAIN') ? 'border-neutral-400 bg-neutral-100 dark:bg-neutral-800' : 'border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'}`}>{p.myVotes.includes('ABSTAIN') ? '✓ Abstain' : 'Abstain'}</button>
+                    <button disabled={busy || !meets('ABSTAIN')} onClick={() => voteThreshold('ABSTAIN')} className={`rounded border px-3 py-1 text-sm disabled:opacity-40 ${p.myVotes.includes('ABSTAIN') ? 'border-neutral-400 bg-neutral-100 dark:bg-neutral-800' : 'border-neutral-300 text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800'}`}>{p.myVotes.includes('ABSTAIN') ? `✓ ${t('Abstain')}` : t('Abstain')}</button>
                   </>
                 )}
-                {hasVoted ? <button disabled={busy} onClick={cancelChange} className="rounded border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800">Cancel</button> : null}
+                {hasVoted ? <button disabled={busy} onClick={cancelChange} className="rounded border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800">{t('Cancel')}</button> : null}
               </div>
             </>
           )}
         </div>
       ) : p.status === 'ACTIVE' && !expired ? (
-        <div className={card}><p className="text-sm text-neutral-500">You are not eligible to vote on this proposal ({SCOPE_LABEL[p.votersScope] ?? p.votersScope}).</p></div>
+        <div className={card}><p className="text-sm text-neutral-500">{t('You are not eligible to vote on this proposal')} ({t(SCOPE_LABEL[p.votersScope] ?? p.votersScope)}).</p></div>
       ) : null}
 
       {/* §10 — the voting end is fixed at submission; it can't be changed once voting is open. */}
@@ -1018,7 +1020,8 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
 }
 
 function BackBtn({ onBack }: { onBack: () => void }) {
-  return <BackButton onBack={onBack} label="back to internal proposals" />;
+  const t = useT();
+  return <BackButton onBack={onBack} label={t('back to internal proposals')} />;
 }
 
 /**
@@ -1026,6 +1029,7 @@ function BackBtn({ onBack }: { onBack: () => void }) {
  * marker at the approval threshold (placed on the total-power scale, allowing for abstains).
  */
 function ThresholdBar({ yes, abstain, total, denominator, thresholdPct }: { yes: number; abstain: number; total: number; denominator: number; thresholdPct: number }) {
+  const t = useT();
   const no = Math.max(0, total - yes - abstain); // explicit + implicit NO
   const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0);
   const fmt = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
@@ -1040,15 +1044,15 @@ function ThresholdBar({ yes, abstain, total, denominator, thresholdPct }: { yes:
           <div className="absolute inset-y-0 bg-neutral-400" style={{ left: `${pct(yes + no)}%`, width: `${pct(abstain)}%` }} />
         </div>
         <div className="absolute -top-5 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-neutral-700 dark:text-neutral-300" style={{ left: `${tpos}%` }}>
-          threshold {thresholdPct}%
+          {t('threshold')} {thresholdPct}%
         </div>
-        <div className="absolute -top-1.5 bottom-0 w-0.5 bg-neutral-900 dark:bg-white" style={{ left: `${tpos}%` }} title={`threshold ${thresholdPct}%`} />
+        <div className="absolute -top-1.5 bottom-0 w-0.5 bg-neutral-900 dark:bg-white" style={{ left: `${tpos}%` }} title={`${t('threshold')} ${thresholdPct}%`} />
       </div>
       <div className="mt-1 flex flex-wrap gap-3 text-xs text-neutral-500">
         <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-emerald-500" />YES {fmt(yes)}</span>
         <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-red-400" />NO {fmt(no)}</span>
-        {abstain > 0 ? <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-neutral-400" />abstain {fmt(abstain)}</span> : null}
-        <span className="tabular-nums">max power {fmt(total)}</span>
+        {abstain > 0 ? <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-neutral-400" />{t('abstain')} {fmt(abstain)}</span> : null}
+        <span className="tabular-nums">{t('max power')} {fmt(total)}</span>
       </div>
     </div>
   );

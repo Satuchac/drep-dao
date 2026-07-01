@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { meritApi, type MeritInfo, type AvoidPeriod } from '@/lib/api';
+import { useT } from '@/lib/prefs-context';
 
 // §13 — human labels for merit reason codes.
 const REASON_LABEL: Record<string, string> = {
@@ -30,6 +31,7 @@ const inputCls =
 
 /** §13 — the DRep's merit points + ledger, and avoid-period ("vacancy") signalling. */
 export function MeritPanel() {
+  const t = useT();
   const [info, setInfo] = useState<MeritInfo | null>(null);
   const [avoid, setAvoid] = useState<AvoidPeriod[]>([]);
   const [start, setStart] = useState('');
@@ -54,7 +56,7 @@ export function MeritPanel() {
       setReason('');
       load();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'failed');
+      setErr(e instanceof Error ? e.message : t('failed'));
     } finally {
       setBusy(false);
     }
@@ -66,24 +68,24 @@ export function MeritPanel() {
   return (
     <div className="space-y-5">
       <div>
-        <h3 className="text-base font-semibold">Merit points</h3>
+        <h3 className="text-base font-semibold">{t('Merit points')}</h3>
         <div className="mt-1 flex items-baseline gap-2">
           <span className={`text-3xl font-bold tabular-nums ${pts > 0 ? 'text-emerald-600' : pts < 0 ? 'text-red-600' : 'text-neutral-500'}`}>
             {pts > 0 ? '+' : ''}
             {pts}
           </span>
           <span className="text-xs text-neutral-500">
-            range −200…+200 · voting power ×{(1 + pts / 200).toFixed(2)}
+            {t('range −200…+200 · voting power ×')}{(1 + pts / 200).toFixed(2)}
           </span>
         </div>
         <p className="mt-0.5 text-xs text-neutral-500">
-          Earn points for voting and reviewing on time; lose them for missing. Your merit scales your voting power.
+          {t('Earn points for voting and reviewing on time; lose them for missing. Your merit scales your voting power.')}
         </p>
         {info.ledger.length ? (
           <ul className="mt-2 space-y-1 text-xs">
             {info.ledger.slice(0, 8).map((l, i) => (
               <li key={i} className="flex items-center justify-between gap-3">
-                <span className="text-neutral-700 dark:text-neutral-300">{REASON_LABEL[l.reason] ?? l.reason}</span>
+                <span className="text-neutral-700 dark:text-neutral-300">{REASON_LABEL[l.reason] ? t(REASON_LABEL[l.reason]) : l.reason}</span>
                 <span className="flex items-center gap-2 whitespace-nowrap text-neutral-400">
                   <span className="tabular-nums">{new Date(l.at).toLocaleDateString()}</span>
                   <span className={`tabular-nums font-semibold ${l.delta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
@@ -95,15 +97,14 @@ export function MeritPanel() {
             ))}
           </ul>
         ) : (
-          <p className="mt-1 text-xs text-neutral-400">No merit changes yet.</p>
+          <p className="mt-1 text-xs text-neutral-400">{t('No merit changes yet.')}</p>
         )}
       </div>
 
       <div>
-        <h4 className="text-sm font-semibold">Availability (avoid periods)</h4>
+        <h4 className="text-sm font-semibold">{t('Availability (avoid periods)')}</h4>
         <p className="text-xs text-neutral-500">
-          Signal time off — while an avoid period is active you won&apos;t be assigned to filtering/milestone reviews,
-          and missed Debate&nbsp;&amp;&nbsp;Vote ballots won&apos;t cost you merit.
+          {t('Signal time off — while an avoid period is active you won’t be assigned to filtering/milestone reviews, and missed Debate & Vote ballots won’t cost you merit.')}
         </p>
         {avoid.length ? (
           <ul className="mt-2 space-y-1 text-xs">
@@ -117,7 +118,7 @@ export function MeritPanel() {
                   {a.reason ? ` · ${a.reason}` : ''}
                 </span>
                 <button onClick={() => meritApi.removeAvoid(a.id).then(load)} className="text-red-600 hover:underline">
-                  remove
+                  {t('remove')}
                 </button>
               </li>
             ))}
@@ -125,15 +126,15 @@ export function MeritPanel() {
         ) : null}
         <div className="mt-2 flex flex-wrap items-end gap-2">
           <label className="flex flex-col gap-0.5 text-[11px] text-neutral-500">
-            From
+            {t('From')}
             <input type="date" value={start} onChange={(e) => setStart(e.target.value)} className={inputCls} />
           </label>
           <label className="flex flex-col gap-0.5 text-[11px] text-neutral-500">
-            To
+            {t('To')}
             <input type="date" value={end} onChange={(e) => setEnd(e.target.value)} className={inputCls} />
           </label>
           <label className="flex flex-col gap-0.5 text-[11px] text-neutral-500">
-            Reason (optional)
+            {t('Reason (optional)')}
             <input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} className={inputCls} />
           </label>
           <button
@@ -141,7 +142,7 @@ export function MeritPanel() {
             disabled={busy || !start || !end}
             className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
           >
-            {busy ? 'Saving…' : 'Add'}
+            {busy ? t('Saving…') : t('Add')}
           </button>
         </div>
         {err ? <div className="mt-1 text-xs text-red-600">{err}</div> : null}

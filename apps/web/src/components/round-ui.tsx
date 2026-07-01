@@ -65,9 +65,10 @@ const ACTIVE_STAGE_LABEL: Record<string, string> = {
   FUNDING: 'funding',
 };
 export function ProposalCounts({ counts, activeStage }: { counts?: Record<string, number>; activeStage?: Record<string, number> }) {
+  const t = useT();
   const c = counts ?? {};
   const entries = STATUS_ORDER.filter((s) => (c[s] ?? 0) > 0).map((s) => [s, c[s]] as const);
-  if (entries.length === 0) return <span className="text-xs text-neutral-400">no proposals yet</span>;
+  if (entries.length === 0) return <span className="text-xs text-neutral-400">{t('no proposals yet')}</span>;
   const activeParts = activeStage
     ? Object.entries(activeStage)
         .filter(([, n]) => (n ?? 0) > 0)
@@ -129,6 +130,7 @@ export function toLocalInput(iso: string | null | undefined): string {
  * (>50 chars or multi-line) default to collapsed. Preserves original line breaks when expanded.
  */
 export function RationaleText({ text }: { text: string | null | undefined }) {
+  const t = useT();
   const trimmed = (text ?? '').trim();
   const long = trimmed.length > 50 || trimmed.includes('\n');
   const [open, setOpen] = useState(!long);
@@ -140,7 +142,7 @@ export function RationaleText({ text }: { text: string | null | undefined }) {
         onClick={() => setOpen((o) => !o)}
         className="text-[11px] text-emerald-700 hover:underline dark:text-emerald-400"
       >
-        {open ? '▾ rationale (hide)' : `▸ rationale (${trimmed.length} char${trimmed.length === 1 ? '' : 's'} — show)`}
+        {open ? t('▾ rationale (hide)') : `▸ ${t('rationale')} (${trimmed.length} char${trimmed.length === 1 ? '' : 's'} — ${t('show')})`}
       </button>
       {open ? <div className="mt-0.5 whitespace-pre-wrap">{trimmed}</div> : null}
     </div>
@@ -188,6 +190,7 @@ export function DateField({
   required?: boolean;
   className?: string;
 }) {
+  const tr = useT();
   const withTime = type === 'datetime-local';
   // Sub-fields keep their own state so the user can fill them in any order — the parent's
   // `value` only updates once month + day + year are all set (otherwise the partial entry
@@ -233,7 +236,7 @@ export function DateField({
         onChange={(e) => update({ m: e.target.value })}
         className={`${cell} min-w-[8.5rem]`}
       >
-        <option value="">Month</option>
+        <option value="">{tr('Month')}</option>
         {MONTHS.map((label, i) => (
           <option key={i + 1} value={String(i + 1)}>{label}</option>
         ))}
@@ -242,7 +245,7 @@ export function DateField({
         type="number"
         min={1}
         max={31}
-        placeholder="Day"
+        placeholder={tr('Day')}
         value={d}
         required={required}
         onChange={(e) => update({ d: e.target.value.replace(/\D/g, '') })}
@@ -252,7 +255,7 @@ export function DateField({
         type="number"
         min={2024}
         max={2100}
-        placeholder="Year"
+        placeholder={tr('Year')}
         value={y}
         required={required}
         onChange={(e) => update({ y: e.target.value.replace(/\D/g, '') })}
@@ -278,6 +281,7 @@ export function DateField({
  * position on the total-power scale; compute it with `thresholdMarkerPct`.
  */
 export function PowerBar({ yes, no, abstain, total, thresholdPosPct, thresholdPct }: { yes: number; no: number; abstain: number; total: number; thresholdPosPct: number; thresholdPct: number }) {
+  const t = useT();
   const pct = (v: number) => (total > 0 ? (v / total) * 100 : 0);
   const fmt = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 1 });
   // Share of TOTAL power (so YES/NO/abstain sum to 100% and match the bar segment widths).
@@ -293,15 +297,15 @@ export function PowerBar({ yes, no, abstain, total, thresholdPosPct, thresholdPc
         </div>
         {/* §6 — threshold marker with a labelled percentage above the line. */}
         <div className="absolute -top-5 -translate-x-1/2 whitespace-nowrap text-[10px] font-medium text-neutral-700 dark:text-neutral-300" style={{ left: `${tpos}%` }}>
-          threshold {thresholdPct}%
+          {t('threshold')} {thresholdPct}%
         </div>
-        <div className="absolute -top-1.5 bottom-0 w-0.5 bg-neutral-900 dark:bg-white" style={{ left: `${tpos}%` }} title={`threshold ${thresholdPct}%`} />
+        <div className="absolute -top-1.5 bottom-0 w-0.5 bg-neutral-900 dark:bg-white" style={{ left: `${tpos}%` }} title={`${t('threshold')} ${thresholdPct}%`} />
       </div>
       <div className="mt-1 flex flex-wrap gap-3 text-xs text-neutral-500">
-        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-emerald-500" />YES {fmt(yes)}{pctLabel(yes)}</span>
-        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-red-400" />NO {fmt(no)}{pctLabel(no)}</span>
-        {abstain > 0 ? <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-neutral-400" />abstain {fmt(abstain)}{pctLabel(abstain)}</span> : null}
-        <span className="tabular-nums">total power {fmt(total)} · threshold {thresholdPct}%</span>
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-emerald-500" />{t('YES')} {fmt(yes)}{pctLabel(yes)}</span>
+        <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-red-400" />{t('NO')} {fmt(no)}{pctLabel(no)}</span>
+        {abstain > 0 ? <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-neutral-400" />{t('abstain')} {fmt(abstain)}{pctLabel(abstain)}</span> : null}
+        <span className="tabular-nums">{t('total power')} {fmt(total)} · {t('threshold')} {thresholdPct}%</span>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useT } from '@/lib/prefs-context';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
@@ -10,6 +11,7 @@ type Report = {
 };
 
 export function HealthBadge() {
+  const t = useT();
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState(false);
 
@@ -20,13 +22,18 @@ export function HealthBadge() {
       .catch(() => setError(true));
   }, []);
 
-  if (error) return <span className="text-red-600">API unreachable ({API_URL})</span>;
-  if (!report) return <span className="text-neutral-500">checking API…</span>;
+  if (error)
+    return (
+      <span className="text-red-600">
+        {t('API unreachable')} ({API_URL})
+      </span>
+    );
+  if (!report) return <span className="text-neutral-500">{t('checking API…')}</span>;
 
   return (
     <span>
-      API <strong>{report.status}</strong> · db {report.components.database} · redis{' '}
-      {report.components.redis}
+      {t('API')} <strong>{report.status}</strong> · {t('db')} {report.components.database} ·{' '}
+      {t('redis')} {report.components.redis}
     </span>
   );
 }

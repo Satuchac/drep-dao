@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { DEFAULT_SUBCATEGORIES } from '@drep-dao/shared';
 import { useAuth } from '@/lib/auth-context';
+import { useT } from '@/lib/prefs-context';
 import { COUNTRIES } from '@/lib/countries';
 import { drepApi, submitterApi, type DrepApplicationInput, type ApprovedSubmitter } from '@/lib/api';
 import { MarkdownEditor } from './markdown';
@@ -16,6 +17,7 @@ const field =
  * then votes 3-of-5). `profile` = an existing DAO member editing their details.
  */
 export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
+  const t = useT();
   const { profile, refresh } = useAuth();
   const drepId = profile?.onchainDrep.drepId ?? null;
 
@@ -103,11 +105,11 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
     setError(null);
     setSaved(false);
     // §14.3 — the bio is mandatory: at least 100 words (also enforced server-side).
-    if (bioWords < 100) { setError(`The bio must be at least 100 words (currently ${bioWords}).`); return; }
-    if (!country) { setError('Please select a country.'); return; }
+    if (bioWords < 100) { setError(`${t('The bio must be at least 100 words (currently')} ${bioWords}).`); return; }
+    if (!country) { setError(t('Please select a country.')); return; }
     // §14.3 — Telegram + a valid email are mandatory contact details.
-    if (!telegram.trim()) { setError('A Telegram handle is required.'); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError('A valid email is required.'); return; }
+    if (!telegram.trim()) { setError(t('A Telegram handle is required.')); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) { setError(t('A valid email is required.')); return; }
     setBusy(true);
     const input: DrepApplicationInput = {
       displayName: displayName.trim() || undefined,
@@ -144,7 +146,7 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       setSavedSig(formSig); // re-pin baseline → the button disables again until the next change
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed');
+      setError(err instanceof Error ? err.message : t('Failed'));
     } finally {
       setBusy(false);
     }
@@ -153,14 +155,14 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="block space-y-1">
-        <span className="text-sm font-medium">Your DRep ID (verified on-chain)</span>
+        <span className="text-sm font-medium">{t('Your DRep ID (verified on-chain)')}</span>
         <div className="break-all rounded-md border border-neutral-200 bg-neutral-50 px-3 py-2 font-mono text-xs text-neutral-600 dark:border-neutral-800 dark:bg-neutral-950 dark:text-neutral-400">
           {drepId ?? '—'}
         </div>
       </div>
 
       <label className="block space-y-1">
-        <span className="text-sm font-medium">Display name</span>
+        <span className="text-sm font-medium">{t('Display name')}</span>
         <input className={field} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
       </label>
 
@@ -173,19 +175,19 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       <MarkdownEditor
         value={bio}
         onChange={setBio}
-        title="Bio — motivation / experience"
-        hint={`min 100 words — ${bioWords}/100`}
-        subtitle="Who you are, your experience, why you participate in the DAO. Supports bold, italics, headers, lists."
-        placeholder="Who you are, your experience, why you participate in the DAO…"
+        title={t('Bio — motivation / experience')}
+        hint={`${t('min 100 words —')} ${bioWords}/100`}
+        subtitle={t('Who you are, your experience, why you participate in the DAO. Supports bold, italics, headers, lists.')}
+        placeholder={t('Who you are, your experience, why you participate in the DAO…')}
         minRows={6}
         required
       />
-      {bioWords < 100 ? <p className="text-xs text-amber-600">The bio must be at least 100 words ({bioWords}/100).</p> : null}
+      {bioWords < 100 ? <p className="text-xs text-amber-600">{t('The bio must be at least 100 words (')}{bioWords}/100).</p> : null}
 
       <label className="block">
-        <span className="text-sm font-medium">Country <span className="text-red-500">*</span></span>
+        <span className="text-sm font-medium">{t('Country')} <span className="text-red-500">*</span></span>
         <select className={field} value={country} onChange={(e) => setCountry(e.target.value)}>
-          <option value="">— select a country —</option>
+          <option value="">{t('— select a country —')}</option>
           {COUNTRIES.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
       </label>
@@ -194,32 +196,32 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       <MarkdownEditor
         value={conflict}
         onChange={setConflict}
-        title="Conflict of interest"
-        subtitle={'Disclose everything related to a conflict of interest around approving funding (write "none" if you have none). Supports bold, italics, headers, lists.'}
-        placeholder="e.g. I am affiliated with project X which competes for the same category…"
+        title={t('Conflict of interest')}
+        subtitle={t('Disclose everything related to a conflict of interest around approving funding (write "none" if you have none). Supports bold, italics, headers, lists.')}
+        placeholder={t('e.g. I am affiliated with project X which competes for the same category…')}
         minRows={3}
       />
       <label className="flex items-start gap-2 text-sm">
         <input type="checkbox" checked={noSelfVote} onChange={(e) => setNoSelfVote(e.target.checked)} className="mt-0.5" />
-        <span>I will not vote for my own proposal <span className="text-xs text-neutral-500">(informative — optional)</span></span>
+        <span>{t('I will not vote for my own proposal')} <span className="text-xs text-neutral-500">{t('(informative — optional)')}</span></span>
       </label>
 
       {/* §2 — declare a submitter profile that is the SAME entity (possibly a different wallet). */}
       <div className="rounded-md border border-neutral-200 p-3 dark:border-neutral-800">
         <label className="flex items-start gap-2 text-sm">
           <input type="checkbox" checked={linkSubmitter} onChange={(e) => setLinkSubmitter(e.target.checked)} className="mt-0.5" />
-          <span>I&apos;m also a <strong>submitter</strong> <span className="text-xs text-neutral-500">(link my submitter profile — it may be on a different wallet)</span></span>
+          <span>{t('I\'m also a')} <strong>{t('submitter')}</strong> <span className="text-xs text-neutral-500">{t('(link my submitter profile — it may be on a different wallet)')}</span></span>
         </label>
         {linkSubmitter ? (
           <select value={linkedSubmitterUserId} onChange={(e) => setLinkedSubmitterUserId(e.target.value)} className={`mt-2 ${field}`}>
-            <option value="">— select your submitter profile —</option>
+            <option value="">{t('— select your submitter profile —')}</option>
             {submitters.map((s) => <option key={s.userId} value={s.userId}>{s.displayName}{s.country ? ` — ${s.country}` : ''}</option>)}
           </select>
         ) : null}
       </div>
 
       <div className="space-y-1">
-        <span className="text-sm font-medium">Expertise (subcategories)</span>
+        <span className="text-sm font-medium">{t('Expertise (subcategories)')}</span>
         <div className="flex flex-wrap gap-1.5">
           {DEFAULT_SUBCATEGORIES.map((sc) => (
             <button
@@ -259,7 +261,7 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
           <input className={field} value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="@handle" />
         </label>
         <label className="block space-y-1">
-          <span className="text-xs font-medium">Email <span className="text-red-500">*</span></span>
+          <span className="text-xs font-medium">{t('Email')} <span className="text-red-500">*</span></span>
           <input type="email" className={field} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.org" />
         </label>
       </div>
@@ -268,14 +270,14 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       {mode === 'join' ? (
         <div className="space-y-1.5 text-sm">
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={kyc} onChange={(e) => setKyc(e.target.checked)} /> KYC opt-in
+            <input type="checkbox" checked={kyc} onChange={(e) => setKyc(e.target.checked)} /> {t('KYC opt-in')}
           </label>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={calls} onChange={(e) => setCalls(e.target.checked)} /> Calls opt-in
+            <input type="checkbox" checked={calls} onChange={(e) => setCalls(e.target.checked)} /> {t('Calls opt-in')}
           </label>
           <label className="flex items-center gap-2">
             <input type="checkbox" checked={admissionCall} onChange={(e) => setAdmissionCall(e.target.checked)} />{' '}
-            Admission-call opt-in
+            {t('Admission-call opt-in')}
           </label>
         </div>
       ) : null}
@@ -293,10 +295,9 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
               className="mt-1"
             />
             <span>
-              <span className="font-medium">Vote on funding proposals</span>
+              <span className="font-medium">{t('Vote on funding proposals')}</span>
               <span className="block text-xs text-neutral-500">
-                When on, your weighted voting power is counted in every funding-proposal Debate &amp; Vote tally.
-                Turn it off to opt out — any vote you already cast becomes effective abstain (your snapshot weight goes to 0).
+                {t('When on, your weighted voting power is counted in every funding-proposal Debate & Vote tally. Turn it off to opt out — any vote you already cast becomes effective abstain (your snapshot weight goes to 0).')}
               </span>
             </span>
           </label>
@@ -306,7 +307,7 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {saved && !dirty ? (
         <div className="text-sm text-emerald-600">
-          {mode === 'join' ? 'Request submitted — awaiting board review.' : 'Profile saved.'}
+          {mode === 'join' ? t('Request submitted — awaiting board review.') : t('Profile saved.')}
         </div>
       ) : null}
 
@@ -315,7 +316,7 @@ export function DrepForm({ mode }: { mode: 'join' | 'profile' }) {
         disabled={busy || !drepId || !!photoError || !dirty}
         className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
       >
-        {busy ? 'Saving…' : mode === 'join' ? 'Submit request to join' : 'Save profile'}
+        {busy ? t('Saving…') : mode === 'join' ? t('Submit request to join') : t('Save profile')}
       </button>
     </form>
   );

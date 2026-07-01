@@ -81,7 +81,7 @@ export function DaoOverview() {
           <h2 className="text-lg font-semibold">{t('DAO Member overview')}</h2>
           {members ? (
             <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">
-              <strong>{members.filter((m) => m.isBoard).length}</strong> board · <strong>{members.length}</strong> members total
+              <strong>{members.filter((m) => m.isBoard).length}</strong> {t('board')} · <strong>{members.length}</strong> {t('members total')}
             </span>
           ) : null}
         </div>
@@ -89,7 +89,7 @@ export function DaoOverview() {
 
       {/* Linear submenu: DAO members | Experts. */}
       <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
-        {([['members', 'DAO members'], ['experts', 'Experts']] as const).map(([k, l]) => (
+        {([['members', t('DAO members')], ['experts', t('Experts')]] as const).map(([k, l]) => (
           <button
             key={k}
             onClick={() => setSub(k)}
@@ -107,18 +107,17 @@ export function DaoOverview() {
       ) : (
       <div className="space-y-3">
         <p className="text-sm text-neutral-500">
-          Adjusted power (§4) = log₁₀(on-chain DRep voting power in ADA) × (1 + merit/200). Voting power is
-          ADA delegated to the DRep (CIP-1694 vote delegation — not stake-pool delegation).
+          {t('Adjusted power (§4) = log₁₀(on-chain DRep voting power in ADA) × (1 + merit/200). Voting power is ADA delegated to the DRep (CIP-1694 vote delegation — not stake-pool delegation).')}
         </p>
         {members && members.length > 1 ? (
-          <p className="mt-1 text-xs text-neutral-400">Tip: click any column header to sort (click again to reverse).</p>
+          <p className="mt-1 text-xs text-neutral-400">{t('Tip: click any column header to sort (click again to reverse).')}</p>
         ) : null}
 
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
       {!members ? (
-        <p className="text-sm text-neutral-500">Loading…</p>
+        <p className="text-sm text-neutral-500">{t('Loading…')}</p>
       ) : members.length === 0 ? (
-        <p className="text-sm text-neutral-500">No DAO members yet.</p>
+        <p className="text-sm text-neutral-500">{t('No DAO members yet.')}</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
           <table className="w-full text-sm">
@@ -133,9 +132,9 @@ export function DaoOverview() {
                         className={`inline-flex cursor-pointer select-none items-center gap-1 rounded px-1 py-0.5 uppercase hover:bg-neutral-200/70 dark:hover:bg-neutral-700/70 ${
                           c.right ? 'flex-row-reverse' : ''
                         } ${active ? 'font-semibold text-emerald-700 dark:text-emerald-400' : ''}`}
-                        title={`Sort by ${c.label}${active ? (sort.dir === 'asc' ? ' (ascending)' : ' (descending)') : ''}`}
+                        title={`${t('Sort by')} ${t(c.label)}${active ? (sort.dir === 'asc' ? t(' (ascending)') : t(' (descending)')) : ''}`}
                       >
-                        {c.label}
+                        {t(c.label)}
                         <span className={`text-[10px] ${active ? '' : 'text-neutral-400'}`}>
                           {active ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}
                         </span>
@@ -157,33 +156,33 @@ export function DaoOverview() {
                           so each gets one of the two flags). */}
                       {m.isBoard ? (
                         <span
-                          title="Founding board seat"
+                          title={t('Founding board seat')}
                           className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300"
                         >
-                          BOARD
+                          {t('BOARD')}
                         </span>
                       ) : (
                         <span
-                          title="Admitted DAO member"
+                          title={t('Admitted DAO member')}
                           className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
                         >
-                          MEMBER
+                          {t('MEMBER')}
                         </span>
                       )}
                       {/* §14.1 — fell below the entry power/delegator minimum, but stays a full voting member. */}
                       {!m.meetsEntryRequirements ? (
                         <span
                           className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300"
-                          title="Below a configured entry requirement (voting power / qualifying delegators, and/or voting activity). Still a full voting member — this is informational only."
+                          title={t('Below a configured entry requirement (voting power / qualifying delegators, and/or voting activity). Still a full voting member — this is informational only.')}
                         >
-                          ⚠ below minimum
+                          {t('⚠ below minimum')}
                         </span>
                       ) : null}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-neutral-600 dark:text-neutral-400">
                     {m.since ? (
-                      <span title={m.isBoard ? 'Installed on the board' : 'Approved by the board'}>
+                      <span title={m.isBoard ? t('Installed on the board') : t('Approved by the board')}>
                         {fmtDate(m.since)}
                       </span>
                     ) : (
@@ -210,17 +209,17 @@ export function DaoOverview() {
                 voting power (base), and total adjusted voting power across all members. */}
             <tfoot className="border-t-2 border-neutral-300 bg-neutral-50 text-xs dark:border-neutral-700 dark:bg-neutral-900">
               <tr>
-                <td className="px-3 py-2 font-semibold uppercase tracking-wide text-neutral-500" colSpan={2}>Aggregate</td>
-                <td className="px-3 py-2 text-right font-semibold tabular-nums" title="Total on-chain DRep voting power (ADA) across all members">
+                <td className="px-3 py-2 font-semibold uppercase tracking-wide text-neutral-500" colSpan={2}>{t('Aggregate')}</td>
+                <td className="px-3 py-2 text-right font-semibold tabular-nums" title={t('Total on-chain DRep voting power (ADA) across all members')}>
                   {(sorted ?? []).reduce((s, m) => s + m.votingPowerAda, 0).toLocaleString()}
                 </td>
                 <td className="px-3 py-2" />
-                <td className="px-3 py-2 text-right font-semibold tabular-nums" title="Total DAO voting power (sum of the log₁₀ base power)">
+                <td className="px-3 py-2 text-right font-semibold tabular-nums" title={t('Total DAO voting power (sum of the log₁₀ base power)')}>
                   {(sorted ?? []).reduce((s, m) => s + m.basePower, 0).toFixed(2)}
                 </td>
                 <td className="px-3 py-2" />
                 <td className="px-3 py-2" />
-                <td className="px-3 py-2 text-right font-semibold tabular-nums" title="Total adjusted voting power across all members">
+                <td className="px-3 py-2 text-right font-semibold tabular-nums" title={t('Total adjusted voting power across all members')}>
                   {(sorted ?? []).reduce((s, m) => s + m.adjustedPower, 0).toFixed(2)}
                 </td>
               </tr>
@@ -235,15 +234,12 @@ export function DaoOverview() {
 
       {members && members.some((m) => m.delegators === 0) ? (
         <p className="text-xs text-neutral-400">
-          0 voting power / 0 delegators means no account has delegated its vote to that DRep yet (CIP-1694
-          vote delegation, separate from stake-pool delegation).
+          {t('0 voting power / 0 delegators means no account has delegated its vote to that DRep yet (CIP-1694 vote delegation, separate from stake-pool delegation).')}
         </p>
       ) : null}
       {members && members.some((m) => !m.meetsEntryRequirements) ? (
         <p className="text-xs text-amber-600">
-          <strong>⚠ below minimum</strong> — this member no longer meets a configured entry requirement (voting
-          power / qualifying delegators, and/or recent voting activity). They remain a full voting member; the flag
-          is informational. Board members are checked for activity but exempt from the voting-power minimum.
+          <strong>{t('⚠ below minimum')}</strong> {t('— this member no longer meets a configured entry requirement (voting power / qualifying delegators, and/or recent voting activity). They remain a full voting member; the flag is informational. Board members are checked for activity but exempt from the voting-power minimum.')}
         </p>
       ) : null}
 
@@ -258,11 +254,12 @@ export function DaoOverview() {
 /** §2 — the Experts list on its own sub-tab of the DAO overview: name, photo,
  *  expertise tags, and a link to the full profile in the Experts directory. */
 function ExpertsSection({ experts, onOpen }: { experts: DaoExpert[]; onOpen: (id: string) => void }) {
+  const t = useT();
   return (
     <div className="space-y-3">
-      <p className="text-sm text-neutral-500">Non-DRep ADA holders approved by the board to advise on proposals — feedback in Filtering, advice in Debate &amp; Vote, and milestone reviews.</p>
+      <p className="text-sm text-neutral-500">{t('Non-DRep ADA holders approved by the board to advise on proposals — feedback in Filtering, advice in Debate & Vote, and milestone reviews.')}</p>
       {experts.length === 0 ? (
-        <p className="text-sm text-neutral-500">No approved experts yet.</p>
+        <p className="text-sm text-neutral-500">{t('No approved experts yet.')}</p>
       ) : (
         <ul className="space-y-1.5">
             {experts.map((x) => (
@@ -274,7 +271,7 @@ function ExpertsSection({ experts, onOpen }: { experts: DaoExpert[]; onOpen: (id
                   ? <img src={x.logoDataUrl} alt="" className="h-6 w-6 rounded-full object-cover" />
                   : <FallbackAvatar name={x.displayName} className="h-6 w-6 rounded-full" />}
                 <span className="font-medium">{x.displayName}</span>
-                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">Expert</span>
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">{t('Expert')}</span>
                 {x.subcategoryIds.length ? (
                   <span className="flex flex-wrap gap-1">
                     {x.subcategoryIds.map((id) => (
@@ -284,14 +281,14 @@ function ExpertsSection({ experts, onOpen }: { experts: DaoExpert[]; onOpen: (id
                     ))}
                   </span>
                 ) : (
-                  <span className="text-[11px] text-neutral-400">no expertise areas listed</span>
+                  <span className="text-[11px] text-neutral-400">{t('no expertise areas listed')}</span>
                 )}
                 {/* §2 — the full profile (experience, conflict, contact, wallet) lives in the Experts directory. */}
                 <button
                   onClick={() => onOpen(x.id)}
                   className="ml-auto text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
                 >
-                  View profile →
+                  {t('View profile →')}
                 </button>
               </li>
             ))}
@@ -312,6 +309,7 @@ function ExpertsSection({ experts, onOpen }: { experts: DaoExpert[]; onOpen: (id
  *     have opted out are excluded.
  */
 function VotingPowerTotals({ members }: { members: DaoMember[] }) {
+  const t = useT();
   const internalTotal = members.reduce((s, m) => s + m.adjustedPower, 0);
   const fundingTotal = members.reduce((s, m) => {
     if (!m.isBoard) return s + m.adjustedPower;
@@ -323,21 +321,21 @@ function VotingPowerTotals({ members }: { members: DaoMember[] }) {
   return (
     <div className="mt-2 rounded-md border border-neutral-200 bg-neutral-50/40 p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900/40">
       <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-        Aggregate voting power (adjusted)
+        {t('Aggregate voting power (adjusted)')}
       </div>
       <dl className="mt-1 grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
         <div className="flex items-baseline justify-between gap-3">
           <dt className="text-neutral-600 dark:text-neutral-400">
-            Internal proposals
-            <span className="ml-1 text-xs text-neutral-400">— all {members.length} members</span>
+            {t('Internal proposals')}
+            <span className="ml-1 text-xs text-neutral-400">{t('— all')} {members.length} {t('members')}</span>
           </dt>
           <dd className="font-semibold tabular-nums">{internalTotal.toFixed(2)}</dd>
         </div>
         <div className="flex items-baseline justify-between gap-3">
           <dt className="text-neutral-600 dark:text-neutral-400">
-            Funding proposals
+            {t('Funding proposals')}
             <span className="ml-1 text-xs text-neutral-400">
-              — non-board + {optedIn.length}/{optedIn.length + optedOut.length} opted-in board
+              {t('— non-board +')} {optedIn.length}/{optedIn.length + optedOut.length} {t('opted-in board')}
             </span>
           </dt>
           <dd className="font-semibold tabular-nums">{fundingTotal.toFixed(2)}</dd>
@@ -345,9 +343,9 @@ function VotingPowerTotals({ members }: { members: DaoMember[] }) {
       </dl>
       {optedOut.length > 0 ? (
         <div className="mt-1 text-xs text-neutral-500">
-          Excluded from funding total (opted out): {optedOut.map((m) => m.displayName).join(', ')} ·{' '}
+          {t('Excluded from funding total (opted out):')} {optedOut.map((m) => m.displayName).join(', ')} ·{' '}
           <span className="tabular-nums">
-            {optedOut.reduce((s, m) => s + m.adjustedPower, 0).toFixed(2)} adjusted power
+            {optedOut.reduce((s, m) => s + m.adjustedPower, 0).toFixed(2)} {t('adjusted power')}
           </span>
         </div>
       ) : null}

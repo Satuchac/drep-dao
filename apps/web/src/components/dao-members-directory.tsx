@@ -53,22 +53,22 @@ export function DaoMembersDirectory() {
             <div>
               <h2 className="text-lg font-semibold">{t('DAO members')}</h2>
               <p className="text-xs text-neutral-500">
-                Board members first, then admitted DReps. Click a photo to open the full profile.
+                {t('Board members first, then admitted DReps. Click a photo to open the full profile.')}
               </p>
             </div>
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by name or DRep ID…"
+              placeholder={t('Search by name or DRep ID…')}
               className="w-72 rounded-md border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700 dark:bg-neutral-950"
             />
           </header>
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
           {!rows ? (
-            <p className="text-sm text-neutral-500">Loading…</p>
+            <p className="text-sm text-neutral-500">{t('Loading…')}</p>
           ) : visible.length === 0 ? (
-            <p className="text-sm text-neutral-500">No members match “{query}”.</p>
+            <p className="text-sm text-neutral-500">{t('No members match')} “{query}”.</p>
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {visible.map((m) => (
@@ -83,13 +83,14 @@ export function DaoMembersDirectory() {
 }
 
 function MemberCard({ m, onOpen }: { m: DaoMember; onOpen: () => void }) {
+  const t = useT();
   return (
     <div className="overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50 transition hover:shadow-sm dark:border-neutral-800 dark:bg-neutral-900/60">
       <button
         type="button"
         onClick={onOpen}
         className="block w-full focus:outline-none focus:ring-2 focus:ring-emerald-500"
-        aria-label={`Open profile of ${m.displayName}`}
+        aria-label={`${t('Open profile of')} ${m.displayName}`}
       >
         <AspectSquare>
           <Avatar src={m.image} name={m.displayName} />
@@ -106,7 +107,7 @@ function MemberCard({ m, onOpen }: { m: DaoMember; onOpen: () => void }) {
           </button>
           {m.isBoard ? (
             <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-              Board
+              {t('Board')}
             </span>
           ) : null}
         </div>
@@ -127,6 +128,7 @@ function MemberCard({ m, onOpen }: { m: DaoMember; onOpen: () => void }) {
 const bioCache = new Map<string, string | null>();
 
 function BioPreview({ drepId }: { drepId: string }) {
+  const t = useT();
   const [bio, setBio] = useState<string | null | undefined>(() => bioCache.get(drepId));
   useEffect(() => {
     if (bioCache.has(drepId)) return;
@@ -145,12 +147,13 @@ function BioPreview({ drepId }: { drepId: string }) {
       cancelled = true;
     };
   }, [drepId]);
-  if (bio === undefined) return <p className="line-clamp-4 text-xs text-neutral-400">Loading bio…</p>;
-  if (!bio) return <p className="line-clamp-4 text-xs italic text-neutral-400">No bio provided.</p>;
+  if (bio === undefined) return <p className="line-clamp-4 text-xs text-neutral-400">{t('Loading bio…')}</p>;
+  if (!bio) return <p className="line-clamp-4 text-xs italic text-neutral-400">{t('No bio provided.')}</p>;
   return <p className="line-clamp-4 whitespace-pre-wrap text-xs text-neutral-600 dark:text-neutral-300">{bio}</p>;
 }
 
 function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }) {
+  const t = useT();
   const { drepUrl } = useExplorer();
   const [d, setD] = useState<DaoMemberDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -168,18 +171,18 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
         onClick={onBack}
         className="text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-400"
       >
-        ← Back to DAO members
+        ← {t('Back to DAO members')}
       </button>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       {!d ? (
-        <p className="text-sm text-neutral-500">Loading…</p>
+        <p className="text-sm text-neutral-500">{t('Loading…')}</p>
       ) : (
         <>
         {/* DRep ID: fully visible on one line (whole card width), linked to cexplorer, with copy. */}
         <div className="flex items-center gap-2 overflow-x-auto rounded border border-neutral-200 bg-neutral-50 px-2 py-1.5 dark:border-neutral-800 dark:bg-neutral-900">
-          <span className="shrink-0 text-[11px] font-medium text-neutral-500">DRep ID:</span>
+          <span className="shrink-0 text-[11px] font-medium text-neutral-500">{t('DRep ID:')}</span>
           <a href={drepUrl(d.drepId)} target="_blank" rel="noreferrer" className="whitespace-nowrap font-mono text-[11px] text-emerald-700 underline dark:text-emerald-400">{d.drepId}</a>
-          <CopyButton text={d.drepId} label="Copy" />
+          <CopyButton text={d.drepId} label={t('Copy')} />
         </div>
         <div className="grid gap-6 md:grid-cols-[280px_1fr]">
           <div className="space-y-3">
@@ -193,13 +196,13 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
                 <h3 className="text-lg font-semibold">{d.displayName}</h3>
                 {d.isBoard ? (
                   <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-                    Board member
+                    {t('Board member')}
                   </span>
                 ) : null}
                 {/* §2 — also a submitter? show the (possibly different) submitter name. */}
                 {d.isSubmitter ? (
-                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title="Also an approved submitter — can submit funding proposals">
-                    also a submitter{d.submitterName ? ` (${d.submitterName})` : ''}
+                  <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title={t('Also an approved submitter — can submit funding proposals')}>
+                    {t('also a submitter')}{d.submitterName ? ` (${d.submitterName})` : ''}
                   </span>
                 ) : null}
               </div>
@@ -211,22 +214,22 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
             <Stats d={d} />
             <Activity d={d} />
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Bio</div>
-              <ClampedMarkdown className="mt-1 text-sm text-neutral-800 dark:text-neutral-200" empty="No bio provided." maxLines={15}>
+              <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Bio')}</div>
+              <ClampedMarkdown className="mt-1 text-sm text-neutral-800 dark:text-neutral-200" empty={t('No bio provided.')} maxLines={15}>
                 {d.bio}
               </ClampedMarkdown>
-              <div className="mt-2 text-xs text-neutral-500">Country: {d.country ? <span className="font-medium text-neutral-700 dark:text-neutral-300">{d.country}</span> : <span className="italic text-neutral-400">not provided</span>}</div>
+              <div className="mt-2 text-xs text-neutral-500">{t('Country:')} {d.country ? <span className="font-medium text-neutral-700 dark:text-neutral-300">{d.country}</span> : <span className="italic text-neutral-400">{t('not provided')}</span>}</div>
               {/* §2.1 — conflict-of-interest disclosure + pledge (transparency). */}
               <div className="mt-2 text-xs">
-                <span className="font-medium">Conflict of interest:</span>
-                <ClampedMarkdown className="mt-0.5 text-neutral-600 dark:text-neutral-300" empty="not provided" maxLines={15}>
+                <span className="font-medium">{t('Conflict of interest:')}</span>
+                <ClampedMarkdown className="mt-0.5 text-neutral-600 dark:text-neutral-300" empty={t('not provided')} maxLines={15}>
                   {d.conflictOfInterest}
                 </ClampedMarkdown>
               </div>
               <div className="mt-1 text-xs">
                 {d.noSelfVotePledge
-                  ? <span className="font-medium text-emerald-600">✓ Pledged NOT to vote for own proposals</span>
-                  : <span className="font-medium text-red-600">✗ Has NOT pledged to abstain from voting on own proposals</span>}
+                  ? <span className="font-medium text-emerald-600">{t('✓ Pledged NOT to vote for own proposals')}</span>
+                  : <span className="font-medium text-red-600">{t('✗ Has NOT pledged to abstain from voting on own proposals')}</span>}
               </div>
             </div>
             <Links socials={d.socials} contact={d.contact} />
@@ -240,6 +243,7 @@ function MemberDetail({ drepId, onBack }: { drepId: string; onBack: () => void }
 
 /** §2 (board) — set/clear this DAO member's cross-wallet link to a submitter profile. Board-only. */
 function MemberLinkEditor({ d, onSaved }: { d: DaoMemberDetail; onSaved: (d: DaoMemberDetail) => void }) {
+  const t = useT();
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
   const [submitters, setSubmitters] = useState<ApprovedSubmitter[]>([]);
@@ -254,29 +258,30 @@ function MemberLinkEditor({ d, onSaved }: { d: DaoMemberDetail; onSaved: (d: Dao
   };
   return (
     <div className="mt-2 rounded border border-dashed border-neutral-300 p-2 text-xs dark:border-neutral-700">
-      <div className="font-medium text-neutral-500">Board override: link to a submitter profile</div>
+      <div className="font-medium text-neutral-500">{t('Board override: link to a submitter profile')}</div>
       <div className="mt-1 flex flex-wrap items-center gap-2">
         <select value={sel} onChange={(e) => setSel(e.target.value)} disabled={busy} className="rounded border border-neutral-300 px-1.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900">
-          <option value="">— none —</option>
+          <option value="">{t('— none —')}</option>
           {submitters.map((s) => <option key={s.userId} value={s.userId}>{s.displayName}</option>)}
         </select>
-        <button type="button" disabled={busy || sel === (d.linkedSubmitterUserId ?? '')} onClick={save} className="rounded bg-emerald-600 px-2 py-1 font-medium text-white disabled:opacity-50">Save</button>
+        <button type="button" disabled={busy || sel === (d.linkedSubmitterUserId ?? '')} onClick={save} className="rounded bg-emerald-600 px-2 py-1 font-medium text-white disabled:opacity-50">{t('Save')}</button>
       </div>
     </div>
   );
 }
 
 function Stats({ d }: { d: DaoMemberDetail }) {
+  const t = useT();
   return (
     <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm md:grid-cols-3 lg:grid-cols-4">
-      <Stat label="Voting power" value={`${d.votingPowerAda.toLocaleString()} ₳`} />
-      <Stat label="Delegators" value={d.delegators.toLocaleString()} />
-      <Stat label="Merit" value={d.merit.toLocaleString()} />
-      <Stat label="Adjusted power" value={d.adjustedPower.toFixed(2)} />
-      <Stat label="Member since" value={d.since ? new Date(d.since).toLocaleDateString() : '—'} />
+      <Stat label={t('Voting power')} value={`${d.votingPowerAda.toLocaleString()} ₳`} />
+      <Stat label={t('Delegators')} value={d.delegators.toLocaleString()} />
+      <Stat label={t('Merit')} value={d.merit.toLocaleString()} />
+      <Stat label={t('Adjusted power')} value={d.adjustedPower.toFixed(2)} />
+      <Stat label={t('Member since')} value={d.since ? new Date(d.since).toLocaleDateString() : '—'} />
       {/* §8.2 — board-only opt-in flag (non-board always vote, so hidden for them). It's a
           flag, not an activity count, so it sits with the headline stats. */}
-      {d.isBoard ? <Stat label="Votes on funding" value={d.votesOnFundingProposals ? '✓ yes' : '✗ opted out'} /> : null}
+      {d.isBoard ? <Stat label={t('Votes on funding')} value={d.votesOnFundingProposals ? t('✓ yes') : t('✗ opted out')} /> : null}
     </dl>
   );
 }
@@ -284,18 +289,19 @@ function Stats({ d }: { d: DaoMemberDetail }) {
 /** §13 — all of the member's governance participation, grouped side by side. Totals across
  *  every round for the lifetime of the profile. */
 function Activity({ d }: { d: DaoMemberDetail }) {
+  const t = useT();
   return (
     <div>
-      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Activity</div>
+      <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Activity')}</div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm md:grid-cols-3 lg:grid-cols-5">
         <Stat
-          label="Admission votes cast"
-          value={d.isBoard ? `${d.admissionVotesCast.total} (${d.admissionVotesCast.yes} YES · ${d.admissionVotesCast.no} NO)` : '— (non-board)'}
+          label={t('Admission votes cast')}
+          value={d.isBoard ? `${d.admissionVotesCast.total} (${d.admissionVotesCast.yes} ${t('YES')} · ${d.admissionVotesCast.no} ${t('NO')})` : t('— (non-board)')}
         />
-        <Stat label="Filtering reviews" value={`${d.votingActivity.filtering.total} (${d.votingActivity.filtering.yes} YES · ${d.votingActivity.filtering.no} NO)`} />
-        <Stat label="Funding votes" value={`${d.votingActivity.funding.total} (${d.votingActivity.funding.yes} YES · ${d.votingActivity.funding.no} NO · Abstain ${d.votingActivity.funding.abstain})`} />
-        <Stat label="Milestone reviews" value={`${d.votingActivity.milestone.total} (${d.votingActivity.milestone.yes} YES · ${d.votingActivity.milestone.no} NO)`} />
-        <Stat label="Internal proposal votes" value={`${d.votingActivity.internal.total} (${d.votingActivity.internal.yes} YES · ${d.votingActivity.internal.no} NO · Abstain ${d.votingActivity.internal.abstain})`} />
+        <Stat label={t('Filtering reviews')} value={`${d.votingActivity.filtering.total} (${d.votingActivity.filtering.yes} ${t('YES')} · ${d.votingActivity.filtering.no} ${t('NO')})`} />
+        <Stat label={t('Funding votes')} value={`${d.votingActivity.funding.total} (${d.votingActivity.funding.yes} ${t('YES')} · ${d.votingActivity.funding.no} ${t('NO')} · ${t('Abstain')} ${d.votingActivity.funding.abstain})`} />
+        <Stat label={t('Milestone reviews')} value={`${d.votingActivity.milestone.total} (${d.votingActivity.milestone.yes} ${t('YES')} · ${d.votingActivity.milestone.no} ${t('NO')})`} />
+        <Stat label={t('Internal proposal votes')} value={`${d.votingActivity.internal.total} (${d.votingActivity.internal.yes} ${t('YES')} · ${d.votingActivity.internal.no} ${t('NO')} · ${t('Abstain')} ${d.votingActivity.internal.abstain})`} />
       </dl>
     </div>
   );
@@ -311,6 +317,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 function Links({ socials, contact }: { socials: Record<string, string> | null; contact: Record<string, string> | null }) {
+  const t = useT();
   const all = [
     ...Object.entries(socials ?? {}),
     ...Object.entries(contact ?? {}),
@@ -318,7 +325,7 @@ function Links({ socials, contact }: { socials: Record<string, string> | null; c
   if (all.length === 0) return null;
   return (
     <div>
-      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Links</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Links')}</div>
       <ul className="mt-1 space-y-0.5 text-xs">
         {all.map(([k, v]) => (
           <li key={k}>

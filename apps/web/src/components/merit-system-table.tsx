@@ -2,6 +2,8 @@
 
 import { MERIT_DELTAS, type MeritReason } from '@drep-dao/shared';
 
+import { useT } from '@/lib/prefs-context';
+
 /**
  * §13 — human-readable explanation of the merit-based system, shown at the
  * bottom of the DAO Member overview. Point values come straight from the
@@ -45,6 +47,7 @@ const BOARD_LOSSES: Row[] = [
 const fmt = (n: number) => `${n > 0 ? '+' : '−'}${Math.abs(n)}`;
 
 function Group({ title, note, gains, losses }: { title: string; note: string; gains: Row[]; losses: Row[] }) {
+  const t = useT();
   const renderRows = (rows: Row[], header: string) => (
     <>
       <tr className="border-t border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900">
@@ -54,7 +57,7 @@ function Group({ title, note, gains, losses }: { title: string; note: string; ga
         const delta = MERIT_DELTAS[r.reason];
         return (
           <tr key={r.reason} className="border-t border-neutral-200 dark:border-neutral-800">
-            <td className="px-3 py-1.5">{r.what}</td>
+            <td className="px-3 py-1.5">{t(r.what)}</td>
             <td className={`px-3 py-1.5 text-right font-medium tabular-nums ${delta >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
               {fmt(delta)}
             </td>
@@ -65,19 +68,19 @@ function Group({ title, note, gains, losses }: { title: string; note: string; ga
   );
   return (
     <div>
-      <h4 className="text-sm font-semibold">{title}</h4>
-      <p className="text-xs text-neutral-500">{note}</p>
+      <h4 className="text-sm font-semibold">{t(title)}</h4>
+      <p className="text-xs text-neutral-500">{t(note)}</p>
       <div className="mt-1 overflow-x-auto rounded-lg border border-neutral-200 dark:border-neutral-800">
         <table className="w-full text-sm">
           <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-500 dark:bg-neutral-900">
             <tr>
-              <th className="px-3 py-2">Operation</th>
-              <th className="px-3 py-2 text-right">Points</th>
+              <th className="px-3 py-2">{t('Operation')}</th>
+              <th className="px-3 py-2 text-right">{t('Points')}</th>
             </tr>
           </thead>
           <tbody>
-            {renderRows(gains, 'Earning points')}
-            {renderRows(losses, 'Losing points')}
+            {renderRows(gains, t('Earning points'))}
+            {renderRows(losses, t('Losing points'))}
           </tbody>
         </table>
       </div>
@@ -86,14 +89,13 @@ function Group({ title, note, gains, losses }: { title: string; note: string; ga
 }
 
 export function MeritSystemTable() {
+  const t = useT();
   return (
     <section className="space-y-3 pt-2">
       <div>
-        <h3 className="text-base font-semibold">How merit points work</h3>
+        <h3 className="text-base font-semibold">{t('How merit points work')}</h3>
         <p className="text-sm text-neutral-500">
-          Merit raises a member&apos;s adjusted voting power — the ×Mult column above is 1 + merit/MERIT_POINT_MAX
-          (capped by that platform parameter). Points are earned when the operation happens; misses are deducted
-          by the daily sweep unless an avoid period covers them.
+          {t("Merit raises a member's adjusted voting power — the ×Mult column above is 1 + merit/MERIT_POINT_MAX (capped by that platform parameter). Points are earned when the operation happens; misses are deducted by the daily sweep unless an avoid period covers them.")}
         </p>
       </div>
       <div className="grid gap-4 lg:grid-cols-2">

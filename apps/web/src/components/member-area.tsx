@@ -47,6 +47,7 @@ import { QuickPollsPanel } from './quick-polls-panel';
 
 
 export function MemberArea() {
+  const t = useT();
   const { profile, loading, refresh } = useAuth();
   const { setParams } = useUrlNav();
   const [myExpert, setMyExpert] = useState<MyExpert | null>(null);
@@ -134,11 +135,11 @@ export function MemberArea() {
         ) : (
           // §2.1 — submitting requires the approved submitter role.
           <section className={card}>
-            <h3 className="text-base font-semibold">My proposals</h3>
+            <h3 className="text-base font-semibold">{t('My proposals')}</h3>
             <p className="mt-1 text-sm text-neutral-500">
-              If you want to submit a proposal, apply for a <strong>submitter</strong> role on the{' '}
-              <button onClick={() => setParams({ view: 'me', tab: 'profile' })} className="text-emerald-700 underline dark:text-emerald-400">Profile</button> tab.
-              Once a board member approves it, you can submit here.
+              {t('If you want to submit a proposal, apply for a')} <strong>{t('submitter')}</strong> {t('role on the')}{' '}
+              <button onClick={() => setParams({ view: 'me', tab: 'profile' })} className="text-emerald-700 underline dark:text-emerald-400">{t('Profile')}</button> {t('tab.')}
+              {t('Once a board member approves it, you can submit here.')}
             </p>
           </section>
         )}
@@ -189,6 +190,7 @@ function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPendi
   loadExpert: () => void;
   onSubmitterChange: () => void;
 }) {
+  const t = useT();
   // 'dao' = the member/expert primary profile (default); 'submitter' = the submitter sub-profile.
   const [sub, setSub] = useState<'dao' | 'submitter'>('dao');
   // Clicking "Apply to become a submitter" opens the submitter sub-profile with the form.
@@ -198,7 +200,7 @@ function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPendi
     <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
       {([['dao', primaryLabel], ['submitter', 'Submitter profile']] as const).map(([k, l]) => (
         <button key={k} onClick={() => setSub(k)} className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${sub === k ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}>
-          {l}
+          {t(l)}
         </button>
       ))}
     </div>
@@ -207,10 +209,10 @@ function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPendi
   // form stacked on this page). Hidden once a submitter profile exists.
   const submitterRoleCard = !showSubmitterSub ? (
     <section className={card}>
-      <h3 className="text-base font-semibold">Submitter role</h3>
-      <p className="mt-1 text-sm text-neutral-500">Want to submit funding proposals too? Apply for the separate, board-approved <strong>submitter</strong> role. Your submitter profile then lives on its own tab here.</p>
+      <h3 className="text-base font-semibold">{t('Submitter role')}</h3>
+      <p className="mt-1 text-sm text-neutral-500">{t('Want to submit funding proposals too? Apply for the separate, board-approved')} <strong>{t('submitter')}</strong> {t('role. Your submitter profile then lives on its own tab here.')}</p>
       <button onClick={() => { setApplying(true); setSub('submitter'); }} className="mt-2 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">
-        Apply to become a submitter
+        {t('Apply to become a submitter')}
       </button>
     </section>
   ) : null;
@@ -269,7 +271,7 @@ function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPendi
         <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
           {([['dao', isBoard ? 'Board member profile' : 'DAO member profile'], ['submitter', 'Submitter profile']] as const).map(([k, l]) => (
             <button key={k} onClick={() => setSub(k)} className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${sub === k ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}>
-              {l}
+              {t(l)}
             </button>
           ))}
         </div>
@@ -283,9 +285,9 @@ function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPendi
         <div className="space-y-6">
           <section className={card}><MyDrepStatus /></section>
           <section className={card}>
-            <h3 className="text-base font-semibold">Your DRep profile</h3>
+            <h3 className="text-base font-semibold">{t('Your DRep profile')}</h3>
             <p className="mb-3 text-sm text-neutral-500">
-              {isBoard ? 'As a board member you are a DAO member.' : 'You are a DAO member.'} Keep your details up to date.
+              {isBoard ? t('As a board member you are a DAO member.') : t('You are a DAO member.')} {t('Keep your details up to date.')}
             </p>
             <DrepForm mode="profile" />
             {/* §14 — any DAO member can voluntarily leave; a board member also steps down. */}
@@ -294,10 +296,10 @@ function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPendi
           {/* §2.1 — separate submitter role: apply from here; the sub-profile appears once applied. */}
           {!showSubmitterSub ? (
             <section className={card}>
-              <h3 className="text-base font-semibold">Submitter role</h3>
-              <p className="mt-1 text-sm text-neutral-500">To submit funding proposals you need the separate submitter role (board-approved).</p>
+              <h3 className="text-base font-semibold">{t('Submitter role')}</h3>
+              <p className="mt-1 text-sm text-neutral-500">{t('To submit funding proposals you need the separate submitter role (board-approved).')}</p>
               <button onClick={() => { setApplying(true); setSub('submitter'); }} className="mt-2 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">
-                Apply to become a submitter
+                {t('Apply to become a submitter')}
               </button>
             </section>
           ) : null}
@@ -313,6 +315,7 @@ function ProfileTab({ isMember, isBoard, daoPending, expertApproved, expertPendi
 }
 
 function VotingReviewsTab() {
+  const t = useT();
   // §7 — three views: To do (awaiting your vote), Recent (everything in the active stages,
   // voted or not), and History (all past rounds/stages).
   const [mode, setMode] = useState<ReviewMode>('pending');
@@ -321,9 +324,9 @@ function VotingReviewsTab() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-neutral-500">
-          {mode === 'history' ? 'Your past votes & reviews across all rounds.'
-            : mode === 'recent' ? 'Everything in the currently-active stages — voted or not.'
-              : 'Everything awaiting your vote or review — filtering juries, Debate & Vote, and milestone reviews.'}
+          {mode === 'history' ? t('Your past votes & reviews across all rounds.')
+            : mode === 'recent' ? t('Everything in the currently-active stages — voted or not.')
+              : t('Everything awaiting your vote or review — filtering juries, Debate & Vote, and milestone reviews.')}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <ProposalSearchBox value={query} onChange={setQuery} />
@@ -335,7 +338,7 @@ function VotingReviewsTab() {
       {/* §9.2 — tie-break quick polls of the active round (self-hides when none). */}
       <ActiveRoundQuickPolls mode={mode} perspective="voter" />
       <MilestoneReviewsPanel history={mode === 'history'} query={query} />
-      <EmptyHint text={mode === 'history' ? 'No votes — past or present.' : mode === 'recent' ? 'Nothing in the active stages.' : 'Nothing is awaiting your vote right now.'} />
+      <EmptyHint text={mode === 'history' ? t('No votes — past or present.') : mode === 'recent' ? t('Nothing in the active stages.') : t('Nothing is awaiting your vote right now.')} />
     </div>
   );
 }
@@ -343,14 +346,15 @@ function VotingReviewsTab() {
 /** Search box shared by Voting & reviews and Actions — filters every list in the tab by
  *  proposal Title, Proposer name, or public Proposal ID. */
 function ProposalSearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const t = useT();
   return (
     <div className="relative">
       <input
         type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search title, proposer, or ID…"
-        aria-label="Search by title, proposer name, or proposal ID"
+        placeholder={t('Search title, proposer, or ID…')}
+        aria-label={t('Search by title, proposer name, or proposal ID')}
         className="w-60 rounded-md border border-neutral-300 bg-white px-2.5 py-1 text-xs text-neutral-700 placeholder:text-neutral-400 focus:border-emerald-500 focus:outline-none dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-200"
       />
     </div>
@@ -359,6 +363,7 @@ function ProposalSearchBox({ value, onChange }: { value: string; onChange: (v: s
 
 /** §7 — segmented To do / Recent / History selector shared by Voting & reviews (and Actions). */
 function ReviewModeToggle({ mode, onChange }: { mode: ReviewMode; onChange: (m: ReviewMode) => void }) {
+  const t = useT();
   return (
     <div className="flex overflow-hidden rounded-md border border-neutral-300 text-xs dark:border-neutral-700">
       {([['pending', 'To do'], ['recent', 'Recent'], ['history', 'History']] as const).map(([k, l]) => (
@@ -366,9 +371,9 @@ function ReviewModeToggle({ mode, onChange }: { mode: ReviewMode; onChange: (m: 
           key={k}
           onClick={() => onChange(k)}
           className={`px-2.5 py-1 font-medium ${mode === k ? 'bg-emerald-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-100 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:bg-neutral-800'}`}
-          title={k === 'pending' ? 'Items still awaiting your action' : k === 'recent' ? 'All items in the currently-active stages' : 'All past rounds/stages'}
+          title={k === 'pending' ? t('Items still awaiting your action') : k === 'recent' ? t('All items in the currently-active stages') : t('All past rounds/stages')}
         >
-          {l}
+          {t(l)}
         </button>
       ))}
     </div>
@@ -380,6 +385,7 @@ function ReviewModeToggle({ mode, onChange }: { mode: ReviewMode; onChange: (m: 
  *  queue. Separated from Actions so the latter stays focused on review/audit
  *  to-dos (fees, pledges, stop-funding, budget settlements). */
 function TreasuryTab() {
+  const t = useT();
   // §15 — Treasury sub-items: Signatures (default — the queue awaiting this member),
   // Actions (send / top-up / buckets), Multisig setup (rarely touched).
   const [sub, setSub] = useState<'signatures' | 'actions' | 'setup'>('signatures');
@@ -395,26 +401,26 @@ function TreasuryTab() {
         <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
           {([['signatures', 'Signatures'], ['actions', 'Actions'], ['setup', 'Multisig setup']] as const).map(([k, l]) => (
             <button key={k} onClick={() => setSub(k)} className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${sub === k ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}>
-              {l}
+              {t(l)}
             </button>
           ))}
         </div>
         {sub === 'signatures' ? (
           <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
             <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
-            Show history
+            {t('Show history')}
           </label>
         ) : null}
       </div>
       {sub === 'signatures' ? (
         <div className="space-y-6">
-          <p className="text-sm text-neutral-500">The Approve &amp; sign queue — every multisig action awaiting the board&apos;s 3-of-5 ceremony.</p>
+          <p className="text-sm text-neutral-500">{t('The Approve & sign queue — every multisig action awaiting the board\'s 3-of-5 ceremony.')}</p>
           <BoardActions history={showHistory} refreshKey={refreshKey} onChange={bumpRefresh} filter="non-rewards" />
-          {!showHistory ? <p className="text-xs text-neutral-400">Nothing to sign? Turn on &quot;Show history&quot; to browse past actions.</p> : null}
+          {!showHistory ? <p className="text-xs text-neutral-400">{t('Nothing to sign? Turn on "Show history" to browse past actions.')}</p> : null}
         </div>
       ) : sub === 'actions' ? (
         <div className="space-y-6">
-          <p className="text-sm text-neutral-500">Treasury operations: board-initiated transfers, hot-wallet top-ups/sweeps, and bucket configuration.</p>
+          <p className="text-sm text-neutral-500">{t('Treasury operations: board-initiated transfers, hot-wallet top-ups/sweeps, and bucket configuration.')}</p>
           <SendFromTreasuryPanel onChange={bumpRefresh} />
           <InternalTransferPanel onChange={bumpRefresh} />
           <HotWalletControls onChange={bumpRefresh} />
@@ -443,6 +449,7 @@ function ActiveRoundQuickPolls({ mode, perspective }: { mode?: ReviewMode; persp
  *  submission-fee confirmations, pledge confirmations, stop-funding votes,
  *  budget-change settlements. */
 function ActionsTab() {
+  const t = useT();
   // §15 — To do (pending), Recent (active rounds), History (done/past). The board-action panels
   // are pending/done, so Recent currently mirrors To do; History shows the resolved items.
   const [mode, setMode] = useState<ReviewMode>('pending');
@@ -463,13 +470,11 @@ function ActionsTab() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-neutral-500">
-          Board to-dos: reward payouts to review &amp; sign, submission-fee confirmations, pledge
-          confirmations, revenue-sharing verification, stop-funding votes, and budget-change
-          settlements. Other multisig signing and hot-wallet ops live in <strong>Treasury</strong>.
+          {t('Board to-dos: reward payouts to review & sign, submission-fee confirmations, pledge confirmations, revenue-sharing verification, stop-funding votes, and budget-change settlements. Other multisig signing and hot-wallet ops live in')} <strong>{t('Treasury')}</strong>.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           {msgs.done > 0 ? (
-            <button onClick={() => setViewMessages(true)} className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">Go to messages</button>
+            <button onClick={() => setViewMessages(true)} className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">{t('Go to messages')}</button>
           ) : null}
           <ProposalSearchBox value={query} onChange={setQuery} />
           <ReviewModeToggle mode={mode} onChange={setMode} />
@@ -486,7 +491,7 @@ function ActionsTab() {
       <FeeConfirmations history={showHistory} query={query} />
       <PledgeConfirmations query={query} />
       <BoardPayments history={showHistory} query={query} />
-      <EmptyHint text={showHistory ? 'No actions — past or present.' : 'Nothing to do right now.'} />
+      <EmptyHint text={showHistory ? t('No actions — past or present.') : t('Nothing to do right now.')} />
     </div>
   );
 }
@@ -494,14 +499,15 @@ function ActionsTab() {
 /** Board "Applications" tab: DRep & Expert applications + member removals, with the same
  *  "Show history" switch as Actions — resolved items appear marked as done. */
 function ApplicationsTab() {
+  const t = useT();
   const [showHistory, setShowHistory] = useState(false);
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-neutral-500">Review DRep &amp; Expert applications and member-removal votes.</p>
+        <p className="text-sm text-neutral-500">{t('Review DRep & Expert applications and member-removal votes.')}</p>
         <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
           <input type="checkbox" checked={showHistory} onChange={(e) => setShowHistory(e.target.checked)} />
-          Show history
+          {t('Show history')}
         </label>
       </div>
       <section className={card}><BoardReviewPanel history={showHistory} /></section>
@@ -562,6 +568,7 @@ function EmptyHint({ text }: { text: string }) {
 
 /** §14 — both participation routes; pick one (until accepted). */
 function ApplyOptions({ registeredDRep, onExpertChange, onSubmitterChange, showSubmitterCard }: { registeredDRep: boolean; onExpertChange: () => void; onSubmitterChange: () => void; showSubmitterCard: boolean }) {
+  const t = useT();
   const [mode, setMode] = useState<'choose' | 'dao' | 'expert' | 'submitter'>('choose');
 
   if (mode === 'dao') {
@@ -595,20 +602,20 @@ function ApplyOptions({ registeredDRep, onExpertChange, onSubmitterChange, showS
 
   return (
     <div className="space-y-3">
-      <h3 className="text-base font-semibold">How do you want to participate?</h3>
+      <h3 className="text-base font-semibold">{t('How do you want to participate?')}</h3>
       <div className="grid gap-3 sm:grid-cols-2">
         <button onClick={() => setMode('dao')} className="rounded-lg border border-neutral-200 p-3 text-left hover:border-emerald-400 dark:border-neutral-700">
-          <div className="font-medium">Join as a DAO member</div>
-          <div className="text-xs text-neutral-500">For registered on-chain DReps. Board votes 3-of-5 to admit. You then vote on proposals.</div>
+          <div className="font-medium">{t('Join as a DAO member')}</div>
+          <div className="text-xs text-neutral-500">{t('For registered on-chain DReps. Board votes 3-of-5 to admit. You then vote on proposals.')}</div>
         </button>
         <button onClick={() => setMode('expert')} className="rounded-lg border border-neutral-200 p-3 text-left hover:border-emerald-400 dark:border-neutral-700">
-          <div className="font-medium">Apply as an Expert</div>
-          <div className="text-xs text-neutral-500">For ADA holders with subject-matter knowledge. Board approves; you provide your expertise.</div>
+          <div className="font-medium">{t('Apply as an Expert')}</div>
+          <div className="text-xs text-neutral-500">{t('For ADA holders with subject-matter knowledge. Board approves; you provide your expertise.')}</div>
         </button>
         {showSubmitterCard ? (
           <button onClick={() => setMode('submitter')} className="rounded-lg border border-neutral-200 p-3 text-left hover:border-emerald-400 dark:border-neutral-700">
-            <div className="font-medium">Become a submitter</div>
-            <div className="text-xs text-neutral-500">To submit proposals. Fill in a short profile; a board member approves it, then you can submit.</div>
+            <div className="font-medium">{t('Become a submitter')}</div>
+            <div className="text-xs text-neutral-500">{t('To submit proposals. Fill in a short profile; a board member approves it, then you can submit.')}</div>
           </button>
         ) : null}
       </div>
@@ -623,6 +630,7 @@ function ApplyOptions({ registeredDRep, onExpertChange, onSubmitterChange, showS
  * in place of the form. An unregistered wallet is told to register its DRep key first.
  */
 function DaoJoinBody({ registeredDRep }: { registeredDRep: boolean }) {
+  const t = useT();
   const [elig, setElig] = useState<EntryEligibility | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
@@ -633,20 +641,19 @@ function DaoJoinBody({ registeredDRep }: { registeredDRep: boolean }) {
   if (!registeredDRep) {
     return (
       <p className="text-sm text-neutral-500">
-        To join as a DAO member your wallet must be a registered on-chain DRep. Register your DRep key (e.g. Eternl →
-        Governance → Register as a DRep), then sign in again. Meanwhile you can apply as an Expert.
+        {t('To join as a DAO member your wallet must be a registered on-chain DRep. Register your DRep key (e.g. Eternl → Governance → Register as a DRep), then sign in again. Meanwhile you can apply as an Expert.')}
       </p>
     );
   }
-  if (loading) return <p className="text-sm text-neutral-500">Checking your entry eligibility…</p>;
+  if (loading) return <p className="text-sm text-neutral-500">{t('Checking your entry eligibility…')}</p>;
 
   const blocked = !!elig && elig.gatingEnabled && !elig.eligible;
   if (blocked) {
     return (
       <div className="space-y-2">
-        <h3 className="text-base font-semibold">Request to join the DAO</h3>
+        <h3 className="text-base font-semibold">{t('Request to join the DAO')}</h3>
         <p className="text-sm text-neutral-500">
-          The DAO currently enforces minimum entry requirements. You can apply once you meet them:
+          {t('The DAO currently enforces minimum entry requirements. You can apply once you meet them:')}
         </p>
         <EntryRequirementsNotice requirements={elig!.requirements} />
       </div>
@@ -654,7 +661,7 @@ function DaoJoinBody({ registeredDRep }: { registeredDRep: boolean }) {
   }
   return (
     <>
-      <h3 className="text-base font-semibold">Request to join the DAO</h3>
+      <h3 className="text-base font-semibold">{t('Request to join the DAO')}</h3>
       <DrepForm mode="join" />
     </>
   );

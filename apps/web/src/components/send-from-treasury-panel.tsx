@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { treasuryApi, configApi, treasuryBucketsApi, type TreasuryOverview, type PublicConfig, type TreasuryBucket } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useTreasuryAutoRefresh } from '@/lib/treasury-refresh';
+import { useT } from '@/lib/prefs-context';
 
 /**
  * §15.4 — any board member can initiate an arbitrary outbound treasury
@@ -17,6 +18,7 @@ import { useTreasuryAutoRefresh } from '@/lib/treasury-refresh';
  * collapsible to keep the form compact when not in use.
  */
 export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
+  const t = useT();
   const { profile } = useAuth();
   const isBoard = !!profile?.roles.includes('BOARD');
   const [overview, setOverview] = useState<TreasuryOverview | null>(null);
@@ -48,11 +50,11 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
   if (cfg && !cfg.multisigConfigured) {
     return (
       <section className="rounded-lg border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
-        <div className="font-semibold">Send from treasury</div>
+        <div className="font-semibold">{t('Send from treasury')}</div>
         <div className="mt-1 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          The board hasn&apos;t finished assembling the multisig yet. Until every seat has submitted a signing key
-          (see <strong>Treasury multisig — setup</strong> above), the platform doesn&apos;t have a script address
-          to send funds out of. The form returns once the multisig is built.
+          {t('The board hasn’t finished assembling the multisig yet. Until every seat has submitted a signing key (see')}{' '}
+          <strong>{t('Treasury multisig — setup')}</strong>{' '}
+          {t('above), the platform doesn’t have a script address to send funds out of. The form returns once the multisig is built.')}
         </div>
       </section>
     );
@@ -83,7 +85,7 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
         context: context.trim(),
         sourceBucketId: sourceBucketId || undefined,
       });
-      setSuccess(`Transfer of ${amt.toLocaleString()} ₳ queued — awaiting 3-of-5 board signatures in the queue below.`);
+      setSuccess(`${t('Transfer of')} ${amt.toLocaleString()} ₳ ${t('queued — awaiting 3-of-5 board signatures in the queue below.')}`);
       setDest(''); setAmount(''); setContext('');
       load();
       onChange?.();
@@ -97,21 +99,20 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-semibold">Send from treasury</div>
+        <div className="font-semibold">{t('Send from treasury')}</div>
         <span className="text-xs text-neutral-500 tabular-nums">
-          treasury balance {treasuryAda.toLocaleString()} ₳
+          {t('treasury balance')} {treasuryAda.toLocaleString()} ₳
         </span>
       </div>
       <p className="mt-1 text-xs text-neutral-500">
-        Any board member can queue an outbound transfer. It then needs every board signature in the
-        Approve&nbsp;&amp;&nbsp;sign queue below; on the last signature the platform builds + broadcasts the tx.
+        {t('Any board member can queue an outbound transfer. It then needs every board signature in the Approve & sign queue below; on the last signature the platform builds + broadcasts the tx.')}
       </p>
       {/* §15.5 — Source bucket picker. Only shown when more than the
           primary bucket exists; otherwise the primary is the implicit
           source and we don't clutter the form. */}
       {buckets.length > 1 ? (
         <label className="mt-2 block text-xs">
-          Source bucket
+          {t('Source bucket')}
           <select
             value={sourceBucketId}
             onChange={(e) => { setSourceBucketId(e.target.value); setSuccess(null); }}
@@ -127,16 +128,16 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
       ) : null}
       <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_8rem]">
         <label className="block text-xs">
-          Destination address
+          {t('Destination address')}
           <input
             value={dest}
             onChange={(e) => { setDest(e.target.value); setSuccess(null); }}
-            placeholder="addr1… or addr_test1…"
+            placeholder={t('addr1… or addr_test1…')}
             className="mt-0.5 block w-full rounded-md border border-neutral-300 px-2 py-1 font-mono text-[11px] dark:border-neutral-700 dark:bg-neutral-900"
           />
         </label>
         <label className="block text-xs">
-          Amount (₳)
+          {t('Amount (₳)')}
           <input
             type="number"
             min={1}
@@ -157,18 +158,18 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
           className="flex w-full items-center justify-between px-2 py-1 text-xs font-semibold text-neutral-700 dark:text-neutral-300"
         >
           <span>
-            Transaction context (audit trail) — required
+            {t('Transaction context (audit trail) — required')}
             <span className={`ml-2 text-[11px] font-normal ${validContext ? 'text-emerald-600' : 'text-neutral-500'}`}>
-              {context.trim().length}/10 min
+              {context.trim().length}/10 {t('min')}
             </span>
           </span>
-          <span>{showContext ? '▾ hide' : '▸ show'}</span>
+          <span>{showContext ? `▾ ${t('hide')}` : `▸ ${t('show')}`}</span>
         </button>
         {showContext ? (
           <textarea
             value={context}
             onChange={(e) => { setContext(e.target.value); setSuccess(null); }}
-            placeholder="Why is this transfer needed? E.g. 'Rotate funds from legacy treasury to new multisig (genesis bootstrap)', 'Reimburse Alice for hardware wallet purchase, see invoice #42', …"
+            placeholder={t("Why is this transfer needed? E.g. 'Rotate funds from legacy treasury to new multisig (genesis bootstrap)', 'Reimburse Alice for hardware wallet purchase, see invoice #42', …")}
             rows={3}
             className="block w-full resize-y rounded-b border-t border-neutral-200 px-2 py-1.5 text-xs dark:border-neutral-800 dark:bg-neutral-900"
           />
@@ -176,9 +177,7 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
       </div>
       {insufficient ? (
         <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-1.5 text-[11px] text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          ⚠ Treasury holds {treasuryAda.toLocaleString()} ₳ — short of the {amt.toLocaleString()} ₳ you&apos;re queueing.
-          The action can still be queued and authorized; it just won&apos;t broadcast on the 3rd signature until the
-          treasury has the funds.
+          ⚠ {t('Treasury holds')} {treasuryAda.toLocaleString()} ₳ — {t('short of the')} {amt.toLocaleString()} ₳ {t('you’re queueing. The action can still be queued and authorized; it just won’t broadcast on the 3rd signature until the treasury has the funds.')}
         </div>
       ) : null}
       {error ? <div className="mt-2 text-xs text-red-600">{error}</div> : null}
@@ -189,10 +188,10 @@ export function SendFromTreasuryPanel({ onChange }: { onChange?: () => void }) {
           onClick={submit}
           className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
         >
-          {busy ? '…' : 'Queue transfer'}
+          {busy ? '…' : t('Queue transfer')}
         </button>
-        {!validAddr && dest ? <span className="text-[11px] text-amber-700 dark:text-amber-300">address looks invalid (need addr… / addr_test…)</span> : null}
-        {amount && !validAmount ? <span className="text-[11px] text-amber-700 dark:text-amber-300">amount must be {'>'} 0</span> : null}
+        {!validAddr && dest ? <span className="text-[11px] text-amber-700 dark:text-amber-300">{t('address looks invalid (need addr… / addr_test…)')}</span> : null}
+        {amount && !validAmount ? <span className="text-[11px] text-amber-700 dark:text-amber-300">{t('amount must be')} {'>'} 0</span> : null}
       </div>
     </section>
   );

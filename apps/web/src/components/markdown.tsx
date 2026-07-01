@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { renderMarkdown } from '@/lib/markdown';
+import { useT } from '@/lib/prefs-context';
 
 /**
  * Lets a parent expand/collapse ALL MarkdownEditors under it at once (e.g. an "Expand all /
@@ -108,6 +109,7 @@ export function MarkdownEditor({
   maxWords?: number;
   showShortfall?: boolean;
 }) {
+  const tr = useT();
   const ref = useRef<HTMLTextAreaElement>(null);
   const [open, setOpen] = useState(!defaultCollapsed);
   // §3 — respond to a parent "Expand all / Collapse all" toggle (skip the initial mount).
@@ -136,9 +138,9 @@ export function MarkdownEditor({
   // Word-count badge: "needs N more words" / "N over the M-word max" / "X words".
   const wordBadge = minWords || maxWords ? (
     <span className={`text-[11px] ${short || over ? 'font-semibold text-red-600 dark:text-red-400' : 'text-neutral-400'}`}>
-      {short ? `needs ${minWords! - words} more word${minWords! - words === 1 ? '' : 's'}`
-        : over ? `${words - maxWords!} over the ${maxWords}-word max`
-          : `${words} word${words === 1 ? '' : 's'}`}
+      {short ? `${tr('needs')} ${minWords! - words} ${minWords! - words === 1 ? tr('more word') : tr('more words')}`
+        : over ? `${words - maxWords!} ${tr('over the')} ${maxWords}${tr('-word max')}`
+          : `${words} ${words === 1 ? tr('word') : tr('words')}`}
     </span>
   ) : null;
   const borderCls = needsFix ? 'border-red-400 dark:border-red-700' : 'border-neutral-300 dark:border-neutral-700';
@@ -154,14 +156,14 @@ export function MarkdownEditor({
             className="flex flex-1 items-center gap-1 text-left text-sm font-medium text-neutral-700 hover:text-neutral-900 dark:text-neutral-300"
           >
             <span className="text-neutral-400">▸</span>
-            {title ?? 'Field'}
+            {title ?? tr('Field')}
             {hint ? <span className="font-normal text-neutral-400"> — {hint}</span> : null}
             {required && !filled ? <span className="text-red-500">*</span> : null}
           </button>
           {wordBadge}
-          <span className="text-xs text-neutral-400">{filled ? '✓ filled' : 'empty'}</span>
+          <span className="text-xs text-neutral-400">{filled ? `✓ ${tr('filled')}` : tr('empty')}</span>
           <button type="button" onClick={() => setOpen(true)} className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700">
-            ⤢ Expand
+            ⤢ {tr('Expand')}
           </button>
         </div>
         {subtitle ? <p className="mt-0.5 pl-5 text-[11px] italic text-neutral-500 dark:text-neutral-400">{subtitle}</p> : null}
@@ -205,8 +207,8 @@ export function MarkdownEditor({
               {required && !filled ? <span className="text-red-500">*</span> : null}
             </button>
             {wordBadge}
-            <button type="button" onClick={() => setOpen(false)} className={btn} title="Collapse to just the field name">
-              ▣ Shrink
+            <button type="button" onClick={() => setOpen(false)} className={btn} title={tr('Collapse to just the field name')}>
+              ▣ {tr('Shrink')}
             </button>
           </div>
           {subtitle ? <p className="mt-0.5 pl-5 text-[11px] italic text-neutral-500 dark:text-neutral-400">{subtitle}</p> : null}
@@ -217,7 +219,7 @@ export function MarkdownEditor({
           <button
             key={t.label}
             type="button"
-            title={t.title}
+            title={tr(t.title)}
             onMouseDown={(e) => e.preventDefault() /* keep textarea selection */}
             onClick={() => apply(t)}
             disabled={preview}
@@ -228,18 +230,18 @@ export function MarkdownEditor({
         ))}
         <span className="mx-1 h-4 w-px bg-neutral-300 dark:bg-neutral-600" />
         <button type="button" onClick={() => setPreview((v) => !v)} className={btn}>
-          {preview ? 'Write' : 'Preview'}
+          {preview ? tr('Write') : tr('Preview')}
         </button>
-        <button type="button" onClick={() => setTall((v) => !v)} className={`${btn} ml-auto`} title="Taller / shorter editing area">
-          {tall ? '↕ Shorter' : '↕ Taller'}
+        <button type="button" onClick={() => setTall((v) => !v)} className={`${btn} ml-auto`} title={tr('Taller / shorter editing area')}>
+          {tall ? `↕ ${tr('Shorter')}` : `↕ ${tr('Taller')}`}
         </button>
         {!title ? (
-          <button type="button" onClick={() => setOpen(false)} className={btn} title="Collapse">▣ Shrink</button>
+          <button type="button" onClick={() => setOpen(false)} className={btn} title={tr('Collapse')}>▣ {tr('Shrink')}</button>
         ) : null}
       </div>
       {preview ? (
         <div className="min-h-[5rem] px-2 py-1.5 text-sm text-neutral-700 dark:text-neutral-300">
-          {value.trim() ? <Markdown>{value}</Markdown> : <span className="text-neutral-400">Nothing to preview.</span>}
+          {value.trim() ? <Markdown>{value}</Markdown> : <span className="text-neutral-400">{tr('Nothing to preview.')}</span>}
         </div>
       ) : (
         <textarea

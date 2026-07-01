@@ -44,6 +44,7 @@ import { RevenueSharingBlock } from './proposal-submit';
 import { ProposalMessagesPanel } from './proposal-messages';
 import { MilestoneBar } from './milestone-bar';
 import { boardDeadlinesApi } from '@/lib/api';
+import { useT } from '@/lib/prefs-context';
 
 
 // Subtle blue tint on platform-managed governance sections (Filtering jury, D&V,
@@ -71,6 +72,7 @@ export function ProposalDetail({
    *  the My-area row instead of "Open", so they don't have to click again. */
   initialEditing?: boolean;
 }) {
+  const tr = useT();
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
   const [p, setP] = useState<PDetail | null>(null);
@@ -102,7 +104,7 @@ export function ProposalDetail({
   }, [load]);
 
   if (error) return <div className="space-y-2"><BackBtn onBack={onBack} /><div className="text-sm text-red-600">{error}</div></div>;
-  if (!p) return <div className="space-y-2"><BackBtn onBack={onBack} /><p className="text-sm text-neutral-500">Loading…</p></div>;
+  if (!p) return <div className="space-y-2"><BackBtn onBack={onBack} /><p className="text-sm text-neutral-500">{tr('Loading…')}</p></div>;
 
   const stageReached = (s: string) => {
     const order = ['FILTERING', 'DEBATE_VOTE', 'FUNDING'];
@@ -124,22 +126,22 @@ export function ProposalDetail({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h2 className="text-lg font-semibold">
             {p.title}
-            {p.submitter ? <span className="ml-2 text-sm font-normal text-neutral-500">by {p.submitter}</span> : null}
+            {p.submitter ? <span className="ml-2 text-sm font-normal text-neutral-500">{tr('by')} {p.submitter}</span> : null}
           </h2>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
             {p.publicId ? (
-              <span>Proposal ID: <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{p.publicId}</span></span>
+              <span>{tr('Proposal ID:')} <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{p.publicId}</span></span>
             ) : null}
-            {p.stage ? <span>Stage: <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.stage}</span></span> : null}
-            <span className="flex items-center gap-1">Status: <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} /></span>
+            {p.stage ? <span>{tr('Stage:')} <span className="font-medium text-neutral-700 dark:text-neutral-300">{p.stage}</span></span> : null}
+            <span className="flex items-center gap-1">{tr('Status:')} <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} /></span>
             {/* §3 — once in FUNDING, a promised-but-unconfirmed pledge holds the
                 proposal effectively PENDING (milestone POAs blocked). Surface that
                 explicitly so the team / reviewers see the gating without scrolling. */}
             {p.stage === 'FUNDING' && p.status === 'APPROVED' && p.pledgeAmountAda > 0 ? (
               p.pledgeConfirmedAt ? (
-                <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">ACTIVE · pledge confirmed</span>
+                <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">{tr('ACTIVE · pledge confirmed')}</span>
               ) : (
-                <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">PENDING · awaiting pledge confirmation</span>
+                <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">{tr('PENDING · awaiting pledge confirmation')}</span>
               )
             ) : null}
             {/* §7/§8/§11 — at-a-glance: how many DReps must still vote at the current stage. */}
@@ -147,13 +149,13 @@ export function ProposalDetail({
           </div>
         </div>
         <div className="mt-1 text-xs text-neutral-500">
-          {p.categoryName ?? 'uncategorized'} · <span className="font-semibold text-blue-600 dark:text-blue-400">{p.requestedAmountAda.toLocaleString()} ₳</span> ·{' '}
-          {p.isCommercial ? 'commercial' : 'open-source'} · fee {p.submissionFeeAda.toLocaleString()} ₳
+          {p.categoryName ?? tr('uncategorized')} · <span className="font-semibold text-blue-600 dark:text-blue-400">{p.requestedAmountAda.toLocaleString()} ₳</span> ·{' '}
+          {p.isCommercial ? tr('commercial') : tr('open-source')} · {tr('fee')} {p.submissionFeeAda.toLocaleString()} ₳
           {p.categoryAsk && (p.categoryAsk.minAda != null || p.categoryAsk.maxAda != null) ? (
-            <> · category ask {p.categoryAsk.minAda != null ? `${p.categoryAsk.minAda.toLocaleString()}` : '0'}–{p.categoryAsk.maxAda != null ? `${p.categoryAsk.maxAda.toLocaleString()}` : '∞'} ₳</>
+            <> · {tr('category ask')} {p.categoryAsk.minAda != null ? `${p.categoryAsk.minAda.toLocaleString()}` : '0'}–{p.categoryAsk.maxAda != null ? `${p.categoryAsk.maxAda.toLocaleString()}` : '∞'} ₳</>
           ) : null}
           {/* §3 — when the proposer submitted it (set on submit; null while still a private draft). */}
-          {p.submittedAt ? <> · submitted {fmtDateTime(p.submittedAt)}</> : null}
+          {p.submittedAt ? <> · {tr('submitted')} {fmtDateTime(p.submittedAt)}</> : null}
         </div>
         {/* §3.5 — board can message the submitter at any stage (jumps to the thread list below). */}
         {isBoard ? (
@@ -161,7 +163,7 @@ export function ProposalDetail({
             onClick={() => document.getElementById('proposal-messages')?.scrollIntoView({ behavior: 'smooth' })}
             className="mt-2 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
           >
-            Send message to the submitter
+            {tr('Send message to the submitter')}
           </button>
         ) : null}
         {/* Why a proposal was rejected — shown to everyone (submitter + reviewers), not buried. */}
@@ -196,12 +198,12 @@ export function ProposalDetail({
                 type="button"
                 onClick={toggleAll}
                 className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-                title={allOpen ? 'Collapse every section' : 'Expand every section'}
+                title={allOpen ? tr('Collapse every section') : tr('Expand every section')}
               >
-                {allOpen ? '▣ Shrink all' : '▾ Open all'}
+                {allOpen ? tr('▣ Shrink all') : tr('▾ Open all')}
               </button>
             </div>
-            <CollapsibleView label="Pitch / summary">
+            <CollapsibleView label={tr('Pitch / summary')}>
               <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.contentMd}</Markdown>
             </CollapsibleView>
             {/* §3.4/§11 — the complete milestone plan (title, budget, description,
@@ -211,10 +213,10 @@ export function ProposalDetail({
                 handles the actual POA submission / review workflow. */}
             {p.milestones.length > 0 ? <MilestonePlan milestones={p.milestones} /> : null}
             {/* §3.4 — every funding field from the form is shown (collapsible); empty ones collapse with an "empty" marker. */}
-            <DetailBlock label="Expected ecosystem impact" md={p.ecosystemImpactMd} hint="what changes if this is built" />
-            <DetailBlock label="Success metrics / KPIs" md={p.successMetricsMd} hint="how success will be measured" />
-            <DetailBlock label="Cost breakdown" md={p.costBreakdownMd} hint="how the budget is spent" />
-            <DetailBlock label="Team info" md={p.teamInfoMd} hint="who is delivering this" />
+            <DetailBlock label={tr('Expected ecosystem impact')} md={p.ecosystemImpactMd} hint={tr('what changes if this is built')} />
+            <DetailBlock label={tr('Success metrics / KPIs')} md={p.successMetricsMd} hint={tr('how success will be measured')} />
+            <DetailBlock label={tr('Cost breakdown')} md={p.costBreakdownMd} hint={tr('how the budget is spent')} />
+            <DetailBlock label={tr('Team info')} md={p.teamInfoMd} hint={tr('who is delivering this')} />
             <RevenueSharingReadOnly proposal={p} isBoard={isBoard} onChange={load} />
             <SkinInTheGameReadOnly proposal={p} />
             {/* §3 — when a pledge was promised and the round is in FUNDING, render the
@@ -225,7 +227,7 @@ export function ProposalDetail({
               <PledgeSection id={id} proposal={p} isBoard={isBoard} isMine={mine} onChange={load} />
             ) : null}
             {/* §5.3/§7.1 — expertise tags (always shown like the form). */}
-            <CollapsibleView label="Expertise areas" hint="helps match filtering reviewers" empty={!p.subcategoryIds || p.subcategoryIds.length === 0}>
+            <CollapsibleView label={tr('Expertise areas')} hint={tr('helps match filtering reviewers')} empty={!p.subcategoryIds || p.subcategoryIds.length === 0}>
               {p.subcategoryIds && p.subcategoryIds.length > 0 ? (
                 <div className="flex flex-wrap gap-1">
                   {p.subcategoryIds.map((sid) => (
@@ -235,20 +237,20 @@ export function ProposalDetail({
                   ))}
                 </div>
               ) : (
-                <span className="text-sm text-neutral-400">None selected.</span>
+                <span className="text-sm text-neutral-400">{tr('None selected.')}</span>
               )}
             </CollapsibleView>
-            {p.categoryAsk?.conditions ? <DetailBlock label="Category conditions" md={p.categoryAsk.conditions} /> : null}
+            {p.categoryAsk?.conditions ? <DetailBlock label={tr('Category conditions')} md={p.categoryAsk.conditions} /> : null}
             {/* Payout / refund address — where the DAO sends fee refunds + the budget once funded. */}
             <div className="mt-3 rounded-md border border-neutral-300 px-2 py-1.5 dark:border-neutral-700">
-              <div className="text-sm font-medium text-neutral-700 dark:text-neutral-300">Payout / refund address</div>
+              <div className="text-sm font-medium text-neutral-700 dark:text-neutral-300">{tr('Payout / refund address')}</div>
               {p.payoutAddress ? (
                 <div className="mt-0.5 flex flex-wrap items-center gap-2">
                   <span className="break-all font-mono text-xs text-neutral-600 dark:text-neutral-400">{p.payoutAddress}</span>
                   <CopyButton text={p.payoutAddress} />
                 </div>
               ) : (
-                <div className="mt-0.5 text-xs text-neutral-400">Not provided.</div>
+                <div className="mt-0.5 text-xs text-neutral-400">{tr('Not provided.')}</div>
               )}
             </div>
             {/* §8.1 — content fingerprint, once the proposal has been frozen (round reached VOTE). */}
@@ -263,7 +265,7 @@ export function ProposalDetail({
             {/* Pre-public (PENDING / fee-rejected): edit ALL fields in the full form. */}
             {mine && onEditFull && (p.status === 'PENDING' || (p.status === 'REJECTED' && !p.stage)) ? (
               <button onClick={onEditFull} className="mt-3 rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
-                {p.status === 'REJECTED' ? 'Edit & re-submit (all fields)' : 'Edit all fields'}
+                {p.status === 'REJECTED' ? tr('Edit & re-submit (all fields)') : tr('Edit all fields')}
               </button>
             ) : null}
           </MarkdownCollapseContext.Provider>
@@ -300,7 +302,8 @@ export function ProposalDetail({
 }
 
 function BackBtn({ onBack }: { onBack: () => void }) {
-  return <BackButton onBack={onBack} label="back to proposals" />;
+  const t = useT();
+  return <BackButton onBack={onBack} label={t('back to proposals')} />;
 }
 
 /**
@@ -311,6 +314,7 @@ function BackBtn({ onBack }: { onBack: () => void }) {
  * FAILED / REJECTED). On hover, the title attribute shows a short summary.
  */
 function VotingProgressChip({ id, status, stage }: { id: string; status: string; stage: string | null }) {
+  const t = useT();
   type Chip = { label: string; tone: 'amber' | 'emerald' | 'neutral' | 'red'; title: string } | null;
   const [chip, setChip] = useState<Chip>(null);
 
@@ -323,26 +327,26 @@ function VotingProgressChip({ id, status, stage }: { id: string; status: string;
         const r = await filteringApi.result(id).catch(() => null);
         if (!r) return;
         if (!r.assigned || r.assigned.length === 0) {
-          set({ label: 'awaiting reviewer draw', tone: 'neutral', title: 'Board has not drawn the filtering jury yet.' });
+          set({ label: t('awaiting reviewer draw'), tone: 'neutral', title: t('Board has not drawn the filtering jury yet.') });
         } else {
           const voted = r.assigned.filter((a) => a.voted).length;
           const decided = r.yes >= r.threshold || r.no >= r.threshold;
           set({
-            label: `${voted}/${r.reviewers} voted (need ${r.threshold})`,
+            label: `${voted}/${r.reviewers} ${t('voted (need')} ${r.threshold})`,
             tone: decided ? 'emerald' : voted === 0 ? 'amber' : 'amber',
-            title: `Filtering: ${voted}/${r.reviewers} reviewers voted · ${r.yes} YES · ${r.no} NO · ${r.threshold} required to decide.`,
+            title: `${t('Filtering:')} ${voted}/${r.reviewers} ${t('reviewers voted ·')} ${r.yes} YES · ${r.no} NO · ${r.threshold} ${t('required to decide.')}`,
           });
         }
       } else if (stage === 'DEBATE_VOTE' && status === 'ACTIVE') {
         const r = await dvApi.result(id).catch(() => null);
         if (!r) return;
         if (!r.open) {
-          set({ label: 'D&V not yet open', tone: 'neutral', title: 'Board hasn\'t opened the Debate & Vote voting window.' });
+          set({ label: t('D&V not yet open'), tone: 'neutral', title: t('Board hasn\'t opened the Debate & Vote voting window.') });
         } else {
           set({
-            label: `${r.cast}/${r.eligible} DReps voted · ${r.approved ? 'passing' : 'short'} (${r.ratioPct}% / ${r.thresholdPct}%)`,
+            label: `${r.cast}/${r.eligible} ${t('DReps voted ·')} ${r.approved ? t('passing') : t('short')} (${r.ratioPct}% / ${r.thresholdPct}%)`,
             tone: r.approved ? 'emerald' : 'amber',
-            title: `D&V: ${r.cast} of ${r.eligible} eligible voted. ${r.ratioPct}% of participating power — needs ${r.thresholdPct}% to pass.`,
+            title: `${t('D&V:')} ${r.cast} ${t('of')} ${r.eligible} ${t('eligible voted.')} ${r.ratioPct}% ${t('of participating power — needs')} ${r.thresholdPct}% ${t('to pass.')}`,
           });
         }
       } else if (stage === 'FUNDING' && status === 'APPROVED') {
@@ -353,9 +357,9 @@ function VotingProgressChip({ id, status, stage }: { id: string; status: string;
         const active = stops.find((s) => s.status === 'ACTIVE');
         if (active) {
           set({
-            label: `stop-funding open · ${active.yes}/${active.threshold} YES`,
+            label: `${t('stop-funding open ·')} ${active.yes}/${active.threshold} YES`,
             tone: 'red',
-            title: `Stop-funding ACTIVE — board votes 1p1v, ${active.yes} YES / ${active.no} NO of ${active.threshold} needed.`,
+            title: `${t('Stop-funding ACTIVE — board votes 1p1v,')} ${active.yes} YES / ${active.no} NO ${t('of')} ${active.threshold} ${t('needed.')}`,
           });
           return;
         }
@@ -369,9 +373,9 @@ function VotingProgressChip({ id, status, stage }: { id: string; status: string;
         if (rejected.length > 0) {
           const m = rejected[0];
           set({
-            label: `M#${m.idx + 1} POA rejected — resubmit needed`,
+            label: `M#${m.idx + 1} ${t('POA rejected — resubmit needed')}`,
             tone: 'red',
-            title: `Milestone #${m.idx + 1} POA was rejected (${m.yes} YES / ${m.no} NO of ${m.threshold} needed). The team can post a revised POA.`,
+            title: `${t('Milestone #')}${m.idx + 1} ${t('POA was rejected (')}${m.yes} YES / ${m.no} NO ${t('of')} ${m.threshold} ${t('needed). The team can post a revised POA.')}`,
           });
         } else if (inReview.length > 0) {
           const m = inReview[0];
@@ -382,16 +386,16 @@ function VotingProgressChip({ id, status, stage }: { id: string; status: string;
           const stuck = m.no > 0 && maxPossibleYes < m.threshold;
           set({
             label: stuck
-              ? `M#${m.idx + 1} stuck · ${m.yes} YES / ${m.no} NO (need ${m.threshold})`
-              : `M#${m.idx + 1} in review · ${m.yes} YES / ${m.no} NO (need ${m.threshold})`,
+              ? `M#${m.idx + 1} ${t('stuck ·')} ${m.yes} YES / ${m.no} NO ${t('(need')} ${m.threshold})`
+              : `M#${m.idx + 1} ${t('in review ·')} ${m.yes} YES / ${m.no} NO ${t('(need')} ${m.threshold})`,
             tone: stuck ? 'red' : m.no > 0 ? 'amber' : 'amber',
-            title: `Milestone #${m.idx + 1} POA — ${m.yes} YES / ${m.no} NO of ${m.threshold} needed${stuck ? '. Approval is no longer reachable with the current ballots — the POA will close as rejected.' : '.'}`,
+            title: `${t('Milestone #')}${m.idx + 1} ${t('POA —')} ${m.yes} YES / ${m.no} NO ${t('of')} ${m.threshold} ${t('needed')}${stuck ? t('. Approval is no longer reachable with the current ballots — the POA will close as rejected.') : '.'}`,
           });
         } else {
           set({
-            label: `${approved}/${ms.length} milestones approved`,
+            label: `${approved}/${ms.length} ${t('milestones approved')}`,
             tone: approved === ms.length ? 'emerald' : 'neutral',
-            title: `${approved} of ${ms.length} milestones approved.`,
+            title: `${approved} ${t('of')} ${ms.length} ${t('milestones approved.')}`,
           });
         }
       } else {
@@ -440,6 +444,7 @@ function CollapsibleView({
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(defaultOpen ?? !empty);
   // §3.4 — obey the page-level "Open all / Shrink all" toggle (same MarkdownCollapseContext the
   // form's editors use), while still allowing individual toggling between global clicks.
@@ -456,9 +461,9 @@ function CollapsibleView({
           {label}
           {hint ? <span className="font-normal text-neutral-400"> — {hint}</span> : null}
         </button>
-        {empty ? <span className="text-xs text-neutral-400">empty</span> : null}
+        {empty ? <span className="text-xs text-neutral-400">{t('empty')}</span> : null}
         <button type="button" onClick={() => setOpen((v) => !v)} className="rounded px-1.5 py-0.5 text-xs text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700">
-          {open ? '▣ Shrink' : '⤢ Expand'}
+          {open ? t('▣ Shrink') : t('⤢ Expand')}
         </button>
       </div>
       {open ? <div className="border-t border-neutral-200 px-2 py-1.5 dark:border-neutral-700">{children}</div> : null}
@@ -469,13 +474,14 @@ function CollapsibleView({
 /** §3.4 — a labelled, collapsible markdown detail section. Always shown (parity with the form);
  * when empty it collapses with an "empty" marker rather than disappearing. */
 function DetailBlock({ label, md, hint }: { label: string; md?: string | null; hint?: string }) {
+  const t = useT();
   const has = !!md && md.trim().length > 0;
   return (
     <CollapsibleView label={label} hint={hint} empty={!has}>
       {has ? (
         <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{md as string}</Markdown>
       ) : (
-        <span className="text-sm text-neutral-400">Not provided.</span>
+        <span className="text-sm text-neutral-400">{t('Not provided.')}</span>
       )}
     </CollapsibleView>
   );
@@ -487,12 +493,13 @@ function DetailBlock({ label, md, hint }: { label: string; md?: string | null; h
  * post-approval action — and, once approved, whether the board has verified it.
  */
 function RevenueSharingReadOnly({ proposal: p, isBoard, onChange }: { proposal: PDetail; isBoard: boolean; onChange: () => void }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (!p.revenueSharingRequired) {
     return (
-      <CollapsibleView label="Revenue sharing" hint="no post-approval conditions" empty>
-        <span className="text-sm text-neutral-400">Not promised.</span>
+      <CollapsibleView label={t('Revenue sharing')} hint={t('no post-approval conditions')} empty>
+        <span className="text-sm text-neutral-400">{t('Not promised.')}</span>
       </CollapsibleView>
     );
   }
@@ -509,8 +516,8 @@ function RevenueSharingReadOnly({ proposal: p, isBoard, onChange }: { proposal: 
   };
   return (
     <CollapsibleView
-      label="Revenue sharing"
-      hint={verified ? 'verified by the board' : p.status === 'APPROVED' ? 'pending board verification' : 'verified by the board after approval'}
+      label={t('Revenue sharing')}
+      hint={verified ? t('verified by the board') : p.status === 'APPROVED' ? t('pending board verification') : t('verified by the board after approval')}
     >
       <div className="space-y-2">
         <div className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
@@ -521,15 +528,15 @@ function RevenueSharingReadOnly({ proposal: p, isBoard, onChange }: { proposal: 
               : 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300'
         }`}>
           {verified
-            ? `✓ Verified ${fmtDateTime(p.revenueSharingVerifiedAt!)}`
+            ? `${t('✓ Verified')} ${fmtDateTime(p.revenueSharingVerifiedAt!)}`
             : p.status === 'APPROVED'
-              ? '⏳ Pending board verification — milestone POAs are blocked until verified'
-              : 'The board verifies these conditions once the proposal is approved (FUNDING) — nothing to confirm yet'}
+              ? t('⏳ Pending board verification — milestone POAs are blocked until verified')
+              : t('The board verifies these conditions once the proposal is approved (FUNDING) — nothing to confirm yet')}
         </div>
         {p.revenueSharingMd?.trim() ? (
           <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.revenueSharingMd}</Markdown>
         ) : (
-          <span className="text-sm text-neutral-400">No conditions text provided.</span>
+          <span className="text-sm text-neutral-400">{t('No conditions text provided.')}</span>
         )}
         {canVerify ? (
           <div className="flex items-center gap-2">
@@ -539,7 +546,7 @@ function RevenueSharingReadOnly({ proposal: p, isBoard, onChange }: { proposal: 
               onClick={verify}
               className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
             >
-              {busy ? 'Verifying…' : '✓ Confirm conditions met'}
+              {busy ? t('Verifying…') : t('✓ Confirm conditions met')}
             </button>
             {error ? <span className="text-xs text-red-600">{error}</span> : null}
           </div>
@@ -555,28 +562,29 @@ function RevenueSharingReadOnly({ proposal: p, isBoard, onChange }: { proposal: 
  * tx / verification panel — that's in the dedicated PledgeSection in FUNDING.
  */
 function SkinInTheGameReadOnly({ proposal: p }: { proposal: PDetail }) {
+  const t = useT();
   const promised = p.pledgeAmountAda > 0;
   if (!promised) {
     return (
-      <CollapsibleView label="Skin in the game" hint="optional refundable pledge" empty>
-        <span className="text-sm text-neutral-400">Not promised.</span>
+      <CollapsibleView label={t('Skin in the game')} hint={t('optional refundable pledge')} empty>
+        <span className="text-sm text-neutral-400">{t('Not promised.')}</span>
       </CollapsibleView>
     );
   }
   const confirmed = !!p.pledgeConfirmedAt;
   return (
-    <CollapsibleView label="Skin in the game" hint={confirmed ? 'pledge confirmed on-chain' : 'pledge promised (confirmed by board post-approval)'}>
+    <CollapsibleView label={t('Skin in the game')} hint={confirmed ? t('pledge confirmed on-chain') : t('pledge promised (confirmed by board post-approval)')}>
       <div className="space-y-1.5">
         <div className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
           confirmed
             ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
             : 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300'
         }`}>
-          Promised: {p.pledgeAmountAda.toLocaleString()} ₳ {confirmed ? '· ✓ confirmed' : '· awaiting payment + board confirmation (FUNDING)'}
+          {t('Promised:')} {p.pledgeAmountAda.toLocaleString()} ₳ {confirmed ? t('· ✓ confirmed') : t('· awaiting payment + board confirmation (FUNDING)')}
         </div>
         {p.pledgeReturnMethod?.trim() ? (
           <div>
-            <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Return method</div>
+            <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{t('Return method')}</div>
             <Markdown className="text-sm text-neutral-700 dark:text-neutral-300">{p.pledgeReturnMethod}</Markdown>
           </div>
         ) : null}
@@ -587,22 +595,23 @@ function SkinInTheGameReadOnly({ proposal: p }: { proposal: PDetail }) {
 
 /** Read-only milestone plan (title · budget · description · acceptance), shown to everyone. */
 function MilestonePlan({ milestones }: { milestones: PDetail['milestones'] }) {
+  const t = useT();
   return (
-    <CollapsibleView label={`Milestones (${milestones.length})`}>
+    <CollapsibleView label={`${t('Milestones')} (${milestones.length})`}>
       <ul className="space-y-2">
         {milestones.map((m) => (
           <li key={m.id} className="rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">
             <div className="font-medium">
-              Milestone #{m.idx + 1}{m.title ? ` — ${m.title}` : ''}
+              {t('Milestone #')}{m.idx + 1}{m.title ? ` — ${m.title}` : ''}
               <span className="font-semibold text-blue-600 dark:text-blue-400"> · {m.amountAda.toLocaleString()} ₳</span>
             </div>
             {m.description ? <Markdown className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">{m.description}</Markdown> : null}
             <div className="mt-1">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Acceptance criteria</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">{t('Acceptance criteria')}</div>
               {m.acceptanceCriteria ? (
                 <Markdown className="text-xs text-neutral-600 dark:text-neutral-400">{m.acceptanceCriteria}</Markdown>
               ) : (
-                <span className="text-xs text-neutral-400">Not provided.</span>
+                <span className="text-xs text-neutral-400">{t('Not provided.')}</span>
               )}
             </div>
           </li>
@@ -623,6 +632,7 @@ function MilestonePlan({ milestones }: { milestones: PDetail['milestones'] }) {
  *   - stage === 'DEBATE_VOTE'   → tally + rationales render in the D&V section below.
  */
 function RejectionBanner({ proposal: p }: { proposal: PDetail }) {
+  const t = useT();
   const [filterRes, setFilterRes] = useState<FilterResult | null>(null);
   // §9 — the published D&V tally, to tell a threshold-miss from a budget-cut (a proposal that PASSED
   // the threshold but couldn't be funded because higher-ranked proposals exhausted the category budget).
@@ -646,25 +656,22 @@ function RejectionBanner({ proposal: p }: { proposal: PDetail }) {
       return (
         <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/40">
           <div className="text-sm font-semibold text-red-800 dark:text-red-300">
-            {budgetCut ? 'Not funded — budget-cut (Debate & Vote)' : 'Rejected at Debate & Vote'}
+            {budgetCut ? t('Not funded — budget-cut (Debate & Vote)') : t('Rejected at Debate & Vote')}
           </div>
           <div className="mt-0.5 text-sm text-red-700 dark:text-red-300">
             {budgetCut ? (
-              <>This proposal <strong>passed the approval threshold</strong>{dvRes ? ` (${dvRes.ratioPct}% ≥ ${dvRes.thresholdPct}%)` : ''}, but the
-              category&apos;s budget was used up by higher-ranked proposals, so it could not be funded this round
-              (budget-cut). See the tally + per-voter weights in the Debate &amp; Vote section below.</>
+              <>{t('This proposal')} <strong>{t('passed the approval threshold')}</strong>{dvRes ? ` (${dvRes.ratioPct}% ≥ ${dvRes.thresholdPct}%)` : ''}{t(', but the category\'s budget was used up by higher-ranked proposals, so it could not be funded this round (budget-cut). See the tally + per-voter weights in the Debate & Vote section below.')}</>
             ) : (
-              <>The published tally did not meet the approval threshold{dvRes ? ` (${dvRes.ratioPct}% < ${dvRes.thresholdPct}%)` : ''} — see the
-              rationales + per-voter weights in the Debate &amp; Vote section below.</>
+              <>{t('The published tally did not meet the approval threshold')}{dvRes ? ` (${dvRes.ratioPct}% < ${dvRes.thresholdPct}%)` : ''}{t(' — see the rationales + per-voter weights in the Debate & Vote section below.')}</>
             )}
           </div>
         </div>
       );
     }
-    const reason = p.feeReviewFeedback?.trim() || 'No reason was recorded.';
+    const reason = p.feeReviewFeedback?.trim() || t('No reason was recorded.');
     return (
       <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/40">
-        <div className="text-sm font-semibold text-red-800 dark:text-red-300">Proposal rejected</div>
+        <div className="text-sm font-semibold text-red-800 dark:text-red-300">{t('Proposal rejected')}</div>
         <div className="mt-0.5 whitespace-pre-wrap text-sm text-red-700 dark:text-red-300">{reason}</div>
       </div>
     );
@@ -674,18 +681,18 @@ function RejectionBanner({ proposal: p }: { proposal: PDetail }) {
     const noVoters = (filterRes?.votes ?? []).filter((v) => v.choice === 'NO');
     return (
       <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/40">
-        <div className="text-sm font-semibold text-red-800 dark:text-red-300">Rejected during the Filtering review</div>
+        <div className="text-sm font-semibold text-red-800 dark:text-red-300">{t('Rejected during the Filtering review')}</div>
         <div className="mt-0.5 text-sm text-red-700 dark:text-red-300">
           {filterRes
-            ? `${noVoters.length} reviewer${noVoters.length === 1 ? '' : 's'} voted NO — a YES decision is no longer mathematically possible.`
-            : 'Loading reviewer rationales…'}
+            ? `${noVoters.length} ${noVoters.length === 1 ? t('reviewer voted NO — a YES decision is no longer mathematically possible.') : t('reviewers voted NO — a YES decision is no longer mathematically possible.')}`
+            : t('Loading reviewer rationales…')}
         </div>
         {noVoters.length > 0 ? (
           <ul className="mt-2 space-y-1.5">
             {noVoters.map((v, i) => (
               <li key={i} className="rounded border border-red-200 bg-white/60 px-2 py-1.5 text-xs dark:border-red-900 dark:bg-red-950/30">
                 <div className="font-medium text-red-900 dark:text-red-200">
-                  {v.displayName ?? (v.drep ? `${v.drep.slice(0, 16)}…` : 'Reviewer')} · <span className="text-red-700 dark:text-red-300">NO</span>
+                  {v.displayName ?? (v.drep ? `${v.drep.slice(0, 16)}…` : t('Reviewer'))} · <span className="text-red-700 dark:text-red-300">NO</span>
                 </div>
                 <RationaleText text={v.rationale} />
               </li>
@@ -698,9 +705,9 @@ function RejectionBanner({ proposal: p }: { proposal: PDetail }) {
 
   return (
     <div className="mt-3 rounded-md border border-red-300 bg-red-50 p-3 dark:border-red-900 dark:bg-red-950/40">
-      <div className="text-sm font-semibold text-red-800 dark:text-red-300">Proposal rejected</div>
+      <div className="text-sm font-semibold text-red-800 dark:text-red-300">{t('Proposal rejected')}</div>
       <div className="mt-0.5 whitespace-pre-wrap text-sm text-red-700 dark:text-red-300">
-        Rejected at Debate &amp; Vote — see the published tally and rationales below.
+        {t('Rejected at Debate & Vote — see the published tally and rationales below.')}
       </div>
     </div>
   );
@@ -723,6 +730,7 @@ function RejectionBanner({ proposal: p }: { proposal: PDetail }) {
  * a board member then verifies + confirms. Self-hides when there's nothing to pay.
  */
 function FeeTopUpPanel({ id }: { id: string }) {
+  const t = useT();
   const { txUrl, cfg } = useExplorer();
   const [topUp, setTopUp] = useState<FeeTopUp | null>(null);
   const [tx, setTx] = useState('');
@@ -734,7 +742,7 @@ function FeeTopUpPanel({ id }: { id: string }) {
   const awaiting = topUp.status === 'AWAITING_CONFIRM';
   const submit = async () => {
     setError(null);
-    if (!/^[0-9a-f]{64}$/i.test(tx.trim())) { setError('Paste the 64-hex tx hash of your top-up payment.'); return; }
+    if (!/^[0-9a-f]{64}$/i.test(tx.trim())) { setError(t('Paste the 64-hex tx hash of your top-up payment.')); return; }
     setBusy(true);
     try { await feeTopUpApi.pay(id, tx.trim()); setTx(''); load(); }
     catch (e) { setError(e instanceof Error ? e.message : 'failed'); }
@@ -742,28 +750,27 @@ function FeeTopUpPanel({ id }: { id: string }) {
   };
   return (
     <section className="mt-3 space-y-1 rounded-md border border-amber-300 bg-amber-50/60 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30">
-      <div className="font-semibold text-amber-800 dark:text-amber-200">Submission fee top-up required</div>
+      <div className="font-semibold text-amber-800 dark:text-amber-200">{t('Submission fee top-up required')}</div>
       <p className="text-xs text-neutral-600 dark:text-neutral-300">
-        Your budget increase raised the submission fee. Send the extra <strong>{topUp.amountAda.toLocaleString()} ₳</strong>
-        {topUp.newFeeAda != null ? <> (new total fee {topUp.newFeeAda.toLocaleString()} ₳)</> : null} to the submission-fee
-        address, then paste the tx hash below. A board member verifies and confirms it.
+        {t('Your budget increase raised the submission fee. Send the extra')} <strong>{topUp.amountAda.toLocaleString()} ₳</strong>
+        {topUp.newFeeAda != null ? <> ({t('new total fee')} {topUp.newFeeAda.toLocaleString()} ₳)</> : null} {t('to the submission-fee address, then paste the tx hash below. A board member verifies and confirms it.')}
       </p>
       {cfg?.submissionFeeAddress ? (
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-neutral-500">Pay to:</span>
+          <span className="text-neutral-500">{t('Pay to:')}</span>
           <span className="break-all font-mono text-[11px] text-neutral-700 dark:text-neutral-300">{cfg.submissionFeeAddress}</span>
-          <CopyButton text={cfg.submissionFeeAddress} label="Copy address" />
+          <CopyButton text={cfg.submissionFeeAddress} label={t('Copy address')} />
         </div>
       ) : null}
       {awaiting && topUp.txHash ? (
         <div className="text-xs text-emerald-700 dark:text-emerald-300">
-          ✓ Submitted — <a href={txUrl(topUp.txHash)} target="_blank" rel="noreferrer" className="font-mono underline">{topUp.txHash.slice(0, 16)}…</a>. Awaiting the board&apos;s confirmation. You can re-submit a corrected hash below if needed.
+          {t('✓ Submitted —')} <a href={txUrl(topUp.txHash)} target="_blank" rel="noreferrer" className="font-mono underline">{topUp.txHash.slice(0, 16)}…</a>. {t('Awaiting the board\'s confirmation. You can re-submit a corrected hash below if needed.')}
         </div>
       ) : null}
       <div className="mt-1 flex flex-wrap items-center gap-2">
-        <input value={tx} onChange={(e) => setTx(e.target.value)} placeholder="64-hex top-up tx hash" className="flex-1 rounded border border-neutral-300 px-2 py-1 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900" />
+        <input value={tx} onChange={(e) => setTx(e.target.value)} placeholder={t('64-hex top-up tx hash')} className="flex-1 rounded border border-neutral-300 px-2 py-1 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900" />
         <button disabled={busy} onClick={submit} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950">
-          {busy ? '…' : awaiting ? 'Re-submit hash' : 'Submit top-up tx'}
+          {busy ? '…' : awaiting ? t('Re-submit hash') : t('Submit top-up tx')}
         </button>
       </div>
       {error ? <div className="text-xs text-red-600">{error}</div> : null}
@@ -772,6 +779,7 @@ function FeeTopUpPanel({ id }: { id: string }) {
 }
 
 function FeeBlock({ proposal }: { proposal: PDetail }) {
+  const tr = useT();
   const { txUrl } = useExplorer();
   const hashes = proposal.submissionFeeTxHashes?.length
     ? proposal.submissionFeeTxHashes
@@ -804,15 +812,15 @@ function FeeBlock({ proposal }: { proposal: PDetail }) {
       {showBox ? (
         <div className="mt-3 rounded border border-blue-200 bg-blue-50 p-2 dark:border-blue-900 dark:bg-blue-950/30">
           <div className="text-xs font-semibold uppercase tracking-wide text-blue-800 dark:text-blue-300">
-            Submission fee{proposal.submissionFeeAda ? ` · required ${proposal.submissionFeeAda.toLocaleString()} ₳` : ''}
-            {fv && fv.txs.length > 0 ? <span className="ml-1 font-normal normal-case text-blue-700/80 dark:text-blue-300/80">· paid {fv.paidAda.toLocaleString()} ₳{fv.fullyPaid ? ' ✓' : ` (${fv.missingAda.toLocaleString()} ₳ missing)`}</span> : null}
+            {tr('Submission fee')}{proposal.submissionFeeAda ? ` · ${tr('required')} ${proposal.submissionFeeAda.toLocaleString()} ₳` : ''}
+            {fv && fv.txs.length > 0 ? <span className="ml-1 font-normal normal-case text-blue-700/80 dark:text-blue-300/80">· {tr('paid')} {fv.paidAda.toLocaleString()} ₳{fv.fullyPaid ? ' ✓' : ` (${fv.missingAda.toLocaleString()} ₳ ${tr('missing')})`}</span> : null}
           </div>
           {/* §16 — submitter has paid (tx hash entered) but the board hasn't reviewed yet. */}
           {awaitingFeeConfirmation ? (
             <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 dark:border-amber-900 dark:bg-amber-950/30">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">Waiting for payment confirmation</div>
+              <div className="text-[11px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">{tr('Waiting for payment confirmation')}</div>
               <div className="mt-0.5 text-xs text-amber-800 dark:text-amber-200">
-                A board member will verify your on-chain payment to the submission-fee address. Once approved your proposal moves to Filtering and becomes public.
+                {tr('A board member will verify your on-chain payment to the submission-fee address. Once approved your proposal moves to Filtering and becomes public.')}
               </div>
             </div>
           ) : null}
@@ -827,10 +835,10 @@ function FeeBlock({ proposal }: { proposal: PDetail }) {
                     </a>
                     {t ? (
                       <span className={t.paidAda > 0 ? 'whitespace-nowrap font-medium text-emerald-700 dark:text-emerald-400' : 'whitespace-nowrap text-neutral-500'}>
-                        {!t.koiosAvailable ? 'chain check failed' : t.paidAda > 0 ? `${t.paidAda.toLocaleString()} ₳ paid` : t.found ? '0 ₳ to fee address' : 'not found yet'}
+                        {!t.koiosAvailable ? tr('chain check failed') : t.paidAda > 0 ? `${t.paidAda.toLocaleString()} ₳ ${tr('paid')}` : t.found ? tr('0 ₳ to fee address') : tr('not found yet')}
                       </span>
                     ) : null}
-                    {hashes.length > 1 && i === hashes.length - 1 ? <span className="text-[10px] uppercase text-neutral-400">latest</span> : null}
+                    {hashes.length > 1 && i === hashes.length - 1 ? <span className="text-[10px] uppercase text-neutral-400">{tr('latest')}</span> : null}
                   </div>
                 );
               })}
@@ -839,12 +847,12 @@ function FeeBlock({ proposal }: { proposal: PDetail }) {
           {feedbackInBox ? (
             feeRejected ? (
               <div className="mt-2 rounded border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/30">
-                <div className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Rejected — feedback</div>
+                <div className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">{tr('Rejected — feedback')}</div>
                 <div className="mt-0.5 whitespace-pre-wrap text-xs text-red-800 dark:text-red-300">{proposal.feeReviewFeedback}</div>
               </div>
             ) : (
               <div className="mt-2 rounded border border-emerald-300 bg-emerald-50 p-2 dark:border-emerald-900 dark:bg-emerald-950/30">
-                <div className="text-[11px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">Approved — feedback</div>
+                <div className="text-[11px] font-bold uppercase tracking-wide text-emerald-700 dark:text-emerald-300">{tr('Approved — feedback')}</div>
                 <div className="mt-0.5 whitespace-pre-wrap text-xs text-emerald-800 dark:text-emerald-200">{proposal.feeReviewFeedback}</div>
               </div>
             )
@@ -853,7 +861,7 @@ function FeeBlock({ proposal }: { proposal: PDetail }) {
       ) : null}
       {nonFeeRejection ? (
         <div className="mt-3 rounded border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/30">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Rejected — feedback</div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">{tr('Rejected — feedback')}</div>
           <div className="mt-0.5 whitespace-pre-wrap text-xs text-red-800 dark:text-red-300">{proposal.feeReviewFeedback}</div>
         </div>
       ) : null}
@@ -863,7 +871,8 @@ function FeeBlock({ proposal }: { proposal: PDetail }) {
 
 /** Public rationale list (filtering / D&V / milestone), with optional balanced weight. */
 function Votes({ votes }: { votes: VoteRationale[] }) {
-  if (!votes || votes.length === 0) return <p className="text-xs text-neutral-400">No votes yet.</p>;
+  const t = useT();
+  if (!votes || votes.length === 0) return <p className="text-xs text-neutral-400">{t('No votes yet.')}</p>;
   return (
     <ul className="space-y-1.5">
       {votes.map((v, i) => (
@@ -872,7 +881,7 @@ function Votes({ votes }: { votes: VoteRationale[] }) {
             <span className="font-medium">{v.displayName ?? (v.drep ? `${v.drep.slice(0, 16)}…` : 'DRep')}</span>
             <span className={`font-semibold ${choiceCls[v.choice] ?? ''}`}>
               {v.choice}
-              {v.weight != null ? ` · ${v.weight.toLocaleString()} power` : ''}
+              {v.weight != null ? ` · ${v.weight.toLocaleString()} ${t('power')}` : ''}
             </span>
           </div>
           <RationaleText text={v.rationale} />
@@ -883,11 +892,12 @@ function Votes({ votes }: { votes: VoteRationale[] }) {
 }
 
 function AnchorLink({ txHash }: { txHash: string | null | undefined }) {
+  const t = useT();
   const { txUrl } = useExplorer();
-  if (!txHash) return <span className="text-xs text-neutral-400">recorded (anchor pending submission)</span>;
+  if (!txHash) return <span className="text-xs text-neutral-400">{t('recorded (anchor pending submission)')}</span>;
   return (
     <a href={txUrl(txHash)} target="_blank" rel="noreferrer" className="text-xs text-emerald-700 underline dark:text-emerald-400">
-      on-chain proof ↗
+      {t('on-chain proof ↗')}
     </a>
   );
 }
@@ -899,17 +909,16 @@ function AnchorLink({ txHash }: { txHash: string | null | undefined }) {
  * it themselves with the named function, and confirm it matches what was committed on-chain.
  */
 function ContentFingerprintView({ fp }: { fp: NonNullable<PDetail['contentFingerprint']> }) {
+  const t = useT();
   return (
-    <CollapsibleView label="Content fingerprint" hint="frozen when Debate ended — verifiable on-chain" empty>
+    <CollapsibleView label={t('Content fingerprint')} hint={t('frozen when Debate ended — verifiable on-chain')} empty>
       <div className="space-y-2">
         <p className="text-xs text-neutral-500 dark:text-neutral-400">
-          When the Debate stage ended the proposal was frozen and can no longer be changed. The exact
-          text below was committed on-chain by its {fp.hashAlgo} hash. To verify, copy the text and hash
-          it with {fp.hashAlgo} — it must equal the hash shown.
+          {t('When the Debate stage ended the proposal was frozen and can no longer be changed. The exact text below was committed on-chain by its')} {fp.hashAlgo} {t('hash. To verify, copy the text and hash it with')} {fp.hashAlgo} {t('— it must equal the hash shown.')}
         </p>
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-medium dark:bg-neutral-800">Hash function: {fp.hashAlgo}</span>
-          <span className="text-neutral-500">Frozen: {new Date(fp.frozenAt).toLocaleString()}</span>
+          <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-medium dark:bg-neutral-800">{t('Hash function:')} {fp.hashAlgo}</span>
+          <span className="text-neutral-500">{t('Frozen:')} {new Date(fp.frozenAt).toLocaleString()}</span>
           <AnchorLink txHash={fp.txHash} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -919,7 +928,7 @@ function ContentFingerprintView({ fp }: { fp: NonNullable<PDetail['contentFinger
         </div>
         <div>
           <div className="mb-1 flex items-center gap-2">
-            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Canonical text (the hashed bytes):</span>
+            <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{t('Canonical text (the hashed bytes):')}</span>
             <CopyButton text={fp.text} />
           </div>
           <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded border border-neutral-200 bg-neutral-50 p-2 font-mono text-[11px] leading-relaxed text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">{fp.text}</pre>
@@ -932,39 +941,41 @@ function ContentFingerprintView({ fp }: { fp: NonNullable<PDetail['contentFinger
 /** §11/§15 — milestone payout badge: collapses the multisig signing + on-chain
  *  state into a single chip with the explorer link when PAID. */
 function PayoutBadge({ payout }: { payout: MilestoneView['payout'] }) {
+  const t = useT();
   const { txUrl } = useExplorer();
   if (!payout) return null;
   const base = 'rounded px-2 py-0.5 text-[11px] font-medium';
   if (payout.status === 'CONFIRMED') {
     return (
-      <span className={`${base} bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200`} title={`Paid ${payout.paidAt ? `on ${fmtDateTime(payout.paidAt)}` : ''}`}>
-        ✓ PAID{payout.txHash ? <> · <a href={txUrl(payout.txHash)} target="_blank" rel="noreferrer" className="underline">tx ↗</a></> : null}
+      <span className={`${base} bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200`} title={`${t('Paid')} ${payout.paidAt ? `${t('on')} ${fmtDateTime(payout.paidAt)}` : ''}`}>
+        {t('✓ PAID')}{payout.txHash ? <> · <a href={txUrl(payout.txHash)} target="_blank" rel="noreferrer" className="underline">{t('tx ↗')}</a></> : null}
       </span>
     );
   }
   if (payout.status === 'BROADCASTED') {
     return (
-      <span className={`${base} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200`} title="Tx broadcast, on-chain verification pending.">
-        Payment broadcasting{payout.txHash ? <> · <a href={txUrl(payout.txHash)} target="_blank" rel="noreferrer" className="underline">tx ↗</a></> : null}
+      <span className={`${base} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200`} title={t('Tx broadcast, on-chain verification pending.')}>
+        {t('Payment broadcasting')}{payout.txHash ? <> · <a href={txUrl(payout.txHash)} target="_blank" rel="noreferrer" className="underline">{t('tx ↗')}</a></> : null}
       </span>
     );
   }
   if (payout.status === 'READY') {
     return (
-      <span className={`${base} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200`} title="All board signatures collected — board is broadcasting the multisig tx.">
-        Payment ready — awaiting broadcast
+      <span className={`${base} bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200`} title={t('All board signatures collected — board is broadcasting the multisig tx.')}>
+        {t('Payment ready — awaiting broadcast')}
       </span>
     );
   }
   // PENDING_SIGS (default) — show the signature progress.
   return (
-    <span className={`${base} bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300`} title="Awaiting 3-of-5 board signatures.">
-      Payment pending · {payout.approvals}/{payout.threshold} sigs
+    <span className={`${base} bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300`} title={t('Awaiting 3-of-5 board signatures.')}>
+      {t('Payment pending ·')} {payout.approvals}/{payout.threshold} {t('sigs')}
     </span>
   );
 }
 
 function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: boolean; proposal: PDetail }) {
+  const t = useT();
   const [r, setR] = useState<FilterResult | null>(null);
   const [roundStatus, setRoundStatus] = useState<string | null>(null);
   const [drawing, setDrawing] = useState(false);
@@ -1012,15 +1023,15 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
   const advanced = r.status === 'ACTIVE' && r.stage !== 'FILTERING' && r.stage !== null;
   const rejectedAtFiltering = r.status === 'REJECTED' && r.stage === 'FILTERING';
   const outcomeChip = advanced
-    ? { label: '✓ Filtering passed — advanced to Debate & Vote', tone: 'emerald' as const }
+    ? { label: t('✓ Filtering passed — advanced to Debate & Vote'), tone: 'emerald' as const }
     : rejectedAtFiltering
-      ? { label: '✗ Rejected at filtering', tone: 'red' as const }
+      ? { label: t('✗ Rejected at filtering'), tone: 'red' as const }
       : null;
 
   return (
     <section className={platformCard}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold">Filtering — 1 member · 1 vote</h3>
+        <h3 className="text-base font-semibold">{t('Filtering — 1 member · 1 vote')}</h3>
         <div className="flex items-center gap-2">
           {outcomeChip ? (
             <span
@@ -1038,9 +1049,9 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
                 : voted === 0
                   ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300'
                   : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'}`}
-              title="Voting progress"
+              title={t('Voting progress')}
             >
-              {voted}/{r.reviewers || 0} voted{decided ? ' · passed (advancing)' : ' · awaiting votes'}
+              {voted}/{r.reviewers || 0} {t('voted')}{decided ? t(' · passed (advancing)') : t(' · awaiting votes')}
             </span>
           ) : null}
           <AnchorLink txHash={r.anchorTxHash} />
@@ -1048,14 +1059,13 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
       </div>
       {/* §7.1 — a fixed jury (FILTER_REVIEWER_COUNT) decides; no abstain in filtering. */}
       <div className="mt-1 text-xs text-neutral-500">
-        {r.reviewers} reviewers · {r.yes} YES / {r.no} NO · need {r.threshold} to decide
+        {r.reviewers} {t('reviewers')} · {r.yes} YES / {r.no} NO · {t('need')} {r.threshold} {t('to decide')}
       </div>
       {submissionPhase ? (
         <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          <strong>Round in SUBMISSION.</strong> Reviewer voting opens when the board moves the round to FILTERING.
-          Reviewers can already be pre-assigned here.
+          <strong>{t('Round in SUBMISSION.')}</strong> {t('Reviewer voting opens when the board moves the round to FILTERING. Reviewers can already be pre-assigned here.')}
           {r.assigned && r.assigned.length > 0 ? (
-            <> The assigned reviewers will be <strong>automatically notified to vote</strong> the moment the round moves to FILTERING — no further action needed if the board doesn&apos;t want to swap anyone.</>
+            <> {t('The assigned reviewers will be')} <strong>{t('automatically notified to vote')}</strong> {t('the moment the round moves to FILTERING — no further action needed if the board doesn\'t want to swap anyone.')}</>
           ) : null}
         </div>
       ) : null}
@@ -1072,9 +1082,9 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
                   <span className="flex items-center gap-1.5">
                     <span className="font-medium">{a.displayName ?? (a.drep ? `${a.drep.slice(0, 16)}…` : 'DRep')}</span>
                     {a.expertiseMatch ? (
-                      <span className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title="matched the proposal's expertise areas">⭐ expertise</span>
+                      <span className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" title={t("matched the proposal's expertise areas")}>{t('⭐ expertise')}</span>
                     ) : (
-                      <span className="rounded bg-neutral-200 px-1 py-0.5 text-[10px] text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300" title="no expertise overlap with the proposal's categories — picked at random">random pick</span>
+                      <span className="rounded bg-neutral-200 px-1 py-0.5 text-[10px] text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300" title={t("no expertise overlap with the proposal's categories — picked at random")}>{t('random pick')}</span>
                     )}
                   </span>
                   <span className="flex items-center gap-2">
@@ -1082,19 +1092,19 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
                       <span className={`font-semibold ${choiceCls[a.choice ?? ''] ?? ''}`}>{a.choice}</span>
                     ) : (
                       // §5 — "pending" only while filtering is open; otherwise the reviewer simply didn't vote.
-                      <span className="text-amber-600">{open ? 'pending' : 'not voted'}</span>
+                      <span className="text-amber-600">{open ? t('pending') : t('not voted')}</span>
                     )}
                     {canChange ? (
                       <button
                         onClick={() => setChangingDrepId(changingDrepId === a.drepId ? null : a.drepId)}
-                        title="Swap this reviewer for someone else (only available before they vote)"
+                        title={t('Swap this reviewer for someone else (only available before they vote)')}
                         className={
                           changingDrepId === a.drepId
                             ? 'rounded border border-neutral-400 px-1.5 py-0.5 text-[11px] text-neutral-700 hover:bg-neutral-100 dark:border-neutral-500 dark:text-neutral-300 dark:hover:bg-neutral-800'
                             : 'rounded border border-emerald-500 px-2 py-0.5 text-[11px] font-medium text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950'
                         }
                       >
-                        {changingDrepId === a.drepId ? 'Cancel' : '↻ Change reviewer'}
+                        {changingDrepId === a.drepId ? t('Cancel') : t('↻ Change reviewer')}
                       </button>
                     ) : null}
                   </span>
@@ -1117,16 +1127,16 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
         // voting status) replaces this button.
         <div className="mt-2 space-y-1">
           <div className="text-xs text-neutral-500">
-            No reviewers drawn yet — the jury is picked by the board (expertise overlap first, then equal participation).
-            {submissionPhase ? ' Pre-assigning now is fine; their votes open once the round moves to FILTERING.' : ''}
+            {t('No reviewers drawn yet — the jury is picked by the board (expertise overlap first, then equal participation).')}
+            {submissionPhase ? t(' Pre-assigning now is fine; their votes open once the round moves to FILTERING.') : ''}
           </div>
           <button onClick={draw} disabled={drawing} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950">
-            {drawing ? 'Drawing…' : 'Draw + confirm reviewers'}
+            {drawing ? t('Drawing…') : t('Draw + confirm reviewers')}
           </button>
           {drawError ? <div className="text-xs text-red-600">{drawError}</div> : null}
         </div>
       ) : (
-        <div className="mt-2 text-xs text-neutral-400">No reviewers drawn yet.</div>
+        <div className="mt-2 text-xs text-neutral-400">{t('No reviewers drawn yet.')}</div>
       )}
     </section>
   );
@@ -1139,6 +1149,7 @@ function FilteringSection({ id, isBoard, proposal }: { id: string; isBoard: bool
  * `replaceFilterReviewer` and bubbles the refresh.
  */
 function ChangeReviewerPicker({ proposalId, oldDrepId, onDone }: { proposalId: string; oldDrepId: string; onDone: () => void }) {
+  const t = useT();
   const [cands, setCands] = useState<FilterCandidate[] | null>(null);
   const [showAll, setShowAll] = useState(false); // include admitted DReps outside this round's eligibility
   const [busy, setBusy] = useState(false);
@@ -1157,27 +1168,27 @@ function ChangeReviewerPicker({ proposalId, oldDrepId, onDone }: { proposalId: s
     finally { setBusy(false); }
   };
 
-  if (!cands) return <div className="mt-1.5 text-[11px] text-neutral-500">{error ?? 'Loading candidates…'}</div>;
+  if (!cands) return <div className="mt-1.5 text-[11px] text-neutral-500">{error ?? t('Loading candidates…')}</div>;
   const pickable = cands.filter((c) => !c.alreadyAssigned && !c.alreadyVoted);
   return (
     <div className="mt-2 rounded-md border border-neutral-200 bg-neutral-50 p-2 text-xs dark:border-neutral-800 dark:bg-neutral-900">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <span className="text-[11px] text-neutral-500">
           {showAll
-            ? 'Pick a replacement (in-round first, then expertise-matched, then equal participation):'
-            : 'Pick a replacement (expertise-matched first, then equal participation):'}
+            ? t('Pick a replacement (in-round first, then expertise-matched, then equal participation):')
+            : t('Pick a replacement (expertise-matched first, then equal participation):')}
         </span>
         <button
           type="button"
           onClick={() => setShowAll((v) => !v)}
           className="rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          title={showAll ? 'Show only DReps already eligible for this round' : 'Show every admitted DRep in the DAO; picking one outside the round auto-adds them to it'}
+          title={showAll ? t('Show only DReps already eligible for this round') : t('Show every admitted DRep in the DAO; picking one outside the round auto-adds them to it')}
         >
-          {showAll ? '↩ Show round-eligible only' : '🌐 Show all admitted DReps'}
+          {showAll ? t('↩ Show round-eligible only') : t('🌐 Show all admitted DReps')}
         </button>
       </div>
       {pickable.length === 0 ? (
-        <div className="text-[11px] text-amber-700">No other DReps available — every other admitted reviewer is already assigned or has voted on this proposal.{!showAll ? ' Click "Show all admitted DReps" above to broaden the search.' : ''}</div>
+        <div className="text-[11px] text-amber-700">{t('No other DReps available — every other admitted reviewer is already assigned or has voted on this proposal.')}{!showAll ? t(' Click "Show all admitted DReps" above to broaden the search.') : ''}</div>
       ) : (
         <ul className="max-h-72 space-y-0.5 overflow-y-auto">
           {pickable.map((c) => (
@@ -1185,27 +1196,27 @@ function ChangeReviewerPicker({ proposalId, oldDrepId, onDone }: { proposalId: s
               <span className="flex items-center gap-1.5">
                 <span className="font-medium">{c.displayName ?? `${c.drepIdOnchain.slice(0, 16)}…`}</span>
                 {c.matchedSubcategoryIds.length > 0 ? (
-                  <span className="flex flex-wrap items-center gap-1" title="Subcategories shared with the proposal">
+                  <span className="flex flex-wrap items-center gap-1" title={t('Subcategories shared with the proposal')}>
                     <span className="text-amber-600">⭐</span>
                     {c.matchedSubcategoryIds.map((sid) => (
                       <span key={sid} className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">{SUBCAT_LABEL[sid] ?? sid}</span>
                     ))}
                   </span>
                 ) : (
-                  <span title="No expertise overlap — would be a random pick" className="rounded bg-neutral-200 px-1 py-0.5 text-[10px] text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">random pick</span>
+                  <span title={t('No expertise overlap — would be a random pick')} className="rounded bg-neutral-200 px-1 py-0.5 text-[10px] text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{t('random pick')}</span>
                 )}
                 {!c.inRound ? (
-                  <span title="Not in this round's eligibility yet; will be added on assignment" className="rounded bg-amber-100 px-1 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950 dark:text-amber-300">not in round (auto-add)</span>
+                  <span title={t("Not in this round's eligibility yet; will be added on assignment")} className="rounded bg-amber-100 px-1 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950 dark:text-amber-300">{t('not in round (auto-add)')}</span>
                 ) : null}
               </span>
               <span className="flex items-center gap-2">
-                <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] tabular-nums text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">load {c.loadInRound}</span>
+                <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] tabular-nums text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{t('load')} {c.loadInRound}</span>
                 <button
                   onClick={() => pick(c.drepId)}
                   disabled={busy}
                   className="rounded border border-emerald-500 px-1.5 py-0.5 text-[11px] text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
                 >
-                  {busy ? '…' : 'Assign'}
+                  {busy ? '…' : t('Assign')}
                 </button>
               </span>
             </li>
@@ -1218,6 +1229,7 @@ function ChangeReviewerPicker({ proposalId, oldDrepId, onDone }: { proposalId: s
 }
 
 function DvSection({ id }: { id: string; isBoard: boolean }) {
+  const t = useT();
   const [r, setR] = useState<DvResult | null>(null);
   const load = useCallback(() => dvApi.result(id).then(setR).catch(() => setR(null)), [id]);
   useEffect(() => { load(); }, [load]);
@@ -1234,11 +1246,11 @@ function DvSection({ id }: { id: string; isBoard: boolean }) {
   return (
     <section className={platformCard}>
       <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold">Debate &amp; Vote — balanced voting power</h3>
+        <h3 className="text-base font-semibold">{t('Debate & Vote — balanced voting power')}</h3>
         <AnchorLink txHash={r.anchorTxHash} />
       </div>
       <div className="mt-1 text-xs text-neutral-500">
-        {r.cast}/{r.eligible} eligible DReps voted · {r.approved ? 'passing' : 'not passing'} at {r.ratioPct}% (need {r.thresholdPct}% of participating power)
+        {r.cast}/{r.eligible} {t('eligible DReps voted ·')} {r.approved ? t('passing') : t('not passing')} {t('at')} {r.ratioPct}% ({t('need')} {r.thresholdPct}% {t('of participating power')})
       </div>
       <PowerBar yes={yes} no={no} abstain={abstain} total={total} thresholdPosPct={thresholdPosPct} thresholdPct={r.thresholdPct ?? 0} />
       {/* §8.2 — board members are voters by default; the per-proposal opt-in
@@ -1251,6 +1263,7 @@ function DvSection({ id }: { id: string; isBoard: boolean }) {
 
 /** §7/§8 — content version history with a simple line diff (original vs selected). */
 function VersionsSection({ id }: { id: string }) {
+  const t = useT();
   const [versions, setVersions] = useState<ProposalVersionEntry[]>([]);
   useEffect(() => {
     proposalVersionsApi.list(id).then(setVersions).catch(() => setVersions([]));
@@ -1266,8 +1279,8 @@ function VersionsSection({ id }: { id: string }) {
     return (
       <section className={card}>
         <button onClick={() => setOpen(true)} className="flex w-full items-center justify-between text-left">
-          <span className="text-base font-semibold">Edit history</span>
-          <span className="text-xs text-neutral-500">{versions.length} versions · view changes ▸</span>
+          <span className="text-base font-semibold">{t('Edit history')}</span>
+          <span className="text-xs text-neutral-500">{versions.length} {t('versions · view changes ▸')}</span>
         </button>
       </section>
     );
@@ -1275,12 +1288,12 @@ function VersionsSection({ id }: { id: string }) {
   return (
     <section className={card}>
       <button onClick={() => setOpen(false)} className="flex w-full items-center justify-between text-left">
-        <span className="text-base font-semibold">Edit history</span>
-        <span className="text-xs text-neutral-500">hide ▾</span>
+        <span className="text-base font-semibold">{t('Edit history')}</span>
+        <span className="text-xs text-neutral-500">{t('hide ▾')}</span>
       </button>
       {/* Pick any earlier version; compare it to (or view it next to) the current one. */}
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
-        version
+        {t('version')}
         <select
           className="rounded border border-neutral-300 px-1.5 py-0.5 dark:border-neutral-700 dark:bg-neutral-900"
           value={prev.version}
@@ -1290,9 +1303,9 @@ function VersionsSection({ id }: { id: string }) {
             <option key={v.version} value={v.version}>v{v.version} ({fmtDateTime(v.editedAt)}{v.editor ? ` · ${v.editor}` : ''})</option>
           ))}
         </select>
-        → current (v{current.version})
+        {t('→ current (v')}{current.version})
         <button onClick={() => setShowFull((s) => !s)} className="ml-2 underline">
-          {showFull ? 'inline diff' : 'side-by-side diff'}
+          {showFull ? t('inline diff') : t('side-by-side diff')}
         </button>
       </div>
       <VersionDiff prev={prev} current={current} sideBySide={showFull} />
@@ -1311,6 +1324,7 @@ function VersionsSection({ id }: { id: string }) {
  * Falls back to a contentMd-only diff when older rows don't have a snapshot.
  */
 function VersionDiff({ prev, current, sideBySide }: { prev: ProposalVersionEntry; current: ProposalVersionEntry; sideBySide: boolean }) {
+  const t = useT();
   const renderText = (oldText: string, newText: string) =>
     sideBySide
       ? <SideBySideDiff oldText={oldText} newText={newText} oldLabel={`v${prev.version}`} newLabel={`v${current.version}`} />
@@ -1319,25 +1333,25 @@ function VersionDiff({ prev, current, sideBySide }: { prev: ProposalVersionEntry
   // Backward compatibility: older rows have no snapshot — compare contentMd only.
   if (!prev.snapshot || !current.snapshot) {
     if (prev.contentMd === current.contentMd) {
-      return <p className="mt-2 text-xs italic text-neutral-500">No textual changes detected (older version captured only the pitch text).</p>;
+      return <p className="mt-2 text-xs italic text-neutral-500">{t('No textual changes detected (older version captured only the pitch text).')}</p>;
     }
     return (
       <div className="mt-2">
-        <DiffFieldHeader label="Pitch / summary" />
+        <DiffFieldHeader label={t('Pitch / summary')} />
         {renderText(prev.contentMd, current.contentMd)}
       </div>
     );
   }
 
   const TEXT_FIELDS: { key: keyof ProposalSnapshot; label: string }[] = [
-    { key: 'title', label: 'Title' },
-    { key: 'contentMd', label: 'Pitch / summary' },
-    { key: 'ecosystemImpactMd', label: 'Expected ecosystem impact' },
-    { key: 'successMetricsMd', label: 'Success metrics / KPIs' },
-    { key: 'costBreakdownMd', label: 'Cost breakdown' },
-    { key: 'teamInfoMd', label: 'Team info' },
-    { key: 'revenueSharingMd', label: 'Revenue sharing' },
-    { key: 'payoutAddress', label: 'Payout / refund address' },
+    { key: 'title', label: t('Title') },
+    { key: 'contentMd', label: t('Pitch / summary') },
+    { key: 'ecosystemImpactMd', label: t('Expected ecosystem impact') },
+    { key: 'successMetricsMd', label: t('Success metrics / KPIs') },
+    { key: 'costBreakdownMd', label: t('Cost breakdown') },
+    { key: 'teamInfoMd', label: t('Team info') },
+    { key: 'revenueSharingMd', label: t('Revenue sharing') },
+    { key: 'payoutAddress', label: t('Payout / refund address') },
   ];
 
   const a = prev.snapshot, b = current.snapshot;
@@ -1359,7 +1373,7 @@ function VersionDiff({ prev, current, sideBySide }: { prev: ProposalVersionEntry
   if (a.requestedAmountAda !== b.requestedAmountAda) {
     sections.push(
       <div key="amount" className="mt-3">
-        <DiffFieldHeader label="Requested amount" />
+        <DiffFieldHeader label={t('Requested amount')} />
         <ScalarChange before={`${a.requestedAmountAda.toLocaleString()} ₳`} after={`${b.requestedAmountAda.toLocaleString()} ₳`} />
       </div>,
     );
@@ -1367,8 +1381,8 @@ function VersionDiff({ prev, current, sideBySide }: { prev: ProposalVersionEntry
   if (a.isCommercial !== b.isCommercial) {
     sections.push(
       <div key="commercial" className="mt-3">
-        <DiffFieldHeader label="Commercial / for profit" />
-        <ScalarChange before={a.isCommercial ? 'yes' : 'no'} after={b.isCommercial ? 'yes' : 'no'} />
+        <DiffFieldHeader label={t('Commercial / for profit')} />
+        <ScalarChange before={a.isCommercial ? t('yes') : t('no')} after={b.isCommercial ? t('yes') : t('no')} />
       </div>,
     );
   }
@@ -1380,7 +1394,7 @@ function VersionDiff({ prev, current, sideBySide }: { prev: ProposalVersionEntry
   if (removed.length || added.length) {
     sections.push(
       <div key="subs" className="mt-3">
-        <DiffFieldHeader label="Expertise areas" />
+        <DiffFieldHeader label={t('Expertise areas')} />
         <div className="mt-1 flex flex-wrap gap-1.5 text-xs">
           {removed.map((s) => (
             <span key={`r-${s}`} className="rounded-full bg-red-100 px-2 py-0.5 text-red-700 line-through dark:bg-red-950 dark:text-red-300">{SUBCAT_LABEL[s] ?? s}</span>
@@ -1396,14 +1410,14 @@ function VersionDiff({ prev, current, sideBySide }: { prev: ProposalVersionEntry
   if (!sameMilestones(a.milestones, b.milestones)) {
     sections.push(
       <div key="milestones" className="mt-3">
-        <DiffFieldHeader label="Milestones" />
+        <DiffFieldHeader label={t('Milestones')} />
         <MilestoneDiff before={a.milestones} after={b.milestones} />
       </div>,
     );
   }
 
   if (sections.length === 0) {
-    return <p className="mt-2 text-xs italic text-neutral-500">No differences between v{prev.version} and v{current.version}.</p>;
+    return <p className="mt-2 text-xs italic text-neutral-500">{t('No differences between v')}{prev.version} {t('and v')}{current.version}.</p>;
   }
   return <div>{sections}</div>;
 }
@@ -1434,6 +1448,7 @@ function sameMilestones(a: ProposalSnapshot['milestones'], b: ProposalSnapshot['
 }
 
 function MilestoneDiff({ before, after }: { before: ProposalSnapshot['milestones']; after: ProposalSnapshot['milestones'] }) {
+  const t = useT();
   const max = Math.max(before.length, after.length);
   const rows: React.ReactNode[] = [];
   for (let i = 0; i < max; i++) {
@@ -1442,7 +1457,7 @@ function MilestoneDiff({ before, after }: { before: ProposalSnapshot['milestones
     if (!a) {
       rows.push(
         <div key={`add-${i}`} className="mt-1 rounded border border-emerald-200 bg-emerald-50 p-2 text-xs dark:border-emerald-900 dark:bg-emerald-950/30">
-          <div className="font-semibold text-emerald-800 dark:text-emerald-200">+ Milestone #{i + 1} added</div>
+          <div className="font-semibold text-emerald-800 dark:text-emerald-200">{t('+ Milestone #')}{i + 1} {t('added')}</div>
           <MilestoneSummary m={b} />
         </div>,
       );
@@ -1451,7 +1466,7 @@ function MilestoneDiff({ before, after }: { before: ProposalSnapshot['milestones
     if (!b) {
       rows.push(
         <div key={`del-${i}`} className="mt-1 rounded border border-red-200 bg-red-50 p-2 text-xs dark:border-red-900 dark:bg-red-950/30">
-          <div className="font-semibold text-red-800 dark:text-red-200">− Milestone #{i + 1} removed</div>
+          <div className="font-semibold text-red-800 dark:text-red-200">{t('− Milestone #')}{i + 1} {t('removed')}</div>
           <MilestoneSummary m={a} />
         </div>,
       );
@@ -1461,10 +1476,10 @@ function MilestoneDiff({ before, after }: { before: ProposalSnapshot['milestones
     if (!changed) continue;
     rows.push(
       <div key={`ch-${i}`} className="mt-1 rounded border border-amber-200 bg-amber-50 p-2 text-xs dark:border-amber-900 dark:bg-amber-950/30">
-        <div className="font-semibold text-amber-800 dark:text-amber-200">Milestone #{i + 1} changed</div>
+        <div className="font-semibold text-amber-800 dark:text-amber-200">{t('Milestone #')}{i + 1} {t('changed')}</div>
         <div className="mt-1 grid gap-1 sm:grid-cols-2">
-          <div><div className="text-[10px] uppercase text-neutral-500">before</div><MilestoneSummary m={a} /></div>
-          <div><div className="text-[10px] uppercase text-neutral-500">after</div><MilestoneSummary m={b} /></div>
+          <div><div className="text-[10px] uppercase text-neutral-500">{t('before')}</div><MilestoneSummary m={a} /></div>
+          <div><div className="text-[10px] uppercase text-neutral-500">{t('after')}</div><MilestoneSummary m={b} /></div>
         </div>
       </div>,
     );
@@ -1473,12 +1488,13 @@ function MilestoneDiff({ before, after }: { before: ProposalSnapshot['milestones
 }
 
 function MilestoneSummary({ m }: { m: ProposalSnapshot['milestones'][number] }) {
+  const t = useT();
   return (
     <div className="text-neutral-700 dark:text-neutral-300">
-      <div><span className="text-neutral-500">Title:</span> {m.title || <span className="italic text-neutral-400">(none)</span>}</div>
-      <div><span className="text-neutral-500">Budget:</span> {m.amountAda.toLocaleString()} ₳</div>
-      <div className="whitespace-pre-wrap"><span className="text-neutral-500">Description:</span> {m.description || <span className="italic text-neutral-400">(none)</span>}</div>
-      {m.acceptanceCriteria ? <div className="whitespace-pre-wrap"><span className="text-neutral-500">Acceptance:</span> {m.acceptanceCriteria}</div> : null}
+      <div><span className="text-neutral-500">{t('Title:')}</span> {m.title || <span className="italic text-neutral-400">{t('(none)')}</span>}</div>
+      <div><span className="text-neutral-500">{t('Budget:')}</span> {m.amountAda.toLocaleString()} ₳</div>
+      <div className="whitespace-pre-wrap"><span className="text-neutral-500">{t('Description:')}</span> {m.description || <span className="italic text-neutral-400">{t('(none)')}</span>}</div>
+      {m.acceptanceCriteria ? <div className="whitespace-pre-wrap"><span className="text-neutral-500">{t('Acceptance:')}</span> {m.acceptanceCriteria}</div> : null}
     </div>
   );
 }
@@ -1595,6 +1611,7 @@ function diffLines(a: string[], b: string[]): { op: 'eq' | 'add' | 'del'; line: 
  * existing reviewer votes — untouched.
  */
 function PendingBudgetChangeBanner({ proposal, isBoard, onChange }: { proposal: PDetail; isBoard: boolean; onChange: () => void }) {
+  const t = useT();
   const pending = proposal.pendingBudgetChange;
   const [feedback, setFeedback] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1605,7 +1622,7 @@ function PendingBudgetChangeBanner({ proposal, isBoard, onChange }: { proposal: 
   const decide = async (kind: 'APPROVE' | 'REJECT') => {
     setError(null);
     if (kind === 'REJECT' && !feedback.trim()) {
-      setError('Rejection feedback is required so the team understands why.');
+      setError(t('Rejection feedback is required so the team understands why.'));
       return;
     }
     setBusy(true);
@@ -1624,26 +1641,26 @@ function PendingBudgetChangeBanner({ proposal, isBoard, onChange }: { proposal: 
   return (
     <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
       <div className="text-sm font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">
-        Budget change pending board approval
+        {t('Budget change pending board approval')}
       </div>
       <div className="mt-1 text-xs text-amber-800 dark:text-amber-200">
-        {pending.requester ? <strong>{pending.requester}</strong> : 'The submitter'} requested{' '}
-        <strong>{pending.prevAmountAda.toLocaleString()} ₳ → {pending.proposedAmountAda.toLocaleString()} ₳</strong> on{' '}
+        {pending.requester ? <strong>{pending.requester}</strong> : t('The submitter')} {t('requested')}{' '}
+        <strong>{pending.prevAmountAda.toLocaleString()} ₳ → {pending.proposedAmountAda.toLocaleString()} ₳</strong> {t('on')}{' '}
         {new Date(pending.createdAt).toLocaleString()}.
-        {inFiltering ? ' If approved, the jury\'s filtering votes will be cleared and they vote again on the revised budget.' : ''}
+        {inFiltering ? t(' If approved, the jury\'s filtering votes will be cleared and they vote again on the revised budget.') : ''}
       </div>
       {pending.reason ? (
         <div className="mt-1.5 rounded bg-white/70 p-1.5 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-          <span className="text-[10px] font-semibold uppercase">Reason from team:</span> {pending.reason}
+          <span className="text-[10px] font-semibold uppercase">{t('Reason from team:')}</span> {pending.reason}
         </div>
       ) : null}
       {pending.proposedMilestones?.length ? (
         <div className="mt-2">
-          <div className="text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-300">Proposed milestones</div>
+          <div className="text-[10px] font-semibold uppercase text-amber-700 dark:text-amber-300">{t('Proposed milestones')}</div>
           <ul className="mt-0.5 space-y-0.5 text-xs text-amber-900 dark:text-amber-100">
             {pending.proposedMilestones.map((m, i) => (
               <li key={i}>
-                M#{i + 1} — {m.title || <em>(untitled)</em>} · {m.amountAda.toLocaleString()} ₳{m.description ? <span className="text-amber-700 dark:text-amber-300"> · {m.description.slice(0, 80)}{m.description.length > 80 ? '…' : ''}</span> : null}
+                M#{i + 1} — {m.title || <em>{t('(untitled)')}</em>} · {m.amountAda.toLocaleString()} ₳{m.description ? <span className="text-amber-700 dark:text-amber-300"> · {m.description.slice(0, 80)}{m.description.length > 80 ? '…' : ''}</span> : null}
               </li>
             ))}
           </ul>
@@ -1654,7 +1671,7 @@ function PendingBudgetChangeBanner({ proposal, isBoard, onChange }: { proposal: 
           <textarea
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            placeholder="Feedback (required to reject; optional on approve)"
+            placeholder={t('Feedback (required to reject; optional on approve)')}
             rows={2}
             className="w-full rounded border border-amber-300 px-2 py-1 text-xs dark:border-amber-900 dark:bg-amber-950/50"
           />
@@ -1666,7 +1683,7 @@ function PendingBudgetChangeBanner({ proposal, isBoard, onChange }: { proposal: 
               onClick={() => decide('APPROVE')}
               className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
             >
-              {busy ? '…' : '✓ Approve change'}
+              {busy ? '…' : t('✓ Approve change')}
             </button>
             <button
               type="button"
@@ -1674,7 +1691,7 @@ function PendingBudgetChangeBanner({ proposal, isBoard, onChange }: { proposal: 
               onClick={() => decide('REJECT')}
               className="rounded-md border border-red-500 px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950"
             >
-              ✗ Reject change
+              {t('✗ Reject change')}
             </button>
           </div>
         </div>
@@ -1690,6 +1707,7 @@ function PendingBudgetChangeBanner({ proposal, isBoard, onChange }: { proposal: 
  * deletes the filtering votes and reopens the proposal as ACTIVE+FILTERING.
  */
 function ResubmitPanel({ id, proposal, onChange }: { id: string; proposal: PDetail; onChange: () => void }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const rejected = proposal.status === 'REJECTED' && proposal.stage === 'FILTERING';
@@ -1715,15 +1733,13 @@ function ResubmitPanel({ id, proposal, onChange }: { id: string; proposal: PDeta
   return (
     <div className="mt-3 rounded border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
       <div className="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">
-        Rejected at filtering — you can revise
+        {t('Rejected at filtering — you can revise')}
       </div>
       <p className="mt-0.5 text-xs text-amber-800 dark:text-amber-200">
-        Edit your proposal below (every save is captured as a new version DReps can diff),
-        then click <strong>Resubmit for re-vote</strong>. The current filtering votes are
-        cleared and the jury votes again on the revised content.{' '}
+        {t('Edit your proposal below (every save is captured as a new version DReps can diff), then click')} <strong>{t('Resubmit for re-vote')}</strong>. {t('The current filtering votes are cleared and the jury votes again on the revised content.')}{' '}
         {exhausted
-          ? `All ${allowed} resubmissions used — no more retries this round.`
-          : `${remaining} of ${allowed} resubmission${allowed === 1 ? '' : 's'} remaining.`}
+          ? `${t('All')} ${allowed} ${t('resubmissions used — no more retries this round.')}`
+          : `${remaining} ${t('of')} ${allowed} ${allowed === 1 ? t('resubmission remaining.') : t('resubmissions remaining.')}`}
       </p>
       <div className="mt-2">
         <button
@@ -1732,7 +1748,7 @@ function ResubmitPanel({ id, proposal, onChange }: { id: string; proposal: PDeta
           disabled={busy || exhausted}
           className="rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50"
         >
-          {busy ? 'Resubmitting…' : exhausted ? 'No resubmissions left' : 'Resubmit for re-vote'}
+          {busy ? t('Resubmitting…') : exhausted ? t('No resubmissions left') : t('Resubmit for re-vote')}
         </button>
       </div>
       {error ? <p className="mt-1 text-xs text-red-600">{error}</p> : null}
@@ -1753,6 +1769,7 @@ function EditSection({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const t = useT();
   const { cfg } = useExplorer();
   const [title] = useState(proposal.title);
   const [content, setContent] = useState(proposal.contentMd);
@@ -1856,9 +1873,9 @@ function EditSection({
 
   const save = async () => {
     setError(null);
-    if (editClosed) { setError('The editing window has closed — this stage has ended, so the proposal can no longer be edited.'); return; }
+    if (editClosed) { setError(t('The editing window has closed — this stage has ended, so the proposal can no longer be edited.')); return; }
     if (budgetEditable && !milestonesMatch) {
-      setError(`Milestones sum to ${milestoneSum.toLocaleString()} ₳ but must equal the requested amount ${Number(amount).toLocaleString()} ₳.`);
+      setError(`${t('Milestones sum to')} ${milestoneSum.toLocaleString()} ₳ ${t('but must equal the requested amount')} ${Number(amount).toLocaleString()} ₳.`);
       return;
     }
     setBusy(true);
@@ -1907,7 +1924,7 @@ function EditSection({
   if (!open)
     return (
       <button onClick={() => onOpenChange(true)} className="mt-3 rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
-        Edit proposal
+        {t('Edit proposal')}
       </button>
     );
   return (
@@ -1917,49 +1934,49 @@ function EditSection({
       {endMs != null ? (
         editClosed ? (
           <div className="rounded border border-red-300 bg-red-50 px-2 py-1.5 text-xs font-medium text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            ⏱ Editing has closed — this stage ended. {dirty ? 'Unsaved changes can no longer be saved.' : 'The proposal is now locked.'}
+            {t('⏱ Editing has closed — this stage ended.')} {dirty ? t('Unsaved changes can no longer be saved.') : t('The proposal is now locked.')}
           </div>
         ) : (
           <div className={`rounded border px-2 py-1.5 text-xs ${last2h ? 'border-red-300 bg-red-50 font-medium text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300' : 'border-neutral-200 text-neutral-600 dark:border-neutral-800 dark:text-neutral-400'}`}>
-            ⏱ Editing closes in <strong>{fmtCountdown(endMs - now)}</strong> (when this stage ends).
-            {dirty ? ' You have unsaved changes — save them before then.' : ' Save any changes before then.'}
+            {t('⏱ Editing closes in')} <strong>{fmtCountdown(endMs - now)}</strong> {t('(when this stage ends).')}
+            {dirty ? t(' You have unsaved changes — save them before then.') : t(' Save any changes before then.')}
           </div>
         )
       ) : null}
       <div className="text-xs text-neutral-500">
         {budgetEditable
-          ? 'Revise the proposal — every field including the budget and milestones (the submission-fee tx hash is locked).'
+          ? t('Revise the proposal — every field including the budget and milestones (the submission-fee tx hash is locked).')
           : milestonesEditable
-            ? 'Revise the proposal text and milestone details (title / description / acceptance criteria). The budget — requested amount and milestone amounts — changes only via "Request a budget change".'
-            : 'Edit the proposal text. The budget (amount + milestones) changes via "Request a budget change".'}
+            ? t('Revise the proposal text and milestone details (title / description / acceptance criteria). The budget — requested amount and milestone amounts — changes only via "Request a budget change".')
+            : t('Edit the proposal text. The budget (amount + milestones) changes via "Request a budget change".')}
       </div>
       <label className="block">
-        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Title</span>
+        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{t('Title')}</span>
         <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm opacity-60 dark:border-neutral-700 dark:bg-neutral-900" value={title} disabled readOnly />
-        <span className="mt-0.5 block text-[11px] italic text-neutral-500 dark:text-neutral-400">The title is locked — it cannot be changed once the proposal is submitted.</span>
+        <span className="mt-0.5 block text-[11px] italic text-neutral-500 dark:text-neutral-400">{t('The title is locked — it cannot be changed once the proposal is submitted.')}</span>
       </label>
       {milestonesEditable ? (
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm">
-            <span className="block text-xs font-medium text-neutral-600 dark:text-neutral-400">Requested ₳</span>
+            <span className="block text-xs font-medium text-neutral-600 dark:text-neutral-400">{t('Requested ₳')}</span>
             <input type="number" className={`mt-0.5 w-36 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900 ${budgetEditable ? '' : 'opacity-60'}`} value={amount} disabled={!budgetEditable} readOnly={!budgetEditable} onChange={(e) => setAmount(Number(e.target.value))} />
           </label>
           <label className={`flex items-center gap-1.5 text-sm ${budgetEditable ? '' : 'opacity-60'}`}>
             <input type="checkbox" checked={commercial} disabled={!budgetEditable} onChange={(e) => setCommercial(e.target.checked)} />
-            Commercial / for profit
+            {t('Commercial / for profit')}
           </label>
           {!budgetEditable ? (
-            <span className="text-[11px] italic text-neutral-500 dark:text-neutral-400">Locked during Debate — change via &ldquo;Request a budget change&rdquo;.</span>
+            <span className="text-[11px] italic text-neutral-500 dark:text-neutral-400">{t('Locked during Debate — change via “Request a budget change”.')}</span>
           ) : null}
         </div>
       ) : null}
       {/* Entering edit mode signals intent to edit — keep every section expanded so
           the submitter can see all editable fields, even the ones that were empty. */}
-      <MarkdownEditor value={content} onChange={setContent} title="Pitch / summary" subtitle="What are you proposing to build, and why? Who is it for, what does it solve, and what makes it the right project at the right time?" placeholder="Proposal pitch (markdown)" minRows={6} />
+      <MarkdownEditor value={content} onChange={setContent} title={t('Pitch / summary')} subtitle={t('What are you proposing to build, and why? Who is it for, what does it solve, and what makes it the right project at the right time?')} placeholder={t('Proposal pitch (markdown)')} minRows={6} />
       {milestonesEditable ? (
         <div className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
           <div className="text-sm font-medium">
-            Milestones{budgetEditable ? ' (must sum to the requested amount)' : ' — edit the details; budgets are locked'}
+            {t('Milestones')}{budgetEditable ? t(' (must sum to the requested amount)') : t(' — edit the details; budgets are locked')}
           </div>
           <div className="mt-1 space-y-2">
             {milestones.map((m, i) => {
@@ -1968,27 +1985,27 @@ function EditSection({
               return (
                 <div key={i} className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-neutral-500">Milestone {i + 1}</span>
+                    <span className="text-xs font-semibold text-neutral-500">{t('Milestone')} {i + 1}</span>
                     {/* Add/remove restructures the budget → resubmit cycle only. */}
                     {budgetEditable && milestones.length > 1 ? (
-                      <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => setMilestones((p) => p.filter((_, j) => j !== i))}>remove</button>
+                      <button type="button" className="text-xs text-red-600 hover:underline" onClick={() => setMilestones((p) => p.filter((_, j) => j !== i))}>{t('remove')}</button>
                     ) : null}
                   </div>
                   <div className="mt-1 flex flex-wrap items-end gap-2">
                     <label className="flex-1">
-                      <span className="block text-xs font-medium text-neutral-600 dark:text-neutral-400">Title</span>
-                      <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" placeholder="Milestone title" value={m.title} onChange={(e) => set({ title: e.target.value })} />
+                      <span className="block text-xs font-medium text-neutral-600 dark:text-neutral-400">{t('Title')}</span>
+                      <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" placeholder={t('Milestone title')} value={m.title} onChange={(e) => set({ title: e.target.value })} />
                     </label>
                     <label className={budgetEditable ? '' : 'opacity-60'}>
-                      <span className="block text-xs font-medium text-neutral-600 dark:text-neutral-400">Budget (₳)</span>
+                      <span className="block text-xs font-medium text-neutral-600 dark:text-neutral-400">{t('Budget (₳)')}</span>
                       <input type="number" className={`mt-0.5 w-32 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900 ${budgetEditable ? '' : 'cursor-not-allowed'}`} value={m.amountAda} disabled={!budgetEditable} readOnly={!budgetEditable} onChange={(e) => set({ amountAda: Number(e.target.value) })} />
                     </label>
                   </div>
                   <div className="mt-2">
-                    <MarkdownEditor value={m.description} onChange={(v) => set({ description: v })} title="Description" placeholder="What is delivered in this milestone" minRows={3} required />
+                    <MarkdownEditor value={m.description} onChange={(v) => set({ description: v })} title={t('Description')} placeholder={t('What is delivered in this milestone')} minRows={3} required />
                   </div>
                   <div className="mt-2">
-                    <MarkdownEditor value={m.acceptanceCriteria} onChange={(v) => set({ acceptanceCriteria: v })} title="Acceptance criteria" hint="how completion is judged" placeholder="How completion will be verified" minRows={3} />
+                    <MarkdownEditor value={m.acceptanceCriteria} onChange={(v) => set({ acceptanceCriteria: v })} title={t('Acceptance criteria')} hint={t('how completion is judged')} placeholder={t('How completion will be verified')} minRows={3} />
                   </div>
                 </div>
               );
@@ -1996,24 +2013,24 @@ function EditSection({
           </div>
           {budgetEditable ? (
             <>
-              <button type="button" className="mt-1 text-xs underline" onClick={() => setMilestones((p) => [...p, { title: '', description: '', acceptanceCriteria: '', amountAda: 0 }])}>+ add milestone</button>
+              <button type="button" className="mt-1 text-xs underline" onClick={() => setMilestones((p) => [...p, { title: '', description: '', acceptanceCriteria: '', amountAda: 0 }])}>{t('+ add milestone')}</button>
               <div className={`mt-1 text-xs ${milestonesMatch ? 'text-emerald-600' : 'font-medium text-red-600'}`}>
                 {milestonesMatch
-                  ? `✓ Milestones sum to ${milestoneSum.toLocaleString()} ₳ (matches requested).`
-                  : `⚠ Milestones sum to ${milestoneSum.toLocaleString()} ₳ but the requested amount is ${Number(amount).toLocaleString()} ₳ — they must be equal (off by ${Math.abs(milestoneSum - Number(amount)).toLocaleString()} ₳).`}
+                  ? `${t('✓ Milestones sum to')} ${milestoneSum.toLocaleString()} ₳ ${t('(matches requested).')}`
+                  : `${t('⚠ Milestones sum to')} ${milestoneSum.toLocaleString()} ₳ ${t('but the requested amount is')} ${Number(amount).toLocaleString()} ₳ ${t('— they must be equal (off by')} ${Math.abs(milestoneSum - Number(amount)).toLocaleString()} ₳).`}
               </div>
             </>
           ) : (
             <div className="mt-1 text-[11px] italic text-neutral-500 dark:text-neutral-400">
-              Milestone budgets and the number of milestones are locked during Debate — change them via &ldquo;Request a budget change&rdquo;.
+              {t('Milestone budgets and the number of milestones are locked during Debate — change them via “Request a budget change”.')}
             </div>
           )}
         </div>
       ) : null}
-      <MarkdownEditor value={ecosystemImpact} onChange={setEcosystemImpact} title="Expected ecosystem impact" subtitle="What specific benefit will the project have for the ecosystem? Who will the result serve, what problem does it solve and why should it be funded from community funds?" placeholder="Who benefits, what changes — short- and long-term." minRows={3} />
-      <MarkdownEditor value={successMetrics} onChange={setSuccessMetrics} title="Success metrics / KPIs" subtitle="What measurable indicators will you use to evaluate the success of the project? Specify the target values, time frame and method of verification." placeholder="How will success be measured (with targets where you can)" minRows={3} />
-      <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title="Cost breakdown" hint="optional" placeholder="How the budget is spent" minRows={3} />
-      <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title="Team info" hint="optional" placeholder="Who is delivering this" minRows={3} />
+      <MarkdownEditor value={ecosystemImpact} onChange={setEcosystemImpact} title={t('Expected ecosystem impact')} subtitle={t('What specific benefit will the project have for the ecosystem? Who will the result serve, what problem does it solve and why should it be funded from community funds?')} placeholder={t('Who benefits, what changes — short- and long-term.')} minRows={3} />
+      <MarkdownEditor value={successMetrics} onChange={setSuccessMetrics} title={t('Success metrics / KPIs')} subtitle={t('What measurable indicators will you use to evaluate the success of the project? Specify the target values, time frame and method of verification.')} placeholder={t('How will success be measured (with targets where you can)')} minRows={3} />
+      <MarkdownEditor value={costBreakdown} onChange={setCostBreakdown} title={t('Cost breakdown')} hint={t('optional')} placeholder={t('How the budget is spent')} minRows={3} />
+      <MarkdownEditor value={teamInfo} onChange={setTeamInfo} title={t('Team info')} hint={t('optional')} placeholder={t('Who is delivering this')} minRows={3} />
       <RevenueSharingBlock
         required={revenueSharingRequired}
         onRequiredChange={setRevenueSharingRequired}
@@ -2022,7 +2039,7 @@ function EditSection({
         pledgeAddress={cfg?.pledgeAddress ?? null}
       />
       <label className="block">
-        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Payout / refund address (Cardano)</span>
+        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{t('Payout / refund address (Cardano)')}</span>
         <input className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900" placeholder="addr_test1…" value={payoutAddress} onChange={(e) => setPayoutAddress(e.target.value)} />
       </label>
       {/* §3 — skin-in-the-game pledge. Same shape as the submission form.
@@ -2031,12 +2048,12 @@ function EditSection({
         <div className="rounded border border-neutral-200 p-3 dark:border-neutral-800">
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={pledgeEnabled} onChange={(e) => setPledgeEnabled(e.target.checked)} />
-            <span className="font-medium">Skin in the game (refundable pledge — optional)</span>
+            <span className="font-medium">{t('Skin in the game (refundable pledge — optional)')}</span>
           </label>
           {pledgeEnabled ? (
             <div className="mt-2 space-y-2">
               <label className="flex items-center gap-2 text-sm">
-                Pledge ₳
+                {t('Pledge ₳')}
                 <input
                   type="number"
                   className="w-32 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
@@ -2047,9 +2064,9 @@ function EditSection({
               <MarkdownEditor
                 value={pledgeReturnMethod}
                 onChange={setPledgeReturnMethod}
-                title="Pledge return method"
-                subtitle="How and when will the pledge be returned? Common patterns: a slice with each milestone, or the full amount only after the final milestone."
-                placeholder="Example: 25% returned after milestone 1, 25% after milestone 2, the rest after the final milestone."
+                title={t('Pledge return method')}
+                subtitle={t('How and when will the pledge be returned? Common patterns: a slice with each milestone, or the full amount only after the final milestone.')}
+                placeholder={t('Example: 25% returned after milestone 1, 25% after milestone 2, the rest after the final milestone.')}
                 minRows={3}
               />
             </div>
@@ -2057,7 +2074,7 @@ function EditSection({
         </div>
       ) : null}
       <div>
-        <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Expertise areas</div>
+        <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{t('Expertise areas')}</div>
         <div className="mt-1 flex flex-wrap gap-1.5">
           {DEFAULT_SUBCATEGORIES.map((s) => {
             const on = subcatIds.includes(s.id);
@@ -2077,9 +2094,9 @@ function EditSection({
       {error ? <div className="text-xs text-red-600">{error}</div> : null}
       <div className="flex gap-2">
         <button disabled={busy || editClosed} onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-          {busy ? 'Saving…' : editClosed ? 'Editing closed' : 'Save (creates a new version)'}
+          {busy ? t('Saving…') : editClosed ? t('Editing closed') : t('Save (creates a new version)')}
         </button>
-        <button onClick={() => onOpenChange(false)} className="text-xs text-neutral-500 hover:underline">cancel</button>
+        <button onClick={() => onOpenChange(false)} className="text-xs text-neutral-500 hover:underline">{t('cancel')}</button>
       </div>
     </div>
   );
@@ -2091,6 +2108,7 @@ function EditSection({
  * settles. Milestones must still sum to the new requested amount.
  */
 function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal: PDetail; onChange: () => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(proposal.requestedAmountAda);
   // Carry the FULL milestone (title + acceptance criteria too) so a budget change never wipes them
@@ -2118,7 +2136,7 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
   const save = async () => {
     setError(null);
     setMsg(null);
-    if (!match) { setError(`Milestones sum to ${sum.toLocaleString()} ₳ but must equal ${Number(amount).toLocaleString()} ₳.`); return; }
+    if (!match) { setError(`${t('Milestones sum to')} ${sum.toLocaleString()} ₳ ${t('but must equal')} ${Number(amount).toLocaleString()} ₳.`); return; }
     setBusy(true);
     try {
       await proposalsApi.budgetChange(id, {
@@ -2126,7 +2144,7 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
         milestones: ms.map((m) => ({ title: m.title.trim() || undefined, description: m.description, acceptanceCriteria: m.acceptanceCriteria.trim() || undefined, amountAda: Number(m.amountAda) })),
         reason: reason.trim() || undefined,
       });
-      setMsg('Budget change submitted — waiting for a board member to approve. Your existing reviewer votes stay until the board decides.');
+      setMsg(t('Budget change submitted — waiting for a board member to approve. Your existing reviewer votes stay until the board decides.'));
       setOpen(false);
       onChange();
     } catch (e) {
@@ -2146,7 +2164,7 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
       <div className="mt-3">
         {msg ? <div className="mb-1 text-xs text-emerald-600">{msg}</div> : null}
         <div className="text-xs text-neutral-500">
-          No in-filter budget changes left ({proposal.budgetChangesUsed} of {proposal.filterBudgetChangesAllowed} used) — the budget is locked for the rest of this round&apos;s filtering.
+          {t('No in-filter budget changes left (')}{proposal.budgetChangesUsed} {t('of')} {proposal.filterBudgetChangesAllowed} {t('used) — the budget is locked for the rest of this round\'s filtering.')}
         </div>
       </div>
     );
@@ -2156,71 +2174,71 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
       <div className="mt-3 space-y-1">
         {msg ? <div className="text-xs text-emerald-600">{msg}</div> : null}
         <button onClick={() => setOpen(true)} className="rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
-          Request a budget change
+          {t('Request a budget change')}
         </button>
         {invalidatesVotes ? (
           <div className="text-[11px] text-neutral-500">
-            A budget change now needs board approval first. If they approve, the jury&apos;s filtering votes will be cleared and they re-vote on the revised budget. {budgetRemaining} of {proposal.filterBudgetChangesAllowed} budget change{proposal.filterBudgetChangesAllowed === 1 ? '' : 's'} remaining.
+            {t('A budget change now needs board approval first. If they approve, the jury\'s filtering votes will be cleared and they re-vote on the revised budget.')} {budgetRemaining} {t('of')} {proposal.filterBudgetChangesAllowed} {proposal.filterBudgetChangesAllowed === 1 ? t('budget change remaining.') : t('budget changes remaining.')}
           </div>
         ) : null}
       </div>
     );
   return (
     <div className="mt-3 space-y-2 rounded border border-neutral-200 p-2 dark:border-neutral-800">
-      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Request a budget change</div>
+      <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t('Request a budget change')}</div>
       <label className="block text-sm">
-        New requested ₳
+        {t('New requested ₳')}
         <input type="number" className="ml-2 w-36 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={amount} onChange={(e) => setAmount(Number(e.target.value))} />
       </label>
       <div>
-        <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Milestones (must sum to the new amount)</div>
+        <div className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{t('Milestones (must sum to the new amount)')}</div>
         {ms.map((m, i) => {
           const upd = (patch: Partial<typeof m>) => setMs((p) => p.map((x, j) => (j === i ? { ...x, ...patch } : x)));
           return (
             <div key={i} className="mt-1 space-y-1 rounded border border-neutral-200 p-2 dark:border-neutral-800">
               <div className="flex flex-wrap items-center gap-2">
-                <input className="flex-1 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" placeholder="title" value={m.title} onChange={(e) => upd({ title: e.target.value })} />
+                <input className="flex-1 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" placeholder={t('title')} value={m.title} onChange={(e) => upd({ title: e.target.value })} />
                 <input type="number" className="w-28 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" value={m.amountAda} onChange={(e) => upd({ amountAda: Number(e.target.value) })} />
-                {ms.length > 1 ? <button type="button" className="text-xs text-red-600" onClick={() => setMs((p) => p.filter((_, j) => j !== i))}>remove</button> : null}
+                {ms.length > 1 ? <button type="button" className="text-xs text-red-600" onClick={() => setMs((p) => p.filter((_, j) => j !== i))}>{t('remove')}</button> : null}
               </div>
-              <textarea className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" rows={2} placeholder="description" value={m.description} onChange={(e) => upd({ description: e.target.value })} />
-              <textarea className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" rows={2} placeholder="acceptance criteria" value={m.acceptanceCriteria} onChange={(e) => upd({ acceptanceCriteria: e.target.value })} />
+              <textarea className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" rows={2} placeholder={t('description')} value={m.description} onChange={(e) => upd({ description: e.target.value })} />
+              <textarea className="w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" rows={2} placeholder={t('acceptance criteria')} value={m.acceptanceCriteria} onChange={(e) => upd({ acceptanceCriteria: e.target.value })} />
             </div>
           );
         })}
-        <button type="button" className="mt-1 text-xs underline" onClick={() => setMs((p) => [...p, { title: '', description: '', acceptanceCriteria: '', amountAda: 0 }])}>+ add milestone</button>
+        <button type="button" className="mt-1 text-xs underline" onClick={() => setMs((p) => [...p, { title: '', description: '', acceptanceCriteria: '', amountAda: 0 }])}>{t('+ add milestone')}</button>
         <div className={`mt-1 text-xs ${match ? 'text-emerald-600' : 'font-medium text-red-600'}`}>
-          {match ? `✓ sums to ${sum.toLocaleString()} ₳` : `⚠ sums to ${sum.toLocaleString()} ₳ — must equal ${Number(amount).toLocaleString()} ₳`}
+          {match ? `${t('✓ sums to')} ${sum.toLocaleString()} ₳` : `${t('⚠ sums to')} ${sum.toLocaleString()} ₳ ${t('— must equal')} ${Number(amount).toLocaleString()} ₳`}
         </div>
       </div>
       <div className="text-xs text-neutral-500">
         {delta > 0
-          ? 'Increasing the budget will create a submission-fee top-up the board collects on-chain.'
+          ? t('Increasing the budget will create a submission-fee top-up the board collects on-chain.')
           : delta < 0
-            ? 'Decreasing the budget will create a fee refund the board returns on-chain.'
-            : 'Change the amount to create a fee top-up (increase) or refund (decrease).'}
+            ? t('Decreasing the budget will create a fee refund the board returns on-chain.')
+            : t('Change the amount to create a fee top-up (increase) or refund (decrease).')}
       </div>
       {invalidatesVotes ? (
         <div className="rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
-          ⚠ This request needs board approval first. If they approve, the jury&apos;s filtering votes will be cleared and they re-vote on the revised budget. {budgetRemaining} of {proposal.filterBudgetChangesAllowed} budget change{proposal.filterBudgetChangesAllowed === 1 ? '' : 's'} remaining for this round.
+          {t('⚠ This request needs board approval first. If they approve, the jury\'s filtering votes will be cleared and they re-vote on the revised budget.')} {budgetRemaining} {t('of')} {proposal.filterBudgetChangesAllowed} {proposal.filterBudgetChangesAllowed === 1 ? t('budget change remaining for this round.') : t('budget changes remaining for this round.')}
         </div>
       ) : null}
       <label className="block">
-        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">Reason for the change <span className="text-neutral-400">(optional — context for the board)</span></span>
+        <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400">{t('Reason for the change')} <span className="text-neutral-400">{t('(optional — context for the board)')}</span></span>
         <textarea
           className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900"
           rows={2}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Why is the budget changing? What did you learn that motivated this?"
+          placeholder={t('Why is the budget changing? What did you learn that motivated this?')}
         />
       </label>
       {error ? <div className="text-xs text-red-600">{error}</div> : null}
       <div className="flex gap-2">
         <button disabled={busy || delta === 0} onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">
-          {busy ? 'Submitting…' : 'Submit for board approval'}
+          {busy ? t('Submitting…') : t('Submit for board approval')}
         </button>
-        <button onClick={() => setOpen(false)} className="text-xs text-neutral-500 hover:underline">cancel</button>
+        <button onClick={() => setOpen(false)} className="text-xs text-neutral-500 hover:underline">{t('cancel')}</button>
       </div>
     </div>
   );
@@ -2245,6 +2263,7 @@ function BudgetChangeSection({ id, proposal, onChange }: { id: string; proposal:
  *   - Everyone else: a read-only status badge so the proposal page makes sense.
  */
 function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string; proposal: PDetail; isBoard: boolean; isMine: boolean; onChange: () => void }) {
+  const t = useT();
   const { txUrl } = useExplorer();
   const [pledgeAddress, setPledgeAddress] = useState<string | null>(null);
   const [tx, setTx] = useState('');
@@ -2283,7 +2302,7 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
   };
 
   const review = async (decision: 'APPROVE' | 'REJECT') => {
-    if (decision === 'REJECT' && !feedback.trim()) { setError('A reason is required when rejecting a pledge.'); return; }
+    if (decision === 'REJECT' && !feedback.trim()) { setError(t('A reason is required when rejecting a pledge.')); return; }
     setBusy(true); setError(null);
     try { await boardPledgeApi.review(id, decision, feedback || undefined); setFeedback(''); onChange(); }
     catch (e) { setError(e instanceof Error ? e.message : 'failed'); }
@@ -2293,7 +2312,7 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
   return (
     <section className={platformCard}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold">Proposer pledge (§3)</h3>
+        <h3 className="text-base font-semibold">{t('Proposer pledge (§3)')}</h3>
         <span className={`rounded px-2 py-0.5 text-[11px] font-medium ${
           confirmed
             ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200'
@@ -2301,16 +2320,16 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
               ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
               : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200'
         }`}>
-          {confirmed ? '✓ confirmed on-chain' : paidNotConfirmed ? 'paid, awaiting board confirmation' : 'pledge not paid yet'}
+          {confirmed ? t('✓ confirmed on-chain') : paidNotConfirmed ? t('paid, awaiting board confirmation') : t('pledge not paid yet')}
         </span>
       </div>
       <div className="mt-1 text-xs text-neutral-500">
-        Pledge: <strong>{proposal.pledgeAmountAda.toLocaleString()} ₳</strong>
-        {proposal.pledgeReturnMethod ? <> · return method shown below</> : null}
+        {t('Pledge:')} <strong>{proposal.pledgeAmountAda.toLocaleString()} ₳</strong>
+        {proposal.pledgeReturnMethod ? <> · {t('return method shown below')}</> : null}
       </div>
       {proposal.pledgeReturnMethod ? (
         <div className="mt-2 rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-800/40">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Return method (set by the team)</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{t('Return method (set by the team)')}</div>
           <Markdown className="mt-0.5 text-neutral-700 dark:text-neutral-300">{proposal.pledgeReturnMethod}</Markdown>
         </div>
       ) : null}
@@ -2318,10 +2337,10 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
       {/* Address (visible to everyone — payment is on-chain, the address is public). */}
       {!confirmed && pledgeAddress ? (
         <div className="mt-2">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Send the pledge to</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{t('Send the pledge to')}</div>
           <div className="mt-0.5 flex items-start gap-2">
             <div className="flex-1 break-all font-mono text-[11px] text-neutral-600 dark:text-neutral-400">{pledgeAddress}</div>
-            <CopyButton text={pledgeAddress} label="Copy address" />
+            <CopyButton text={pledgeAddress} label={t('Copy address')} />
           </div>
         </div>
       ) : null}
@@ -2329,7 +2348,7 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
       {/* Board's rejection feedback (red box) so the submitter can fix + repaste. */}
       {proposal.pledgeFeedback && !confirmed ? (
         <div className="mt-2 rounded border border-red-300 bg-red-50 p-2 dark:border-red-900 dark:bg-red-950/30">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">Board feedback</div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-red-700 dark:text-red-400">{t('Board feedback')}</div>
           <div className="mt-0.5 whitespace-pre-wrap text-xs text-red-800 dark:text-red-300">{proposal.pledgeFeedback}</div>
         </div>
       ) : null}
@@ -2337,7 +2356,7 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
       {/* The tx hash on file (link out to the explorer). */}
       {proposal.pledgeTxHash ? (
         <div className="mt-2">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">Pledge tx</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">{t('Pledge tx')}</div>
           <a href={txUrl(proposal.pledgeTxHash)} target="_blank" rel="noreferrer" className="break-all font-mono text-xs text-emerald-700 underline dark:text-emerald-400">
             {proposal.pledgeTxHash} ↗
           </a>
@@ -2359,24 +2378,22 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
         >
           {pV.fullyPaid ? (
             <span>
-              <strong>✓ Fully paid</strong> — {pV.paidAda.toLocaleString()} ₳ received at the pledge address
-              (required {pV.requiredAda.toLocaleString()} ₳). Awaiting the board&apos;s final confirmation.
+              <strong>{t('✓ Fully paid')}</strong> — {pV.paidAda.toLocaleString()} ₳ {t('received at the pledge address (required')} {pV.requiredAda.toLocaleString()} ₳). {t('Awaiting the board\'s final confirmation.')}
             </span>
           ) : !pV.koiosAvailable ? (
             <span>
-              <strong>⚠ Couldn&apos;t reach the chain right now</strong> — Koios is throttling. Your hash is saved;
-              the platform re-checks every ~10 s and the answer will appear here automatically.
+              <strong>{t('⚠ Couldn\'t reach the chain right now')}</strong> — {t('Koios is throttling. Your hash is saved; the platform re-checks every ~10 s and the answer will appear here automatically.')}
             </span>
           ) : pV.paidAda > 0 ? (
             <span>
-              <strong>Partial payment:</strong> {pV.paidAda.toLocaleString()} ₳ received,{' '}
-              <strong>{pV.missingAda.toLocaleString()} ₳ still missing</strong>{' '}
-              (required {pV.requiredAda.toLocaleString()} ₳). Send the rest and paste the new tx hash below.
+              <strong>{t('Partial payment:')}</strong> {pV.paidAda.toLocaleString()} ₳ {t('received,')}{' '}
+              <strong>{pV.missingAda.toLocaleString()} ₳ {t('still missing')}</strong>{' '}
+              ({t('required')} {pV.requiredAda.toLocaleString()} ₳). {t('Send the rest and paste the new tx hash below.')}
             </span>
           ) : pV.tx && !pV.tx.found ? (
-            <span>✗ The tx hash isn&apos;t on-chain yet. Re-checking every ~10 s — it will update automatically when the next block lands.</span>
+            <span>{t('✗ The tx hash isn\'t on-chain yet. Re-checking every ~10 s — it will update automatically when the next block lands.')}</span>
           ) : (
-            <span>✗ This tx didn&apos;t pay the pledge address. Did you send to the right address (shown above)?</span>
+            <span>{t('✗ This tx didn\'t pay the pledge address. Did you send to the right address (shown above)?')}</span>
           )}
         </div>
       ) : null}
@@ -2385,17 +2402,17 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
       {isMine && !confirmed ? (
         <div className="mt-3 space-y-1">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-            {notPaid ? 'Paste the on-chain tx hash to send your pledge' : 'Paste a corrected tx hash if the board rejected the previous one'}
+            {notPaid ? t('Paste the on-chain tx hash to send your pledge') : t('Paste a corrected tx hash if the board rejected the previous one')}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <input
               value={tx}
               onChange={(e) => setTx(e.target.value)}
-              placeholder="pledge tx hash (e.g. 43bce05db…)"
+              placeholder={t('pledge tx hash (e.g. 43bce05db…)')}
               className="flex-1 rounded border border-neutral-300 px-2 py-1 font-mono text-xs dark:border-neutral-700 dark:bg-neutral-900"
             />
             <button disabled={busy || !tx.trim()} onClick={submit} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">
-              {busy ? '…' : 'Submit pledge tx'}
+              {busy ? '…' : t('Submit pledge tx')}
             </button>
           </div>
         </div>
@@ -2404,19 +2421,19 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
       {/* Board — approve / reject the pasted tx (only when one is pending review). */}
       {isBoard && paidNotConfirmed ? (
         <div className="mt-3 space-y-1 rounded border border-amber-300 bg-amber-50 p-2 dark:border-amber-900 dark:bg-amber-950/30">
-          <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">Board: confirm the pledge payment</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-300">{t('Board: confirm the pledge payment')}</div>
           <input
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
-            placeholder="Feedback (required to reject, optional to approve)"
+            placeholder={t('Feedback (required to reject, optional to approve)')}
             className="w-full rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
           />
           <div className="flex gap-2">
             <button disabled={busy} onClick={() => review('APPROVE')} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">
-              Approve (confirm on-chain payment)
+              {t('Approve (confirm on-chain payment)')}
             </button>
             <button disabled={busy} onClick={() => review('REJECT')} className="rounded border border-red-500 px-2.5 py-1 text-xs text-red-700 disabled:opacity-40 dark:text-red-300">
-              Reject (team re-pastes)
+              {t('Reject (team re-pastes)')}
             </button>
           </div>
         </div>
@@ -2424,13 +2441,14 @@ function PledgeSection({ id, proposal, isBoard, isMine, onChange }: { id: string
 
       {error ? <div className="mt-1 text-xs text-red-600">{error}</div> : null}
       {notPaid && !isMine ? (
-        <div className="mt-2 text-xs text-neutral-500">Milestone POAs are blocked until the pledge is paid and the board confirms it.</div>
+        <div className="mt-2 text-xs text-neutral-500">{t('Milestone POAs are blocked until the pledge is paid and the board confirms it.')}</div>
       ) : null}
     </section>
   );
 }
 
 function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: string; isBoard: boolean; isMine: boolean; proposal: PDetail; onChange: () => void }) {
+  const t = useT();
   const [ms, setMs] = useState<MilestoneView[] | null>(null);
   // We need the round's milestone settings (reviewer count + approval votes)
   // — not just status — so the allocation panel + UI hints match the round's
@@ -2469,15 +2487,15 @@ function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: st
   return (
     <section className={platformCard}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold">Funding — milestones (§11)</h3>
+        <h3 className="text-base font-semibold">{t('Funding — milestones (§11)')}</h3>
         <div className="flex items-center gap-2 text-xs text-neutral-500">
-          <span>{approved.length}/{ms.length} approved</span>
+          <span>{approved.length}/{ms.length} {t('approved')}</span>
           <span className="rounded border border-neutral-300 px-2 py-0.5 text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
-            Round rule: {requiredReviewers} reviewer{requiredReviewers === 1 ? '' : 's'} · {requiredYes} YES to approve
+            {t('Round rule:')} {requiredReviewers} {requiredReviewers === 1 ? t('reviewer') : t('reviewers')} · {requiredYes} {t('YES to approve')}
           </span>
           {!inFunding && !stoppedOrDone ? (
             <span className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-              Round is not in the FUNDING stage — POAs are closed
+              {t('Round is not in the FUNDING stage — POAs are closed')}
             </span>
           ) : null}
         </div>
@@ -2495,14 +2513,14 @@ function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: st
       {isBoard && !noReviewers && active ? (
         <div className="mt-2 space-y-1 text-xs">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-neutral-700 dark:text-neutral-300">Currently assigned reviewers:</span>
+            <span className="font-semibold text-neutral-700 dark:text-neutral-300">{t('Currently assigned reviewers:')}</span>
             <span className="text-neutral-700 dark:text-neutral-300">
               {active.reviewers.map((r) => r.displayName ?? (r.drepIdOnchain?.slice(0, 14) + '…')).join(', ')}
             </span>
             {!ms.some((m) => m.poaCount > 0) ? (
               <>
                 <span className="text-neutral-400">·</span>
-                <span className="text-neutral-500">no POA submitted yet</span>
+                <span className="text-neutral-500">{t('no POA submitted yet')}</span>
                 <ReleaseReviewersButton id={id} onChange={() => { load(); onChange(); }} />
               </>
             ) : null}
@@ -2523,8 +2541,8 @@ function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: st
             onClick={() => setShowApproved((v) => !v)}
             className="flex w-full items-center justify-between px-2 py-1 text-xs font-semibold text-emerald-800 dark:text-emerald-200"
           >
-            <span>✓ Approved milestones ({approved.length})</span>
-            <span>{showApproved ? '▾ hide' : '▸ show'}</span>
+            <span>{t('✓ Approved milestones (')}{approved.length})</span>
+            <span>{showApproved ? t('▾ hide') : t('▸ show')}</span>
           </button>
           {showApproved ? (
             <ul className="space-y-2 px-2 pb-2">
@@ -2541,7 +2559,7 @@ function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: st
       {active ? (
         <div className="mt-3">
           <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
-            Active milestone — #{active.idx + 1} of {ms.length}
+            {t('Active milestone — #')}{active.idx + 1} {t('of')} {ms.length}
           </div>
           <ul className="space-y-2">
             <MilestoneRow m={active} isMine={isMine} canPoa={inFunding} isBoard={isBoard} proposalId={id} onChange={() => { load(); onChange(); }} />
@@ -2559,8 +2577,8 @@ function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: st
             onClick={() => setShowUpcoming((v) => !v)}
             className="flex w-full items-center justify-between px-2 py-1 text-xs font-semibold text-neutral-700 dark:text-neutral-300"
           >
-            <span>🔒 Upcoming milestones ({upcoming.length}) — unlock one at a time as each prior milestone is approved</span>
-            <span>{showUpcoming ? '▾ hide' : '▸ show'}</span>
+            <span>{t('🔒 Upcoming milestones (')}{upcoming.length}{t(') — unlock one at a time as each prior milestone is approved')}</span>
+            <span>{showUpcoming ? t('▾ hide') : t('▸ show')}</span>
           </button>
           {showUpcoming ? (
             <ul className="space-y-2 px-2 pb-2">
@@ -2583,6 +2601,7 @@ function MilestonesSection({ id, isBoard, isMine, proposal, onChange }: { id: st
  * milestone of the proposal.
  */
 function ReviewerAllocationPanel({ id, target, onChange }: { id: string; target: number; onChange: () => void }) {
+  const t = useT();
   const [cands, setCands] = useState<MilestoneCandidate[] | null>(null);
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
@@ -2613,20 +2632,20 @@ function ReviewerAllocationPanel({ id, target, onChange }: { id: string; target:
     }
   };
 
-  if (!cands) return <div className="mt-2 text-xs text-neutral-500">Loading candidate reviewers…</div>;
-  if (cands.length === 0) return <div className="mt-2 text-xs text-amber-700">No admitted DReps are eligible to review this round.</div>;
+  if (!cands) return <div className="mt-2 text-xs text-neutral-500">{t('Loading candidate reviewers…')}</div>;
+  if (cands.length === 0) return <div className="mt-2 text-xs text-amber-700">{t('No admitted DReps are eligible to review this round.')}</div>;
 
   const offBy = picked.size - target;
   return (
     <div className="mt-3 rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-medium">Allocate milestone reviewers</div>
+        <div className="font-medium">{t('Allocate milestone reviewers')}</div>
         <div className="text-xs text-neutral-500">
-          Pick {target} DRep{target === 1 ? '' : 's'} · {picked.size} selected
+          {t('Pick')} {target} {target === 1 ? t('DRep') : t('DReps')} · {picked.size} {t('selected')}
         </div>
       </div>
       <p className="mt-0.5 text-xs text-neutral-500">
-        ⭐ = expertise match (overlapping subcategories) · &nbsp;<span className="text-neutral-700 dark:text-neutral-300">load N</span> = how many milestone reviews this DRep is already on in this round.
+        {t('⭐ = expertise match (overlapping subcategories) ·')} &nbsp;<span className="text-neutral-700 dark:text-neutral-300">{t('load N')}</span> {t('= how many milestone reviews this DRep is already on in this round.')}
       </p>
       <ul className="mt-2 max-h-72 overflow-y-auto rounded border border-neutral-200 dark:border-neutral-800">
         {cands.map((c) => {
@@ -2636,9 +2655,9 @@ function ReviewerAllocationPanel({ id, target, onChange }: { id: string; target:
               <label className="flex flex-1 cursor-pointer items-center gap-2">
                 <input type="checkbox" checked={sel} onChange={() => toggle(c.id)} />
                 <span className="font-medium">{c.displayName ?? (c.drepIdOnchain?.slice(0, 18) ?? c.id.slice(0, 8)) + '…'}</span>
-                {c.kind === 'Expert' ? <span className="rounded bg-violet-100 px-1 text-[10px] text-violet-700 dark:bg-violet-950 dark:text-violet-300">Expert</span> : null}
+                {c.kind === 'Expert' ? <span className="rounded bg-violet-100 px-1 text-[10px] text-violet-700 dark:bg-violet-950 dark:text-violet-300">{t('Expert')}</span> : null}
                 {c.matchedSubcategoryIds.length > 0 ? (
-                  <span className="flex flex-wrap items-center gap-1" title="Subcategories shared with the proposal">
+                  <span className="flex flex-wrap items-center gap-1" title={t('Subcategories shared with the proposal')}>
                     <span className="text-amber-600">⭐</span>
                     {c.matchedSubcategoryIds.map((sid) => (
                       <span key={sid} className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700 dark:bg-amber-950 dark:text-amber-300">{SUBCAT_LABEL[sid] ?? sid}</span>
@@ -2646,7 +2665,7 @@ function ReviewerAllocationPanel({ id, target, onChange }: { id: string; target:
                   </span>
                 ) : null}
               </label>
-              <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] tabular-nums text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">load {c.loadInRound}</span>
+              <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] tabular-nums text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{t('load')} {c.loadInRound}</span>
             </li>
           );
         })}
@@ -2655,14 +2674,14 @@ function ReviewerAllocationPanel({ id, target, onChange }: { id: string; target:
         <button
           onClick={confirm}
           disabled={busy || picked.size !== target}
-          title={offBy === 0 ? 'Assign these reviewers' : `Pick exactly ${target} reviewer${target === 1 ? '' : 's'} (round setting)`}
+          title={offBy === 0 ? t('Assign these reviewers') : `${t('Pick exactly')} ${target} ${target === 1 ? t('reviewer (round setting)') : t('reviewers (round setting)')}`}
           className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300"
         >
-          {busy ? 'Assigning…' : `Confirm ${picked.size} reviewer${picked.size === 1 ? '' : 's'}`}
+          {busy ? t('Assigning…') : `${t('Confirm')} ${picked.size} ${picked.size === 1 ? t('reviewer') : t('reviewers')}`}
         </button>
         {offBy !== 0 ? (
           <span className="text-xs text-amber-700 dark:text-amber-300">
-            Pick exactly {target} reviewer{target === 1 ? '' : 's'} ({offBy > 0 ? `remove ${offBy}` : `add ${-offBy} more`}).
+            {t('Pick exactly')} {target} {target === 1 ? t('reviewer') : t('reviewers')} ({offBy > 0 ? `${t('remove')} ${offBy}` : `${t('add')} ${-offBy} ${t('more')}`}).
           </span>
         ) : null}
         {error ? <span className="text-xs text-red-600">{error}</span> : null}
@@ -2672,6 +2691,7 @@ function ReviewerAllocationPanel({ id, target, onChange }: { id: string; target:
 }
 
 function ReleaseReviewersButton({ id, onChange }: { id: string; onChange: () => void }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -2683,14 +2703,14 @@ function ReleaseReviewersButton({ id, onChange }: { id: string; onChange: () => 
   return (
     <>
       <button onClick={() => setConfirming(true)} disabled={busy} className="rounded border border-neutral-300 px-1.5 py-0.5 text-[11px] hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700 dark:hover:bg-neutral-800">
-        {busy ? '…' : 're-allocate'}
+        {busy ? '…' : t('re-allocate')}
       </button>
       {err ? <span className="text-[11px] text-red-600">{err}</span> : null}
       <ConfirmDialog
         open={confirming}
-        title="Release reviewers?"
-        message="Release the current reviewers and pick a new set. Only allowed while no POA has been submitted yet."
-        confirmLabel="Release"
+        title={t('Release reviewers?')}
+        message={t('Release the current reviewers and pick a new set. Only allowed while no POA has been submitted yet.')}
+        confirmLabel={t('Release')}
         onConfirm={doRelease}
         onCancel={() => setConfirming(false)}
       />
@@ -2708,6 +2728,7 @@ function ReleaseReviewersButton({ id, onChange }: { id: string; onChange: () => 
  *     submitter, not already on this proposal.
  */
 function ReplaceMilestoneReviewerPanel({ id, reviewers, onChange }: { id: string; reviewers: MilestoneView['reviewers']; onChange: () => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [cands, setCands] = useState<MilestoneCandidate[] | null>(null);
   const [oldDrepId, setOldDrepId] = useState<string>('');
@@ -2741,9 +2762,9 @@ function ReplaceMilestoneReviewerPanel({ id, reviewers, onChange }: { id: string
         <button
           onClick={() => setOpen(true)}
           className="rounded border border-neutral-300 px-2 py-0.5 text-neutral-700 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
-          title="Swap an assigned reviewer (vacancy / illness / conflict of interest)"
+          title={t('Swap an assigned reviewer (vacancy / illness / conflict of interest)')}
         >
-          ↻ Replace a reviewer
+          {t('↻ Replace a reviewer')}
         </button>
       </div>
     );
@@ -2752,36 +2773,36 @@ function ReplaceMilestoneReviewerPanel({ id, reviewers, onChange }: { id: string
   return (
     <div className="mt-2 rounded border border-neutral-300 bg-neutral-50 p-2 text-xs dark:border-neutral-700 dark:bg-neutral-900">
       <div className="mb-1 flex items-center justify-between">
-        <span className="font-semibold">Replace a milestone reviewer</span>
-        <button onClick={() => { setOpen(false); setError(null); }} className="text-neutral-500 hover:underline">cancel</button>
+        <span className="font-semibold">{t('Replace a milestone reviewer')}</span>
+        <button onClick={() => { setOpen(false); setError(null); }} className="text-neutral-500 hover:underline">{t('cancel')}</button>
       </div>
       <div className="mb-1 text-[11px] text-neutral-500">
-        Same reviewer set is mirrored across every milestone, so the swap applies to all of them. A reviewer who has already cast their vote cannot be replaced.
+        {t('Same reviewer set is mirrored across every milestone, so the swap applies to all of them. A reviewer who has already cast their vote cannot be replaced.')}
       </div>
       <div className="mb-2 text-[11px]">
-        <span className="font-semibold text-neutral-600 dark:text-neutral-400">Currently assigned:</span>{' '}
+        <span className="font-semibold text-neutral-600 dark:text-neutral-400">{t('Currently assigned:')}</span>{' '}
         <span className="text-neutral-700 dark:text-neutral-300">
           {reviewers.map((r) => r.displayName ?? (r.drepIdOnchain?.slice(0, 14) + '…')).join(', ')}
         </span>
       </div>
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="block">
-          <span className="text-[11px] text-neutral-500">Old reviewer</span>
+          <span className="text-[11px] text-neutral-500">{t('Old reviewer')}</span>
           <select value={oldDrepId} onChange={(e) => setOldDrepId(e.target.value)} className="mt-0.5 w-full rounded border border-neutral-300 px-1.5 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900">
-            <option value="">— pick the reviewer to swap out —</option>
+            <option value="">{t('— pick the reviewer to swap out —')}</option>
             {reviewers.filter((r) => r.drepId).map((r) => (
               <option key={r.drepId!} value={r.drepId!}>{r.displayName ?? `${r.drepIdOnchain?.slice(0, 14)}…`}</option>
             ))}
           </select>
         </label>
         <label className="block">
-          <span className="text-[11px] text-neutral-500">Replacement</span>
+          <span className="text-[11px] text-neutral-500">{t('Replacement')}</span>
           <select value={newDrepId} onChange={(e) => setNewDrepId(e.target.value)} disabled={!cands} className="mt-0.5 w-full rounded border border-neutral-300 px-1.5 py-0.5 text-xs disabled:opacity-50 dark:border-neutral-700 dark:bg-neutral-900">
-            <option value="">{cands ? '— pick a replacement DRep —' : 'Loading candidates…'}</option>
+            <option value="">{cands ? t('— pick a replacement DRep —') : t('Loading candidates…')}</option>
             {eligibleNew.filter((c) => c.kind === 'DRep' && c.drepId).map((c) => (
               <option key={c.drepId} value={c.drepId ?? ''}>
                 {c.displayName ?? `${c.drepIdOnchain?.slice(0, 14)}…`}
-                {c.expertiseMatch ? ' · expertise match' : ''} · load {c.loadInRound}
+                {c.expertiseMatch ? ` · ${t('expertise match')}` : ''} · {t('load')} {c.loadInRound}
               </option>
             ))}
           </select>
@@ -2789,7 +2810,7 @@ function ReplaceMilestoneReviewerPanel({ id, reviewers, onChange }: { id: string
       </div>
       <div className="mt-2 flex items-center gap-2">
         <button disabled={busy || !oldDrepId || !newDrepId} onClick={submit} className="rounded border border-emerald-500 px-2 py-0.5 text-emerald-700 disabled:opacity-40 dark:text-emerald-300">
-          {busy ? '…' : 'Replace reviewer'}
+          {busy ? '…' : t('Replace reviewer')}
         </button>
         {error ? <span className="text-red-600">{error}</span> : null}
       </div>
@@ -2804,6 +2825,7 @@ function ReplaceMilestoneReviewerPanel({ id, reviewers, onChange }: { id: string
  * ACTIVE stop-funding per proposal at a time.
  */
 function StopFundingPanel({ proposalId, canShowProposeButton, isBoard, onChange }: { proposalId: string; canShowProposeButton: boolean; isBoard: boolean; onChange: () => void }) {
+  const t = useT();
   const [items, setItems] = useState<StopFundingView[]>([]);
   const [showHist, setShowHist] = useState(false);
   const [reason, setReason] = useState('');
@@ -2829,32 +2851,32 @@ function StopFundingPanel({ proposalId, canShowProposeButton, isBoard, onChange 
   return (
     <div className="mt-3 rounded-md border border-red-200 bg-red-50/50 p-3 text-sm dark:border-red-900 dark:bg-red-950/30">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-medium text-red-800 dark:text-red-200">⛔ Stop funding</div>
+        <div className="font-medium text-red-800 dark:text-red-200">{t('⛔ Stop funding')}</div>
         {canShowProposeButton && !active && !proposing ? (
           <button onClick={() => setProposing(true)} className="rounded border border-red-400 px-2 py-0.5 text-xs text-red-700 hover:bg-red-100 dark:border-red-700 dark:text-red-300 dark:hover:bg-red-950">
-            Propose stopping funding
+            {t('Propose stopping funding')}
           </button>
         ) : null}
       </div>
       <p className="mt-0.5 text-xs text-neutral-600 dark:text-neutral-400">
-        Any assigned reviewer or any board member may propose stopping a project mid-funding. The board votes 1 member · 1 vote — {items[0]?.threshold ?? 3} YES → project FAILED + on-chain anchor.
+        {t('Any assigned reviewer or any board member may propose stopping a project mid-funding. The board votes 1 member · 1 vote —')} {items[0]?.threshold ?? 3} {t('YES → project FAILED + on-chain anchor.')}
       </p>
 
       {proposing ? (
         <div className="mt-2 space-y-1">
           <textarea
             rows={3}
-            placeholder="Reason for stopping funding (required, ≥ 10 chars) — what did the project fail to deliver, what concrete evidence supports it?"
+            placeholder={t('Reason for stopping funding (required, ≥ 10 chars) — what did the project fail to deliver, what concrete evidence supports it?')}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             className="w-full rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
           />
           <div className="flex items-center gap-2">
             <button onClick={submit} disabled={busy || reason.trim().length < 10} className="rounded border border-red-500 px-2 py-0.5 text-xs text-red-700 disabled:opacity-40 dark:text-red-300">
-              {busy ? 'Proposing…' : 'Open stop-funding vote'}
+              {busy ? t('Proposing…') : t('Open stop-funding vote')}
             </button>
             <button onClick={() => { setProposing(false); setReason(''); setError(null); }} className="rounded border border-neutral-300 px-2 py-0.5 text-xs dark:border-neutral-700">
-              Cancel
+              {t('Cancel')}
             </button>
             {error ? <span className="text-xs text-red-600">{error}</span> : null}
           </div>
@@ -2865,7 +2887,7 @@ function StopFundingPanel({ proposalId, canShowProposeButton, isBoard, onChange 
       {history.length > 0 ? (
         <div className="mt-2">
           <button onClick={() => setShowHist((v) => !v)} className="text-[11px] text-neutral-600 underline hover:text-neutral-800 dark:text-neutral-400">
-            {showHist ? `▾ hide history (${history.length})` : `▸ show history (${history.length})`}
+            {showHist ? `${t('▾ hide history (')}${history.length})` : `${t('▸ show history (')}${history.length})`}
           </button>
           {showHist ? (
             <ul className="mt-1 space-y-1">
@@ -2879,6 +2901,7 @@ function StopFundingPanel({ proposalId, canShowProposeButton, isBoard, onChange 
 }
 
 function StopFundingRow({ s, isBoard, onChange }: { s: StopFundingView; isBoard: boolean; onChange: () => void }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [rationale, setRationale] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -2893,29 +2916,29 @@ function StopFundingRow({ s, isBoard, onChange }: { s: StopFundingView; isBoard:
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span>
           <StatusBadge status={s.status} cls={PROPOSAL_STATUS_CLS} />
-          <span className="ml-2">Proposed by <span className="font-medium">{s.proposerName ?? s.proposerDrep ?? 'unknown'}</span> ({s.proposerRole === 'BOARD' ? 'board' : 'reviewer'})</span>
+          <span className="ml-2">{t('Proposed by')} <span className="font-medium">{s.proposerName ?? s.proposerDrep ?? t('unknown')}</span> ({s.proposerRole === 'BOARD' ? t('board') : t('reviewer')})</span>
           <span className="ml-2 text-neutral-500">{fmtDateTime(s.createdAt)}</span>
         </span>
         <span className="tabular-nums text-neutral-500">
-          {s.yes} YES / {s.no} NO (need {s.threshold}) <AnchorLink txHash={s.anchorTxHash} />
+          {s.yes} YES / {s.no} NO ({t('need')} {s.threshold}) <AnchorLink txHash={s.anchorTxHash} />
         </span>
       </div>
-      <div className="mt-1 whitespace-pre-wrap rounded bg-neutral-100 p-1.5 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"><strong>Reason:</strong> {s.reason}</div>
+      <div className="mt-1 whitespace-pre-wrap rounded bg-neutral-100 p-1.5 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"><strong>{t('Reason:')}</strong> {s.reason}</div>
       {s.votes.length > 0 ? <div className="mt-1"><Votes votes={s.votes} /></div> : null}
       {isBoard && s.status === 'ACTIVE' ? (
         <div className="mt-2 space-y-1">
           <input
             value={rationale}
             onChange={(e) => setRationale(e.target.value)}
-            placeholder="rationale (required for NO)"
+            placeholder={t('rationale (required for NO)')}
             className="w-full rounded border border-neutral-300 px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
           />
           <div className="flex gap-2">
             <button disabled={busy} onClick={() => vote('YES')} className="rounded border border-red-500 px-2 py-0.5 text-xs text-red-700 disabled:opacity-40 dark:text-red-300">
-              YES — stop funding
+              {t('YES — stop funding')}
             </button>
             <button disabled={busy} onClick={() => vote('NO')} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">
-              NO — continue
+              {t('NO — continue')}
             </button>
           </div>
           {error ? <div className="text-xs text-red-600">{error}</div> : null}
@@ -2926,6 +2949,7 @@ function StopFundingRow({ s, isBoard, onChange }: { s: StopFundingView; isBoard:
 }
 
 function MilestoneRow({ m, isMine, canPoa, locked = false, isBoard = false, proposalId, onChange }: { m: MilestoneView; isMine: boolean; canPoa: boolean; locked?: boolean; isBoard?: boolean; proposalId?: string; onChange: () => void }) {
+  const t = useT();
   const [poa, setPoa] = useState('');
   const [rationale, setRationale] = useState('');
   const [busy, setBusy] = useState(false);
@@ -2947,12 +2971,12 @@ function MilestoneRow({ m, isMine, canPoa, locked = false, isBoard = false, prop
     <li className="rounded border border-neutral-200 p-2 text-sm dark:border-neutral-800">
       <div className="flex items-center justify-between">
         <span className="font-medium">
-          Milestone #{m.idx + 1}{m.title ? ` — ${m.title}` : ''}
+          {t('Milestone #')}{m.idx + 1}{m.title ? ` — ${m.title}` : ''}
           <span className="font-semibold text-blue-600 dark:text-blue-400"> · {m.amountAda.toLocaleString()} ₳</span>
         </span>
         <div className="flex items-center gap-2">
           <span className="text-xs text-neutral-500">
-            {m.reviewers.length} reviewer{m.reviewers.length === 1 ? '' : 's'} · {m.yes} YES / {m.no} NO (need {m.threshold})
+            {m.reviewers.length} {m.reviewers.length === 1 ? t('reviewer') : t('reviewers')} · {m.yes} YES / {m.no} NO ({t('need')} {m.threshold})
           </span>
           <StatusBadge status={m.status} cls={PROPOSAL_STATUS_CLS} />
           <AnchorLink txHash={m.anchorTxHash} />
@@ -2964,7 +2988,7 @@ function MilestoneRow({ m, isMine, canPoa, locked = false, isBoard = false, prop
       </div>
       {m.reviewers.length > 0 ? (
         <div className="mt-0.5 text-[11px] text-neutral-500">
-          Reviewers: {m.reviewers.map((r) => r.displayName ?? r.drepIdOnchain?.slice(0, 14) + '…').join(', ')}
+          {t('Reviewers:')} {m.reviewers.map((r) => r.displayName ?? r.drepIdOnchain?.slice(0, 14) + '…').join(', ')}
         </div>
       ) : null}
       {/* §11.5 — POA deadline + extension state; the board may grant ONE extra extension. */}
@@ -2972,23 +2996,23 @@ function MilestoneRow({ m, isMine, canPoa, locked = false, isBoard = false, prop
         <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-neutral-500">
           {m.deadlineAt ? (
             <span className={new Date(m.deadlineAt) < new Date() && m.status !== 'APPROVED' ? 'text-red-600' : ''}>
-              POA deadline {new Date(m.deadlineAt).toLocaleDateString()}
-              {m.autoExtendedCount > 0 ? ` · auto-extended ${m.autoExtendedCount}×` : ''}
-              {m.boardExtendedAt ? ` · board +${m.boardExtensionDays}d` : ''}
+              {t('POA deadline')} {new Date(m.deadlineAt).toLocaleDateString()}
+              {m.autoExtendedCount > 0 ? ` · ${t('auto-extended')} ${m.autoExtendedCount}×` : ''}
+              {m.boardExtendedAt ? ` · ${t('board +')}${m.boardExtensionDays}d` : ''}
             </span>
           ) : null}
-          {m.paidAt ? <span className="text-emerald-600">✓ paid {new Date(m.paidAt).toLocaleDateString()}</span> : null}
+          {m.paidAt ? <span className="text-emerald-600">{t('✓ paid')} {new Date(m.paidAt).toLocaleDateString()}</span> : null}
           {isBoard && proposalId && m.status !== 'APPROVED' && !m.boardExtendedAt ? (
             extOpen ? (
               <span className="flex items-center gap-1">
                 <input value={extDays} onChange={(e) => setExtDays(e.target.value)} className="w-14 rounded border border-neutral-300 px-1 py-0.5 dark:border-neutral-700 dark:bg-neutral-900" />
-                <span>days</span>
+                <span>{t('days')}</span>
                 <button onClick={() => { const d = Number(extDays); if (d > 0) void run(() => boardDeadlinesApi.extendMilestone(proposalId, m.id, d)).then(() => setExtOpen(false)); }} disabled={busy} className="rounded bg-emerald-600 px-1.5 py-0.5 text-white disabled:opacity-40">OK</button>
                 <button onClick={() => setExtOpen(false)} className="rounded border border-neutral-300 px-1.5 py-0.5 dark:border-neutral-700">✕</button>
               </span>
             ) : (
-              <button onClick={() => setExtOpen(true)} disabled={busy} title="One-time board extension (§11.5)" className="rounded border border-neutral-300 px-1.5 py-0.5 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700">
-                Extend deadline
+              <button onClick={() => setExtOpen(true)} disabled={busy} title={t('One-time board extension (§11.5)')} className="rounded border border-neutral-300 px-1.5 py-0.5 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700">
+                {t('Extend deadline')}
               </button>
             )
           ) : null}
@@ -3002,26 +3026,26 @@ function MilestoneRow({ m, isMine, canPoa, locked = false, isBoard = false, prop
           proposal card, so we skip it on locked rows to avoid duplication. */}
       {!locked && (m.description || m.acceptanceCriteria) ? (
         <div className="mt-1 rounded border border-neutral-200 bg-neutral-50 p-2 text-xs dark:border-neutral-800 dark:bg-neutral-900/40">
-          <div className="text-[11px] font-bold uppercase tracking-wide text-neutral-500">What the team promised to deliver</div>
+          <div className="text-[11px] font-bold uppercase tracking-wide text-neutral-500">{t('What the team promised to deliver')}</div>
           {m.description ? (
             <div className="mt-1">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Description</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">{t('Description')}</div>
               <Markdown className="text-neutral-700 dark:text-neutral-300">{m.description}</Markdown>
             </div>
           ) : null}
           {m.acceptanceCriteria ? (
             <div className="mt-1">
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">Acceptance criteria</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-400">{t('Acceptance criteria')}</div>
               <Markdown className="text-neutral-700 dark:text-neutral-300">{m.acceptanceCriteria}</Markdown>
             </div>
           ) : (
-            <div className="mt-1 text-[11px] text-neutral-400">No acceptance criteria were provided at submission.</div>
+            <div className="mt-1 text-[11px] text-neutral-400">{t('No acceptance criteria were provided at submission.')}</div>
           )}
         </div>
       ) : null}
       {m.latestPoa ? (
         <div className="mt-1 rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-800/50">
-          <div className="font-medium">Proof of Achievement (attempt {m.latestPoa.attempt}{m.status === 'REJECTED' ? ' — REJECTED, may resubmit' : m.status === 'POA_SUBMITTED' ? ' — under review' : m.status === 'APPROVED' ? ' — APPROVED' : ''})</div>
+          <div className="font-medium">{t('Proof of Achievement (attempt')} {m.latestPoa.attempt}{m.status === 'REJECTED' ? t(' — REJECTED, may resubmit') : m.status === 'POA_SUBMITTED' ? t(' — under review') : m.status === 'APPROVED' ? t(' — APPROVED') : ''})</div>
           <Markdown className="mt-0.5 text-neutral-600 dark:text-neutral-400">{m.latestPoa.contentMd ?? ''}</Markdown>
         </div>
       ) : null}
@@ -3035,14 +3059,14 @@ function MilestoneRow({ m, isMine, canPoa, locked = false, isBoard = false, prop
             onClick={() => setShowPast((v) => !v)}
             className="flex w-full items-center justify-between px-2 py-1 text-[11px] font-semibold text-neutral-500"
           >
-            <span>Previous attempts ({m.pastPoas.length}) — all rejected, superseded by the current attempt</span>
-            <span>{showPast ? '▾ hide' : '▸ show'}</span>
+            <span>{t('Previous attempts (')}{m.pastPoas.length}{t(') — all rejected, superseded by the current attempt')}</span>
+            <span>{showPast ? t('▾ hide') : t('▸ show')}</span>
           </button>
           {showPast ? (
             <ul className="space-y-1 px-2 pb-2">
               {m.pastPoas.map((p) => (
                 <li key={p.attempt} className="rounded bg-neutral-50 p-2 text-xs dark:bg-neutral-800/40">
-                  <div className="font-medium text-neutral-500">Attempt {p.attempt} — rejected (superseded)</div>
+                  <div className="font-medium text-neutral-500">{t('Attempt')} {p.attempt} {t('— rejected (superseded)')}</div>
                   <Markdown className="mt-0.5 text-neutral-500 dark:text-neutral-400">{p.contentMd ?? ''}</Markdown>
                 </li>
               ))}
@@ -3056,27 +3080,27 @@ function MilestoneRow({ m, isMine, canPoa, locked = false, isBoard = false, prop
           REJECTED milestone allows another attempt (so the next POA can address the feedback). */}
       {submitterCanPoa ? (
         <div className="mt-2 space-y-1">
-          <MarkdownEditor value={poa} onChange={setPoa} placeholder={m.status === 'REJECTED' ? 'New Proof of Achievement — address the reviewers\' feedback above' : 'Proof of Achievement (markdown + links)'} minRows={4} />
+          <MarkdownEditor value={poa} onChange={setPoa} placeholder={m.status === 'REJECTED' ? t('New Proof of Achievement — address the reviewers\' feedback above') : t('Proof of Achievement (markdown + links)')} minRows={4} />
           <button disabled={busy || !poa.trim()} onClick={() => run(() => milestonesApi.submitPoa(m.id, poa))} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">
-            {m.status === 'REJECTED' ? `Submit attempt ${m.poaCount + 1}` : 'Submit POA'}
+            {m.status === 'REJECTED' ? `${t('Submit attempt')} ${m.poaCount + 1}` : t('Submit POA')}
           </button>
         </div>
       ) : isMine && !locked && m.status === 'POA_SUBMITTED' ? (
-        <div className="mt-2 text-xs text-neutral-500">Your POA is under review — you can resubmit only if the reviewers reject it.</div>
+        <div className="mt-2 text-xs text-neutral-500">{t('Your POA is under review — you can resubmit only if the reviewers reject it.')}</div>
       ) : isMine && !locked && !canPoa && m.status !== 'APPROVED' ? (
-        <div className="mt-2 text-xs text-amber-700">POA submission is closed (round is not in the FUNDING stage).</div>
+        <div className="mt-2 text-xs text-amber-700">{t('POA submission is closed (round is not in the FUNDING stage).')}</div>
       ) : isMine && locked && m.status !== 'APPROVED' ? (
-        <div className="mt-2 text-xs text-amber-700">Locked — the previous milestone must be approved first.</div>
+        <div className="mt-2 text-xs text-amber-700">{t('Locked — the previous milestone must be approved first.')}</div>
       ) : null}
 
       {/* Assigned reviewer votes when a POA is in review. Locked rows never vote
           (an active POA is by definition on the active milestone, not a locked one). */}
       {!isMine && !locked && m.status === 'POA_SUBMITTED' ? (
         <div className="mt-2 space-y-1">
-          <MarkdownEditor value={rationale} onChange={setRationale} placeholder="feedback (required for NO)" minRows={3} />
+          <MarkdownEditor value={rationale} onChange={setRationale} placeholder={t('feedback (required for NO)')} minRows={3} />
           <div className="flex gap-2">
-            <button disabled={busy} onClick={() => run(() => milestonesApi.vote(m.id, 'YES', rationale || undefined))} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">YES — approve</button>
-            <button disabled={busy} onClick={() => run(() => milestonesApi.vote(m.id, 'NO', rationale))} className="rounded border border-red-500 px-2 py-0.5 text-xs text-red-700 disabled:opacity-40 dark:text-red-300">NO — reject (resubmit needed)</button>
+            <button disabled={busy} onClick={() => run(() => milestonesApi.vote(m.id, 'YES', rationale || undefined))} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">{t('YES — approve')}</button>
+            <button disabled={busy} onClick={() => run(() => milestonesApi.vote(m.id, 'NO', rationale))} className="rounded border border-red-500 px-2 py-0.5 text-xs text-red-700 disabled:opacity-40 dark:text-red-300">{t('NO — reject (resubmit needed)')}</button>
           </div>
         </div>
       ) : null}
@@ -3124,6 +3148,7 @@ function commentTint(c: CommentNode): string {
 }
 
 function CommentsSection({ id, title, canPost }: { id: string; title: string; canPost: boolean }) {
+  const t = useT();
   const [comments, setComments] = useState<CommentNode[]>([]);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -3149,7 +3174,7 @@ function CommentsSection({ id, title, canPost }: { id: string; title: string; ca
   return (
     <section className={card}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-base font-semibold">Comments on &ldquo;{title}&rdquo;</h3>
+        <h3 className="text-base font-semibold">{t('Comments on')} &ldquo;{title}&rdquo;</h3>
         {comments.length > 0 ? (
           <button
             type="button"
@@ -3162,7 +3187,7 @@ function CommentsSection({ id, title, canPost }: { id: string; title: string; ca
             }}
             className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 hover:bg-neutral-100 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
           >
-            {allCollapsed ? `▸ Expand all (${total})` : `▾ Collapse all (${total})`}
+            {allCollapsed ? `${t('▸ Expand all (')}${total})` : `${t('▾ Collapse all (')}${total})`}
           </button>
         ) : null}
       </div>
@@ -3171,8 +3196,8 @@ function CommentsSection({ id, title, canPost }: { id: string; title: string; ca
           <MarkdownEditor
             value={text}
             onChange={setText}
-            title="Add a public comment"
-            placeholder="Share your view (markdown — bold, italic, bullets, links…)"
+            title={t('Add a public comment')}
+            placeholder={t('Share your view (markdown — bold, italic, bullets, links…)')}
             minRows={3}
           />
           <button
@@ -3180,16 +3205,16 @@ function CommentsSection({ id, title, canPost }: { id: string; title: string; ca
             onClick={() => post(text)}
             className="mt-1 rounded bg-emerald-600 px-3 py-1 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
           >
-            {busy ? 'Posting…' : 'Post comment'}
+            {busy ? t('Posting…') : t('Post comment')}
           </button>
         </div>
       ) : (
         <div className="mt-2 rounded border border-neutral-200 bg-neutral-50 p-2 text-xs text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/60">
-          Only signed-in DAO members (DReps, board, approved experts) and the proposal&apos;s team can post — viewers may read.
+          {t('Only signed-in DAO members (DReps, board, approved experts) and the proposal\'s team can post — viewers may read.')}
         </div>
       )}
       <ul className="mt-3 space-y-2">
-        {comments.length === 0 ? <li className="text-sm text-neutral-500">No comments yet.</li> : null}
+        {comments.length === 0 ? <li className="text-sm text-neutral-500">{t('No comments yet.')}</li> : null}
         {comments.map((c) => (
           <CommentItem
             key={c.id}
@@ -3218,9 +3243,10 @@ function RoleBadge({ role }: { role: string | null }) {
   return <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[10px] font-medium ${ROLE_CLS[role] ?? 'bg-neutral-100 text-neutral-600'}`}>{role}</span>;
 }
 function TeamBadge() {
+  const t = useT();
   return (
     <span className="ml-1.5 rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-medium text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-      Team
+      {t('Team')}
     </span>
   );
 }
@@ -3247,6 +3273,7 @@ function CommentItem({
   post: (text: string, parentId?: string) => void | Promise<void>;
   onChange: () => void;
 }) {
+  const t = useT();
   const [replying, setReplying] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [editing, setEditing] = useState(false);
@@ -3256,7 +3283,7 @@ function CommentItem({
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const saveEdit = async () => {
-    if (!editText.trim()) { setError('Comment cannot be empty.'); return; }
+    if (!editText.trim()) { setError(t('Comment cannot be empty.')); return; }
     setBusy(true); setError(null);
     try { await commentsApi.edit(c.id, editText); setEditing(false); onChange(); }
     catch (e) { setError(e instanceof Error ? e.message : 'edit failed'); }
@@ -3285,7 +3312,7 @@ function CommentItem({
           <button
             onClick={onToggle}
             className="rounded px-1 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700"
-            title={open ? 'Hide this comment' : 'Show this comment'}
+            title={open ? t('Hide this comment') : t('Show this comment')}
           >
             {open ? '▾' : '▸'}
           </button>
@@ -3296,15 +3323,15 @@ function CommentItem({
         <>
           {editing ? (
             <div className="mt-1">
-              <MarkdownEditor value={editText} onChange={setEditText} placeholder="Edit your comment…" minRows={3} />
+              <MarkdownEditor value={editText} onChange={setEditText} placeholder={t('Edit your comment…')} minRows={3} />
               <div className="mt-1 flex gap-2">
-                <button disabled={busy} onClick={saveEdit} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">{busy ? 'Saving…' : 'Save'}</button>
-                <button disabled={busy} onClick={() => { setEditing(false); setEditText(c.contentMd ?? ''); setError(null); }} className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 dark:border-neutral-700 dark:text-neutral-300">Cancel</button>
+                <button disabled={busy} onClick={saveEdit} className="rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300">{busy ? t('Saving…') : t('Save')}</button>
+                <button disabled={busy} onClick={() => { setEditing(false); setEditText(c.contentMd ?? ''); setError(null); }} className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 dark:border-neutral-700 dark:text-neutral-300">{t('Cancel')}</button>
                 {error ? <span className="text-xs text-red-600">{error}</span> : null}
               </div>
             </div>
           ) : c.deleted ? (
-            <div className="mt-1 italic text-neutral-400">[deleted]</div>
+            <div className="mt-1 italic text-neutral-400">{t('[deleted]')}</div>
           ) : (
             <Markdown className="mt-1 text-sm">{c.contentMd ?? ''}</Markdown>
           )}
@@ -3312,26 +3339,26 @@ function CommentItem({
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
             {canPost && !c.deleted ? (
               <button onClick={() => setReplying((v) => !v)} className="text-neutral-500 hover:underline">
-                {replying ? 'cancel reply' : 'reply'}
+                {replying ? t('cancel reply') : t('reply')}
               </button>
             ) : null}
             {c.isMine && !c.deleted && !editing ? (
               <>
-                <button onClick={() => { setEditing(true); setEditText(c.contentMd ?? ''); }} className="text-emerald-700 hover:underline dark:text-emerald-400">edit</button>
-                <button onClick={remove} className="text-red-600 hover:underline">delete</button>
+                <button onClick={() => { setEditing(true); setEditText(c.contentMd ?? ''); }} className="text-emerald-700 hover:underline dark:text-emerald-400">{t('edit')}</button>
+                <button onClick={remove} className="text-red-600 hover:underline">{t('delete')}</button>
               </>
             ) : null}
           </div>
 
           {replying ? (
             <div className="mt-1">
-              <MarkdownEditor value={replyText} onChange={setReplyText} title="Reply" placeholder="Reply…" minRows={2} />
+              <MarkdownEditor value={replyText} onChange={setReplyText} title={t('Reply')} placeholder={t('Reply…')} minRows={2} />
               <button
                 onClick={() => { post(replyText, c.id); setReplyText(''); setReplying(false); }}
                 disabled={!replyText.trim()}
                 className="mt-1 rounded border border-emerald-500 px-2 py-0.5 text-xs text-emerald-700 disabled:opacity-40 dark:text-emerald-300"
               >
-                Send reply
+                {t('Send reply')}
               </button>
             </div>
           ) : null}
@@ -3357,9 +3384,9 @@ function CommentItem({
       ) : null}
       <ConfirmDialog
         open={confirmDelete}
-        title="Delete comment?"
-        message="The comment will show as [deleted] but stay in the thread."
-        confirmLabel="Delete"
+        title={t('Delete comment?')}
+        message={t('The comment will show as [deleted] but stay in the thread.')}
+        confirmLabel={t('Delete')}
         tone="danger"
         onConfirm={doRemove}
         onCancel={() => setConfirmDelete(false)}

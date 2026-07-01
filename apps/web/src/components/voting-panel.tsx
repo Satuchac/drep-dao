@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
+import { useT } from '@/lib/prefs-context';
 import {
   boardProposalsApi,
   dvApi,
@@ -26,6 +27,7 @@ const VOTE_FLAG: Record<string, string> = {
 };
 
 export function VotingPanel({ mode = 'pending', query }: { mode?: ReviewMode; query?: string }) {
+  const t = useT();
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
   const isDrep = profile?.roles.includes('DREP') ?? false;
@@ -56,12 +58,12 @@ export function VotingPanel({ mode = 'pending', query }: { mode?: ReviewMode; qu
   useEffect(() => { setOpenId(null); }, [mode]);
   if (items.length === 0) return null;
   const openRow = openId ? items.find((p) => p.id === openId) ?? null : null;
-  const heading = mode === 'history' ? ' — past decisions' : mode === 'recent' ? ' — open for your vote' : '';
+  const heading = mode === 'history' ? t(' — past decisions') : mode === 'recent' ? t(' — open for your vote') : '';
 
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
-      <h3 className="text-base font-semibold">Debate &amp; Vote ({items.length}){heading}</h3>
-      <p className="text-xs text-neutral-500">Balanced voting power (§4); rationale ≥ 200 chars.</p>
+      <h3 className="text-base font-semibold">{t('Debate & Vote')} ({items.length}){heading}</h3>
+      <p className="text-xs text-neutral-500">{t('Balanced voting power (§4); rationale ≥ 200 chars.')}</p>
       {openRow ? (
         <div className="mt-2">
           <VoteCard proposal={openRow} isBoard={isBoard} isDrep={isDrep} open onToggle={() => setOpenId(null)} onChange={load} />
@@ -94,6 +96,7 @@ function VoteCard({
   onToggle: () => void;
   onChange: () => void;
 }) {
+  const t = useT();
   const [r, setR] = useState<DvResult | null>(null);
   const [choice, setChoice] = useState<'YES' | 'NO' | 'ABSTAIN'>('YES');
   const [rationale, setRationale] = useState('');
@@ -120,7 +123,7 @@ function VoteCard({
       loadResult();
       onChange();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'failed');
+      setError(e instanceof Error ? e.message : t('failed'));
     } finally {
       setBusy(false);
     }
@@ -131,19 +134,19 @@ function VoteCard({
 
   const tally = r?.open ? (
     <div className="mt-1 text-xs text-neutral-500">
-      {r.cast}/{r.eligible} voted · YES {r.yesPower} / denom {r.denominator} ={' '}
-      <strong>{r.ratioPct}%</strong> (threshold {r.thresholdPct}%) ·{' '}
-      <span className={r.approved ? 'text-emerald-600' : 'text-red-600'}>{r.approved ? 'passing' : 'failing'}</span>
+      {r.cast}/{r.eligible} {t('voted')} · YES {r.yesPower} / {t('denom')} {r.denominator} ={' '}
+      <strong>{r.ratioPct}%</strong> ({t('threshold')} {r.thresholdPct}%) ·{' '}
+      <span className={r.approved ? 'text-emerald-600' : 'text-red-600'}>{r.approved ? t('passing') : t('failing')}</span>
     </div>
   ) : (
-    <div className="mt-1 text-xs text-neutral-500">Voting not open yet.</div>
+    <div className="mt-1 text-xs text-neutral-500">{t('Voting not open yet.')}</div>
   );
 
   // §8 — the single, BLUE vote box (radio + rich rationale + history + cast button). Shared by the
   // open view and the list's expanded toggle, so there's exactly one rationale box per proposal.
   const voteBox = isDrep && r?.open ? (
     <div className="mt-2 space-y-1 rounded-md border border-blue-300 bg-blue-50/50 p-2 dark:border-blue-900 dark:bg-blue-950/20">
-      <div className="text-xs font-semibold text-blue-700 dark:text-blue-300">Your vote &amp; rationale</div>
+      <div className="text-xs font-semibold text-blue-700 dark:text-blue-300">{t('Your vote & rationale')}</div>
       <div className="flex gap-3 text-xs">
         {(['YES', 'NO', 'ABSTAIN'] as const).map((c) => (
           <label key={c} className="flex items-center gap-1">
@@ -154,15 +157,15 @@ function VoteCard({
       <MarkdownEditor
         value={rationale}
         onChange={setRationale}
-        title="Rationale"
-        hint="min 200 chars · published with your vote"
-        placeholder="Explain your reasoning — formatting (bold, lists) supported."
+        title={t('Rationale')}
+        hint={t('min 200 chars · published with your vote')}
+        placeholder={t('Explain your reasoning — formatting (bold, lists) supported.')}
         minRows={8}
       />
       {r?.myRationaleHistory && r.myRationaleHistory.length > 0 ? (
         <details className="rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs dark:border-neutral-800 dark:bg-neutral-900/40">
           <summary className="cursor-pointer select-none text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300">
-            Previous rationales ({r.myRationaleHistory.length}) — view only
+            {t('Previous rationales')} ({r.myRationaleHistory.length}) {t('— view only')}
           </summary>
           <ul className="mt-1 space-y-1">
             {r.myRationaleHistory.map((h, i) => (
@@ -183,8 +186,8 @@ function VoteCard({
         className="rounded-md bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
       >
         {rationale.trim().length < 200
-          ? `${r?.myChoice ? 'Update vote' : 'Cast vote'} (${rationale.trim().length}/200)`
-          : r?.myChoice ? 'Update vote' : 'Cast vote'}
+          ? `${r?.myChoice ? t('Update vote') : t('Cast vote')} (${rationale.trim().length}/200)`
+          : r?.myChoice ? t('Update vote') : t('Cast vote')}
       </button>
       {error ? <div className="mt-1 text-xs text-red-600">{error}</div> : null}
     </div>
@@ -192,7 +195,7 @@ function VoteCard({
 
   const boardNote = isBoard ? (
     <div className="mt-2 text-xs text-neutral-500">
-      {r?.open ? 'Tally finalizes automatically when the round advances to TALLY (after the Vote stage ends).' : 'Voting opens automatically when the round enters VOTE.'}
+      {r?.open ? t('Tally finalizes automatically when the round advances to TALLY (after the Vote stage ends).') : t('Voting opens automatically when the round enters VOTE.')}
     </div>
   ) : null;
 
@@ -200,7 +203,7 @@ function VoteCard({
   if (open) {
     return (
       <li className="rounded border border-neutral-200 p-3 text-sm dark:border-neutral-800">
-        <BackButton onBack={onToggle} label="back to your votes" />
+        <BackButton onBack={onToggle} label={t('back to your votes')} />
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <span className="font-medium">{proposal.title}</span>
           {flag ? <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${VOTE_FLAG[flag]}`}>{flag}</span> : null}
@@ -223,15 +226,15 @@ function VoteCard({
         <span className="font-medium">{proposal.title}</span>
         <span className="flex items-center gap-3">
           {flag ? (
-            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${VOTE_FLAG[flag]}`} title={flag === 'PENDING' ? "You haven't voted yet" : `You voted ${flag}`}>{flag}</span>
+            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${VOTE_FLAG[flag]}`} title={flag === 'PENDING' ? t("You haven't voted yet") : `${t('You voted')} ${flag}`}>{flag}</span>
           ) : null}
           <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">{proposal.requestedAmountAda.toLocaleString()} ₳</span>
           {isDrep && r?.open ? (
             <button onClick={() => setExpanded((v) => !v)} className="rounded-md border border-blue-500 px-2 py-0.5 text-xs font-medium text-blue-700 hover:bg-blue-50 dark:text-blue-300 dark:hover:bg-blue-950">
-              {expanded ? '▾ Close' : r?.myChoice ? '▸ Edit vote' : '▸ Vote'}
+              {expanded ? `▾ ${t('Close')}` : r?.myChoice ? `▸ ${t('Edit vote')}` : `▸ ${t('Vote')}`}
             </button>
           ) : null}
-          <button onClick={onToggle} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">View full proposal →</button>
+          <button onClick={onToggle} className="text-xs text-emerald-700 hover:underline dark:text-emerald-400">{t('View full proposal →')}</button>
         </span>
       </div>
       {tally}

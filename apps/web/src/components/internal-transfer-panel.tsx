@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { treasuryApi, treasuryBucketsApi, type TreasuryBucket } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useTreasuryAutoRefresh } from '@/lib/treasury-refresh';
+import { useT } from '@/lib/prefs-context';
 
 /**
  * §15.5 — internal transfer: move ADA between the DAO's own treasury
@@ -16,6 +17,7 @@ import { useTreasuryAutoRefresh } from '@/lib/treasury-refresh';
  * addresses (nothing to transfer between).
  */
 export function InternalTransferPanel({ onChange }: { onChange?: () => void }) {
+  const t = useT();
   const { profile } = useAuth();
   const isBoard = !!profile?.roles.includes('BOARD');
   const [buckets, setBuckets] = useState<TreasuryBucket[]>([]);
@@ -52,12 +54,12 @@ export function InternalTransferPanel({ onChange }: { onChange?: () => void }) {
     setError(null); setSuccess(null); setBusy(true);
     try {
       await treasuryApi.prepareInternalTransfer({ sourceBucketId: source.id, destBucketId: dest.id, amountAda: amt });
-      setSuccess(`Internal transfer of ${amt.toLocaleString()} ₳ (${source.label} → ${dest.label}) queued — needs 3-of-5 board signatures in Signatures.`);
+      setSuccess(`${t('Internal transfer of')} ${amt.toLocaleString()} ₳ (${source.label} → ${dest.label}) ${t('queued — needs 3-of-5 board signatures in Signatures.')}`);
       setAmount('');
       load();
       onChange?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'failed');
+      setError(e instanceof Error ? e.message : t('failed'));
     } finally {
       setBusy(false);
     }
@@ -67,17 +69,17 @@ export function InternalTransferPanel({ onChange }: { onChange?: () => void }) {
   return (
     <section className="rounded-lg border border-neutral-200 bg-white p-3 text-sm dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="font-semibold">Internal transfers</div>
-        <div className="text-xs text-neutral-500">moves between the DAO&apos;s own addresses — funds never leave the treasury</div>
+        <div className="font-semibold">{t('Internal transfers')}</div>
+        <div className="text-xs text-neutral-500">{t('moves between the DAO\'s own addresses — funds never leave the treasury')}</div>
       </div>
       <p className="mt-0.5 text-xs text-neutral-500">
-        Pick a source and a destination treasury address (no manual address entry). The transfer needs 3-of-5
-        board signatures and shows as <span className="text-amber-700 dark:text-amber-400">Internal</span> in the
-        transaction history.
+        {t('Pick a source and a destination treasury address (no manual address entry). The transfer needs 3-of-5 board signatures and shows as')}{' '}
+        <span className="text-amber-700 dark:text-amber-400">{t('Internal')}</span>{' '}
+        {t('in the transaction history.')}
       </p>
       <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_8rem]">
         <label className="block text-xs text-neutral-600 dark:text-neutral-400">
-          From
+          {t('From')}
           <select value={source.id} onChange={(e) => { setSourceId(e.target.value); if (e.target.value === dest?.id) setDestId(''); }} className={selectCls}>
             {buckets.map((b) => (
               <option key={b.id} value={b.id}>{b.label} — {b.balanceAda.toLocaleString()} ₳</option>
@@ -85,7 +87,7 @@ export function InternalTransferPanel({ onChange }: { onChange?: () => void }) {
           </select>
         </label>
         <label className="block text-xs text-neutral-600 dark:text-neutral-400">
-          To
+          {t('To')}
           <select value={dest?.id ?? ''} onChange={(e) => setDestId(e.target.value)} className={selectCls}>
             {destOptions.map((b) => (
               <option key={b.id} value={b.id}>{b.label} — {b.balanceAda.toLocaleString()} ₳</option>
@@ -93,7 +95,7 @@ export function InternalTransferPanel({ onChange }: { onChange?: () => void }) {
           </select>
         </label>
         <label className="block text-xs text-neutral-600 dark:text-neutral-400">
-          Amount (₳)
+          {t('Amount (₳)')}
           <input
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
@@ -105,8 +107,7 @@ export function InternalTransferPanel({ onChange }: { onChange?: () => void }) {
       </div>
       {insufficient ? (
         <div className="mt-1 text-xs text-amber-700 dark:text-amber-300">
-          ⚠ {source.label} currently holds {source.balanceAda.toLocaleString()} ₳ — the transfer can be queued, but
-          it won&apos;t broadcast until the balance covers it.
+          ⚠ {source.label} {t('currently holds')} {source.balanceAda.toLocaleString()} ₳ — {t('the transfer can be queued, but it won\'t broadcast until the balance covers it.')}
         </div>
       ) : null}
       <div className="mt-2 flex items-center gap-2">
@@ -115,7 +116,7 @@ export function InternalTransferPanel({ onChange }: { onChange?: () => void }) {
           disabled={!canSubmit}
           className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
         >
-          {busy ? 'Queueing…' : 'Queue internal transfer'}
+          {busy ? t('Queueing…') : t('Queue internal transfer')}
         </button>
       </div>
       {error ? <div className="mt-1 text-xs text-red-600">{error}</div> : null}

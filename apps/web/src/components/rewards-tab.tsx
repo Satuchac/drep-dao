@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { roundsApi, rewardsApi, treasuryApi, type RoundSummary, type RewardCalcView, type ExpertRewardRow, type RewardSourceBucket } from '@/lib/api';
 import { ConfirmDialog } from './confirm-dialog';
+import { useT } from '@/lib/prefs-context';
 
 const KIND_LABEL: Record<string, string> = {
   FILTER: 'Filtering rewards',
@@ -22,6 +23,7 @@ const DAY_MS = 86_400_000;
 const inputCls = 'w-24 rounded border border-neutral-300 px-1.5 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900';
 
 export function RewardsTab() {
+  const t = useT();
   const [sub, setSub] = useState<'overview' | 'experts' | 'setup'>('overview');
   const [rounds, setRounds] = useState<RoundSummary[]>([]);
   const [roundId, setRoundId] = useState<string>('');
@@ -32,18 +34,18 @@ export function RewardsTab() {
   return (
     <div className="space-y-4">
       <div>
-        <h2 className="text-lg font-semibold">Rewards</h2>
-        <p className="text-sm text-neutral-500">Calculate per-DRep rewards for filtering, Debate&nbsp;&amp;&nbsp;Vote and milestone review, adjust amounts, and pay them out via the multisig (default source: the Rewards bucket).</p>
+        <h2 className="text-lg font-semibold">{t('Rewards')}</h2>
+        <p className="text-sm text-neutral-500">{t('Calculate per-DRep rewards for filtering, Debate & Vote and milestone review, adjust amounts, and pay them out via the multisig (default source: the Rewards bucket).')}</p>
       </div>
       <div className="flex items-center gap-3">
         <div className="flex gap-1 border-b border-neutral-200 dark:border-neutral-800">
-          {([['overview', 'Round DRep Rewards'], ['experts', 'Expert rewards'], ['setup', 'Board rewards']] as const).map(([k, l]) => (
+          {([['overview', t('Round DRep Rewards')], ['experts', t('Expert rewards')], ['setup', t('Board rewards')]] as const).map(([k, l]) => (
             <button key={k} onClick={() => setSub(k)} className={`-mb-px border-b-2 px-3 py-1.5 text-sm font-medium ${sub === k ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent text-neutral-500'}`}>{l}</button>
           ))}
         </div>
       </div>
       {sub !== 'setup' ? (
-        <label className="flex items-center gap-2 text-sm">Round
+        <label className="flex items-center gap-2 text-sm">{t('Round')}
           <select value={roundId} onChange={(e) => setRoundId(e.target.value)} className="rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900">
             {rounds.map((r) => <option key={r.id} value={r.id}>#{r.number}{r.name ? ` — ${r.name}` : ''}</option>)}
           </select>
@@ -58,6 +60,7 @@ export function RewardsTab() {
 }
 
 function Overview({ roundId }: { roundId: string }) {
+  const t = useT();
   const [calcs, setCalcs] = useState<RewardCalcView[] | null>(null);
   const [buckets, setBuckets] = useState<RewardSourceBucket[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
@@ -67,24 +70,25 @@ function Overview({ roundId }: { roundId: string }) {
 
   const run = async (fn: () => Promise<unknown>) => {
     setMsg(null);
-    try { await fn(); load(); } catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); }
+    try { await fn(); load(); } catch (e) { setMsg(e instanceof Error ? e.message : t('failed')); }
   };
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
-        <button onClick={() => run(() => rewardsApi.computeFiltering(roundId))} className="rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">Compute filtering rewards</button>
-        <button onClick={() => run(() => rewardsApi.computeDv(roundId))} className="rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">Compute D&V rewards</button>
-        <button onClick={() => run(() => rewardsApi.computeMilestone(roundId))} className="rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">Compute milestone rewards (monthly)</button>
+        <button onClick={() => run(() => rewardsApi.computeFiltering(roundId))} className="rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">{t('Compute filtering rewards')}</button>
+        <button onClick={() => run(() => rewardsApi.computeDv(roundId))} className="rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">{t('Compute D&V rewards')}</button>
+        <button onClick={() => run(() => rewardsApi.computeMilestone(roundId))} className="rounded border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700">{t('Compute milestone rewards (monthly)')}</button>
       </div>
       {msg ? <div className="text-xs text-red-600">{msg}</div> : null}
-      {calcs && calcs.length === 0 ? <p className="text-sm text-neutral-500">Nothing computed yet — use the buttons above.</p> : null}
+      {calcs && calcs.length === 0 ? <p className="text-sm text-neutral-500">{t('Nothing computed yet — use the buttons above.')}</p> : null}
       {calcs?.slice().sort((a, b) => (KIND_ORDER[a.kind] ?? 99) - (KIND_ORDER[b.kind] ?? 99)).map((c) => <CalcCard key={c.id} calc={c} buckets={buckets} onChange={load} />)}
     </div>
   );
 }
 
 function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buckets: RewardSourceBucket[]; onChange: () => void; seq?: number }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
@@ -112,9 +116,9 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
   useEffect(() => { setSrc(defaultBucketId); }, [defaultBucketId]);
   const pay = async () => {
     setBusy(true); setMsg(null);
-    try { const r = await rewardsApi.preparePayout(calc.id, src || undefined); setMsg(`Queued ${r.recipients} payout${r.recipients === 1 ? '' : 's'} (${r.totalAda.toLocaleString()} ₳) — review & sign under Actions.${r.skipped > 0 ? ` ${r.skipped} skipped — no payment address set; pay them later once they add one.` : ''}`); onChange(); }
+    try { const r = await rewardsApi.preparePayout(calc.id, src || undefined); setMsg(`${t('Queued')} ${r.recipients} ${r.recipients === 1 ? t('payout') : t('payouts')} (${r.totalAda.toLocaleString()} ₳) — ${t('review & sign under Actions.')}${r.skipped > 0 ? ` ${r.skipped} ${t('skipped — no payment address set; pay them later once they add one.')}` : ''}`); onChange(); }
     catch (e) {
-      const m = e instanceof Error ? e.message : 'failed';
+      const m = e instanceof Error ? e.message : t('failed');
       // Insufficient-funds gets a styled warning dialog; other errors stay inline.
       if (/insufficient funds/i.test(m)) setWarning(m);
       else { setMsg(m); if (/calculation not found/i.test(m)) onChange(); } // refresh a stale card
@@ -127,7 +131,7 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
     setConfirmingCancel(false);
     setBusy(true); setMsg(null);
     try { await treasuryApi.cancelAction(calc.payout.actionId, 'Cancelled from Rewards to redo the payout'); onChange(); }
-    catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
+    catch (e) { setMsg(e instanceof Error ? e.message : t('failed')); } finally { setBusy(false); }
   };
   // Recompute this calc in place from the latest votes (so the board doesn't have to find
   // the compute buttons up top). Only offered before a payout is prepared.
@@ -140,35 +144,35 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
       else if (calc.kind === 'MILESTONE') await rewardsApi.computeMilestone(rid);
       else if (calc.kind === 'BOARD_MONTHLY') await rewardsApi.computeBoardMonthly();
       onChange();
-    } catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
+    } catch (e) { setMsg(e instanceof Error ? e.message : t('failed')); } finally { setBusy(false); }
   };
   return (
     <section className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-800">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-sm font-semibold">
           {calc.periodKey
-            ? `${seq != null ? `${seq}. ` : ''}Board pay · ${monthLabel(calc.periodKey)}`
-            : `${KIND_LABEL[calc.kind] ?? calc.kind} · pool ${calc.poolAda.toLocaleString()} ₳`}
+            ? `${seq != null ? `${seq}. ` : ''}${t('Board pay')} · ${monthLabel(calc.periodKey)}`
+            : `${KIND_LABEL[calc.kind] ? t(KIND_LABEL[calc.kind]) : calc.kind} · ${t('pool')} ${calc.poolAda.toLocaleString()} ₳`}
         </h3>
         <div className="flex items-center gap-2">
         {!calc.payout && calc.kind !== 'BOARD_MONTHLY' ? (
-          <button onClick={recompute} disabled={busy} title="Recalculate this reward from the latest votes" className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700">
-            {busy ? '…' : '↻ Recompute'}
+          <button onClick={recompute} disabled={busy} title={t('Recalculate this reward from the latest votes')} className="rounded border border-neutral-300 px-2 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700">
+            {busy ? '…' : `↻ ${t('Recompute')}`}
           </button>
         ) : null}
         {!calc.payable ? (
-          <span className="text-xs text-neutral-400">payable once the stage ends</span>
+          <span className="text-xs text-neutral-400">{t('payable once the stage ends')}</span>
         ) : calc.pending > 0 ? (
           // Recipients with a reward address are still owed → offer the payout (covers the first
           // batch AND paying anyone who only added their address after an earlier partial batch).
           <div className="flex items-center gap-2">
             {buckets.length > 0 ? (
               <label className="flex items-center gap-1 text-xs text-neutral-500">
-                from
+                {t('from')}
                 <select
                   value={src}
                   onChange={(e) => setSrc(e.target.value)}
-                  title="Source address the payout spends from"
+                  title={t('Source address the payout spends from')}
                   className="max-w-[14rem] rounded border border-neutral-300 bg-white px-1.5 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
                 >
                   {buckets.map((b) => (
@@ -180,65 +184,65 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
               </label>
             ) : null}
             <button onClick={pay} disabled={busy} className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300">
-              {busy ? 'Preparing…' : 'Prepare bulk payout'}
+              {busy ? t('Preparing…') : t('Prepare bulk payout')}
             </button>
           </div>
         ) : calc.payout ? (
           calc.payout.status === 'CONFIRMED' || calc.payout.status === 'BROADCASTED' ? (
-            <span className="text-xs text-emerald-600">✓ paid{calc.payout.paidAt ? ` on ${new Date(calc.payout.paidAt).toLocaleDateString()}` : ' on-chain'}</span>
+            <span className="text-xs text-emerald-600">✓ {t('paid')}{calc.payout.paidAt ? ` ${t('on')} ${new Date(calc.payout.paidAt).toLocaleDateString()}` : ` ${t('on-chain')}`}</span>
           ) : (
             <span className="flex items-center gap-2">
-              <span className="text-xs text-amber-600">⏳ payout prepared — review &amp; sign under Actions</span>
+              <span className="text-xs text-amber-600">⏳ {t('payout prepared — review & sign under Actions')}</span>
               <button onClick={() => setConfirmingCancel(true)} disabled={busy} className="rounded border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50 disabled:opacity-40 dark:border-red-800 dark:text-red-400">
-                {busy ? '…' : 'Cancel'}
+                {busy ? '…' : t('Cancel')}
               </button>
             </span>
           )
         ) : allPaid ? (
-          <span className="text-xs text-emerald-600">✓ all paid</span>
+          <span className="text-xs text-emerald-600">✓ {t('all paid')}</span>
         ) : (
-          <span className="text-xs text-amber-600">waiting on reward addresses</span>
+          <span className="text-xs text-amber-600">{t('waiting on reward addresses')}</span>
         )}
         </div>
       </div>
       {msg ? <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">{msg}</div> : null}
       <table className="mt-2 w-full text-xs">
-        <thead><tr className="text-left text-neutral-400"><th className="font-normal">Recipient</th>{calc.kind !== 'BOARD_MONTHLY' ? <th className="font-normal">{calc.kind === 'MILESTONE' ? 'Checks' : 'Votes'}</th> : null}{calc.kind === 'DV_BONUS' ? <th className="font-normal" title="Final voting power used to weight the bonus">Power</th> : null}<th className="font-normal">Computed</th><th className="font-normal">Pay</th><th></th></tr></thead>
+        <thead><tr className="text-left text-neutral-400"><th className="font-normal">{t('Recipient')}</th>{calc.kind !== 'BOARD_MONTHLY' ? <th className="font-normal">{calc.kind === 'MILESTONE' ? t('Checks') : t('Votes')}</th> : null}{calc.kind === 'DV_BONUS' ? <th className="font-normal" title={t('Final voting power used to weight the bonus')}>{t('Power')}</th> : null}<th className="font-normal">{t('Computed')}</th><th className="font-normal">{t('Pay')}</th><th></th></tr></thead>
         <tbody>
           {calc.entries.map((e) => <EntryRow key={e.id} e={e} showUnits={calc.kind !== 'BOARD_MONTHLY'} showPower={calc.kind === 'DV_BONUS'} locked={anyPaid} onChange={onChange} />)}
-          {calc.entries.length === 0 ? <tr><td colSpan={4} className="py-1 text-neutral-400">No recipients.</td></tr> : null}
+          {calc.entries.length === 0 ? <tr><td colSpan={4} className="py-1 text-neutral-400">{t('No recipients.')}</td></tr> : null}
         </tbody>
         <tfoot>
           {anyPaid ? (
             <>
-              <tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">Sent</td>{calc.kind !== 'BOARD_MONTHLY' ? <td></td> : null}<td></td><td className="pt-1 tabular-nums text-emerald-700 dark:text-emerald-400">{sentSum.toLocaleString()} ₳</td><td></td></tr>
-              {unpaidSum > 0 ? <tr><td className="pt-0.5 text-amber-600">Stays in treasury (next payment)</td>{calc.kind !== 'BOARD_MONTHLY' ? <td></td> : null}<td></td><td className="pt-0.5 tabular-nums text-amber-600">{unpaidSum.toLocaleString()} ₳</td><td></td></tr> : null}
+              <tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">{t('Sent')}</td>{calc.kind !== 'BOARD_MONTHLY' ? <td></td> : null}<td></td><td className="pt-1 tabular-nums text-emerald-700 dark:text-emerald-400">{sentSum.toLocaleString()} ₳</td><td></td></tr>
+              {unpaidSum > 0 ? <tr><td className="pt-0.5 text-amber-600">{t('Stays in treasury (next payment)')}</td>{calc.kind !== 'BOARD_MONTHLY' ? <td></td> : null}<td></td><td className="pt-0.5 tabular-nums text-amber-600">{unpaidSum.toLocaleString()} ₳</td><td></td></tr> : null}
             </>
           ) : (
-            <tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">Total</td>{calc.kind !== 'BOARD_MONTHLY' ? <td className="pt-1 tabular-nums">{calc.entries.reduce((s, e) => s + (e.units ?? 0), 0)}</td> : null}<td></td><td className="pt-1 tabular-nums">{total.toLocaleString()} ₳</td><td></td></tr>
+            <tr className="border-t border-neutral-200 font-medium dark:border-neutral-800"><td className="pt-1">{t('Total')}</td>{calc.kind !== 'BOARD_MONTHLY' ? <td className="pt-1 tabular-nums">{calc.entries.reduce((s, e) => s + (e.units ?? 0), 0)}</td> : null}<td></td><td className="pt-1 tabular-nums">{total.toLocaleString()} ₳</td><td></td></tr>
           )}
         </tfoot>
       </table>
       {!anyPaid && heldBack > 0 ? (
         <p className="mt-1 text-xs text-amber-600">
-          ⚠ {heldBack.toLocaleString()} ₳ will not be sent — {heldEntries.length} member{heldEntries.length === 1 ? '' : 's'} without a payment address. It stays in the treasury until they set one.
+          ⚠ {heldBack.toLocaleString()} ₳ {t('will not be sent —')} {heldEntries.length} {heldEntries.length === 1 ? t('member') : t('members')} {t('without a payment address. It stays in the treasury until they set one.')}
         </p>
       ) : null}
       <ConfirmDialog
         open={confirmingCancel}
-        title="Cancel this prepared payout?"
-        message="It unlinks the recipients and discards any signatures already collected, so you can edit, recompute, and prepare the payout again."
-        confirmLabel="Cancel payout"
-        cancelLabel="Keep it"
+        title={t('Cancel this prepared payout?')}
+        message={t('It unlinks the recipients and discards any signatures already collected, so you can edit, recompute, and prepare the payout again.')}
+        confirmLabel={t('Cancel payout')}
+        cancelLabel={t('Keep it')}
         tone="danger"
         onCancel={() => setConfirmingCancel(false)}
         onConfirm={cancelPayout}
       />
       <ConfirmDialog
         open={!!warning}
-        title="Insufficient funds"
+        title={t('Insufficient funds')}
         message={warning ?? ''}
-        confirmLabel="OK"
+        confirmLabel={t('OK')}
         hideCancel
         onCancel={() => setWarning(null)}
         onConfirm={() => setWarning(null)}
@@ -248,6 +252,7 @@ function CalcCard({ calc, buckets, onChange, seq }: { calc: RewardCalcView; buck
 }
 
 function EntryRow({ e, showUnits = true, showPower = false, locked = false, onChange }: { e: RewardCalcView['entries'][number]; showUnits?: boolean; showPower?: boolean; locked?: boolean; onChange: () => void }) {
+  const t = useT();
   const [val, setVal] = useState(String(e.amountAda));
   useEffect(() => { setVal(String(e.amountAda)); }, [e.amountAda]);
   const save = async () => {
@@ -264,15 +269,15 @@ function EntryRow({ e, showUnits = true, showPower = false, locked = false, onCh
       <td className="py-1 tabular-nums text-neutral-500">{e.computedAda.toLocaleString()} ₳</td>
       <td className="py-1">
         {e.paid ? (
-          <span className="text-emerald-600">paid</span>
+          <span className="text-emerald-600">{t('paid')}</span>
         ) : !e.recipient.address ? (
-          <span className="text-red-600">not paid — payment address not set</span>
+          <span className="text-red-600">{t('not paid — payment address not set')}</span>
         ) : locked ? (
-          <span className="text-red-600">not paid</span>
+          <span className="text-red-600">{t('not paid')}</span>
         ) : (
           <input value={val} onChange={(ev) => setVal(ev.target.value)} onBlur={save} className={inputCls} />
         )}
-        {e.overridden && !e.paid && e.recipient.address && !locked ? <span className="ml-1 text-[10px] text-amber-600">edited</span> : null}
+        {e.overridden && !e.paid && e.recipient.address && !locked ? <span className="ml-1 text-[10px] text-amber-600">{t('edited')}</span> : null}
       </td>
       <td></td>
     </tr>
@@ -280,16 +285,17 @@ function EntryRow({ e, showUnits = true, showPower = false, locked = false, onCh
 }
 
 function Experts({ roundId }: { roundId: string }) {
+  const t = useT();
   const [rows, setRows] = useState<ExpertRewardRow[] | null>(null);
   const load = useCallback(() => { rewardsApi.listExpertRewards(roundId).then(setRows).catch(() => setRows([])); }, [roundId]);
   useEffect(() => { load(); }, [load]);
   if (!rows) return null;
-  if (rows.length === 0) return <p className="text-sm text-neutral-500">No board-approved experts.</p>;
+  if (rows.length === 0) return <p className="text-sm text-neutral-500">{t('No board-approved experts.')}</p>;
   return (
     <div className="space-y-2">
-      <p className="text-xs text-neutral-500">Set each expert&apos;s ADA reward for this round per stage. The milestone switch: ON = the expert also earns the per-check DRep reward (extra) on top; OFF = they get only the milestone amount.</p>
+      <p className="text-xs text-neutral-500">{t('Set each expert’s ADA reward for this round per stage. The milestone switch: ON = the expert also earns the per-check DRep reward (extra) on top; OFF = they get only the milestone amount.')}</p>
       <table className="w-full text-xs">
-        <thead><tr className="text-left text-neutral-400"><th className="font-normal">Expert</th><th className="font-normal">Filtering ₳</th><th className="font-normal">D&V ₳</th><th className="font-normal">Milestone ₳</th><th className="font-normal">Like DRep</th></tr></thead>
+        <thead><tr className="text-left text-neutral-400"><th className="font-normal">{t('Expert')}</th><th className="font-normal">{t('Filtering ₳')}</th><th className="font-normal">{t('D&V ₳')}</th><th className="font-normal">{t('Milestone ₳')}</th><th className="font-normal">{t('Like DRep')}</th></tr></thead>
         <tbody>{rows.map((r) => <ExpertRow key={r.expertId} roundId={roundId} row={r} onChange={load} />)}</tbody>
       </table>
     </div>
@@ -313,6 +319,7 @@ function ExpertRow({ roundId, row, onChange }: { roundId: string; row: ExpertRew
 }
 
 function Setup() {
+  const t = useT();
   const [yearly, setYearly] = useState('');
   const [months, setMonths] = useState('12');
   const [list, setList] = useState<RewardCalcView[] | null>(null);
@@ -327,16 +334,16 @@ function Setup() {
     loadList();
   }, [loadList]);
   const [confirmingReset, setConfirmingReset] = useState(false);
-  const save = async () => { setSaved(false); setMsg(null); try { await rewardsApi.setBoardYearly(Number(yearly) || 0); setSaved(true); } catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } };
+  const save = async () => { setSaved(false); setMsg(null); try { await rewardsApi.setBoardYearly(Number(yearly) || 0); setSaved(true); } catch (e) { setMsg(e instanceof Error ? e.message : t('failed')); } };
   const compute = async () => {
     setBusy(true); setMsg(null);
-    try { const r = await rewardsApi.computeBoardMonths(Number(months) || 12); setList(r); setMsg(`Computed ${r.length} month${r.length === 1 ? '' : 's'} of board pay.`); }
-    catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
+    try { const r = await rewardsApi.computeBoardMonths(Number(months) || 12); setList(r); setMsg(`${t('Computed')} ${r.length} ${r.length === 1 ? t('month') : t('months')} ${t('of board pay.')}`); }
+    catch (e) { setMsg(e instanceof Error ? e.message : t('failed')); } finally { setBusy(false); }
   };
   const reset = async () => {
     setConfirmingReset(false); setBusy(true); setMsg(null);
-    try { const r = await rewardsApi.resetBoardMonths(); setList(r); setMsg('Reset — unpaid months cleared. Set the amount + months for the current board and compute again.'); }
-    catch (e) { setMsg(e instanceof Error ? e.message : 'failed'); } finally { setBusy(false); }
+    try { const r = await rewardsApi.resetBoardMonths(); setList(r); setMsg(t('Reset — unpaid months cleared. Set the amount + months for the current board and compute again.')); }
+    catch (e) { setMsg(e instanceof Error ? e.message : t('failed')); } finally { setBusy(false); }
   };
 
   const items = list ?? [];
@@ -360,31 +367,31 @@ function Setup() {
     <div className="space-y-4">
       <div className="max-w-lg space-y-3">
         <div>
-          <label className="text-sm font-medium">Yearly board reward (₳)</label>
-          <p className="text-xs text-neutral-500">Total board reward budget, split across the months you compute below (12 = a full year). Per member each month = budget ÷ months ÷ board seats.</p>
+          <label className="text-sm font-medium">{t('Yearly board reward (₳)')}</label>
+          <p className="text-xs text-neutral-500">{t('Total board reward budget, split across the months you compute below (12 = a full year). Per member each month = budget ÷ months ÷ board seats.')}</p>
           <div className="mt-1 flex items-center gap-2">
             <input value={yearly} onChange={(e) => { setYearly(e.target.value); setSaved(false); }} className="w-40 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" />
-            <button onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-sm text-white hover:bg-emerald-700">Save new reward budget</button>
-            {saved ? <span className="text-xs font-medium text-emerald-600">Saved ✓</span> : null}
+            <button onClick={save} className="rounded bg-emerald-600 px-3 py-1 text-sm text-white hover:bg-emerald-700">{t('Save new reward budget')}</button>
+            {saved ? <span className="text-xs font-medium text-emerald-600">{t('Saved')} ✓</span> : null}
           </div>
         </div>
         <div>
-          <label className="text-sm font-medium">Months to compute</label>
-          <p className="text-xs text-neutral-500">Generates a board-pay calc per month (current month first), each payable separately.</p>
+          <label className="text-sm font-medium">{t('Months to compute')}</label>
+          <p className="text-xs text-neutral-500">{t('Generates a board-pay calc per month (current month first), each payable separately.')}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2">
             <input value={months} onChange={(e) => setMonths(e.target.value)} className="w-20 rounded border border-neutral-300 px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900" />
-            <button onClick={compute} disabled={busy} className="rounded border border-neutral-300 px-2.5 py-1 text-sm hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700">{busy ? 'Computing…' : 'Compute board pay'}</button>
-            <button onClick={() => setConfirmingReset(true)} disabled={busy} className="rounded border border-red-300 px-2.5 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400" title="Clear unpaid months and start over for the current board">Reset for new board</button>
+            <button onClick={compute} disabled={busy} className="rounded border border-neutral-300 px-2.5 py-1 text-sm hover:bg-neutral-100 disabled:opacity-50 dark:border-neutral-700">{busy ? t('Computing…') : t('Compute board pay')}</button>
+            <button onClick={() => setConfirmingReset(true)} disabled={busy} className="rounded border border-red-300 px-2.5 py-1 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400" title={t('Clear unpaid months and start over for the current board')}>{t('Reset for new board')}</button>
           </div>
         </div>
         {msg ? <div className="text-xs text-neutral-600 dark:text-neutral-400">{msg}</div> : null}
       </div>
 
-      <p className="text-xs text-neutral-400">One payout per month, sourced from Rewards (or another address you pick). After a payout, the next month opens 30 days later — you can still send it sooner if needed.</p>
+      <p className="text-xs text-neutral-400">{t('One payout per month, sourced from Rewards (or another address you pick). After a payout, the next month opens 30 days later — you can still send it sooner if needed.')}</p>
 
       {missingAddr ? (
         <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-          ⚠ Some board members haven&apos;t set a reward payment address in their profile. They&apos;ll be skipped when you pay (their ADA stays in the treasury) and can be paid later once they add one.
+          ⚠ {t('Some board members haven’t set a reward payment address in their profile. They’ll be skipped when you pay (their ADA stays in the treasury) and can be paid later once they add one.')}
         </div>
       ) : null}
 
@@ -394,34 +401,34 @@ function Setup() {
             {idx === firstFreshIdx && nextPayableAt != null ? (
               daysLeft <= 0 ? (
                 <div className="rounded border border-emerald-300 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
-                  ✓ 30 days have passed since the last board payout — this month is ready to send.
+                  ✓ {t('30 days have passed since the last board payout — this month is ready to send.')}
                 </div>
               ) : (
                 <div className="rounded border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/40">
-                  ⏳ Next board payout opens in {daysLeft} day{daysLeft === 1 ? '' : 's'} — you can send it now if needed.
+                  ⏳ {t('Next board payout opens in')} {daysLeft} {daysLeft === 1 ? t('day') : t('days')} — {t('you can send it now if needed.')}
                 </div>
               )
             ) : null}
             <CalcCard calc={c} buckets={buckets} onChange={loadList} seq={seq} />
           </div>
         ))}
-        {items.length === 0 ? <p className="text-sm text-neutral-500">No board pay computed yet — set the yearly amount, then Compute board pay.</p> : null}
-        {items.length > 0 && active.length === 0 ? <p className="text-sm text-neutral-500">All computed months have been paid — see history below.</p> : null}
+        {items.length === 0 ? <p className="text-sm text-neutral-500">{t('No board pay computed yet — set the yearly amount, then Compute board pay.')}</p> : null}
+        {items.length > 0 && active.length === 0 ? <p className="text-sm text-neutral-500">{t('All computed months have been paid — see history below.')}</p> : null}
       </div>
 
       {history.length > 0 ? (
         <div className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
-          <div className="text-sm font-medium text-neutral-500">Paid history ({history.length})</div>
+          <div className="text-sm font-medium text-neutral-500">{t('Paid history')} ({history.length})</div>
           {history.map(({ c, seq }) => <CalcCard key={c.id} calc={c} buckets={buckets} onChange={loadList} seq={seq} />)}
         </div>
       ) : null}
 
       <ConfirmDialog
         open={confirmingReset}
-        title="Reset board pay?"
-        message="Clears all unpaid (and not-yet-signed) board-pay months so you can set a new amount and month count for the current board. Already-paid months are kept in history."
-        confirmLabel="Reset"
-        cancelLabel="Keep"
+        title={t('Reset board pay?')}
+        message={t('Clears all unpaid (and not-yet-signed) board-pay months so you can set a new amount and month count for the current board. Already-paid months are kept in history.')}
+        confirmLabel={t('Reset')}
+        cancelLabel={t('Keep')}
         tone="danger"
         onCancel={() => setConfirmingReset(false)}
         onConfirm={reset}

@@ -1,5 +1,8 @@
+import { useT } from '@/lib/prefs-context';
+
 /** §4.1 — shows which voting system a context uses (must be visible to users). */
 export function VotingStyleBadge({ style }: { style: '1P1V' | 'BAL' }) {
+  const t = useT();
   const oneVote = style === '1P1V';
   return (
     <span
@@ -10,11 +13,11 @@ export function VotingStyleBadge({ style }: { style: '1P1V' | 'BAL' }) {
       }`}
       title={
         oneVote
-          ? 'One member, one vote (board admission, filtering jury, milestone review)'
-          : 'Balanced voting power: log₁₀(stake) × (1 + merit/200)'
+          ? t('One member, one vote (board admission, filtering jury, milestone review)')
+          : t('Balanced voting power: log₁₀(stake) × (1 + merit/200)')
       }
     >
-      {oneVote ? '1 member · 1 vote' : 'Balanced voting power'}
+      {oneVote ? t('1 member · 1 vote') : t('Balanced voting power')}
     </span>
   );
 }

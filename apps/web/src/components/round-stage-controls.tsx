@@ -7,6 +7,7 @@ import { CreateRoundForm } from './rounds-section';
 import { ConfirmDialog } from './confirm-dialog';
 import { useAuth } from '@/lib/auth-context';
 import { notifyTodoChanged } from '@/lib/use-todo-counts';
+import { useT } from '@/lib/prefs-context';
 
 /** "1 day and 5 hours" / "5 hours and 12 minutes" / "8 minutes" from a ms delta. */
 function untilLabel(ms: number): string {
@@ -47,6 +48,7 @@ const STAGE_LABEL: Record<string, string> = {
  * the final stage (Funding) is closed manually. Self-hides when no round is open.
  */
 export function RoundStageControls() {
+  const t = useT();
   const { profile } = useAuth();
   const isBoard = profile?.roles.includes('BOARD') ?? false;
   const [rounds, setRounds] = useState<RoundDetail[]>([]);
@@ -68,10 +70,9 @@ export function RoundStageControls() {
     <section className="space-y-3 rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <h3 className="text-base font-semibold">Round stage controls</h3>
+          <h3 className="text-base font-semibold">{t('Round stage controls')}</h3>
           <p className="text-xs text-neutral-500">
-            Confirm each next stage before it begins. Check the proposals are ready, then let it auto-start at the
-            planned time or launch it early. Delays shift the new stage to start now and keep its planned length.
+            {t('Confirm each next stage before it begins. Check the proposals are ready, then let it auto-start at the planned time or launch it early. Delays shift the new stage to start now and keep its planned length.')}
           </p>
         </div>
         {/* §5/§6 — board members can start a new funding round straight from here
@@ -81,7 +82,7 @@ export function RoundStageControls() {
             onClick={() => setCreating((v) => !v)}
             className="shrink-0 rounded-md border border-neutral-300 px-3 py-1 text-sm hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
           >
-            {creating ? 'Cancel' : '+ Create round'}
+            {creating ? t('Cancel') : t('+ Create round')}
           </button>
         ) : null}
       </div>
@@ -89,7 +90,7 @@ export function RoundStageControls() {
       {creating ? <CreateRoundForm onDone={() => { setCreating(false); load(); }} /> : null}
 
       {rounds.length === 0 ? (
-        <p className="text-sm text-neutral-500">No open round. Create one to get started.</p>
+        <p className="text-sm text-neutral-500">{t('No open round. Create one to get started.')}</p>
       ) : (
         rounds.map((r) => <RoundControl key={r.id} round={r} onChange={load} />)
       )}
@@ -136,6 +137,7 @@ const CURRENT_STAGE_KEY: Record<string, string | null> = {
 };
 
 function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () => void }) {
+  const t = useT();
   const next = round.nextStage;
   // The "next stage" status — for legacy DV the next is FUNDING (rare).
   const nextStatus = next?.status ?? null;
@@ -171,7 +173,7 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
       // refresh the badges right away (a now-confirmed next stage drops off the count).
       notifyTodoChanged();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'action failed');
+      setError(e instanceof Error ? e.message : t('action failed'));
     } finally {
       setBusy(null);
     }
@@ -186,7 +188,7 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
         </span>
         {betweenStages ? (
           <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-            No active stage
+            {t('No active stage')}
           </span>
         ) : (
           <StatusBadge status={round.status} />
@@ -201,7 +203,7 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
             onClick={() => setSubTab(k)}
             className={`-mb-px border-b-2 px-3 py-1.5 text-xs font-medium ${subTab === k ? 'border-emerald-500 text-emerald-700 dark:text-emerald-400' : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'}`}
           >
-            {l}
+            {t(l)}
           </button>
         ))}
       </div>
@@ -212,9 +214,7 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
         <div className="mt-3 space-y-2">
           {!canEdit ? (
             <p className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-              ⚠ Review has started. You can still edit everything here, but changes now can affect decisions
-              already in flight — fees already paid, votes already cast, reward maths. Edit with care. (The
-              schedule is adjusted under <strong>Round stage control</strong>.)
+              {t('⚠ Review has started. You can still edit everything here, but changes now can affect decisions already in flight — fees already paid, votes already cast, reward maths. Edit with care. (The schedule is adjusted under')}{' '}<strong>{t('Round stage control')}</strong>{t('.)')}
             </p>
           ) : null}
           <CreateRoundForm initial={round} roundId={round.id} onDone={onChange} />
@@ -224,7 +224,7 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
       {subTab === 'stages' ? (
       <>
       <div className="mt-2">
-        <div className="text-xs text-neutral-500">Proposals (verify readiness before advancing):</div>
+        <div className="text-xs text-neutral-500">{t('Proposals (verify readiness before advancing):')}</div>
         <div className="mt-1"><ProposalCounts counts={round.proposalCounts} /></div>
       </div>
 
@@ -265,22 +265,22 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
         {/* §8 — Funding → CLOSED is always manual; surface a dedicated control once we're there. */}
         {round.status === 'FUNDING' ? (
           <div className="rounded border border-red-200 p-2 text-xs dark:border-red-900">
-            <div className="font-medium text-red-800 dark:text-red-200">Closing the round</div>
+            <div className="font-medium text-red-800 dark:text-red-200">{t('Closing the round')}</div>
             <div className="mt-0.5 text-neutral-500">
-              Close manually once funding is complete; delays expected.
+              {t('Close manually once funding is complete; delays expected.')}
             </div>
             <button
               onClick={() => setConfirmClose(true)}
               disabled={busy !== null}
               className="mt-1 rounded border border-red-500 px-2.5 py-1 text-xs text-red-700 hover:bg-red-50 disabled:opacity-40 dark:text-red-300 dark:hover:bg-red-950"
             >
-              {busy === 'close' ? 'Closing…' : 'Close round'}
+              {busy === 'close' ? t('Closing…') : t('Close round')}
             </button>
             <ConfirmDialog
               open={confirmClose}
-              title={`Close round #${round.number}?`}
-              message="This ends the round. New milestone POAs / votes will no longer be accepted."
-              confirmLabel="Close round"
+              title={`${t('Close round #')}${round.number}?`}
+              message={t('This ends the round. New milestone POAs / votes will no longer be accepted.')}
+              confirmLabel={t('Close round')}
               tone="danger"
               onConfirm={() => { setConfirmClose(false); void run(() => boardRoundsApi.close(round.id), 'close'); }}
               onCancel={() => setConfirmClose(false)}
@@ -288,7 +288,7 @@ function RoundControl({ round, onChange }: { round: RoundDetail; onChange: () =>
           </div>
         ) : null}
         {!next && round.status !== 'FUNDING' ? (
-          <div className="text-xs text-neutral-500">Round complete.</div>
+          <div className="text-xs text-neutral-500">{t('Round complete.')}</div>
         ) : null}
       </div>
       </>
@@ -327,6 +327,7 @@ function StageRow({
   busy: string | null;
   onRun: (action: () => Promise<unknown>, tag: string) => Promise<void>;
 }) {
+  const t = useT();
   const tag = `${kind}-${stageKey}`;
   const [startsAt, setStartsAt] = useState(toLocalInput(row?.startsAt));
   const [endsAt, setEndsAt] = useState(toLocalInput(row?.endsAt));
@@ -368,33 +369,33 @@ function StageRow({
   // Saved / Not-saved indicator shown next to a save button.
   const SavedBadge = ({ dirty }: { dirty: boolean }) =>
     dirty
-      ? <span className="text-xs font-medium text-red-600 dark:text-red-400">● Not saved</span>
-      : <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">✓ Saved</span>;
+      ? <span className="text-xs font-medium text-red-600 dark:text-red-400">{t('● Not saved')}</span>
+      : <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{t('✓ Saved')}</span>;
   if (kind === 'past') {
     if (!row) {
-      return <PastRow label={label} note="no schedule row" />;
+      return <PastRow label={label} note={t('no schedule row')} />;
     }
     const lasted = durationLabel(new Date(row.startsAt).getTime(), new Date(row.endsAt).getTime());
     return (
       <PastRow
         label={label}
-        note={`${fmtDateTime(row.startsAt)} → ${fmtDateTime(row.endsAt)}${lasted ? ` · lasted ${lasted}` : ''}`}
+        note={`${fmtDateTime(row.startsAt)} → ${fmtDateTime(row.endsAt)}${lasted ? ` · ${t('lasted')} ${lasted}` : ''}`}
       />
     );
   }
   if (kind === 'current') {
-    if (!row) return <PastRow label={label} note="no schedule row" />;
+    if (!row) return <PastRow label={label} note={t('no schedule row')} />;
     // Start is frozen; only the end is editable. Length runs from the frozen start.
     const frozenStartMs = new Date(row.startsAt).getTime();
     const curDuration = durationLabel(frozenStartMs, endMs);
     const problems: string[] = [];
-    if (!endsAt) problems.push('Set an end date.');
-    else if (Number.isNaN(endMs)) problems.push('The end date is invalid.');
+    if (!endsAt) problems.push(t('Set an end date.'));
+    else if (Number.isNaN(endMs)) problems.push(t('The end date is invalid.'));
     // Only a real error when the board is actively EXTENDING the end (edited it to a past time).
     // An UNCHANGED end date that has simply passed isn't a mistake to fix — the stage is just
     // overdue to hand off, which the next stage / auto-start handles. So don't nag in red then.
-    else if (endMs <= now && endDirty) problems.push('The end date must be in the future.');
-    else if (endMs <= frozenStartMs) problems.push('The end date must be after the start date.');
+    else if (endMs <= now && endDirty) problems.push(t('The end date must be in the future.'));
+    else if (endMs <= frozenStartMs) problems.push(t('The end date must be after the start date.'));
     const valid = problems.length === 0;
     // §6 — once the window has passed the stage is no longer "current": no stage is active
     // until the round advances. Mirrors the read-only Schedule view's "No stage active right now".
@@ -403,16 +404,16 @@ function StageRow({
       <div className={`rounded border p-2 ${ended ? 'border-amber-300 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20' : 'border-emerald-300 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20'}`}>
         <div className="text-xs">
           <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${ended ? 'bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-100' : 'bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100'}`}>
-            {ended ? 'ended' : 'current'}
+            {ended ? t('ended') : t('current')}
           </span>{' '}
           <span className="font-medium">{label}</span>
           {' · '}
-          <span className="text-neutral-500">started {fmtDateTime(row.startsAt)} (frozen)</span>
-          {curDuration ? <span className="text-neutral-500"> · planned length {curDuration}</span> : null}
+          <span className="text-neutral-500">{t('started')} {fmtDateTime(row.startsAt)} {t('(frozen)')}</span>
+          {curDuration ? <span className="text-neutral-500"> · {t('planned length')} {curDuration}</span> : null}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 text-xs text-neutral-500">
-            ends
+            {t('ends')}
             <DateField value={endsAt} onChange={setEndsAt} />
           </div>
           <button
@@ -420,7 +421,7 @@ function StageRow({
             disabled={busy !== null || !valid || !endDirty}
             className="rounded border border-neutral-400 px-2.5 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:hover:bg-neutral-800"
           >
-            {busy === tag ? 'Saving…' : 'Save new end date'}
+            {busy === tag ? t('Saving…') : t('Save new end date')}
           </button>
           <SavedBadge dirty={endDirty} />
         </div>
@@ -430,11 +431,11 @@ function StageRow({
         {!Number.isNaN(endMs) ? (
           endMs > now ? (
             <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-300">
-              Ends in: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(endMs - now)}</span> <span className="text-xs text-neutral-500">({fmtDateTime(endsAt ? new Date(endsAt).toISOString() : row.endsAt)})</span>
+              {t('Ends in:')} <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(endMs - now)}</span> <span className="text-xs text-neutral-500">({fmtDateTime(endsAt ? new Date(endsAt).toISOString() : row.endsAt)})</span>
             </div>
           ) : (
             <div className="mt-1 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-              Ended <strong>{untilLabel(now - endMs)}</strong> ago — no stage is active right now. The round advances when you launch the next stage below (or it auto-starts at its planned time). Set a later end above only to extend this stage.
+              {t('Ended')} <strong>{untilLabel(now - endMs)}</strong> {t('ago — no stage is active right now. The round advances when you launch the next stage below (or it auto-starts at its planned time). Set a later end above only to extend this stage.')}
             </div>
           )
         ) : null}
@@ -452,12 +453,12 @@ function StageRow({
     // Relational/format problems — a broken state for BOTH buttons (Launch keeps the stage's
     // planned length, so an end-before-start is nonsensical for it too).
     const relProblems: string[] = [];
-    if (!startsAt) relProblems.push('Set a start date.');
-    else if (Number.isNaN(startMs)) relProblems.push('The start date is invalid.');
-    if (!endsAt) relProblems.push('Set an end date.');
-    else if (Number.isNaN(endMs)) relProblems.push('The end date is invalid.');
-    if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs <= startMs) relProblems.push('The end date must be after the start date.');
-    if (startsBeforePrev) relProblems.push(`${label} can't start before the previous stage ends (${fmtDateTime(prevEndsAt)}).`);
+    if (!startsAt) relProblems.push(t('Set a start date.'));
+    else if (Number.isNaN(startMs)) relProblems.push(t('The start date is invalid.'));
+    if (!endsAt) relProblems.push(t('Set an end date.'));
+    else if (Number.isNaN(endMs)) relProblems.push(t('The end date is invalid.'));
+    if (!Number.isNaN(startMs) && !Number.isNaN(endMs) && endMs <= startMs) relProblems.push(t('The end date must be after the start date.'));
+    if (startsBeforePrev) relProblems.push(`${label} ${t("can't start before the previous stage ends")} (${fmtDateTime(prevEndsAt)}).`);
     // "Dirty" for the next stage = either the dates/auto-start were edited, or the stage isn't
     // confirmed yet. When it's already confirmed AND unchanged, there's nothing to confirm.
     const nextDirty = planDirty || !confirmed;
@@ -468,23 +469,23 @@ function StageRow({
     // "Confirm date" additionally needs the start in the future (auto/planned start). To start a
     // stage right now regardless of the planned start, use "Launch … now".
     const confirmProblems = [...relProblems];
-    if (nextDirty && !Number.isNaN(startMs) && startMs <= now) confirmProblems.push('The start date must be in the future (or use “Launch now” to start immediately).');
+    if (nextDirty && !Number.isNaN(startMs) && startMs <= now) confirmProblems.push(t('The start date must be in the future (or use “Launch now” to start immediately).'));
     const launchValid = relProblems.length === 0;
     const confirmValid = confirmProblems.length === 0;
     return (
       <div className={`rounded border p-2 ${overdue && !autoStartHandlesIt ? 'border-red-300 bg-red-50/50 dark:border-red-900 dark:bg-red-950/20' : 'border-amber-300 bg-amber-50/40 dark:border-amber-900 dark:bg-amber-950/20'}`}>
         <div className="text-xs">
           <span className="rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-900 dark:bg-amber-900 dark:text-amber-100">
-            next
+            {t('next')}
           </span>{' '}
           <span className="font-medium">{label}</span>
           {' · '}
           {confirmed ? (
             <span className="text-emerald-600">
-              confirmed ({nextStage?.autoStart ? 'auto-start' : 'manual'}, planned {fmtDateTime(nextStage?.planned?.startsAt)})
+              {t('confirmed')} ({nextStage?.autoStart ? t('auto-start') : t('manual')}, {t('planned')} {fmtDateTime(nextStage?.planned?.startsAt)})
             </span>
           ) : (
-            <span className="text-amber-700 dark:text-amber-300">not yet confirmed</span>
+            <span className="text-amber-700 dark:text-amber-300">{t('not yet confirmed')}</span>
           )}
         </div>
         {/* §6/§8 — overdue handling. Auto-start + confirmed: NO board action needed — the scheduler
@@ -492,33 +493,33 @@ function StageRow({
             unconfirmed: a loud red call to action (pick a future date or launch now). */}
         {overdue && autoStartHandlesIt ? (
           <div className="mt-1.5 rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-            Planned start ({startLabel}) has passed — <strong>auto-start</strong> advances it on the next scheduled check (within a minute). No action needed; use <strong>Launch {label} now</strong> to start immediately.
+            {t('Planned start')} ({startLabel}) {t('has passed —')} <strong>{t('auto-start')}</strong> {t('advances it on the next scheduled check (within a minute). No action needed; use')} <strong>{t('Launch')} {label} {t('now')}</strong> {t('to start immediately.')}
           </div>
         ) : overdue ? (
           <div className="mt-1.5 rounded border border-red-300 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
-            ⚠ The start ({startLabel}) is in the past. Launch {label} now, or move the start date into the future and confirm.
+            {t('⚠ The start')} ({startLabel}) {t('is in the past. Launch')} {label} {t('now, or move the start date into the future and confirm.')}
           </div>
         ) : !Number.isNaN(startMs) ? (
           <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-300">
-            Starts in: <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(startMs - now)}</span> <span className="text-xs text-neutral-500">({startLabel})</span>
+            {t('Starts in:')} <span className="font-semibold text-emerald-700 dark:text-emerald-400">{untilLabel(startMs - now)}</span> <span className="text-xs text-neutral-500">({startLabel})</span>
           </div>
         ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1 text-xs text-neutral-500">
-            starts
+            {t('starts')}
             <span className={startsBeforePrev ? 'rounded ring-1 ring-red-400 dark:ring-red-700' : ''}>
               <DateField value={startsAt} onChange={setStartsAt} />
             </span>
           </div>
           <div className="flex items-center gap-1 text-xs text-neutral-500">
-            ends
+            {t('ends')}
             <DateField value={endsAt} onChange={setEndsAt} />
           </div>
           <label className="flex items-center gap-1 text-xs">
             <input type="checkbox" checked={autoStart} onChange={(e) => setAutoStart(e.target.checked)} />
-            auto-start at the planned time
+            {t('auto-start at the planned time')}
           </label>
-          {editDuration ? <span className="text-xs text-neutral-500">· will last {editDuration}</span> : null}
+          {editDuration ? <span className="text-xs text-neutral-500">· {t('will last')} {editDuration}</span> : null}
         </div>
         <div className="mt-2 flex flex-wrap gap-2">
           <button
@@ -535,24 +536,24 @@ function StageRow({
             disabled={busy !== null || !confirmValid || !nextDirty}
             className="rounded border border-neutral-400 px-2.5 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:hover:bg-neutral-800"
           >
-            {busy === `${tag}-confirm` ? 'Saving…' : 'Confirm date'}
+            {busy === `${tag}-confirm` ? t('Saving…') : t('Confirm date')}
           </button>
           <button
             onClick={() => setConfirmLaunch(true)}
             disabled={busy !== null || !launchValid}
             className="rounded border border-emerald-500 px-2.5 py-1 text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-40 dark:text-emerald-300 dark:hover:bg-emerald-950"
           >
-            {busy === `${tag}-launch` ? 'Launching…' : `Launch ${label} now`}
+            {busy === `${tag}-launch` ? t('Launching…') : `${t('Launch')} ${label} ${t('now')}`}
           </button>
           <SavedBadge dirty={nextDirty} />
         </div>
         <Problems items={confirmProblems} />
         <ConfirmDialog
           open={confirmLaunch}
-          title={`Launch ${label} now?`}
-          message={`This starts the ${label} stage immediately (instead of at the planned time). The stage keeps its planned length and any later stages shift accordingly. This can't be undone.`}
-          confirmLabel={`Launch ${label} now`}
-          cancelLabel="Cancel"
+          title={`${t('Launch')} ${label} ${t('now?')}`}
+          message={`${t('This starts the')} ${label} ${t("stage immediately (instead of at the planned time). The stage keeps its planned length and any later stages shift accordingly. This can't be undone.")}`}
+          confirmLabel={`${t('Launch')} ${label} ${t('now')}`}
+          cancelLabel={t('Cancel')}
           onConfirm={() => { setConfirmLaunch(false); void onRun(() => boardRoundsApi.launchNext(roundId), `${tag}-launch`); }}
           onCancel={() => setConfirmLaunch(false)}
         />
@@ -561,39 +562,39 @@ function StageRow({
   }
   // FUTURE — beyond next. Re-plannable dates; no transition controls.
   const planProblems: string[] = [];
-  if (!startsAt) planProblems.push('Set a start date.');
-  else if (Number.isNaN(startMs)) planProblems.push('The start date is invalid.');
-  else if (startMs <= now) planProblems.push('The start date must be in the future.');
-  if (!endsAt) planProblems.push('Set an end date.');
-  else if (Number.isNaN(endMs)) planProblems.push('The end date is invalid.');
-  else if (!Number.isNaN(startMs) && endMs <= startMs) planProblems.push('The end date must be after the start date.');
-  if (startsBeforePrev) planProblems.push(`${label} can't start before the previous stage ends (${fmtDateTime(prevEndsAt)}).`);
+  if (!startsAt) planProblems.push(t('Set a start date.'));
+  else if (Number.isNaN(startMs)) planProblems.push(t('The start date is invalid.'));
+  else if (startMs <= now) planProblems.push(t('The start date must be in the future.'));
+  if (!endsAt) planProblems.push(t('Set an end date.'));
+  else if (Number.isNaN(endMs)) planProblems.push(t('The end date is invalid.'));
+  else if (!Number.isNaN(startMs) && endMs <= startMs) planProblems.push(t('The end date must be after the start date.'));
+  if (startsBeforePrev) planProblems.push(`${label} ${t("can't start before the previous stage ends")} (${fmtDateTime(prevEndsAt)}).`);
   const planValid = planProblems.length === 0;
   return (
     <div className="rounded border border-neutral-200 p-2 dark:border-neutral-800">
       <div className="text-xs">
         <span className="rounded bg-neutral-200 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-          planned
+          {t('planned')}
         </span>{' '}
         <span className="font-medium">{label}</span>
         {' · '}
-        <span className="text-neutral-500">re-plan ahead</span>
-        {editDuration ? <span className="text-neutral-500"> · will last {editDuration}</span> : null}
+        <span className="text-neutral-500">{t('re-plan ahead')}</span>
+        {editDuration ? <span className="text-neutral-500"> · {t('will last')} {editDuration}</span> : null}
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1 text-xs text-neutral-500">
-          starts
+          {t('starts')}
           <span className={startsBeforePrev ? 'rounded ring-1 ring-red-400 dark:ring-red-700' : ''}>
             <DateField value={startsAt} onChange={setStartsAt} />
           </span>
         </div>
         <div className="flex items-center gap-1 text-xs text-neutral-500">
-          ends
+          {t('ends')}
           <DateField value={endsAt} onChange={setEndsAt} />
         </div>
         <label className="flex items-center gap-1 text-xs">
           <input type="checkbox" checked={autoStart} onChange={(e) => setAutoStart(e.target.checked)} />
-          auto-start at the planned time
+          {t('auto-start at the planned time')}
         </label>
         <button
           onClick={() =>
@@ -609,7 +610,7 @@ function StageRow({
           disabled={busy !== null || !planValid || !planDirty}
           className="rounded border border-neutral-400 px-2.5 py-1 text-xs hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-600 dark:hover:bg-neutral-800"
         >
-          {busy === tag ? 'Saving…' : 'Save plan'}
+          {busy === tag ? t('Saving…') : t('Save plan')}
         </button>
         <SavedBadge dirty={planDirty} />
       </div>
@@ -619,10 +620,11 @@ function StageRow({
 }
 
 function PastRow({ label, note }: { label: string; note: string }) {
+  const t = useT();
   return (
     <div className="rounded border border-neutral-200 bg-neutral-50/40 p-2 text-xs text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900/40">
       <span className="rounded bg-neutral-300 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200">
-        past
+        {t('past')}
       </span>{' '}
       <span className="font-medium text-neutral-700 dark:text-neutral-300">{label}</span>
       {' · '}
