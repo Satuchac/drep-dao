@@ -631,16 +631,11 @@ export class MultisigBroadcastService {
    *  threshold + required-signer keys still come from the underlying
    *  multisig. */
   private async resolveSource(action: { kind: string; fromConfigId: string | null; sourceBucketId?: string | null }): Promise<{ bech32Address: string; scriptHash: string; keyHashes: string[]; threshold: number; spendingScriptJson: object }> {
-    if (action.kind === 'MIGRATION' && action.fromConfigId) {
-      const c = await this.prisma.multisigConfig.findUnique({ where: { id: action.fromConfigId } });
-      if (!c) throw new ConflictException('migration source multisig missing');
-      const keyHashes = ((c.scriptJson as { scripts?: { keyHash: string }[] } | null)?.scripts ?? []).map((s) => s.keyHash);
-      return { bech32Address: c.bech32Address, scriptHash: c.scriptHash, keyHashes, threshold: c.threshold, spendingScriptJson: c.scriptJson as object };
-    }
-    // §15.5 — bucket-aware lookup. When the action targets a labeled bucket,
-    // we spend from THAT bucket's address with THAT bucket's script (which
-    // wraps the multisig + a label clause). Signing requirements come from
-    // the multisig keys (same N keys, same N-of-N rule).
+    // §15.5 — bucket-aware lookup FIRST. When the action targets a labeled bucket (incl. a
+    // per-bucket MIGRATION), we spend from THAT bucket's address with THAT bucket's wrapped
+    // script — not the config's bare script. Signing requirements come from the multisig keys
+    // (same N keys, same N-of-N rule). Checked before the MIGRATION/config branch so a bucket
+    // migration signs with the correct script.
     if (action.sourceBucketId) {
       const bucket = await this.prisma.treasuryBucket.findUnique({
         where: { id: action.sourceBucketId },
@@ -655,6 +650,12 @@ export class MultisigBroadcastService {
         threshold: bucket.config.threshold,
         spendingScriptJson: bucket.scriptJson as object,
       };
+    }
+    if (action.kind === 'MIGRATION' && action.fromConfigId) {
+      const c = await this.prisma.multisigConfig.findUnique({ where: { id: action.fromConfigId } });
+      if (!c) throw new ConflictException('migration source multisig missing');
+      const keyHashes = ((c.scriptJson as { scripts?: { keyHash: string }[] } | null)?.scripts ?? []).map((s) => s.keyHash);
+      return { bech32Address: c.bech32Address, scriptHash: c.scriptHash, keyHashes, threshold: c.threshold, spendingScriptJson: c.scriptJson as object };
     }
     const active = await this.prisma.multisigConfig.findFirst({ where: { replacedAt: null }, orderBy: { assembledAt: 'desc' } });
     if (!active) throw new ConflictException('no active multisig — assemble the board signing keys first');

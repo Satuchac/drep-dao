@@ -107,11 +107,25 @@ export class BoardMultisigService {
       };
     }));
 
-    // Live balances for every known config (active + history) so the UI can
-    // show "old wallet still holds X ₳ — migration pending".
-    const allAddrs = [active?.bech32Address, ...hist.map((h) => h.bech32Address)].filter((a): a is string => !!a);
+    // Live balances for every known config (active + history) INCLUDING their labeled buckets,
+    // so an old config only reads as "empty/terminated" once its main address AND every bucket
+    // are drained (migration moves all of them to the new primary address).
+    const cfgIds = [active?.id, ...hist.map((h) => h.id)].filter((id): id is string => !!id);
+    const cfgBuckets = cfgIds.length
+      ? await this.prisma.treasuryBucket.findMany({ where: { configId: { in: cfgIds } }, select: { configId: true, bech32Address: true } })
+      : [];
+    const bucketAddrsByConfig = new Map<string, string[]>();
+    for (const b of cfgBuckets) bucketAddrsByConfig.set(b.configId, [...(bucketAddrsByConfig.get(b.configId) ?? []), b.bech32Address]);
+    const allAddrs = [
+      active?.bech32Address,
+      ...hist.map((h) => h.bech32Address),
+      ...cfgBuckets.map((b) => b.bech32Address),
+    ].filter((a): a is string => !!a);
     const balMap = allAddrs.length ? await this.cardano.addressBalance(allAddrs).catch(() => new Map<string, bigint>()) : new Map<string, bigint>();
     const adaOf = (addr: string | null | undefined) => (addr ? Number(balMap.get(addr) ?? 0n) / LOVELACE : 0);
+    // Total held by a config = its main address + all its buckets.
+    const configTotalAda = (configId: string, mainAddr: string) =>
+      adaOf(mainAddr) + (bucketAddrsByConfig.get(configId) ?? []).reduce((s, a) => s + adaOf(a), 0);
 
     // Rotation detection: the current board's keys would assemble to a
     // different script hash than the active one. (When no active config or
@@ -172,10 +186,11 @@ export class BoardMultisigService {
         assembledAt: h.assembledAt,
         replacedAt: h.replacedAt,
         replacedByConfigId: h.replacedByConfigId,
-        balanceAda: adaOf(h.bech32Address),
-        // Terminated = funds emptied. Date the migration tx was paid; if it never held funds,
-        // it's terminated as of when it was replaced. Null while it still holds a balance.
-        terminatedAt: adaOf(h.bech32Address) === 0 ? (migratedAtByConfig.get(h.id) ?? h.replacedAt) : null,
+        balanceAda: configTotalAda(h.id, h.bech32Address), // main + buckets
+        // Terminated = ALL funds emptied (main + every bucket). Date the last migration tx was
+        // paid; if it never held funds, terminated as of when it was replaced. Null while any
+        // address still holds a balance.
+        terminatedAt: configTotalAda(h.id, h.bech32Address) === 0 ? (migratedAtByConfig.get(h.id) ?? h.replacedAt) : null,
         // Old script's key hashes — used by the UI to show "still-reachable
         // signers" when offering a migration.
         keyHashes: ((h.scriptJson as { scripts?: { keyHash: string }[] } | null)?.scripts ?? []).map((s) => s.keyHash),
@@ -300,7 +315,7 @@ export class BoardMultisigService {
       // to the new address. The OLD board just signs them in Approve & sign. Best-effort
       // (never block assembly); the manual "Migrate funds" button remains as a fallback.
       if (active) {
-        try { await this.ensureMigration(active, created); } catch { /* funds may be 0 / already queued */ }
+        try { await this.migrateAllFundedSources(active, created); } catch { /* funds may be 0 / already queued */ }
       }
       return created;
     }).then(async (created) => {
@@ -342,35 +357,62 @@ export class BoardMultisigService {
     const to = await this.active();
     if (!to) throw new ConflictException('no active multisig to migrate to (assemble the new one first)');
 
-    const res = await this.ensureMigration(from, to);
-    if (res.reason === 'empty') throw new ConflictException('the old multisig has no on-chain funds — nothing to migrate');
-    return { id: res.action!.id, status: res.action!.status, amountAda: Number(res.action!.amountAda ?? 0n) / LOVELACE };
+    const summary = await this.migrateAllFundedSources(from, to);
+    if (summary.created === 0 && summary.existing === 0) {
+      throw new ConflictException('the old multisig (and its buckets) have no on-chain funds — nothing to migrate');
+    }
+    return summary;
   }
 
   /**
-   * §15.2 — idempotently create the MIGRATION action that empties `from` into the active
-   * `to` multisig, signed by the OLD board (their keyhashes are in `from`'s script). Reuses an
-   * open migration if one exists; returns reason 'empty' when there's nothing on-chain to move.
-   * Used both by the manual prepareMigration and the auto-trigger on assembly.
+   * §15.2 — move ALL of an old config's funds to the NEW multisig's PRIMARY address: one
+   * MIGRATION tx for the main script address, plus one per labeled bucket that still holds funds.
+   * The new board decides later whether to (re)create buckets and split funds. Each tx is signed
+   * by the OLD board (their keyhashes are in the source's script) and is idempotent per source.
    */
-  private async ensureMigration(from: { id: string; bech32Address: string }, to: { id: string; bech32Address: string }) {
+  private async migrateAllFundedSources(from: { id: string; bech32Address: string }, to: { id: string; bech32Address: string }) {
+    const buckets = await this.prisma.treasuryBucket.findMany({ where: { configId: from.id } });
+    // Sources = the main script address (no bucket) + every NON-primary bucket (the primary
+    // bucket shares the main address, so it's already covered by the main source).
+    const sources: { bucketId: string | null; bech32Address: string; label: string }[] = [
+      { bucketId: null, bech32Address: from.bech32Address, label: 'Primary treasury' },
+      ...buckets.filter((b) => !b.isPrimary).map((b) => ({ bucketId: b.id, bech32Address: b.bech32Address, label: `${b.label || 'Unnamed'} bucket` })),
+    ];
+    const balMap = await this.cardano.addressBalance(sources.map((s) => s.bech32Address)).catch(() => new Map<string, bigint>());
+    let created = 0, existing = 0, totalAda = 0;
+    for (const s of sources) {
+      const r = await this.ensureMigration({ configId: from.id, ...s, balance: balMap.get(s.bech32Address) ?? 0n }, to);
+      if (r.reason === 'created') { created++; totalAda += Number(r.action!.amountAda ?? 0n) / LOVELACE; }
+      else if (r.reason === 'existing') existing++;
+    }
+    return { created, existing, totalAda };
+  }
+
+  /**
+   * Idempotently create ONE MIGRATION action that empties a single source (the main address or a
+   * labeled bucket) into the new multisig's primary address. Reuses an open migration for that
+   * exact source; returns reason 'empty' when there's nothing on-chain to move. The tx is labelled
+   * "FUND MIGRATION" in the treasury history with the source name (e.g. "Rewards bucket → …").
+   */
+  private async ensureMigration(
+    src: { configId: string; bucketId: string | null; bech32Address: string; label: string; balance: bigint },
+    to: { id: string; bech32Address: string },
+  ) {
     const existing = await this.prisma.multisigAction.findFirst({
-      where: { kind: 'MIGRATION', fromConfigId: from.id, status: { in: ['PENDING_SIGS', 'READY', 'BROADCASTED'] } },
+      where: { kind: 'MIGRATION', fromConfigId: src.configId, sourceBucketId: src.bucketId, status: { in: ['PENDING_SIGS', 'READY', 'BROADCASTED'] } },
     });
     if (existing) return { action: existing, reason: 'existing' as const };
-
-    const balMap = await this.cardano.addressBalance([from.bech32Address]).catch(() => new Map<string, bigint>());
-    const balanceLovelace = balMap.get(from.bech32Address) ?? 0n;
-    if (balanceLovelace === 0n) return { action: null, reason: 'empty' as const };
+    if (src.balance === 0n) return { action: null, reason: 'empty' as const };
 
     const action = await this.prisma.multisigAction.create({
       data: {
         kind: 'MIGRATION',
         status: 'PENDING_SIGS',
-        amountAda: balanceLovelace,
-        description: `Migrate ${(Number(balanceLovelace) / LOVELACE).toLocaleString()} ₳ from old multisig ${from.bech32Address.slice(0, 16)}… → new ${to.bech32Address.slice(0, 16)}…`,
+        amountAda: src.balance,
+        description: `${src.label} → new primary address`,
         destAddress: to.bech32Address,
-        fromConfigId: from.id,
+        fromConfigId: src.configId,
+        sourceBucketId: src.bucketId,
         toConfigId: to.id,
       },
     });

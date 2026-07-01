@@ -651,7 +651,7 @@ export class TreasuryService implements OnModuleInit {
     );
     const KIND_LABEL: Record<string, string> = {
       OPS: 'hot-wallet top-up', PROJECT_FUNDING: 'milestone payout', REWARD_PAYOUT: 'reward payout',
-      PLEDGE_RETURN: 'pledge return', LEFTOVER_RETURN: 'leftover return', MIGRATION: 'treasury migration',
+      PLEDGE_RETURN: 'pledge return', LEFTOVER_RETURN: 'leftover return', MIGRATION: 'FUND MIGRATION',
       BOARD_TRANSFER: 'treasury transfer',
     };
     // OPS covers BOTH hot-wallet top-ups (no proposal) and internal-spending-proposal payouts
