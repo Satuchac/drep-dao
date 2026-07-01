@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { multisigApi, type MultisigStatus, type MultisigHistoryEntry } from '@/lib/api';
+import { multisigApi, type MultisigStatus, type MultisigHistoryEntry, type MultisigActiveConfig } from '@/lib/api';
 import { useAuth } from '@/lib/auth-context';
 import { useT } from '@/lib/prefs-context';
 import { CopyButton } from './copy-button';
@@ -10,14 +10,14 @@ const MULTISIG_KEY_MESSAGE = (stakeAddress: string, paymentBech32: string, ts: s
   ['drep-dao | multisig key attestation', `seat:${stakeAddress}`, `pay:${paymentBech32}`, `ts:${ts}`].join('\n');
 
 /**
- * §15 — multisig setup + rotation panel. Sections:
- *   • Status line (threshold + how many keys collected) + rotation banner
- *   • Active config card (script address, balance) — collapsible
- *   • Per-seat roster — collapsible
- *   • Submission form (only for the logged-in board member without a key)
- *   • Old multisigs (history) — collapsible; each entry shows balance + a
- *     "Migrate funds" button (board members) when balance > 0 and active
- *     config exists.
+ * §15 — multisig setup + rotation panel.
+ * Normal state: one active multisig (script address + balance) + the board roster + a key form.
+ * During a board hand-over (rotationInProgress) it splits into TWO clearly-labelled panels —
+ *   • NEW BOARD MULTISIG (top): the incoming board collecting keys (each member's known key is
+ *     pre-filled, editable);
+ *   • OLD BOARD MULTISIG (below): the current wallet that holds the funds until the new one
+ *     assembles, after which the funds auto-migrate.
+ * Old multisigs that still hold funds appear in the history with a "Migrate funds" CTA.
  */
 export function MultisigSetup({ onAssembled }: { onAssembled?: () => void }) {
   const t = useT();
@@ -28,10 +28,6 @@ export function MultisigSetup({ onAssembled }: { onAssembled?: () => void }) {
   }, []);
   useEffect(load, [load]);
 
-  // After a mutation (final key submitted, migration prepared) re-fetch our own
-  // status AND let the parent refresh its data — the Treasury balance card flips
-  // to "configured" the moment the last key assembles the multisig (submitKey
-  // assembles synchronously), so it shouldn't need a manual page reload.
   const reload = useCallback(() => {
     load();
     onAssembled?.();
@@ -41,20 +37,66 @@ export function MultisigSetup({ onAssembled }: { onAssembled?: () => void }) {
   const isBoard = !!profile?.roles.includes('BOARD');
   const mySeat = status?.seats.find((s) => s.userId === profile?.user.id);
 
-  const [showActive, setShowActive] = useState(true);
   const [showRoster, setShowRoster] = useState(true);
   const [showHistory, setShowHistory] = useState(true);
+  const [changingKey, setChangingKey] = useState(false);
 
   if (error) return <div className="text-sm text-red-600">{error}</div>;
   if (!status) return null;
 
-  // §15.2 — a board hand-over is in flight when an old multisig still holds funds (or a
-  // migration tx is queued). While migrating, the active config is the NEW board's wallet and
-  // the funded predecessors are the OLD board's — surfaced with big labels below.
+  // Post-assembly migration in flight (active = NEW, a predecessor still holds funds).
   const migrating = status.history.some((h) => h.balanceAda > 0) || status.migrationsPending.length > 0;
+  // Pre-assembly hand-over: a new board is collecting keys; the active config is still the OLD one.
+  const rotating = status.rotationInProgress;
+
+  // Board roster + per-seat key status (reused in both layouts).
+  const roster = (
+    <ul className="space-y-1 text-xs">
+      {status.seats.map((s) => (
+        <li key={s.seatId} className="rounded border border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <span className="font-medium">{s.displayName}</span>
+              <span className="ml-2 break-all font-mono text-[11px] text-neutral-500">{s.drepId}</span>
+            </div>
+            {s.hasKey ? (
+              <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
+                ✓ {t('key submitted')}{s.hardwareAttested ? ' · HW' : ''}
+              </span>
+            ) : (
+              <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                ⏳ {t('awaiting key')}
+              </span>
+            )}
+          </div>
+          {s.hasKey && s.paymentBech32 ? <div className="mt-1 break-all font-mono text-[11px] text-neutral-500">{s.paymentBech32}</div> : null}
+          {s.hasKey && s.keyHash ? <div className="mt-0.5 text-[11px] text-neutral-500">{t('key hash:')} <span className="font-mono">{s.keyHash}</span></div> : null}
+        </li>
+      ))}
+    </ul>
+  );
+
+  // Current board member's key block: the submit form (pre-filled with any known credential) or a
+  // "submitted — change my key" note that reveals the pre-filled form.
+  const myKeyBlock = isBoard && mySeat ? (
+    !mySeat.hasKey || changingKey ? (
+      <SubmitKeyForm
+        initialAddress={mySeat.paymentBech32 ?? ''}
+        onChange={() => { setChangingKey(false); reload(); }}
+        onCancel={mySeat.hasKey ? () => setChangingKey(false) : undefined}
+      />
+    ) : (
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded border border-emerald-300 bg-emerald-50 p-2 text-xs dark:border-emerald-900 dark:bg-emerald-950/40">
+        <span>✓ {t('You\'ve submitted your multisig key.')}</span>
+        <button type="button" onClick={() => setChangingKey(true)} className="rounded border border-neutral-400 px-2 py-0.5 hover:bg-neutral-100 dark:border-neutral-600 dark:hover:bg-neutral-800">
+          {t('Change my key')}
+        </button>
+      </div>
+    )
+  ) : null;
 
   return (
-    <section className="rounded-lg border border-amber-300 bg-amber-50/40 p-4 dark:border-amber-900 dark:bg-amber-950/20">
+    <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-semibold">{t('Treasury multisig — setup')}</h3>
         <span className="rounded border border-neutral-300 px-2 py-0.5 text-xs text-neutral-700 dark:border-neutral-700 dark:text-neutral-300">
@@ -62,128 +104,83 @@ export function MultisigSetup({ onAssembled }: { onAssembled?: () => void }) {
         </span>
       </div>
 
-      {/* §15.2 — rotation banner: there's an active wallet but the current
-          board's keys would assemble to a different script (re-election in
-          progress, or new seats need to submit). */}
-      {status.rotationInProgress ? (
-        <div className="mt-2 rounded border border-amber-400 bg-amber-100/60 p-2 text-xs dark:border-amber-800 dark:bg-amber-900/40">
-          <strong>{t('Rotation in progress.')}</strong>{' '}
-          {status.allSubmitted
-            ? t('All new keys collected — the platform will assemble the new multisig on the next status refresh.')
-            : `${status.submitted}/${status.total} ${t('new keys collected. The current (old) multisig remains active until the new one is assembled.')}`}
-        </div>
-      ) : null}
-
-      {/* §15.2 — big NEW BOARD MULTISIG banner while a hand-over is in flight. */}
-      {migrating && status.active ? (
-        <div className="mt-3 rounded-md border-2 border-emerald-500 bg-emerald-100 px-3 py-1.5 text-center text-sm font-extrabold uppercase tracking-wide text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-200">
-          {t('NEW BOARD MULTISIG')}
-        </div>
-      ) : null}
-
-      {/* Active assembled config (collapsible). */}
-      {status.active ? (
+      {rotating ? (
         <>
-          <div className="mt-2 rounded border border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40">
-            <button
-              type="button"
-              onClick={() => setShowActive((v) => !v)}
-              className="flex w-full items-center justify-between px-2 py-1.5 text-xs font-semibold text-emerald-800 dark:text-emerald-200"
-            >
-              <span>✓ {t('Active multisig')} · {status.active.threshold}-of-{status.active.totalKeys} · {status.active.balanceAda.toLocaleString()} ₳ {t('on-chain')}</span>
-              <span>{showActive ? `▾ ${t('hide')}` : `▸ ${t('show')}`}</span>
-            </button>
-            {showActive ? (
-              <div className="px-2 pb-2 text-xs">
-                <div className="text-[11px] text-neutral-500">{t('Script address (on-chain home)')}</div>
-                <div className="mt-0.5 flex items-start gap-2">
-                  <div className="flex-1 break-all font-mono text-[11px] text-neutral-700 dark:text-neutral-300">{status.active.bech32Address}</div>
-                  <CopyButton text={status.active.bech32Address} label={t('Copy')} />
-                </div>
-                <div className="mt-1 text-[11px] text-neutral-500">
-                  {t('Script hash:')} <span className="font-mono">{status.active.scriptHash}</span>
-                </div>
-              </div>
-            ) : null}
+          {/* ── NEW BOARD MULTISIG (top): the incoming board sets up its wallet ── */}
+          <div className="mt-3 rounded-lg border-2 border-emerald-500 bg-emerald-50/50 p-3 dark:border-emerald-700 dark:bg-emerald-950/30">
+            <div className="rounded-md bg-emerald-100 px-3 py-1.5 text-center text-sm font-extrabold uppercase tracking-wide text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200">
+              {t('NEW BOARD MULTISIG')}
+            </div>
+            <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-300">
+              <strong>{status.submitted}/{status.total} {t('keys collected')}.</strong>{' '}
+              {t('Each new board member submits their hardware signing key; the platform assembles the new multisig once all keys are in, then moves the funds over.')}
+            </p>
+            <div className="mt-2">{roster}</div>
+            {myKeyBlock}
           </div>
-          {/* §15.3 — bootstrap CTA: the multisig is built but holds 0 ₳.
-              The platform doesn't sign for the legacy env TREASURY_ADDRESS, so
-              a board member with that key has to send funds in from their own
-              wallet. Once anything lands, the platform routes every inbound +
-              outbound flow through this address automatically. */}
-          {status.active.balanceAda === 0 ? (
-            <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-              <div className="font-semibold">{t('Bootstrap funds to start using this multisig')}</div>
-              <p className="mt-1">
-                {t('The multisig is assembled but on-chain balance is')} <strong>0 ₳</strong>. {t('Send some tADA to the script address above from any wallet that controls funds (e.g. the legacy treasury wallet, or any board member\'s personal wallet). Inbound flows (submission fees, pledges) already route here automatically — they\'ll pile up once proposals start.')}
+
+          {/* ── OLD BOARD MULTISIG (below): the current wallet, holds the funds ── */}
+          {status.active ? (
+            <div className="mt-3 rounded-lg border-2 border-amber-500 bg-amber-50/50 p-3 dark:border-amber-600 dark:bg-amber-950/30">
+              <div className="rounded-md bg-amber-100 px-3 py-1.5 text-center text-sm font-extrabold uppercase tracking-wide text-amber-800 dark:bg-amber-900/60 dark:text-amber-200">
+                {t('OLD BOARD MULTISIG')}
+              </div>
+              <p className="mt-2 text-xs text-neutral-600 dark:text-neutral-300">
+                {t('Current treasury — holds the funds. It stays active until the new multisig is assembled, then the funds migrate to it automatically.')}
               </p>
-              <p className="mt-1 text-[11px]">
-                {t('Outbound payouts work via the standard board signing flow once')} {status.active.threshold}-of-{status.active.totalKeys}{' '}
-                {t('board members have signed via')} <strong>{t('Actions → Approve & sign')}</strong> {t('(each click signs the tx with their HW wallet; the platform combines witnesses + broadcasts on the 3rd signature).')}
-              </p>
+              <ConfigCard cfg={status.active} />
             </div>
           ) : null}
         </>
       ) : (
-        <div className="mt-2 rounded border border-amber-300 bg-amber-100/50 p-2 text-xs dark:border-amber-900 dark:bg-amber-900/30">
-          <strong>{t('Multisig not yet built.')}</strong> {t('Every board seat must submit a payment verification key before the platform can assemble the on-chain script.')}
-        </div>
+        <>
+          {/* ── Normal (single multisig) ── */}
+          {migrating && status.active ? (
+            <div className="mt-3 rounded-md border-2 border-emerald-500 bg-emerald-100 px-3 py-1.5 text-center text-sm font-extrabold uppercase tracking-wide text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-200">
+              {t('NEW BOARD MULTISIG')}
+            </div>
+          ) : null}
+          {status.active ? (
+            <>
+              <ConfigCard cfg={status.active} />
+              {status.active.balanceAda === 0 ? (
+                <div className="mt-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                  <div className="font-semibold">{t('Bootstrap funds to start using this multisig')}</div>
+                  <p className="mt-1">
+                    {t('The multisig is assembled but on-chain balance is')} <strong>0 ₳</strong>. {t('Send some tADA to the script address above from any wallet that controls funds (e.g. the legacy treasury wallet, or any board member\'s personal wallet). Inbound flows (submission fees, pledges) already route here automatically — they\'ll pile up once proposals start.')}
+                  </p>
+                  <p className="mt-1 text-[11px]">
+                    {t('Outbound payouts work via the standard board signing flow once')} {status.active.threshold}-of-{status.active.totalKeys}{' '}
+                    {t('board members have signed via')} <strong>{t('Actions → Approve & sign')}</strong> {t('(each click signs the tx with their HW wallet; the platform combines witnesses + broadcasts on the 3rd signature).')}
+                  </p>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="mt-2 rounded border border-amber-300 bg-amber-100/50 p-2 text-xs dark:border-amber-900 dark:bg-amber-900/30">
+              <strong>{t('Multisig not yet built.')}</strong> {t('Every board seat must submit a payment verification key before the platform can assemble the on-chain script.')}
+            </div>
+          )}
+
+          {/* Per-seat roster (collapsible). */}
+          <div className="mt-3 rounded border border-neutral-200 dark:border-neutral-800">
+            <button
+              type="button"
+              onClick={() => setShowRoster((v) => !v)}
+              className="flex w-full items-center justify-between px-2 py-1 text-xs font-semibold text-neutral-700 dark:text-neutral-300"
+            >
+              <span>{t('Board roster')} ({status.submitted}/{status.total} {t('keys submitted')})</span>
+              <span>{showRoster ? `▾ ${t('hide')}` : `▸ ${t('show')}`}</span>
+            </button>
+            {showRoster ? <div className="px-2 pb-2">{roster}</div> : null}
+          </div>
+
+          {myKeyBlock}
+        </>
       )}
 
-      {/* Per-seat roster (collapsible). */}
-      <div className="mt-3 rounded border border-neutral-200 dark:border-neutral-800">
-        <button
-          type="button"
-          onClick={() => setShowRoster((v) => !v)}
-          className="flex w-full items-center justify-between px-2 py-1 text-xs font-semibold text-neutral-700 dark:text-neutral-300"
-        >
-          <span>{t('Board roster')} ({status.submitted}/{status.total} {t('keys submitted')})</span>
-          <span>{showRoster ? `▾ ${t('hide')}` : `▸ ${t('show')}`}</span>
-        </button>
-        {showRoster ? (
-          <ul className="space-y-1 px-2 pb-2 text-xs">
-            {status.seats.map((s) => (
-              <li key={s.seatId} className="rounded border border-neutral-200 bg-white p-2 dark:border-neutral-800 dark:bg-neutral-900">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <span className="font-medium">{s.displayName}</span>
-                    <span className="ml-2 break-all font-mono text-[11px] text-neutral-500">{s.drepId}</span>
-                  </div>
-                  {s.hasKey ? (
-                    <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                      ✓ {t('key submitted')}{s.hardwareAttested ? ' · HW' : ''}
-                    </span>
-                  ) : (
-                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                      ⏳ {t('awaiting key')}
-                    </span>
-                  )}
-                </div>
-                {s.hasKey && s.paymentBech32 ? (
-                  <div className="mt-1 break-all font-mono text-[11px] text-neutral-500">{s.paymentBech32}</div>
-                ) : null}
-                {s.hasKey && s.keyHash ? (
-                  <div className="mt-0.5 text-[11px] text-neutral-500">{t('key hash:')} <span className="font-mono">{s.keyHash}</span></div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-
-      {/* My-seat submission form (only when I AM a board member without a key) */}
-      {isBoard && mySeat && !mySeat.hasKey ? (
-        <SubmitKeyForm onChange={reload} />
-      ) : null}
-      {isBoard && mySeat?.hasKey ? (
-        <div className="mt-3 rounded border border-emerald-300 bg-emerald-50 p-2 text-xs dark:border-emerald-900 dark:bg-emerald-950/40">
-          {t('You\'ve submitted your multisig key — thanks. To rotate, contact the other board members.')}
-        </div>
-      ) : null}
-
-      {/* §15.2 — previous multisigs (collapsible). Each entry shows live
-          balance + a "Migrate funds" CTA (board members only) when funds
-          remain at the old address. */}
+      {/* §15.2 — previous multisigs (collapsible). Each entry shows live balance + a "Migrate
+          funds" CTA (board members only) when funds remain at the old address. */}
       {status.history.length > 0 ? (
         <div className="mt-3 rounded border border-neutral-200 dark:border-neutral-800">
           <button
@@ -215,6 +212,24 @@ export function MultisigSetup({ onAssembled }: { onAssembled?: () => void }) {
         </div>
       ) : null}
     </section>
+  );
+}
+
+/** The assembled multisig's on-chain details: threshold, balance, script address + hash. */
+function ConfigCard({ cfg }: { cfg: MultisigActiveConfig }) {
+  const t = useT();
+  return (
+    <div className="mt-2 rounded border border-neutral-200 bg-white p-2 text-xs dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="font-semibold text-emerald-800 dark:text-emerald-200">
+        ✓ {t('Active multisig')} · {cfg.threshold}-of-{cfg.totalKeys} · {cfg.balanceAda.toLocaleString()} ₳ {t('on-chain')}
+      </div>
+      <div className="mt-1 text-[11px] text-neutral-500">{t('Script address (on-chain home)')}</div>
+      <div className="mt-0.5 flex items-start gap-2">
+        <div className="flex-1 break-all font-mono text-[11px] text-neutral-700 dark:text-neutral-300">{cfg.bech32Address}</div>
+        <CopyButton text={cfg.bech32Address} label={t('Copy')} />
+      </div>
+      <div className="mt-1 text-[11px] text-neutral-500">{t('Script hash:')} <span className="font-mono">{cfg.scriptHash}</span></div>
+    </div>
   );
 }
 
@@ -279,12 +294,12 @@ function HistoryRow({ h, isBoard, pending, onChange }: { h: MultisigHistoryEntry
   );
 }
 
-/** Board member's key-submission form: paste an HW-wallet payment address,
- *  attest HW, sign a CIP-30 challenge with that wallet, submit. */
-function SubmitKeyForm({ onChange }: { onChange: () => void }) {
+/** Board member's key-submission form: paste an HW-wallet payment address (pre-filled with any
+ *  known signing key), attest HW, sign a CIP-30 challenge with that wallet, submit. */
+function SubmitKeyForm({ onChange, initialAddress = '', onCancel }: { onChange: () => void; initialAddress?: string; onCancel?: () => void }) {
   const t = useT();
   const { profile, signMessage } = useAuth();
-  const [paymentBech32, setPaymentBech32] = useState('');
+  const [paymentBech32, setPaymentBech32] = useState(initialAddress);
   const [hardware, setHardware] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -335,12 +350,13 @@ function SubmitKeyForm({ onChange }: { onChange: () => void }) {
           className="mt-1 block w-full rounded border border-neutral-300 px-2 py-1 font-mono text-[11px] dark:border-neutral-700 dark:bg-neutral-900"
         />
       </label>
+      {initialAddress ? <p className="mt-1 text-[11px] text-neutral-500">{t('Pre-filled from your known signing key — change it if you want.')}</p> : null}
       <label className="mt-2 flex items-start gap-2 text-xs">
         <input type="checkbox" checked={hardware} onChange={(e) => setHardware(e.target.checked)} className="mt-0.5" />
         <span>{t('I attest this key is stored on a hardware wallet, not a hot/browser/file wallet.')}</span>
       </label>
       {error ? <div className="mt-1 text-xs text-red-600">{error}</div> : null}
-      <div className="mt-2 flex items-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center gap-2">
         <button
           disabled={busy || !paymentBech32.trim() || !hardware}
           onClick={submit}
@@ -348,6 +364,11 @@ function SubmitKeyForm({ onChange }: { onChange: () => void }) {
         >
           {busy ? t('Verifying signature…') : t('Sign with HW wallet & submit')}
         </button>
+        {onCancel ? (
+          <button type="button" onClick={onCancel} className="rounded border border-neutral-400 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-600 dark:hover:bg-neutral-800">
+            {t('Cancel')}
+          </button>
+        ) : null}
         <span className="text-[11px] text-neutral-500">{t('Your wallet will pop a sign-data request.')}</span>
       </div>
     </div>

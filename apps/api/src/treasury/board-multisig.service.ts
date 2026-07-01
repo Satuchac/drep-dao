@@ -282,9 +282,21 @@ export class BoardMultisigService {
   private async tryAssemble() {
     const seats = await this.prisma.boardSeat.findMany({ where: { removedAt: null }, include: { multisigKey: true }, orderBy: { addedAt: 'asc' } });
     if (seats.length === 0) return null;
-    if (seats.some((s) => !s.multisigKey)) return null;
 
-    const keyHashes = seats.map((s) => s.multisigKey!.paymentKeyHash.toLowerCase()).sort();
+    // Resolve each seat's signing key: the seat's OWN submitted key, else the member's most-recent
+    // known key (a returning board member's key carries over — the same fallback status() uses to
+    // pre-fill the roster). They can still change it via submitKey (which writes the seat's own key
+    // and takes precedence). This keeps assembly consistent with the "X/Y keys collected" count.
+    const resolved = await Promise.all(seats.map(async (s) => {
+      if (s.multisigKey) return s.multisigKey.paymentKeyHash;
+      const member = await this.prisma.appUser.findFirst({ where: { drepKeyHash: s.drepKeyHash }, select: { id: true } });
+      if (!member) return null;
+      const prior = await this.prisma.boardMultisigKey.findFirst({ where: { userId: member.id }, orderBy: { submittedAt: 'desc' } });
+      return prior?.paymentKeyHash ?? null;
+    }));
+    if (resolved.some((kh) => !kh)) return null; // some seat has no resolvable key yet
+
+    const keyHashes = (resolved as string[]).map((kh) => kh.toLowerCase()).sort();
     const built = this.buildNativeScript(keyHashes);
 
     const active = await this.active();
