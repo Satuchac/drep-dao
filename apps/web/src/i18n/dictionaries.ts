@@ -2310,6 +2310,7 @@ const T: Record<string, Translations> = {
   "OLD BOARD MULTISIG": { es: "MULTISIG DEL CONSEJO ANTERIOR", zh: "旧理事会多签", ja: "旧理事会マルチシグ", de: "MULTISIG DES ALTEN VORSTANDS", ru: "МУЛЬТИПОДПИСЬ СТАРОГО СОВЕТА", it: "MULTISIG DEL VECCHIO CONSIGLIO", fr: "MULTISIG DE LANCIEN CONSEIL", pt: "MULTISIG DO CONSELHO ANTIGO", ko: "이전 이사회 멀티시그", ar: "التوقيع المتعدد للمجلس القديم", hi: "पुराना बोर्ड मल्टीसिग" },
   "created": { es: "creado", zh: "创建于", ja: "作成", de: "erstellt", ru: "создан", it: "creato", fr: "créé", pt: "criado", ko: "생성됨", ar: "أُنشئ", hi: "बनाया गया" },
   "terminated": { es: "terminado", zh: "终止于", ja: "終了", de: "beendet", ru: "завершён", it: "terminato", fr: "terminé", pt: "encerrado", ko: "종료됨", ar: "أُنهي", hi: "समाप्त" },
+  "Only DReps can submit internal proposals.": { es: "Solo los DReps pueden enviar propuestas internas.", zh: "只有 DRep 才能提交内部提案。", ja: "DRep のみが内部提案を提出できます。", de: "Nur DReps können interne Anträge einreichen.", ru: "Только DRep могут подавать внутренние предложения.", it: "Solo i DRep possono inviare proposte interne.", fr: "Seuls les DReps peuvent soumettre des propositions internes.", pt: "Apenas DReps podem enviar propostas internas.", ko: "DRep만 내부 제안을 제출할 수 있습니다.", ar: "يمكن لمندوبي DRep فقط تقديم المقترحات الداخلية.", hi: "केवल DRep ही आंतरिक प्रस्ताव प्रस्तुत कर सकते हैं।" },
 };
 
 /** Translate an English source string into `lang`, falling back to the English text. */

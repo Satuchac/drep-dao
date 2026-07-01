@@ -61,6 +61,11 @@ const LIST_PAGE_SIZE = 50;
 
 export function InternalProposals() {
   const tr = useT();
+  const { profile } = useAuth();
+  // §10 — only admitted DReps (DAO members + board) may submit internal proposals. Mirrors the
+  // server-side guard in InternalProposalsService.create/saveDraft (drep.status === ADMITTED);
+  // hiding the button keeps viewers / registered-but-unadmitted DReps from hitting a 403.
+  const canSubmit = !!profile && (profile.roles.includes('DAO_MEMBER') || profile.roles.includes('BOARD'));
   const [items, setItems] = useState<InternalProposalSummary[] | null>(null);
   const [creating, setCreating] = useState(false);
   // §10 — editing a saved draft (its id) vs creating a fresh proposal (null).
@@ -154,9 +159,13 @@ export function InternalProposals() {
               : tr('DAO-governance decisions — process changes, parameter changes, polls. Not tied to a round; voting opens immediately.')}
           </p>
         </div>
-        <button onClick={() => { setEditingDraftId(null); setCreating(true); }} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-          {isElection ? tr('New election') : tr('New internal proposal')}
-        </button>
+        {canSubmit ? (
+          <button onClick={() => { setEditingDraftId(null); setCreating(true); }} className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
+            {isElection ? tr('New election') : tr('New internal proposal')}
+          </button>
+        ) : (
+          <span className="text-xs text-neutral-500">{tr('Only DReps can submit internal proposals.')}</span>
+        )}
       </div>
       {error ? <div className="text-sm text-red-600">{error}</div> : null}
 
