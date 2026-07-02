@@ -323,6 +323,21 @@ export class DrepService {
         const detail = `${p.proposalId ?? ''} · by ${who} (${p.submitterType ?? 'Wallet'}) · ${feeStr}${rejected && p.reason ? ` · reason: ${p.reason}` : ''}`;
         return { id: a.id, title: subTitle, detail, kind: a.kind, label: a.metadataLabel, hash: a.hash, txHash: a.txHash, createdAt: a.createdAt };
       }
+      // §15.2 — a new treasury multisig was prepared (its signers + addresses).
+      if (subject === 'multisig_new') {
+        const mp = (a.preimage ?? {}) as { threshold?: number; totalKeys?: number; signers?: { drep: string; address: string }[] };
+        const n = mp.signers?.length ?? 0;
+        const detail = `${mp.threshold ?? '?'}-of-${mp.totalKeys ?? '?'} · ${n} ${n === 1 ? 'signer' : 'signers'}`;
+        return { id: a.id, title, detail, kind: a.kind, label: a.metadataLabel, hash: a.hash, txHash: a.txHash, createdAt: a.createdAt };
+      }
+      // §15.2 — funds moved from the old multisig to the new one (per-move addresses + txs).
+      if (subject === 'multisig_migration') {
+        const mp = (a.preimage ?? {}) as { totalLovelace?: number; moves?: { from: string; lovelace: number; tx: string }[] };
+        const ada = (mp.totalLovelace ?? 0) / 1_000_000;
+        const n = mp.moves?.length ?? 0;
+        const detail = `${ada.toLocaleString()} ₳ · ${n} ${n === 1 ? 'tx' : 'txs'} → new primary multisig`;
+        return { id: a.id, title, detail, kind: a.kind, label: a.metadataLabel, hash: a.hash, txHash: a.txHash, createdAt: a.createdAt };
+      }
       let detail = '';
       if (p.result) {
         const r = p.result;

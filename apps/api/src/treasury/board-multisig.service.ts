@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as CSL from '@emurgo/cardano-serialization-lib-nodejs';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
+import { AnchorService } from '../cardano/anchor.service';
 import { MeritService } from '../merit/merit.service';
 import { verifyCip30Signature } from '../auth/cip30';
 
@@ -42,6 +43,7 @@ export class BoardMultisigService {
     private readonly config: ConfigService,
     private readonly cardano: CardanoQueryService,
     @Optional() private readonly merit?: MeritService,
+    @Optional() private readonly anchor?: AnchorService,
   ) {
     const net = (this.config.get<string>('CARDANO_NETWORK') ?? 'Preprod').trim();
     this.networkId = net === 'Mainnet' ? 1 : 0;
@@ -303,15 +305,16 @@ export class BoardMultisigService {
     // pre-fill the roster). They can still change it via submitKey (which writes the seat's own key
     // and takes precedence). This keeps assembly consistent with the "X/Y keys collected" count.
     const resolved = await Promise.all(seats.map(async (s) => {
-      if (s.multisigKey) return s.multisigKey.paymentKeyHash;
+      if (s.multisigKey) return { drepId: s.drepId, keyHash: s.multisigKey.paymentKeyHash, address: s.multisigKey.paymentBech32 };
       const member = await this.prisma.appUser.findFirst({ where: { drepKeyHash: s.drepKeyHash }, select: { id: true } });
       if (!member) return null;
       const prior = await this.prisma.boardMultisigKey.findFirst({ where: { userId: member.id }, orderBy: { submittedAt: 'desc' } });
-      return prior?.paymentKeyHash ?? null;
+      return prior ? { drepId: s.drepId, keyHash: prior.paymentKeyHash, address: prior.paymentBech32 } : null;
     }));
-    if (resolved.some((kh) => !kh)) return null; // some seat has no resolvable key yet
+    if (resolved.some((r) => !r)) return null; // some seat has no resolvable key yet
+    const signers = (resolved as { drepId: string; keyHash: string; address: string | null }[]).map((r) => ({ drep: r.drepId, address: r.address ?? '' }));
 
-    const keyHashes = (resolved as string[]).map((kh) => kh.toLowerCase()).sort();
+    const keyHashes = (resolved as { keyHash: string }[]).map((r) => r.keyHash.toLowerCase()).sort();
     const built = this.buildNativeScript(keyHashes);
 
     const active = await this.active();
@@ -337,6 +340,16 @@ export class BoardMultisigService {
       }
       return created;
     }).then(async (created) => {
+      // §15.2 — on-chain proof: a new multisig was prepared (its address + every signer's DRep ID
+      // and provided address). Best-effort; never blocks assembly.
+      try {
+        await this.anchor?.anchorMultisigNew({
+          bech32Address: created.bech32Address,
+          threshold: created.threshold,
+          totalKeys: created.totalKeys,
+          signers,
+        });
+      } catch { /* anchoring is best-effort */ }
       // §15.2 — the platform takes care of the hand-over: as soon as the new multisig
       // is assembled, auto-create the migration tx(s) that move the OLD board's funds
       // to the new address. The OLD board just signs them in Approve & sign. Best-effort

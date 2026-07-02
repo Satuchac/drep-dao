@@ -12,6 +12,8 @@ import {
   buildSubmissionMetadata,
   buildPayoutMetadata,
   buildDocHashMetadata,
+  buildMultisigNewMetadata,
+  buildMultisigMigrationMetadata,
   type AnchorResultMetadata,
   type AnchorSubmissionMetadata,
   type AnchorPayoutMetadata,
@@ -467,6 +469,69 @@ export class AnchorService implements OnModuleInit {
         txHash,
         submittedAt: txHash ? new Date() : null,
       },
+    });
+    return { hash, txHash, submitted: !!txHash };
+  }
+
+  /**
+   * §15.2 — anchor a NEW treasury multisig when it assembles: the new script address + every
+   * board member's DRep ID and the payment address they provided. Best-effort (never blocks
+   * assembly); degrades to txHash null when no anchor hot wallet is configured.
+   */
+  async anchorMultisigNew(params: {
+    bech32Address: string;
+    threshold: number;
+    totalKeys: number;
+    signers: { drep: string; address: string }[];
+  }): Promise<AnchorResult> {
+    const preimage = {
+      subject: GovSubject.MULTISIG_NEW,
+      address: params.bech32Address,
+      threshold: params.threshold,
+      totalKeys: params.totalKeys,
+      signers: params.signers,
+      preparedAt: new Date().toISOString(),
+    };
+    const hash = sha256hex(JSON.stringify(preimage));
+    const metadata = buildMultisigNewMetadata({
+      address: params.bech32Address,
+      threshold: params.threshold,
+      totalKeys: params.totalKeys,
+      signers: params.signers,
+      proofHash: hash,
+    })[GOVERNANCE_METADATA_LABEL];
+    let txHash: string | null = null;
+    try { txHash = await this.submitMetadataTx(metadata as unknown as Record<string, unknown>); }
+    catch (e) { this.logger.warn(`multisig-new anchor submit skipped/failed: ${e instanceof Error ? e.message : e}`); }
+    await this.prisma.anchor.create({
+      data: { kind: GovSubject.MULTISIG_NEW, hash, preimage: preimage as unknown as object, metadataLabel: GOVERNANCE_METADATA_LABEL, txHash, submittedAt: txHash ? new Date() : null },
+    });
+    return { hash, txHash, submitted: !!txHash };
+  }
+
+  /**
+   * §15.2 — anchor the fund migration once the OLD multisig has been emptied into the NEW one:
+   * every move (old source address → amount → tx hash) + the new primary address. Best-effort.
+   */
+  async anchorMultisigMigration(params: {
+    newAddress: string;
+    moves: { from: string; lovelace: number; tx: string }[];
+  }): Promise<AnchorResult> {
+    const moves = params.moves.map((m) => ({ from: m.from, lovelace: Math.round(m.lovelace), tx: m.tx }));
+    const preimage = {
+      subject: GovSubject.MULTISIG_MIGRATION,
+      newAddress: params.newAddress,
+      moves,
+      totalLovelace: moves.reduce((s, m) => s + m.lovelace, 0),
+      movedAt: new Date().toISOString(),
+    };
+    const hash = sha256hex(JSON.stringify(preimage));
+    const metadata = buildMultisigMigrationMetadata({ newAddress: params.newAddress, moves, proofHash: hash })[GOVERNANCE_METADATA_LABEL];
+    let txHash: string | null = null;
+    try { txHash = await this.submitMetadataTx(metadata as unknown as Record<string, unknown>); }
+    catch (e) { this.logger.warn(`multisig-migration anchor submit skipped/failed: ${e instanceof Error ? e.message : e}`); }
+    await this.prisma.anchor.create({
+      data: { kind: GovSubject.MULTISIG_MIGRATION, hash, preimage: preimage as unknown as object, metadataLabel: GOVERNANCE_METADATA_LABEL, txHash, submittedAt: txHash ? new Date() : null },
     });
     return { hash, txHash, submitted: !!txHash };
   }

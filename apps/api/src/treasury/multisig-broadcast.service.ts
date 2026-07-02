@@ -603,6 +603,36 @@ export class MultisigBroadcastService {
     if (action.kind === 'OPS' && action.proposalId && action.destAddress) {
       await anchorSpend('Internal proposal payout');
     }
+    // §15.2 — when the LAST migration tx out of an old multisig confirms, anchor the whole fund
+    // move: every old source address + amount + tx, and the new primary address funds landed at.
+    if (action.kind === 'MIGRATION' && action.fromConfigId) {
+      try {
+        const stillPending = await this.prisma.multisigAction.count({
+          where: { kind: 'MIGRATION', fromConfigId: action.fromConfigId, status: { in: ['PENDING_SIGS', 'READY', 'BROADCASTED'] } },
+        });
+        if (stillPending === 0) {
+          const done = await this.prisma.multisigAction.findMany({
+            where: { kind: 'MIGRATION', fromConfigId: action.fromConfigId, status: 'CONFIRMED', txHash: { not: null } },
+            select: { amountAda: true, txHash: true, destAddress: true, sourceBucketId: true },
+          });
+          const fromCfg = await this.prisma.multisigConfig.findUnique({ where: { id: action.fromConfigId }, select: { bech32Address: true } });
+          const bucketIds = [...new Set(done.map((d) => d.sourceBucketId).filter((x): x is string => !!x))];
+          const bucketAddr = new Map(
+            (bucketIds.length ? await this.prisma.treasuryBucket.findMany({ where: { id: { in: bucketIds } }, select: { id: true, bech32Address: true } }) : [])
+              .map((b) => [b.id, b.bech32Address]),
+          );
+          const moves = done.map((d) => ({
+            from: d.sourceBucketId ? (bucketAddr.get(d.sourceBucketId) ?? '') : (fromCfg?.bech32Address ?? ''),
+            lovelace: Number(d.amountAda ?? 0n),
+            tx: d.txHash as string,
+          }));
+          const newAddress = done.find((d) => d.destAddress)?.destAddress ?? action.destAddress ?? '';
+          if (moves.length && newAddress) await this.anchor.anchorMultisigMigration({ newAddress, moves });
+        }
+      } catch (e) {
+        this.logger.warn(`multisig migration anchor skipped: ${e instanceof Error ? e.message : e}`);
+      }
+    }
     // §13.2 — every signer of a tx that reached the network earns +1 (once per action).
     try {
       const sigs = await this.prisma.multisigSignature.findMany({ where: { actionId }, select: { boardDrepId: true } });

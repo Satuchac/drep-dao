@@ -39,6 +39,8 @@ export const GovSubject = {
   DAILY_VOTES: 'daily_votes', // §24.1 — daily digest: hash of yesterday's vote rows
   DAILY_MERIT: 'daily_merit', // §24.1 — daily digest: hash of yesterday's merit deltas
   PROPOSAL_DOC: 'proposal_doc', // §8.1 — content fingerprint taken when Debate ends (proposal frozen)
+  MULTISIG_NEW: 'multisig_new', // §15.2 — a new treasury multisig assembled (signers + addresses)
+  MULTISIG_MIGRATION: 'multisig_migration', // §15.2 — funds moved from the old multisig to the new one
 } as const;
 export type GovSubject = (typeof GovSubject)[keyof typeof GovSubject];
 
@@ -97,6 +99,8 @@ export const SUBJECT_TITLE: Record<GovSubject, string> = {
   daily_votes: 'Daily vote-tally digest',
   daily_merit: 'Daily merit-ledger digest',
   proposal_doc: 'Proposal content fingerprint (post-debate)',
+  multisig_new: 'New multisig prepared',
+  multisig_migration: 'Funds moved from old multisig to the new multisig',
 };
 export const STYLE_LABEL: Record<VotingStyle, string> = {
   '1P1V': '1 member, 1 vote',
@@ -319,6 +323,73 @@ export function buildDocHashMetadata(p: {
     hashAlgo: p.hashAlgo,
     contentHash: p.contentHash,
     frozenAt: p.frozenAt,
+  };
+  return { [GOVERNANCE_METADATA_LABEL]: meta };
+}
+
+/**
+ * §15.2 — anchor written when a NEW treasury multisig is assembled during a board hand-over.
+ * Self-describing: the new script address + every signer's DRep ID and the payment address they
+ * provided. Anyone can read who controls the new treasury without the DB.
+ */
+export interface AnchorMultisigNewMetadata {
+  title: string; // "New multisig prepared"
+  subject: GovSubject; // 'multisig_new'
+  address: string; // the new multisig script address (on-chain home)
+  threshold: number; // M of N
+  totalKeys: number; // N
+  signers: { drep: string; address: string }[]; // each board member's DRep ID + provided address
+  preparedAt: string; // ISO-8601 UTC
+  proofHash?: string;
+}
+export function buildMultisigNewMetadata(p: {
+  address: string;
+  threshold: number;
+  totalKeys: number;
+  signers: { drep: string; address: string }[];
+  proofHash?: string;
+}): Record<string, AnchorMultisigNewMetadata> {
+  const meta: AnchorMultisigNewMetadata = {
+    title: SUBJECT_TITLE[GovSubject.MULTISIG_NEW],
+    subject: GovSubject.MULTISIG_NEW,
+    address: p.address,
+    threshold: p.threshold,
+    totalKeys: p.totalKeys,
+    signers: p.signers,
+    preparedAt: new Date().toISOString(),
+    ...(p.proofHash ? { proofHash: p.proofHash } : {}),
+  };
+  return { [GOVERNANCE_METADATA_LABEL]: meta };
+}
+
+/**
+ * §15.2 — anchor written when the OLD multisig's funds have been moved to the NEW one. Records
+ * every move: the old source address, the lovelace amount, and the tx that moved it, plus the new
+ * primary multisig address the funds landed at.
+ */
+export interface AnchorMultisigMigrationMetadata {
+  title: string; // "Funds moved from old multisig to the new multisig"
+  subject: GovSubject; // 'multisig_migration'
+  newAddress: string; // the new primary multisig address funds moved to
+  moves: { from: string; lovelace: number; tx: string }[]; // old address, amount, tx id
+  totalLovelace: number;
+  movedAt: string; // ISO-8601 UTC
+  proofHash?: string;
+}
+export function buildMultisigMigrationMetadata(p: {
+  newAddress: string;
+  moves: { from: string; lovelace: number; tx: string }[];
+  proofHash?: string;
+}): Record<string, AnchorMultisigMigrationMetadata> {
+  const moves = p.moves.map((m) => ({ from: m.from, lovelace: Math.round(m.lovelace), tx: m.tx }));
+  const meta: AnchorMultisigMigrationMetadata = {
+    title: SUBJECT_TITLE[GovSubject.MULTISIG_MIGRATION],
+    subject: GovSubject.MULTISIG_MIGRATION,
+    newAddress: p.newAddress,
+    moves,
+    totalLovelace: moves.reduce((s, m) => s + m.lovelace, 0),
+    movedAt: new Date().toISOString(),
+    ...(p.proofHash ? { proofHash: p.proofHash } : {}),
   };
   return { [GOVERNANCE_METADATA_LABEL]: meta };
 }
