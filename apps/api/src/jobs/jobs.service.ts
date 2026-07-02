@@ -118,6 +118,33 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
         });
       }
     }
+    // §15.2 — remind board members who still owe their treasury multisig signing key (initial
+    // setup OR after a board rotation), so the new multisig can be assembled + funds migrated.
+    await this.remindMultisigKeys().catch((e) => this.logger.warn(`multisig-key reminder: ${e instanceof Error ? e.message : e}`));
+  }
+
+  /**
+   * §15.2 — notify each board member whose active seat is still awaiting their multisig signing
+   * key. A member "owes" a key when their seat has no own key AND they have no prior key that
+   * carries over (mirrors BoardMultisigService.tryAssemble's resolution — a returning member's
+   * carried-over key doesn't block assembly, so they aren't nagged). Deduped per seat (refId =
+   * seat id), so it's created once and clears itself once they submit.
+   */
+  private async remindMultisigKeys() {
+    const seats = await this.prisma.boardSeat.findMany({ where: { removedAt: null }, include: { multisigKey: true } });
+    if (seats.length === 0) return;
+    const keyedUsers = new Set(
+      (await this.prisma.boardMultisigKey.findMany({ select: { userId: true } })).map((k) => k.userId),
+    );
+    for (const s of seats) {
+      if (s.multisigKey) continue; // this seat already has its own key
+      const member = await this.prisma.appUser.findFirst({ where: { drepKeyHash: s.drepKeyHash }, select: { id: true } });
+      if (!member || keyedUsers.has(member.id)) continue; // no account yet, or a carried-over key exists
+      await this.notify.notifyUsers([member.id], 'MULTISIG_KEY_NEEDED', s.id, {
+        title: 'Action needed: submit your treasury multisig signing key — open Treasury → Multisig setup so the new multisig can be assembled.',
+        body: 'You are on the board but haven\'t submitted your hardware signing key yet. The platform can\'t assemble the treasury multisig (and migrate funds) until every seat has a key.',
+      });
+    }
   }
 
   /**
