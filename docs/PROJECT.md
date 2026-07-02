@@ -5,7 +5,9 @@
 > changes, update the relevant section here in the same change. `DESIGN.md` is the
 > full spec (the "what we intend"); this file is the "what is built".
 >
-> **Last updated:** 2026-07-01 — **full 12-language UI + light/dark theme** and the
+> **Last updated:** 2026-07-02 — the full **board hand-over / treasury multisig migration** process
+> is documented end-to-end in **§17** (assemble → auto-migrate → two on-chain proofs → terminate).
+> Earlier: **full 12-language UI + light/dark theme** and the
 > **board-election → treasury multisig hand-over** (see §16). Earlier: profile & round-control
 > polish (see §14): slimmed
 > on-chain submission anchor, **post-debate content fingerprint**, proposal **title
@@ -730,3 +732,59 @@ optional `REWARDS_ADDRESS` / `OPERATIONS_ADDRESS` (dedicated bucket addresses).
 - Treasury **Transactions** no longer surfaces "Cannot reach the API": the cold-cache path in
   `addressTransactions` races the slow db-sync query against a 6.5 s deadline and returns empty (then
   warms in the background) instead of blowing past the frontend's 10 s timeout.
+
+## 17. Board hand-over — treasury multisig migration (§15.2)
+
+When the DAO elects a **new board** (internal "Board member election"), the treasury is a
+3-of-N native-script multisig assembled from the board's keys, so a board change means moving
+the funds to a **new** multisig the new board controls. The platform drives the whole hand-over;
+nothing moves without the old board's signatures.
+
+**End-to-end flow:**
+
+1. **Election approved → board installed.** The election is APPROVED by vote; the new board is
+   *installed* either automatically on the **installation date** (`RoundsScheduler`/`maybeInstallElection`)
+   or early by any current board member ("Install new board members now"). `installBoardFromProposal`
+   soft-deletes the old seats (their `BoardMultisigKey`s stay, so they can still sign the migration)
+   and inserts the 5 new seats.
+2. **New board submits keys.** Each new board member submits their hardware signing key on
+   **Treasury → Multisig setup**. A returning member's key **carries over** (they can change it via
+   "Change my key"); a genuinely new member submits a fresh HW key. A **periodic reminder**
+   (`JobsService.remindMultisigKeys`, 5-min tick) notifies any seat still awaiting a key — reliable
+   regardless of how/when the board was installed.
+3. **New multisig assembles.** Once every seat has a (resolvable) key, `BoardMultisigService.tryAssemble`
+   builds the new native script + address, inserts a new `MultisigConfig`, and stamps the old one
+   `replacedAt` + links the successor. **On-chain proof #1** is written here — *"New multisig
+   prepared"* (`anchorMultisigNew`): the new address, threshold, and every signer's DRep ID +
+   provided payment address.
+4. **Funds auto-migrate.** Immediately after assembly the platform auto-creates the migration
+   transactions (`migrateAllFundedSources`): **one per funded source** — the old main address plus
+   each labeled bucket — all moving funds to the **new multisig's primary address** (the new board
+   re-creates buckets + splits funds later if they want). Each is a `MIGRATION` MultisigAction
+   labelled **"FUND MIGRATION"** with the source name (e.g. "Rewards bucket → new primary address").
+   The **old board** signs them in **Actions → Approve & sign** (bucket migrations sign with the
+   bucket's wrapped script — `resolveSource` checks `sourceBucketId` first). The manual "Migrate
+   funds" button on each old wallet remains as a fallback.
+5. **Migration complete → proof #2.** When the **last** migration tx out of the old config confirms
+   (no `MIGRATION` actions left pending for it), **on-chain proof #2** is written —
+   *"Funds moved from old multisig to the new multisig"* (`anchorMultisigMigration`): each move
+   (old source address, lovelace amount, tx id) + the new primary address.
+6. **Old multisig terminates.** An old config reads as **terminated** only once its main address AND
+   every bucket are drained (`status()` sums bucket balances; the terminated date is the migration
+   tx's paid date, derived — no schema change). It then lives in the multisig-setup **history** with
+   its created + terminated dates.
+
+**Hot wallet** is platform infrastructure (the anchor wallet that pays tx/anchor fees) — it is
+**not** board-owned and **stays put** across board rotations.
+
+**UI (`multisig-setup.tsx`).** During a hand-over the setup page splits into two labelled panels —
+**NEW BOARD MULTISIG** (top: the incoming board's roster + key collection, the current member's form
+pre-filled from their known key) and **OLD BOARD MULTISIG** (below: the current wallet holding the
+funds + its signer roster of names/addresses). Once the old wallet is empty the split collapses back
+to the normal single-multisig view.
+
+**Both anchors** use label 80808081 with the standard `sha256(preimage)` commitment (Cardanoscan-
+verifiable), are best-effort (never block assembly/broadcast; degrade to `txHash` null without a hot
+wallet), and are **not applied retrospectively** — they only fire on hand-overs that happen after the
+feature shipped. The pure metadata builders are unit-tested (`buildMultisigNewMetadata` /
+`buildMultisigMigrationMetadata` in `packages/cardano`).

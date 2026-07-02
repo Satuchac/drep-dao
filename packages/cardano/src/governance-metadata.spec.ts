@@ -7,6 +7,8 @@ import {
   buildSubmissionMetadata,
   buildDocHashMetadata,
   buildResultMetadata,
+  buildMultisigNewMetadata,
+  buildMultisigMigrationMetadata,
 } from './governance-metadata';
 
 describe('buildSubmissionMetadata (§3 — slimmed accepted-proposal anchor)', () => {
@@ -173,5 +175,73 @@ describe('buildResultMetadata (§4 — on-chain voting-power precision)', () => 
     expect(meta.tally.no).toBe(1);
     expect(meta.tally.unit).toBe('1 vote');
     expect('totalPower' in meta.tally).toBe(false);
+  });
+});
+
+describe('buildMultisigNewMetadata (§15.2 — new treasury multisig anchor)', () => {
+  const base = {
+    address: 'addr_test1new…',
+    threshold: 3,
+    totalKeys: 5,
+    signers: [
+      { drep: 'drep1alice', address: 'addr_test1alice…' },
+      { drep: 'drep1heidi', address: 'addr_test1heidi…' },
+    ],
+  };
+
+  it('is titled "New multisig prepared" and tagged with the multisig_new subject', () => {
+    const meta = buildMultisigNewMetadata(base)[GOVERNANCE_METADATA_LABEL];
+    expect(meta.title).toBe('New multisig prepared');
+    expect(meta.title).toBe(SUBJECT_TITLE[GovSubject.MULTISIG_NEW]);
+    expect(meta.subject).toBe(GovSubject.MULTISIG_NEW);
+    expect(meta.subject).toBe('multisig_new');
+  });
+
+  it('records the new address, threshold, and every signer (DRep id + provided address)', () => {
+    const meta = buildMultisigNewMetadata(base)[GOVERNANCE_METADATA_LABEL];
+    expect(meta.address).toBe('addr_test1new…');
+    expect(meta.threshold).toBe(3);
+    expect(meta.totalKeys).toBe(5);
+    expect(meta.signers).toEqual(base.signers);
+    expect(typeof meta.preparedAt).toBe('string');
+  });
+
+  it('carries proofHash only when provided', () => {
+    expect('proofHash' in buildMultisigNewMetadata(base)[GOVERNANCE_METADATA_LABEL]).toBe(false);
+    expect(buildMultisigNewMetadata({ ...base, proofHash: 'abc' })[GOVERNANCE_METADATA_LABEL].proofHash).toBe('abc');
+  });
+});
+
+describe('buildMultisigMigrationMetadata (§15.2 — funds-moved anchor)', () => {
+  const base = {
+    newAddress: 'addr_test1new…',
+    moves: [
+      { from: 'addr_test1old_main…', lovelace: 14_100_000, tx: 'tx_main' },
+      { from: 'addr_test1old_rewards…', lovelace: 2_000_000, tx: 'tx_rewards' },
+    ],
+  };
+
+  it('is titled "Funds moved from old multisig to the new multisig" (multisig_migration subject)', () => {
+    const meta = buildMultisigMigrationMetadata(base)[GOVERNANCE_METADATA_LABEL];
+    expect(meta.title).toBe('Funds moved from old multisig to the new multisig');
+    expect(meta.subject).toBe('multisig_migration');
+  });
+
+  it('records the new address, each move (old address + amount + tx), and the summed total', () => {
+    const meta = buildMultisigMigrationMetadata(base)[GOVERNANCE_METADATA_LABEL];
+    expect(meta.newAddress).toBe('addr_test1new…');
+    expect(meta.moves).toEqual(base.moves);
+    expect(meta.totalLovelace).toBe(16_100_000); // 14.1M + 2M
+    expect(typeof meta.movedAt).toBe('string');
+  });
+
+  it('rounds fractional lovelace to integers (Cardano metadata forbids floats)', () => {
+    const meta = buildMultisigMigrationMetadata({
+      newAddress: 'addr_test1new…',
+      moves: [{ from: 'addr_test1old…', lovelace: 1_000_000.7, tx: 'tx1' }],
+    })[GOVERNANCE_METADATA_LABEL];
+    expect(meta.moves[0].lovelace).toBe(1_000_001);
+    expect(Number.isInteger(meta.moves[0].lovelace)).toBe(true);
+    expect(Number.isInteger(meta.totalLovelace)).toBe(true);
   });
 });
