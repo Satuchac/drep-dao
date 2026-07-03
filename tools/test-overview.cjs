@@ -63,7 +63,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   // clean prior
   const prior = await prisma.expert.findFirst({ where: { userId: carol } });
   if (prior) await prisma.expert.delete({ where: { id: prior.id } });
-  const applied = await drep.applyExpert(carol, { displayName: 'Carol', bio: 'QA + tooling', subcategoryIds: ['tooling'] });
+  const applied = await drep.applyExpert(carol, { displayName: 'Carol', bio: 'QA + tooling', subcategoryIds: ['tooling'], conflictOfInterest: 'None.', email: 'carol@test.io', telegram: '@carol_t' });
   ok('expert application pending', applied.approvedByBoard === false);
   const pendingList = await drep.listExpertApplications();
   ok('appears in board pending list', pendingList.some((e) => e.id === applied.id));

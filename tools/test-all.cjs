@@ -51,6 +51,8 @@ const SUITES = [
   ['test-signing-mode', '§15/§20 TX_SIGNING_PROCESS: 1-phase default + gates, 2-phase fallback gates, governance validation'],
   ['test-merit-tx', '§13.2 treasury-action merit: TX_INITIATED/TX_SIGNED deltas, initiator tracking, idempotent award'],
   ['test-internal-transfer', '§15.5 internal transfers: board-only, distinct buckets, bucket-address destination, initiator stamp'],
+  ['test-tally-rewards', '§9/§12/§16 round end-game: VOTE→TALLY tally (approve/budget-cut/reject), TALLY→FUNDING poll guard, D&V reward calc + payout freeze, pledge return shares (self-cleaning)'],
+  ['test-multisig-migration', '§15.2 board hand-over: assembly + carry-over keys, key reminder, auto FUND MIGRATION per source, resolveSource, terminate + both on-chain proofs (self-cleaning)'],
 ];
 
 const failed = [];

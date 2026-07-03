@@ -788,3 +788,23 @@ verifiable), are best-effort (never block assembly/broadcast; degrade to `txHash
 wallet), and are **not applied retrospectively** — they only fire on hand-overs that happen after the
 feature shipped. The pure metadata builders are unit-tested (`buildMultisigNewMetadata` /
 `buildMultisigMigrationMetadata` in `packages/cardano`).
+
+## 18. Recent additions (2026-07-03) — audit, bug fixes & end-game test coverage
+
+A focused audit of the fund-critical flows (tally, rewards, pledge, milestone funding,
+multisig hand-over). **Full findings — fixed and open — live in `docs/AUDIT-2026-07.md`.**
+
+- **8 bugs fixed**, the worst being: recompute could delete reward entries linked to a pending
+  payout (double-payment path); a manual payout confirmation skipped the milestone-PAID stamp
+  and the pledge return (silently stranded pledge); a stop-funded proposal could keep drawing
+  milestone payouts and be resurrected FAILED → COMPLETE; an all-returning-members board
+  rotation stalled forever (assembly now also triggers on the multisig status refresh).
+- **E2E suites repaired**: 13 of 21 service-level suites had rotted against intentional
+  validation changes (mandatory contact/COI, milestone-title words, title min-length, ranked
+  quick-poll API, removed `extendVoting`, budget-change round flags, slimmed anchor shape).
+- **Two new scenario suites** (in `pnpm test:e2e`): `test-tally-rewards` (mid-VOTE finalize
+  blocked → VOTE→TALLY crystallization incl. budget-cut → TALLY→FUNDING poll guard → §12
+  reward pools/payout freeze → §16.3 pledge-return shares → CLOSED) and
+  `test-multisig-migration` (assembly + carry-over keys → key reminder → auto FUND MIGRATION
+  per source → old-board signing resolution → terminate + both on-chain proofs).
+  All 23 suites + 102 unit tests pass.

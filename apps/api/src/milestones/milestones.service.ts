@@ -432,6 +432,11 @@ export class MilestonesService {
     if (!m) throw new NotFoundException('milestone not found');
     if (m.proposal.submitterUserId !== userId) throw new ForbiddenException('not your proposal');
     if (m.proposal.stage !== ProposalStage.FUNDING) throw new ConflictException('proposal is not in the FUNDING stage');
+    // §11 — a stop-funded (FAILED) or COMPLETE proposal draws no further POAs. Stop-funding only
+    // flips `status` (stage stays FUNDING), so the stage check above doesn't cover it.
+    if (m.proposal.status !== ProposalStatus.APPROVED) {
+      throw new ConflictException('this proposal is no longer active for funding (stopped or completed) — POAs are closed');
+    }
     if (m.proposal.round && m.proposal.round.status !== RoundStatus.FUNDING) {
       throw new ConflictException('the round is not in the FUNDING stage — POAs are closed');
     }
@@ -614,6 +619,11 @@ export class MilestonesService {
     }
 
     if (outcome === 'APPROVED') {
+      // §11 — re-check the proposal is still APPROVED: a stop-funding vote may have FAILED it
+      // while this POA was under review. A terminated project must not draw a payout, and the
+      // remaining===0 flip below must never resurrect FAILED → COMPLETE.
+      const fresh = await this.prisma.proposal.findUnique({ where: { id: m.proposal.id }, select: { status: true } });
+      if (fresh?.status !== ProposalStatus.APPROVED) return;
       // Auto-prepare a PROJECT_FUNDING multisig action so the board can sign & pay out
       // the milestone budget. This shows up in board "Actions" with a notification badge.
       await this.preparePayoutAction(m.proposal.id, m.id, m.idx, Number(m.amountAda) / LOVELACE, m.proposal.title, m.proposal.publicId, m.proposal.payoutAddress);
@@ -665,8 +675,11 @@ export class MilestonesService {
     // Idempotent — by milestoneId now (we used to match the description tag
     // since the action wasn't linked to the milestone). One PROJECT_FUNDING
     // action per approved milestone.
+    // FAILED (board-cancelled) actions don't block a retry — the partial unique index was
+    // designed for exactly this ("one LIVE action per milestone"); without the status filter a
+    // cancelled payout dead-ended the milestone forever (no re-prepare path exists).
     const existing = await this.prisma.multisigAction.findFirst({
-      where: { kind: 'PROJECT_FUNDING', milestoneId },
+      where: { kind: 'PROJECT_FUNDING', milestoneId, status: { not: 'FAILED' } },
     });
     if (existing) return;
     const label = `Milestone #${idx + 1} payout — ${publicId ? `${publicId}: ` : ''}${title}`;

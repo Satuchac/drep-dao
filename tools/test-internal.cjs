@@ -119,16 +119,17 @@ const created = [];
     ok('Red has 2 votes', red && red.voters === 2, JSON.stringify(red));
     ok('poll abstain counted (1 voter)', finPoll.tally.kind === 'POLL' && finPoll.tally.abstain.voters === 1, JSON.stringify(finPoll.tally.kind === 'POLL' && finPoll.tally.abstain));
 
-    // 5) Submitter moves the voting end; content stays frozen.
+    // 5) The voting end is FIXED at submission — extendVoting was removed on purpose
+    //    (commit a612ab0 "Internal proposals: fix the voting end at submission (no extend)").
     const p5 = await svc.submit(proposer, {
       title: '__test__ extend', contentMd: 'x', internalType: 'INFORMATIVE',
       votersScope: 'BOTH', thresholdKind: 'IMPORTANT', votingType: 'BALANCED', votingPeriodDays: 3,
     });
     created.push(p5.id);
-    const newEnd = new Date(Date.now() + 30 * 86400_000).toISOString();
-    const ext = await svc.extendVoting(proposer, p5.id, newEnd);
-    ok('submitter extends the voting end', new Date(ext.votingEndAt).getTime() > Date.now() + 20 * 86400_000);
-    ok('IMPORTANT threshold = 75%', ext.thresholdPct === 75, `${ext.thresholdPct}`);
+    ok('voting end is fixed at submission (no extend API)', typeof svc.extendVoting !== 'function');
+    const p5end = new Date(p5.votingEndAt).getTime();
+    ok('voting end ≈ submission + votingPeriodDays', Math.abs(p5end - (Date.now() + 3 * 86400_000)) < 3_600_000, p5.votingEndAt);
+    ok('IMPORTANT threshold = 75%', p5.thresholdPct === 75, `${p5.thresholdPct}`);
 
     // 6) PRIVATE proposal is hidden from a non-board viewer.
     const priv = await svc.submit(proposer, {

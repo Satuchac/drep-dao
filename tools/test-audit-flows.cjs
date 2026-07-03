@@ -125,9 +125,9 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
 
     const launched = await quickPolls.launch(poll.id);
     ok('§9.2 board one-click launch opens the window', launched?.status === 'ACTIVE' && !!launched?.endsAt);
-    const voted = await quickPolls.vote(d1.userId, poll.id, T1.id);
-    ok('§9.2 eligible DRep votes (choice recorded)', voted?.myChoice === T1.id);
-    await throws('§9.2 non-candidate choice rejected', () => quickPolls.vote(d1.userId, poll.id, A.id), /not a candidate/);
+    const voted = await quickPolls.vote(d1.userId, poll.id, [T1.id, T2.id]);
+    ok('§9.2 eligible DRep votes (choice recorded)', voted?.myRanking?.[0] === T1.id);
+    await throws('§9.2 non-candidate choice rejected', () => quickPolls.vote(d1.userId, poll.id, [A.id, T2.id]), /not a candidate/);
 
     // Low participation (1 of 2 voters, power 50%) at deadline → extension.
     await db.quickPoll.update({ where: { id: poll.id }, data: { endsAt: new Date(Date.now() - 1000) } });
@@ -179,7 +179,7 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     // ── §2.1 submitter gating ────────────────────────────────────────────────
     await db.round.update({ where: { id: round.id }, data: { status: 'SUBMISSION' } });
     await throws('§2.1 createDraft refused without an approved submitter role',
-      () => proposals.createDraft(user.id, { roundId: round.id, categoryId: cat.id, title: 't', contentMd: 'c', isCommercial: false, requestedAmountAda: 10, milestones: [{ description: 'm', amountAda: 10 }] }),
+      () => proposals.createDraft(user.id, { roundId: round.id, categoryId: cat.id, title: 'Audit flow test', contentMd: 'c', isCommercial: false, requestedAmountAda: 10, milestones: [{ title: 'Milestone 1', description: 'm', amountAda: 10 }] }),
       /approved submitter/);
 
     // ── §2.1 no self-review of submitter applications ────────────────────────

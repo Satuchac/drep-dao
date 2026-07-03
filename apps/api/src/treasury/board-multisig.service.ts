@@ -85,6 +85,12 @@ export class BoardMultisigService {
    *   - migrationsPending: open MIGRATION actions awaiting signatures
    */
   async status() {
+    // §15.2 — opportunistic assembly. submitKey() triggers assembly, but a rotated board whose
+    // EVERY member's key carries over (all served before) has nothing left to submit — without
+    // this, that hand-over would stall forever. Also makes the UI's promise true ("the platform
+    // will assemble the new multisig on the next status refresh"). Cheap no-op when not ready:
+    // tryAssemble bails early when a seat lacks a resolvable key or the script already matches.
+    await this.tryAssemble().catch(() => null);
     const [seats, active, hist, keys] = await Promise.all([
       this.prisma.boardSeat.findMany({ where: { removedAt: null }, include: { multisigKey: true }, orderBy: { addedAt: 'asc' } }),
       this.active(),

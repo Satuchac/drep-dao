@@ -50,13 +50,14 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
 
   // A round with a category bounded to a 10,000–100,000 ₳ ask per proposal.
   const r = await rounds.create({
+    ignoreBudgetChange: 0, requireFeeTopUp: 1, requireFeeReturn: 1,
     name: '__category_ask_test__', mandatoryWords: 0, budgetAda: 500000, rewardsPoolAda: 1000,
     categories: [{ name: 'Bounded', type: 'GRANT', allocatedAda: 500000, minAda: 10000, maxAda: 100000, conditions: 'OSS only' }],
   });
   const catId = r.categories[0].id;
   const roundIds = [r.id];
   await db.round.update({ where: { id: r.id }, data: { status: 'SUBMISSION' } });
-  const mk = (amt, extra = {}) => ({ roundId: r.id, categoryId: catId, title: 't', payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'c', isCommercial: false, requestedAmountAda: amt, milestones: [{ description: 'm', amountAda: amt }], ...extra });
+  const mk = (amt, extra = {}) => ({ roundId: r.id, categoryId: catId, title: 'Ask range test', payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'c', isCommercial: false, requestedAmountAda: amt, milestones: [{ title: 'Milestone 1', description: 'm', amountAda: amt }], ...extra });
 
   try {
     await throws('request below min (5,000) rejected', () => proposals.createDraft(u.id, mk(5000)), /below.*minimum/);
@@ -75,7 +76,7 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     // Editing a draft: the frontend PATCH carries categoryId (allowed) but NOT roundId
     // (immutable). updateDraft must accept that shape and persist the change.
     const edited = await proposals.updateDraft(u.id, good.id, {
-      categoryId: catId, title: 't', payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'changed pitch', isCommercial: false, requestedAmountAda: 50000,
+      categoryId: catId, title: 'Ask range test', payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'changed pitch', isCommercial: false, requestedAmountAda: 50000,
       submissionFeeTxHash: 'tx12345',
       milestones: [{ title: 'MVP', description: 'Build the MVP', acceptanceCriteria: 'Demo on Preprod', amountAda: 50000 }],
     });
@@ -93,7 +94,7 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     // you can't quote+pay a small fee then raise the budget for free.
     const pendingEdit = await proposals.updateDraft(u.id, good.id, { payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'edited while pending' });
     ok('PENDING content is editable', pendingEdit.status === 'PENDING' && pendingEdit.contentMd === 'edited while pending' && pendingEdit.requestedAmountAda === 50000, `${pendingEdit.status}/${pendingEdit.requestedAmountAda}`);
-    await throws('requested amount is LOCKED while PENDING', () => proposals.updateDraft(u.id, good.id, { requestedAmountAda: 60000, milestones: [{ description: 'm', amountAda: 60000 }] }), /locked after submission/);
+    await throws('requested amount is LOCKED while PENDING', () => proposals.updateDraft(u.id, good.id, { requestedAmountAda: 60000, milestones: [{ title: 'Milestone 1', description: 'm', amountAda: 60000 }] }), /locked after submission/);
     // Board fee review: reject needs a reason, then sets REJECTED + the feedback the submitter sees.
     await throws('reject needs a reason', () => proposals.reviewFee(good.id, { decision: 'REJECT' }), /reason is required/);
     const reviewed = await proposals.reviewFee(good.id, { decision: 'REJECT', feedback: 'fee underpaid' });
@@ -107,7 +108,7 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     const approved = await proposals.reviewFee(good.id, { decision: 'APPROVE', feedback: 'looks good' });
     ok('approve → ACTIVE + structured publicId', approved.status === 'ACTIVE' && /^R\d+-P\d+$/.test(approved.publicId || ''), `${approved.status}/${approved.publicId}`);
     const feeAnchor = await db.anchor.findFirst({ where: { proposalId: good.id, kind: 'submission' }, orderBy: { createdAt: 'desc' } });
-    ok('acceptance anchored with proposalId+submitter+fee tx', !!feeAnchor && feeAnchor.preimage?.proposalId === approved.publicId && feeAnchor.preimage?.fee?.paid === true && feeAnchor.preimage?.fee?.txHash === 'txFIXED' && !!feeAnchor.preimage?.submitter, JSON.stringify(feeAnchor?.preimage));
+    ok('acceptance anchored with proposalId+submitter+fee tx', !!feeAnchor && feeAnchor.preimage?.proposalId === approved.publicId && feeAnchor.preimage?.fee?.txHash === 'txFIXED' && !!feeAnchor.preimage?.submitter, JSON.stringify(feeAnchor?.preimage));
 
     // EditSection (ACTIVE/Filtering): all descriptive fields stay editable + persist; amount stays locked.
     const reviewEdit = await proposals.updateDraft(u.id, good.id, { teamInfoMd: 'Updated team', revenueSharingMd: '10% to DAO', costBreakdownMd: 'Dev + ops', subcategoryIds: ['governance'] });
@@ -115,7 +116,7 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     await throws('amount still locked while ACTIVE', () => proposals.updateDraft(u.id, good.id, { requestedAmountAda: 70000 }), /locked after submission/);
 
     // §12 budget change on an ACTIVE proposal (OSS 1%, current fee 500 for 50,000 ₳).
-    const incReq = await proposals.requestBudgetChange(u.id, good.id, { requestedAmountAda: 80000, milestones: [{ description: 'm', amountAda: 80000 }] });
+    const incReq = await proposals.requestBudgetChange(u.id, good.id, { requestedAmountAda: 80000, milestones: [{ title: 'Milestone 1', description: 'm', amountAda: 80000 }] });
     ok('budget increase creates a PENDING board request (§12)', incReq.status === 'PENDING', incReq.status);
     await proposals.approveBudgetChange(u.id, incReq.id);
     const increased = await proposals.get(good.id, u.id);
@@ -124,10 +125,11 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     const topup = pays.find((x) => x.proposalId === good.id && x.kind === 'TOPUP');
     ok('increase → TOPUP owed = fee delta (800−500)', !!topup && topup.amountAda === 300, JSON.stringify(topup));
     ok('settlement carries old→new fee + payout address', !!topup && topup.prevFeeAda === 500 && topup.newFeeAda === 800 && topup.payoutAddress === 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', JSON.stringify({ prev: topup?.prevFeeAda, next: topup?.newFeeAda, addr: topup?.payoutAddress }));
+    await proposals.submitterTopUp(u.id, good.id, 'txTOPUP');
     await proposals.settlePayment(u.id, topup.id, 'txTOPUP');
     pays = await proposals.listPayments();
     ok('settled top-up leaves the pending list', !pays.find((x) => x.id === topup.id));
-    const decReq = await proposals.requestBudgetChange(u.id, good.id, { requestedAmountAda: 30000, milestones: [{ description: 'm', amountAda: 30000 }] });
+    const decReq = await proposals.requestBudgetChange(u.id, good.id, { requestedAmountAda: 30000, milestones: [{ title: 'Milestone 1', description: 'm', amountAda: 30000 }] });
     await proposals.approveBudgetChange(u.id, decReq.id);
     const decreased = await proposals.get(good.id, u.id);
     ok('approved budget decrease applies', decreased.requestedAmountAda === 30000, String(decreased.requestedAmountAda));
@@ -141,12 +143,12 @@ const throws = async (l, fn, re) => { try { await fn(); ok(l, false, 'did not th
     });
     roundIds.push(freeRound.id);
     await db.round.update({ where: { id: freeRound.id }, data: { status: 'SUBMISSION' } });
-    const freeDraft = await proposals.createDraft(u.id, { roundId: freeRound.id, categoryId: freeRound.categories[0].id, title: 'free', payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'c', isCommercial: false, requestedAmountAda: 1000, milestones: [{ description: 'm', amountAda: 1000 }] });
+    const freeDraft = await proposals.createDraft(u.id, { roundId: freeRound.id, categoryId: freeRound.categories[0].id, title: 'free', payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'c', isCommercial: false, requestedAmountAda: 1000, milestones: [{ title: 'Milestone 1', description: 'm', amountAda: 1000 }] });
     const freeSubmitted = await proposals.submit(u.id, freeDraft.id, {});
     ok('zero-fee OSS proposal goes ACTIVE on submit (no tx)', freeSubmitted.status === 'ACTIVE' && freeSubmitted.stage === 'FILTERING', `${freeSubmitted.status}/${freeSubmitted.stage}`);
     ok('zero-fee proposal gets a structured publicId', /^R\d+-P\d+$/.test(freeSubmitted.publicId || ''), freeSubmitted.publicId);
     const freeAnchor = await db.anchor.findFirst({ where: { proposalId: freeDraft.id, kind: 'submission' } });
-    ok('zero-fee acceptance anchored (no fee required)', !!freeAnchor && freeAnchor.preimage?.fee?.required === false && freeAnchor.preimage?.fee?.paid === false, JSON.stringify(freeAnchor?.preimage?.fee));
+    ok('zero-fee acceptance anchored (no fee required)', !!freeAnchor && (freeAnchor.preimage?.fee?.ada ?? 0) === 0 && !freeAnchor.preimage?.fee?.txHash, JSON.stringify(freeAnchor?.preimage?.fee));
   } finally {
     for (const rid of roundIds) {
       const props = await db.proposal.findMany({ where: { roundId: rid }, select: { id: true } });

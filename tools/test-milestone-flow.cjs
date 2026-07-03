@@ -103,7 +103,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const draft = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: round.categories[0].id, title: 'Milestone flow tool',
     payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Pitch.', isCommercial: true, requestedAmountAda: 1000,
-    milestones: [{ description: 'M1', amountAda: 600 }, { description: 'M2', amountAda: 400 }],
+    milestones: [{ title: 'Milestone 1', description: 'M1', amountAda: 600 }, { title: 'Milestone 2', description: 'M2', amountAda: 400 }],
   });
   await proposals.submit(carol.id, draft.id, { submissionFeeTxHash: 'feehash-mf' });
   await proposals.reviewFee(draft.id, { decision: 'APPROVE' });

@@ -1,10 +1,11 @@
-import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { boardActionMessage } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { AnchorService } from '../cardano/anchor.service';
 import { TreasuryBucketsService } from './treasury-buckets.service';
+import { PledgeReturnService } from './pledge-return.service';
 import { verifyCip30Signature } from '../auth/cip30';
 
 const ADA = 1_000_000;
@@ -55,6 +56,7 @@ export class TreasuryService implements OnModuleInit {
     private readonly cardano: CardanoQueryService,
     private readonly anchor: AnchorService,
     private readonly buckets: TreasuryBucketsService,
+    @Optional() private readonly pledgeReturn?: PledgeReturnService,
   ) {}
 
   /**
@@ -907,6 +909,22 @@ export class TreasuryService implements OnModuleInit {
       where: { id: actionId },
       data: { status: 'CONFIRMED', txHash: hash, paidAt: new Date() },
     });
+    // §11.4/§16.3 — mirror the platform-broadcast confirmation side effects. This manual path
+    // previously flipped the action CONFIRMED but left the milestone un-stamped and never
+    // triggered the pledge return — the milestone showed unpaid forever and the pledge (or its
+    // last share) was silently stranded with no later trigger.
+    if (action.kind === 'PROJECT_FUNDING' && action.milestoneId) {
+      await this.prisma.milestone
+        .update({ where: { id: action.milestoneId }, data: { paidAt: new Date(), paidInTx: hash } })
+        .catch(() => undefined);
+      if (action.proposalId && this.pledgeReturn) {
+        try {
+          await this.pledgeReturn.maybePrepareReturn(action.proposalId, action.milestoneId);
+        } catch {
+          /* best-effort — the pledge return can also be prepared manually */
+        }
+      }
+    }
     return { status: 'CONFIRMED', txHash: hash, paid: true, paidLovelace: v.paidLovelace.toString() };
   }
 

@@ -84,23 +84,23 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   const draftA = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: cats[0].id, title: 'A — pays fee, board approves',
     payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Will be confirmed.', isCommercial: true, requestedAmountAda: 1000,
-    milestones: [{ description: 'M1', amountAda: 1000 }],
+    milestones: [{ title: 'Milestone 1', description: 'M1', amountAda: 1000 }],
   });
   const draftB = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: cats[0].id, title: 'B — pays fee, board approves',
     payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Will be confirmed.', isCommercial: true, requestedAmountAda: 1000,
-    milestones: [{ description: 'M1', amountAda: 1000 }],
+    milestones: [{ title: 'Milestone 1', description: 'M1', amountAda: 1000 }],
   });
   const draftC = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: cats[0].id, title: 'C — never submitted (DRAFT)',
     payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Stays DRAFT.', isCommercial: true, requestedAmountAda: 1000,
-    milestones: [{ description: 'M1', amountAda: 1000 }],
+    milestones: [{ title: 'Milestone 1', description: 'M1', amountAda: 1000 }],
   });
   // A fourth proposal D submits the fee tx but the board never confirms it (PENDING).
   const draftD = await proposals.createDraft(carol.id, {
     roundId: round.id, categoryId: cats[0].id, title: 'D — fee paid, board never confirms',
     payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Stays PENDING.', isCommercial: true, requestedAmountAda: 1000,
-    milestones: [{ description: 'M1', amountAda: 1000 }],
+    milestones: [{ title: 'Milestone 1', description: 'M1', amountAda: 1000 }],
   });
 
   await proposals.submit(carol.id, draftA.id, { submissionFeeTxHash: 'feehash-A' });

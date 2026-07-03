@@ -111,7 +111,7 @@ const HOUR = 3_600_000;
   const created = await proposals.createDraft(bob.id, {
     roundId: round.id, categoryId: round.categories[0].id, title: 'Counted proposal',
     payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'Pitch.', isCommercial: false, requestedAmountAda: 1000,
-    milestones: [{ description: 'Deliver', amountAda: 1000 }],
+    milestones: [{ title: 'Milestone 1', description: 'Deliver', amountAda: 1000 }],
   });
   await proposals.submit(bob.id, created.id, { submissionFeeTxHash: 'devhash' });
   await proposals.reviewFee(created.id, { decision: 'APPROVE' }); // → ACTIVE

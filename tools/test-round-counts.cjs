@@ -49,7 +49,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
   });
   await db.round.update({ where: { id: r.id }, data: { status: 'SUBMISSION' } });
   const catId = r.categories[0].id;
-  const mk = (amt) => ({ roundId: r.id, categoryId: catId, title: 't', payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'c', isCommercial: false, requestedAmountAda: amt, milestones: [{ description: 'm', amountAda: amt }] });
+  const mk = (amt) => ({ roundId: r.id, categoryId: catId, title: 'Count test proposal', payoutAddress: 'addr_test1qp77m2c97pl05yynuua3022r8j302v23q90fkv8p0e4p0vtx0gj9tkmqktz2fhwjxskzz33a2kjxthwugz0e5czdmuzsjyk5u3', contentMd: 'c', isCommercial: false, requestedAmountAda: amt, milestones: [{ title: 'Milestone 1', description: 'm', amountAda: amt }] });
 
   // The round overview reads counts from get(); the rounds list reads them from list().
   const getCounts = async () => (await rounds.get(r.id)).proposalCounts ?? {};

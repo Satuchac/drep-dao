@@ -455,7 +455,10 @@ export class MultisigBroadcastService {
       try { return await this.combineAndSubmit(actionId); }
       catch (e) {
         this.logger.warn(`combine+submit failed for ${actionId}: ${e instanceof Error ? e.message : e}`);
-        await this.prisma.multisigAction.update({ where: { id: actionId }, data: { status: 'READY' } });
+        // Never downgrade a CONFIRMED action: when two witnesses arrive near-simultaneously the
+        // winning combineAndSubmit stamps CONFIRMED while the loser's duplicate submit fails —
+        // clobbering to READY here would reopen a paid action as signable.
+        await this.prisma.multisigAction.updateMany({ where: { id: actionId, status: { not: 'CONFIRMED' } }, data: { status: 'READY' } });
         throw e;
       }
     }
@@ -531,9 +534,15 @@ export class MultisigBroadcastService {
         },
       });
       for (const e of entries) {
+        const addr = e.drep?.user.rewardPaymentAddress ?? e.expert?.user.rewardPaymentAddress ?? null;
+        const amt = e.overrideAda ?? e.amountAda;
+        // Stamp ONLY entries the tx could actually pay: prepareTxBody skips address-less or
+        // zero-amount entries, so stamping them here would mark them paid with no output on-chain
+        // (and paid entries are immutable — the recipient could never be paid later).
+        if (!addr || amt <= 0n) continue;
         await this.prisma.rewardEntry.update({
           where: { id: e.id },
-          data: { paidAt: new Date(), paidInTx: txHash, paidToAddress: e.drep?.user.rewardPaymentAddress ?? e.expert?.user.rewardPaymentAddress ?? null },
+          data: { paidAt: new Date(), paidInTx: txHash, paidToAddress: addr },
         });
       }
       // §12 — anchor an on-chain proof of the payout: stage, tx hash, every recipient (DRep id /

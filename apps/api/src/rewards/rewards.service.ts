@@ -43,15 +43,18 @@ export class RewardsService {
     return ([RoundStatus.FUNDING, RoundStatus.CLOSED] as string[]).includes(status);
   }
 
-  /** Drop a prior unpaid calc of this kind so a recompute is clean; refuse if any entry was paid. */
+  /** Drop a prior unpaid calc of this kind so a recompute is clean; refuse if any entry was paid
+   *  OR is linked to a live payout action (deleting a linked entry would let the pending multisig
+   *  tx broadcast with no matching entries — funds leave, nothing is stamped paid, and a recompute
+   *  would queue the same recipients again = double payment). */
   private async clearCalc(where: { roundId?: string | null; kind: string; periodKey?: string }) {
     const calcs = await this.prisma.rewardCalculation.findMany({
       where: { roundId: where.roundId ?? null, kind: where.kind, ...(where.periodKey ? { periodKey: where.periodKey } : {}) },
-      include: { entries: { select: { paidAt: true } } },
+      include: { entries: { select: { paidAt: true, payoutActionId: true } } },
     });
     for (const c of calcs) {
-      if (c.entries.some((e) => e.paidAt)) {
-        throw new ConflictException('rewards for this stage were already (partly) paid — cannot recompute');
+      if (c.entries.some((e) => e.paidAt || e.payoutActionId)) {
+        throw new ConflictException('rewards for this stage were already (partly) paid or are linked to a pending payout — cancel that payout action first, then recompute');
       }
       await this.prisma.rewardEntry.deleteMany({ where: { rewardCalculationId: c.id } });
       await this.prisma.rewardCalculation.delete({ where: { id: c.id } });
@@ -395,9 +398,13 @@ export class RewardsService {
   }
 
   async setOverride(entryId: string, ada: number | null) {
-    const e = await this.prisma.rewardEntry.findUnique({ where: { id: entryId }, select: { paidAt: true } });
+    const e = await this.prisma.rewardEntry.findUnique({ where: { id: entryId }, select: { paidAt: true, payoutActionId: true } });
     if (!e) throw new NotFoundException('entry not found');
     if (e.paidAt) throw new ConflictException('this reward was already paid');
+    // The payout tx body is frozen when the first signer opens the sign dialog — changing the
+    // override afterwards would make the on-chain payment diverge from what the DB (and the
+    // on-chain anchor) records. Cancel the payout action first, then adjust.
+    if (e.payoutActionId) throw new ConflictException('this entry is part of a pending payout — cancel that payout action first, then adjust the amount');
     await this.prisma.rewardEntry.update({ where: { id: entryId }, data: { overrideAda: ada == null ? null : toLovelace(ada) } });
     return { ok: true };
   }
@@ -515,7 +522,9 @@ export class RewardsService {
         sourceBucketId: source?.id ?? null,
       },
     });
-    await this.prisma.rewardEntry.updateMany({ where: { id: { in: payable.map((l) => l.entryId) } }, data: { payoutActionId: action.id } });
+    // `payoutActionId: null` guard: two board members preparing concurrently must not steal each
+    // other's links — the second click only links entries the first didn't already claim.
+    await this.prisma.rewardEntry.updateMany({ where: { id: { in: payable.map((l) => l.entryId) }, payoutActionId: null }, data: { payoutActionId: action.id } });
     return { actionId: action.id, recipients: payable.length, totalAda: total, skipped: lines.length - payable.length };
   }
 }

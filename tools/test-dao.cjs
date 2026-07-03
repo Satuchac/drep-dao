@@ -73,7 +73,7 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
     heidi.profile.roles.join(','));
 
   console.log('\n=== Heidi requests to join → board 3-of-5 vote (rationale required) ===');
-  const applied = await drep.apply(heidi.userId, { displayName: 'Heidi', bio: __bio100, country: 'Testland', subcategoryIds: ['governance'] });
+  const applied = await drep.apply(heidi.userId, { displayName: 'Heidi', bio: __bio100, country: 'Testland', subcategoryIds: ['governance'], contact: { telegram: '@heidi_t', email: 'heidi@test.io' } });
   ok('application is PENDING_ADMISSION', applied.status === 'PENDING_ADMISSION');
 
   // rationale required
