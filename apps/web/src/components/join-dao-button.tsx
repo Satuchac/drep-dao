@@ -35,6 +35,13 @@ export function JoinDaoButton({ onJoin }: { onJoin: () => void }) {
         {loading ? t('Checking eligibility…') : t('JOIN DAO')}
       </button>
       {blocked ? <EntryRequirementsNotice requirements={elig!.requirements} /> : null}
+      {/* §14 — pre-election "free period": no board is seated, so a complete profile is
+          admitted automatically (no 3-of-5 vote). Approvals resume once a board is elected. */}
+      {!loading && !blocked && elig?.freePeriod ? (
+        <div className="rounded-md border border-emerald-300 bg-emerald-50/60 p-2 text-[11px] text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">
+          {t('Free period — no board is elected yet. Complete your profile and you will join the DAO automatically, without board approval.')}
+        </div>
+      ) : null}
     </div>
   );
 }

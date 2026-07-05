@@ -49,6 +49,14 @@ export class DaoSubmittersController {
   portfolio(@Param('id', ParseUUIDPipe) id: string) {
     return this.svc.submitterPortfolio(id);
   }
+
+  // §2.1/§14 — count of applications awaiting board approval (count only, no content), and
+  // whether a board is seated. During the pre-election "free period" submitter applications
+  // queue up until the first board exists to approve them — the directory shows how many wait.
+  @Get('submitters/pending-count')
+  pendingCount() {
+    return this.svc.pendingPublicCount();
+  }
 }
 
 @Controller('admin/submitters')

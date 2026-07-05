@@ -585,6 +585,8 @@ export interface RemovableMember {
 
 export interface EntryEligibility {
   gatingEnabled: boolean;
+  // §14 — true while NO board is seated: a complete profile is admitted automatically.
+  freePeriod?: boolean;
   eligible: boolean;
   requirements: { group: 'power' | 'activity'; label: string; met: boolean; detail: string }[];
 }
@@ -810,6 +812,8 @@ export const submitterApi = {
   mine: () => request<MySubmitter | null>('/me/submitter'),
   apply: (input: SubmitterApplicationInput) =>
     request<MySubmitter>('/me/submitter-application', { method: 'POST', body: JSON.stringify(input) }),
+  // §2.1/§14 — how many submitter applications await board approval (+ whether a board exists).
+  pendingCount: () => request<{ count: number; boardElected: boolean }>('/dao/submitters/pending-count'),
   directory: (includeLeft = false) => request<ApprovedSubmitter[]>(`/dao/submitters${includeLeft ? '?includeLeft=1' : ''}`),
   // §3 — validate a payout/refund address + whether it's the submitter's own wallet.
   checkPayoutAddress: (address: string) =>

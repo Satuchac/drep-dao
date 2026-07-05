@@ -808,3 +808,20 @@ multisig hand-over). **Full findings — fixed and open — live in `docs/AUDIT-
   `test-multisig-migration` (assembly + carry-over keys → key reminder → auto FUND MIGRATION
   per source → old-board signing resolution → terminate + both on-chain proofs).
   All 23 suites + 102 unit tests pass.
+
+## 19. Free period — pre-election auto-admission (2026-07-03)
+
+- **DAO members (DReps).** While **no board is seated** (start of the platform, before the first
+  election), there is nobody to run the §14.2 3-of-5 admission vote — so a registered DRep who
+  clicks **Join DAO** and submits a **complete profile** (all the §14.3 checks: ≥100-word bio,
+  country, Telegram + email, plus any enabled §14.1 entry gates) is **admitted automatically**
+  (`DrepService.apply` free-period branch; `entryEligibility` exposes `freePeriod` and the Join
+  DAO button shows a green note). Each free-period admission is **anchored on-chain** with the
+  event "new DAO member admitted (free period — no board elected)". The moment a board is seated,
+  new applications go back to the normal board-approval flow — nothing else changes.
+- **Submitters always need board approval.** During the free period their applications simply
+  **queue as PENDING** until the first board exists. The public **Submitters** view shows how many
+  applications are waiting (`GET dao/submitters/pending-count` → `{ count, boardElected }`), with
+  a note that approvals begin once a board is in place. Approved applications then appear exactly
+  as before.
+- Covered by `tools/test-free-period.cjs` (in `pnpm test:e2e`).

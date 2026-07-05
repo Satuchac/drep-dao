@@ -379,6 +379,17 @@ export class SubmitterService {
     };
   }
 
+  /** §2.1/§14 — public count of applications awaiting board approval (no content), plus whether
+   *  a board is seated. Submitter applications ALWAYS need board approval — during the
+   *  pre-election "free period" they simply queue until the first board exists. */
+  async pendingPublicCount() {
+    const [count, boardSeats] = await Promise.all([
+      this.prisma.submitterApplication.count({ where: { status: 'PENDING' } }),
+      this.prisma.boardSeat.count({ where: { removedAt: null } }),
+    ]);
+    return { count, boardElected: boardSeats > 0 };
+  }
+
   /** Board to-do: applications awaiting review (or all, with showAll). Each carries its change history. */
   async listApplications(showAll = false) {
     const rows = await this.prisma.submitterApplication.findMany({

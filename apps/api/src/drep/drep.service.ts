@@ -619,10 +619,17 @@ export class DrepService {
       await this.prisma.appUser.update({ where: { id: userId }, data: { displayName: dto.displayName } });
     }
 
+    // §14 — FREE PERIOD: while NO board is seated (start of the platform, before the first
+    // election), there is nobody to run the 3-of-5 admission vote — a registered DRep whose
+    // profile passes all the checks above is admitted AUTOMATICALLY. The moment a board is
+    // seated, new applications go back to the normal board-approval flow.
+    const boardSeats = await this.prisma.boardSeat.count({ where: { removedAt: null } });
+    const freePeriod = boardSeats === 0;
+
     const data = {
       country: (dto.country ?? '').trim(),
       drepIdOnchain,
-      status: DRepStatus.PENDING_ADMISSION,
+      status: freePeriod ? DRepStatus.ADMITTED : DRepStatus.PENDING_ADMISSION,
       bio: dto.bio ?? null,
       photo: dto.photo && dto.photo !== '' ? dto.photo : null,
       socials: (dto.socials ?? undefined) as Prisma.InputJsonValue | undefined,
@@ -633,16 +640,32 @@ export class DrepService {
       admissionCallOptin: dto.admissionCallOptin ?? false,
       // §2 — optional self-declared link to a submitter profile (empty string clears it).
       linkedSubmitterUserId: dto.linkedSubmitterUserId?.trim() || null,
-      admittedAt: null,
+      admittedAt: freePeriod ? new Date() : null,
       removedAt: null,
     };
 
     try {
+      let row;
       if (existing) {
         await this.prisma.admissionVote.deleteMany({ where: { drepId: existing.id } });
-        return await this.prisma.drep.update({ where: { id: existing.id }, data });
+        row = await this.prisma.drep.update({ where: { id: existing.id }, data });
+      } else {
+        row = await this.prisma.drep.create({ data: { userId, ...data } });
       }
-      return await this.prisma.drep.create({ data: { userId, ...data } });
+      // A free-period admission still leaves an on-chain proof (like a submitter admission),
+      // recording that the member joined automatically because no board was seated. Best-effort.
+      if (freePeriod) {
+        try {
+          await this.anchor.anchorMembership({
+            kind: GovSubject.ADMISSION,
+            event: 'new DAO member admitted (free period — no board elected)',
+            name: dto.displayName ?? drepIdOnchain.slice(0, 16),
+            walletKind: 'drep_id',
+            walletId: drepIdOnchain,
+          });
+        } catch { /* anchoring must never block the admission */ }
+      }
+      return row;
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') {
         throw new ConflictException('that DRep ID is already registered to another account');
@@ -1118,8 +1141,12 @@ export class DrepService {
   async entryEligibility(userId: string): Promise<{
     gatingEnabled: boolean;
     eligible: boolean;
+    // §14 — true while NO board is seated: an eligible DRep with a complete profile is
+    // admitted automatically (no 3-of-5 vote). Drives the "free period" note on Join DAO.
+    freePeriod: boolean;
     requirements: { group: 'power' | 'activity'; label: string; met: boolean; detail: string }[];
   }> {
+    const freePeriod = (await this.prisma.boardSeat.count({ where: { removedAt: null } })) === 0;
     const rows = await this.prisma.platformConfig.findMany();
     const overrides = new Map(rows.map((r) => [r.key, r.value]));
     const D = PLATFORM_CONFIG_DEFAULTS as Record<string, number | string | boolean>;
@@ -1130,13 +1157,14 @@ export class DrepService {
     const requireActivity = bool('ENTRY_REQUIRE_ACTIVITY');
     const gatingEnabled = requirePower || requireActivity;
     const requirements: { group: 'power' | 'activity'; label: string; met: boolean; detail: string }[] = [];
-    if (!gatingEnabled) return { gatingEnabled: false, eligible: true, requirements };
+    if (!gatingEnabled) return { gatingEnabled: false, eligible: true, freePeriod, requirements };
 
     const user = await this.prisma.appUser.findUnique({ where: { id: userId } });
     if (!user?.drepKeyHash || !user.drepRegistered) {
       return {
         gatingEnabled,
         eligible: false,
+        freePeriod,
         requirements: [{ group: 'power', label: 'Registered DRep', met: false, detail: 'register your DRep key on-chain, then sign in again' }],
       };
     }
@@ -1176,7 +1204,7 @@ export class DrepService {
       });
     }
 
-    return { gatingEnabled, eligible: requirements.every((r) => r.met), requirements };
+    return { gatingEnabled, eligible: requirements.every((r) => r.met), freePeriod, requirements };
   }
 }
 

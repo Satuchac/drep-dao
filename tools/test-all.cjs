@@ -33,6 +33,7 @@ const SUITES = [
   ['test-genesis', 'Genesis: JSON load, partial load, add/remove, incremental'],
   ['test-cast', 'Cast roles: board / voting DRep / ADA holder + genesis verify'],
   ['test-dao', 'DAO membership: board auto-member, join + 3-of-5 admission'],
+  ['test-free-period', '§14 free period: no board ⇒ auto-admission (anchored); submitter apps queue for the board; board back ⇒ 3-of-5 flow again (self-cleaning)'],
   ['test-overview', 'DAO overview voting power + Expert apply/approve'],
   ['test-entry-gate', '§14.1 entry gate: config save, eligibility, below-min flag, MERIT cap (self-restoring)'],
   ['test-removal', 'Removal: propose + 3-of-5 vote → REMOVED, re-apply'],

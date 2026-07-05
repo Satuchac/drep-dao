@@ -22,6 +22,8 @@ export function SubmittersDirectory() {
   const t = useT();
   const { drepUrl } = useExplorer();
   const [rows, setRows] = useState<ApprovedSubmitter[] | null>(null);
+  // §2.1/§14 — applications awaiting board approval (queue up during the pre-election free period).
+  const [pending, setPending] = useState<{ count: number; boardElected: boolean } | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   // §2.1 — deregistered profiles stay in the history; show them on demand.
   const [showLeft, setShowLeft] = useState(false);
@@ -30,6 +32,9 @@ export function SubmittersDirectory() {
     setRows(null);
     submitterApi.directory(showLeft).then(setRows).catch(() => setRows([]));
   }, [showLeft]);
+  useEffect(() => {
+    submitterApi.pendingCount().then(setPending).catch(() => setPending(null));
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -39,6 +44,14 @@ export function SubmittersDirectory() {
           {t('Approved submitters — accounts allowed to submit funding proposals. Click a row for the full profile. Submitters who are also DAO members (they vote, too) are flagged.')}
         </p>
       </div>
+      {/* §2.1/§14 — pending applications always need BOARD approval; during the pre-election
+          free period they queue here until the first board exists to approve them. */}
+      {pending && pending.count > 0 ? (
+        <div className="rounded-md border border-amber-300 bg-amber-50/60 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+          <strong>{pending.count}</strong> {pending.count === 1 ? t('application waiting for board approval.') : t('applications waiting for board approval.')}
+          {!pending.boardElected ? <> {t('The board has not been elected yet — they will be approved once a board is in place.')}</> : null}
+        </div>
+      ) : null}
       <label className="flex items-center gap-1.5 text-xs text-neutral-600 dark:text-neutral-400">
         <input type="checkbox" checked={showLeft} onChange={(e) => setShowLeft(e.target.checked)} />
         {t('Show deleted accounts (submitters who left — profiles are kept in the history)')}
