@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { usePrefs } from '@/lib/prefs-context';
 import { useUrlNav } from '@/lib/use-url-nav';
+import { NavIcon } from './nav-icons';
 import { ConnectWallet } from './connect-wallet';
 import { MemberArea } from './member-area';
 import { RoundsSection } from './rounds-section';
@@ -25,19 +26,19 @@ import { useTodoCounts, todoTotal } from '@/lib/use-todo-counts';
 import { HealthBadge } from '@/app/health-badge';
 
 type View = 'overview' | 'members' | 'submitters' | 'experts' | 'me' | 'rounds' | 'proposals' | 'internal' | 'proofs' | 'treasury' | 'setup';
-const NAV: { key: View; label: string; boardOnly?: boolean }[] = [
+const NAV: { key: View; label: string; icon: string; boardOnly?: boolean }[] = [
   // §2 — "My area" first: it is the member's home (to-dos, profile, proposals).
-  { key: 'me', label: 'My area' },
-  { key: 'overview', label: 'DAO Member overview' },
-  { key: 'members', label: 'DAO members' },
-  { key: 'submitters', label: 'Submitters' },
-  { key: 'experts', label: 'Experts' },
-  { key: 'rounds', label: 'Rounds' },
-  { key: 'proposals', label: 'Funding proposals' },
-  { key: 'internal', label: 'Internal proposals' },
-  { key: 'proofs', label: 'On-chain proofs' },
-  { key: 'treasury', label: 'Treasury' },
-  { key: 'setup', label: 'Platform setup', boardOnly: true },
+  { key: 'me', label: 'My area', icon: 'user' },
+  { key: 'overview', label: 'DAO Member overview', icon: 'dashboard' },
+  { key: 'members', label: 'DAO members', icon: 'users' },
+  { key: 'submitters', label: 'Submitters', icon: 'send' },
+  { key: 'experts', label: 'Experts', icon: 'award' },
+  { key: 'rounds', label: 'Rounds', icon: 'rounds' },
+  { key: 'proposals', label: 'Funding proposals', icon: 'file-text' },
+  { key: 'internal', label: 'Internal proposals', icon: 'clipboard' },
+  { key: 'proofs', label: 'On-chain proofs', icon: 'shield' },
+  { key: 'treasury', label: 'Treasury', icon: 'landmark' },
+  { key: 'setup', label: 'Platform setup', icon: 'settings', boardOnly: true },
 ];
 
 export function HomeShell() {
@@ -126,7 +127,10 @@ export function HomeShell() {
                     : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
                 }`}
               >
-                <span>{t(n.label)}</span>
+                <span className="flex items-center gap-2">
+                  <NavIcon name={n.icon} className="h-4 w-4 opacity-80" />
+                  {t(n.label)}
+                </span>
                 {badge ? (
                   <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1.5 text-[11px] font-bold text-white tabular-nums">
                     {badge}

@@ -43,8 +43,24 @@ import { TreasuryBucketsPanel } from './treasury-buckets-panel';
 import { LeaveDao } from './leave-dao';
 import { BackButton } from './round-ui';
 import { QuickPollsPanel } from './quick-polls-panel';
+import { NavIcon } from './nav-icons';
 
 
+
+// One icon per My-area tab, keyed by the tab's stable key (labels vary — the profile tab
+// reads Profile / Expert / Get started depending on role). Same outline set as the left menu.
+const TAB_ICON: Record<string, string> = {
+  profile: 'circle-user',
+  voting: 'vote',
+  internal: 'clipboard',
+  proposals: 'files',
+  messages: 'mail',
+  treasury: 'landmark',
+  sign: 'pen',
+  rounds: 'sliders',
+  rewards: 'gift',
+  apps: 'inbox',
+};
 
 export function MemberArea() {
   const t = useT();
@@ -546,6 +562,7 @@ function MemberTabs({ tabs }: { tabs: { key: string; label: string; node: React.
                 : 'text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800'
             }`}
           >
+            {TAB_ICON[t.key] ? <NavIcon name={TAB_ICON[t.key]} className="h-4 w-4 opacity-80" /> : null}
             {tr(t.label)}
             {/* Red count of new items to process (Actions / Applications). */}
             {t.badge ? (
