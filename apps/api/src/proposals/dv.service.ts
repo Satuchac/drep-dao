@@ -506,7 +506,7 @@ export class DvService {
     });
     const proposal = await this.prisma.proposal.findUnique({
       where: { id: proposalId },
-      select: { status: true, stage: true, approvalThresholdPct: true },
+      select: { status: true, stage: true, approvalThresholdPct: true, round: { select: { dvApprovalThresholdPct: true } } },
     });
     if (!snapshot) {
       return { open: false, status: proposal?.status, stage: proposal?.stage, myChoice: null, myRationale: null, myRationaleHistory: [] };
@@ -560,9 +560,14 @@ export class DvService {
       else if (c === VoteChoice.ABSTAIN) abstainPower += fp;
       // NO or missing → counts in denominator (implicit NO), not in yes/abstain
     }
+    // Fallback order: the per-proposal stamp (set when filtering advances it) → the ROUND's
+    // configured threshold → the platform default. Previously the round's own setting was
+    // skipped, so an unstamped proposal in a 60%-round evaluated at the 67% global default.
     const thresholdPct = proposal?.approvalThresholdPct
       ? Number(proposal.approvalThresholdPct)
-      : ROUND_SETTING_DEFAULTS.dvApprovalThresholdPct;
+      : proposal?.round?.dvApprovalThresholdPct != null
+        ? Number(proposal.round.dvApprovalThresholdPct)
+        : ROUND_SETTING_DEFAULTS.dvApprovalThresholdPct;
     const tally = { yesPower, totalPower, abstainPower, thresholdPct };
 
     const anchor = await this.prisma.anchor.findFirst({ where: { proposalId, kind: 'dv' }, orderBy: { createdAt: 'desc' } });
@@ -604,7 +609,7 @@ export class DvService {
       where: { roundId },
       select: {
         id: true, publicId: true, title: true, requestedAmountAda: true,
-        status: true, approvalThresholdPct: true,
+        status: true, approvalThresholdPct: true, round: { select: { dvApprovalThresholdPct: true } },
         categoryId: true, category: { select: { id: true, name: true } },
       },
     });
@@ -682,7 +687,9 @@ export class DvService {
         else if (c === VoteChoice.ABSTAIN) abstainPower += fp;
       }
       const noPower = Math.max(0, totalPower - yesPower - abstainPower);
-      const thresholdPct = p.approvalThresholdPct ? Number(p.approvalThresholdPct) : ROUND_SETTING_DEFAULTS.dvApprovalThresholdPct;
+      const thresholdPct = p.approvalThresholdPct
+        ? Number(p.approvalThresholdPct)
+        : p.round?.dvApprovalThresholdPct != null ? Number(p.round.dvApprovalThresholdPct) : ROUND_SETTING_DEFAULTS.dvApprovalThresholdPct;
       const { denom, ratioPct, passedThreshold } = voteRatio(yesPower, abstainPower, totalPower, thresholdPct);
       const outcome: Row['outcome'] =
         p.status === ProposalStatus.APPROVED || p.status === ProposalStatus.COMPLETE || p.status === ProposalStatus.FAILED ? 'APPROVED'

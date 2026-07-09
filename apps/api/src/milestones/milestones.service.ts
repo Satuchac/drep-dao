@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
-import { ROUND_SETTING_DEFAULTS, ProposalStage, ProposalStatus, RoundStatus, VoteChoice, VotePhase } from '@drep-dao/shared';
+import { PLATFORM_CONFIG_DEFAULTS, ROUND_SETTING_DEFAULTS, ProposalStage, ProposalStatus, RoundStatus, VoteChoice, VotePhase } from '@drep-dao/shared';
 import { GovSubject, VotingStyle } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
 import { rankReviewerCandidates } from '../proposals/candidate-ranking';
@@ -586,17 +586,50 @@ export class MilestonesService {
 
     // §11.5 — a rejection auto-extends the POA deadline (milestoneAutoExtensionDays) so the
     // team has a window to resubmit. Counted, so the history shows how often it slipped.
-    let autoExtend: { deadlineAt: Date; autoExtendedCount: { increment: number } } | undefined;
-    if (outcome === 'REJECTED' && m.deadlineAt) {
-      const round = await this.prisma.round.findUnique({ where: { id: m.proposal.roundId ?? '' }, select: { milestoneAutoExtensionDays: true } });
-      const days = round?.milestoneAutoExtensionDays ?? ROUND_SETTING_DEFAULTS.milestoneAutoExtensionDays;
-      const base = m.deadlineAt.getTime() > Date.now() ? m.deadlineAt.getTime() : Date.now();
-      autoExtend = { deadlineAt: new Date(base + days * 86_400_000), autoExtendedCount: { increment: 1 } };
+    let autoExtend: { deadlineAt?: Date; autoExtendedCount: { increment: number } } | undefined;
+    if (outcome === 'REJECTED') {
+      // The counter increments on EVERY rejection (it doubles as the rejection history the
+      // §11.5 auto-stop threshold reads); the deadline shift applies only when one exists.
+      autoExtend = { autoExtendedCount: { increment: 1 } };
+      if (m.deadlineAt) {
+        const round = await this.prisma.round.findUnique({ where: { id: m.proposal.roundId ?? '' }, select: { milestoneAutoExtensionDays: true } });
+        const days = round?.milestoneAutoExtensionDays ?? ROUND_SETTING_DEFAULTS.milestoneAutoExtensionDays;
+        const base = m.deadlineAt.getTime() > Date.now() ? m.deadlineAt.getTime() : Date.now();
+        autoExtend.deadlineAt = new Date(base + days * 86_400_000);
+      }
     }
     await this.prisma.milestone.update({
       where: { id: milestoneId },
       data: { status: outcome, closedAt: outcome === 'APPROVED' ? new Date() : null, ...(autoExtend ?? {}) },
     });
+
+    // §11.5 — repeated failure escalates: once a milestone has been REJECTED
+    // MILESTONE_MAX_REJECTIONS times (platform config; 0 = disabled), the platform
+    // automatically opens a stop-funding proposal so the BOARD decides whether to cancel
+    // the project's funding (same 1p1v vote as a member-proposed stop). Idempotent — one
+    // ACTIVE stop-funding proposal per project at a time.
+    if (outcome === 'REJECTED') {
+      try {
+        const cfgRow = await this.prisma.platformConfig.findUnique({ where: { key: 'MILESTONE_MAX_REJECTIONS' } });
+        const max = typeof cfgRow?.value === 'number' ? cfgRow.value : (PLATFORM_CONFIG_DEFAULTS.MILESTONE_MAX_REJECTIONS as number);
+        const fresh = await this.prisma.milestone.findUnique({ where: { id: milestoneId }, select: { autoExtendedCount: true } });
+        const rejections = fresh?.autoExtendedCount ?? 0;
+        if (max > 0 && rejections >= max) {
+          const open = await this.prisma.stopFundingProposal.findFirst({ where: { proposalId: m.proposal.id, status: 'ACTIVE' } });
+          if (!open) {
+            await this.prisma.stopFundingProposal.create({
+              data: {
+                proposalId: m.proposal.id,
+                proposerRole: 'PLATFORM',
+                reason: `Milestone #${m.idx + 1}${m.title ? ` ("${m.title}")` : ''} was rejected ${rejections} times — the platform proposes to stop funding this project.`,
+              },
+            });
+          }
+        }
+      } catch {
+        /* the escalation is best-effort — a failure must never undo the milestone decision */
+      }
+    }
 
     try {
       await this.anchor.anchorResult({

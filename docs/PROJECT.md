@@ -825,3 +825,21 @@ multisig hand-over). **Full findings — fixed and open — live in `docs/AUDIT-
   a note that approvals begin once a board is in place. Approved applications then appear exactly
   as before.
 - Covered by `tools/test-free-period.cjs` (in `pnpm test:e2e`).
+
+## 20. Persona-driven e2e coverage + milestone-failure escalation (2026-07-09)
+
+- **`MILESTONE_MAX_REJECTIONS`** (platform config, default 3, 0 = off, in Platform setup): once a
+  milestone POA has been rejected that many times, the platform **auto-opens a stop-funding
+  proposal** (proposer role `PLATFORM`) so the board votes on cancelling the project's funding —
+  repeated failure now escalates instead of allowing endless resubmits. The milestone rejection
+  counter (`autoExtendedCount`) now increments on every rejection (previously only when a deadline
+  existed). Fixes in the same pass: the D&V threshold fallback now respects the round's configured
+  `dvApprovalThresholdPct` before the platform default (see `docs/AUDIT-2026-07.md` addendum).
+- **Three persona-driven e2e suites** (in `pnpm test:e2e`; details in the audit addendum):
+  `test-proposer-journey` (submitting team's full path incl. fee/pledge cycles + the new
+  escalation), `test-dreps-at-scale` (12 registered DReps: dashboards, filtering jury, exact
+  budget-cliff tie → quick poll, merit, reward split, comments, history), and
+  `test-board-operations` — the **real 3-of-5 signing ceremony** (genuine Ed25519 keys + real
+  CSL transactions) across all four money paths, all internal-proposal types, pledge return,
+  TX_SIGNED merit, Transactions visibility, and per-DRep signature history.
+  **27 e2e suites + 102 unit tests, all passing.**

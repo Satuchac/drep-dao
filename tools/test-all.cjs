@@ -54,6 +54,9 @@ const SUITES = [
   ['test-internal-transfer', '§15.5 internal transfers: board-only, distinct buckets, bucket-address destination, initiator stamp'],
   ['test-tally-rewards', '§9/§12/§16 round end-game: VOTE→TALLY tally (approve/budget-cut/reject), TALLY→FUNDING poll guard, D&V reward calc + payout freeze, pledge return shares (self-cleaning)'],
   ['test-multisig-migration', '§15.2 board hand-over: assembly + carry-over keys, key reminder, auto FUND MIGRATION per source, resolveSource, terminate + both on-chain proofs (self-cleaning)'],
+  ['test-proposer-journey', 'Proposer journey: draft/fee/mandatory-words edges, filtering 2-of-3, debate versioning, tally, pledge cycle, POA rejections → AUTO stop-funding (MILESTONE_MAX_REJECTIONS) (self-cleaning)'],
+  ['test-dreps-at-scale', '12 DReps: overview power math, 5-of-12 filtering jury, exact tie → quick poll → funded, merit (filter/DV/poll), reward split + payout links, comments, history (self-cleaning)'],
+  ['test-board-operations', 'Board ops: REAL 3-of-5 signing ceremony (Ed25519 + CSL txs) for OPS/milestone/reward/transfer, all internal types, pledge return, TX_SIGNED merit, Transactions visibility, signature history (self-cleaning)'],
 ];
 
 const failed = [];

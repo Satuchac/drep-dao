@@ -13,6 +13,9 @@ export const PLATFORM_CONFIG_DEFAULTS = {
   MIN_LEN_OF_WORDS_IN_RATIONALE_FOR_VOTE_YES: 0,
   MIN_LEN_OF_WORDS_IN_RATIONALE_FOR_VOTE_NO: 0,
   MIN_LEN_OF_WORDS_IN_RATIONALE_FOR_VOTE_ABSTAIN: 0,
+  // §11.5 — after a milestone POA is REJECTED this many times, the platform automatically
+  // opens a stop-funding proposal for the board to vote on (0 = never auto-propose).
+  MILESTONE_MAX_REJECTIONS: 3,
   // §14.1 — DAO-entry gate, layer 1: a registered DRep may request to join only if it
   // meets the on-chain minimums. Two independent, separately-toggled groups (both OFF
   // by default so testnet entry is open; enable on mainnet).
@@ -52,6 +55,8 @@ export type PlatformConfigKey = keyof typeof PLATFORM_CONFIG_DEFAULTS;
  * are set per round in the round setup — not here.
  */
 export const PLATFORM_CONFIG_META: Record<PlatformConfigKey, string> = {
+  MILESTONE_MAX_REJECTIONS:
+    'After a milestone POA is rejected this many times, the platform automatically opens a stop-funding proposal for the board (0 = disabled).',
   ADMISSION_APPROVAL_VOTES: 'Board YES votes needed to admit a new DAO member (3-of-5).',
   INTERNAL_DEFAULT_THRESHOLD_PCT: 'Approval threshold (%) for ordinary internal proposals.',
   INTERNAL_IMPORTANT_THRESHOLD_PCT: 'Approval threshold (%) for internal proposals flagged as important.',
