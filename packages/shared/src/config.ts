@@ -4,6 +4,11 @@
  * `*_ADA` values are denominated in ADA (whole units), not Lovelace.
  */
 export const PLATFORM_CONFIG_DEFAULTS = {
+  // §14 — open membership (default ON). A registered DRep with a complete profile joins the
+  // DAO immediately and can vote, with no board admission vote. Switch OFF to require the
+  // board's approval instead. While NO board is seated admission is open regardless of this
+  // flag — there would be nobody to run the vote.
+  DREP_OPEN_ADMISSION: true,
   ADMISSION_APPROVAL_VOTES: 3, // §14.2 board YES votes needed to admit a DRep (3-of-5)
   INTERNAL_DEFAULT_THRESHOLD_PCT: 67,
   INTERNAL_IMPORTANT_THRESHOLD_PCT: 75,
@@ -57,6 +62,8 @@ export type PlatformConfigKey = keyof typeof PLATFORM_CONFIG_DEFAULTS;
 export const PLATFORM_CONFIG_META: Record<PlatformConfigKey, string> = {
   MILESTONE_MAX_REJECTIONS:
     'After a milestone POA is rejected this many times, the platform automatically opens a stop-funding proposal for the board (0 = disabled).',
+  DREP_OPEN_ADMISSION:
+    'Open membership. ENABLED (default): any registered DRep who completes the profile joins the DAO straight away and can vote — no board admission vote is held. DISABLED: each applicant is put on hold as PENDING and joins only once the board approves them (ADMISSION_APPROVAL_VOTES yes-votes). Note that while no board is seated, admission stays open whatever this is set to, since there would be nobody to run the vote.',
   ADMISSION_APPROVAL_VOTES: 'Board YES votes needed to admit a new DAO member (3-of-5).',
   INTERNAL_DEFAULT_THRESHOLD_PCT: 'Approval threshold (%) for ordinary internal proposals.',
   INTERNAL_IMPORTANT_THRESHOLD_PCT: 'Approval threshold (%) for internal proposals flagged as important.',

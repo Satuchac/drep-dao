@@ -21,6 +21,7 @@ import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { AnchorService } from '../cardano/anchor.service';
 import { verifyCip30Signature } from '../auth/cip30';
 import { AdmissionVoteDto, DrepApplicationDto, ExpertApplicationDto, UpdateDrepDto } from './dto';
+import { isAutoAdmitted } from './admission';
 
 const MIN_BIO_WORDS = 100;
 const bioWordCount = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
@@ -619,12 +620,12 @@ export class DrepService {
       await this.prisma.appUser.update({ where: { id: userId }, data: { displayName: dto.displayName } });
     }
 
-    // §14 — FREE PERIOD: while NO board is seated (start of the platform, before the first
-    // election), there is nobody to run the 3-of-5 admission vote — a registered DRep whose
-    // profile passes all the checks above is admitted AUTOMATICALLY. The moment a board is
-    // seated, new applications go back to the normal board-approval flow.
+    // §14 — OPEN MEMBERSHIP (default): a registered DRep whose profile passes the checks above
+    // is admitted AUTOMATICALLY, with no board admission vote. The board can switch
+    // DREP_OPEN_ADMISSION off to require its approval instead. While NO board is seated the
+    // admission is always automatic — there would be nobody to run the vote.
     const boardSeats = await this.prisma.boardSeat.count({ where: { removedAt: null } });
-    const freePeriod = boardSeats === 0;
+    const freePeriod = isAutoAdmitted(await this.openAdmission(), boardSeats);
 
     const data = {
       country: (dto.country ?? '').trim(),
@@ -658,7 +659,9 @@ export class DrepService {
         try {
           await this.anchor.anchorMembership({
             kind: GovSubject.ADMISSION,
-            event: 'new DAO member admitted (free period — no board elected)',
+            event: boardSeats === 0
+              ? 'new DAO member admitted (free period — no board elected)'
+              : 'new DAO member admitted (open membership — no board vote required)',
             name: dto.displayName ?? drepIdOnchain.slice(0, 16),
             walletKind: 'drep_id',
             walletId: drepIdOnchain,
@@ -1124,6 +1127,13 @@ export class DrepService {
     return { id: d.id, drepKeyHash: d.user.drepKeyHash };
   }
 
+  /** §14 — is membership open (join without a board admission vote)? Board-configurable. */
+  private async openAdmission(): Promise<boolean> {
+    const row = await this.prisma.platformConfig.findUnique({ where: { key: 'DREP_OPEN_ADMISSION' } });
+    const v = row?.value;
+    return typeof v === 'boolean' ? v : PLATFORM_CONFIG_DEFAULTS.DREP_OPEN_ADMISSION;
+  }
+
   private async approvalThreshold(): Promise<number> {
     const row = await this.prisma.platformConfig.findUnique({
       where: { key: 'ADMISSION_APPROVAL_VOTES' },
@@ -1141,12 +1151,13 @@ export class DrepService {
   async entryEligibility(userId: string): Promise<{
     gatingEnabled: boolean;
     eligible: boolean;
-    // §14 — true while NO board is seated: an eligible DRep with a complete profile is
-    // admitted automatically (no 3-of-5 vote). Drives the "free period" note on Join DAO.
+    // §14 — true when an eligible DRep with a complete profile is admitted automatically (no
+    // board vote): membership is open, or no board is seated. Drives the note on Join DAO.
     freePeriod: boolean;
     requirements: { group: 'power' | 'activity'; label: string; met: boolean; detail: string }[];
   }> {
-    const freePeriod = (await this.prisma.boardSeat.count({ where: { removedAt: null } })) === 0;
+    const boardSeats = await this.prisma.boardSeat.count({ where: { removedAt: null } });
+    const freePeriod = isAutoAdmitted(await this.openAdmission(), boardSeats);
     const rows = await this.prisma.platformConfig.findMany();
     const overrides = new Map(rows.map((r) => [r.key, r.value]));
     const D = PLATFORM_CONFIG_DEFAULTS as Record<string, number | string | boolean>;
