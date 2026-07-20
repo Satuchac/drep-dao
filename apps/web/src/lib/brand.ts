@@ -15,15 +15,16 @@ export interface Brand {
   description: string;
 }
 
+// Alternatives for each brand are previewed at /icons — swap the path here and rebuild.
 const INNOVATION_GROWTH: Brand = {
   name: 'Innovation & Growth DAO',
-  icon: '/icon-innovation-growth.svg',
+  icon: '/icons/ig-sprout.svg', // green sprouting seed
   description: 'Cardano innovation & growth funding DAO',
 };
 
 const DREP_DAO: Brand = {
   name: 'DRep DAO',
-  icon: '/icon-drep-dao.svg',
+  icon: '/icons/drep-globe.svg', // globe
   description: 'Cardano governance DAO platform',
 };
 
