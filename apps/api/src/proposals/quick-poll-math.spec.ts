@@ -78,5 +78,70 @@ describe('quick-poll-math', () => {
       expect(r.funded).toEqual([]);
       expect(r.rejected).toEqual(['a', 'b']);
     });
+
+    it('funds a candidate that costs exactly the remaining budget', () => {
+      // Off-by-one guard: the walk uses <=, so an exact fit must be funded, not cut.
+      const r = walkBudget([C('a', 800, 20), C('b', 200, 10)], 1000n);
+      expect(r.funded).toEqual(['a', 'b']); // 800 then exactly 200
+      expect(r.rejected).toEqual([]);
+    });
+
+    it('funds an equal-score group that costs exactly the remaining budget', () => {
+      const r = walkBudget([C('a', 500, 10), C('b', 500, 10)], 1000n);
+      expect(r.funded.sort()).toEqual(['a', 'b']);
+      expect(r.tieGroup).toEqual([]);
+    });
+
+    it('cuts everything when the budget is already spent', () => {
+      const r = walkBudget([C('a', 100, 20), C('b', 100, 10)], 0n);
+      expect(r.funded).toEqual([]);
+      expect(r.rejected).toEqual(['a', 'b']);
+      expect(r.tieGroup).toEqual([]);
+    });
+
+    it('cuts everything when the category is overspent (negative remainder)', () => {
+      const r = walkBudget([C('a', 100, 10)], -50n);
+      expect(r.funded).toEqual([]);
+      expect(r.rejected).toEqual(['a']);
+    });
+
+    it('is not a tie when an equal-score group fits none of its members', () => {
+      // Both tied at 900 with only 500 left → nobody could be funded, so no follow-up poll.
+      const r = walkBudget([C('a', 900, 10), C('b', 900, 10)], 500n);
+      expect(r.tieGroup).toEqual([]);
+      expect(r.rejected.sort()).toEqual(['a', 'b']);
+    });
+
+    it('handles an empty candidate list', () => {
+      expect(walkBudget([], 1000n)).toEqual({ funded: [], rejected: [], tieGroup: [] });
+    });
+  });
+
+  describe('borda + walk together — voting power decides the allocation', () => {
+    it('funds the candidate the higher-power voters ranked first', () => {
+      // Two voters disagree; b's backer carries more power, so b outranks a and takes the budget.
+      const scores = bordaScores(['a', 'b'], [
+        { ranking: ['a', 'b'], choice: 'a', power: 3 },
+        { ranking: ['b', 'a'], choice: 'b', power: 9 },
+      ]);
+      const sorted = [
+        { id: 'b', amount: 800n, score: scores.get('b')! },
+        { id: 'a', amount: 800n, score: scores.get('a')! },
+      ];
+      const r = walkBudget(sorted, 1000n);
+      expect(r.funded).toEqual(['b']);
+      expect(r.rejected).toEqual(['a']);
+    });
+
+    it('leaves an unvoted poll as a dead-even tie the budget cannot split', () => {
+      // No ballots → every score is 0 → one equal-score group; only one fits → follow-up poll.
+      const scores = bordaScores(['a', 'b'], []);
+      expect([...scores.values()]).toEqual([0, 0]);
+      const r = walkBudget([
+        { id: 'a', amount: 800n, score: 0 },
+        { id: 'b', amount: 800n, score: 0 },
+      ], 1000n);
+      expect(r.tieGroup.sort()).toEqual(['a', 'b']);
+    });
   });
 });

@@ -819,6 +819,8 @@ multisig hand-over). **Full findings — fixed and open — live in `docs/AUDIT-
   DAO button shows a green note). Each free-period admission is **anchored on-chain** with the
   event "new DAO member admitted (free period — no board elected)". The moment a board is seated,
   new applications go back to the normal board-approval flow — nothing else changes.
+  > **Superseded by §21.** Auto-admission is no longer tied to "no board seated": it is now the
+  > `DREP_OPEN_ADMISSION` policy (default **on**), which the board can switch off.
 - **Submitters always need board approval.** During the free period their applications simply
   **queue as PENDING** until the first board exists. The public **Submitters** view shows how many
   applications are waiting (`GET dao/submitters/pending-count` → `{ count, boardElected }`), with
@@ -843,3 +845,31 @@ multisig hand-over). **Full findings — fixed and open — live in `docs/AUDIT-
   CSL transactions) across all four money paths, all internal-proposal types, pledge return,
   TX_SIGNED merit, Transactions visibility, and per-DRep signature history.
   **27 e2e suites + 102 unit tests, all passing.**
+
+## 21. Open DAO membership — `DREP_OPEN_ADMISSION` (2026-07-20)
+
+The §19 free period only lasted until the first board was seated; after that every application
+went back to the board's admission vote, with **no way to keep entry open**. Auto-admission is
+now a policy the DAO controls rather than a side effect of having no board.
+
+- **New platform parameter `DREP_OPEN_ADMISSION`, default ON** (`PLATFORM_CONFIG_DEFAULTS`,
+  documented in `docs/PARAMETERS.md`). ON: a registered DRep who completes the profile (the §14.3
+  checks plus any enabled §14.1 entry gates) is **admitted immediately and can vote** — no board
+  vote. OFF: the applicant waits as `PENDING` for `ADMISSION_APPROVAL_VOTES` board yes-votes.
+  The board edits it in **My area → Platform setup**; it renders as an Enabled/Disabled toggle
+  automatically, since that screen is generated from the parameter defaults.
+- **The no-board rule still wins.** While no board is seated, admission is automatic regardless
+  of the flag — nobody could run the vote, and DReps must be able to join and vote in the very
+  proposal that installs the first board. The decision is one shared helper,
+  `isAutoAdmitted(openAdmission, boardSeats)` (`apps/api/src/drep/admission.ts`), used by **both**
+  the join flow and the `entryEligibility` check behind the Join-DAO button — so the promise shown
+  in the UI can never drift from the status actually written.
+- **On-chain proof records why** the admission was automatic: "free period — no board elected"
+  when no board exists, otherwise "open membership — no board vote required".
+- **UI.** The green Join-DAO note now reads "Open membership — … you join the DAO automatically,
+  without board approval", instead of the old (now sometimes false) "no board is elected yet".
+- Intended end-to-end flow this unlocks: DReps **join freely → submit internal proposals → vote →
+  pass the proposal that installs the board**.
+
+Both editions (this funding platform and the DRep DAO governance edition) carry the same
+parameter, default and wording.

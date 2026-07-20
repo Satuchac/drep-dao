@@ -1,6 +1,6 @@
 # Parameters — every configurable value and where to change it
 
-> Living doc. **Last updated: 2026-06-12.** Single source of truth in code:
+> Living doc. **Last updated: 2026-07-20.** Single source of truth in code:
 > `packages/shared/src/config.ts` (`PLATFORM_CONFIG_DEFAULTS`,
 > `ROUND_SETTING_DEFAULTS`, `MERIT_DELTAS`). This file explains them for humans;
 > when the two disagree, the code wins — update this doc.
@@ -22,7 +22,8 @@ and the default; values are type-checked against the default's type.
 
 | Parameter | Default | Meaning |
 |---|---|---|
-| `ADMISSION_APPROVAL_VOTES` | 3 | Board YES votes needed to admit a new DAO member (3-of-5). |
+| `DREP_OPEN_ADMISSION` | **on** | **Open membership.** ON: any registered DRep who completes the profile joins the DAO straight away and can vote — no board admission vote is held. OFF: each applicant waits as `PENDING` and joins only once the board approves them (`ADMISSION_APPROVAL_VOTES` yes-votes). While **no board is seated** admission stays open whatever this is set to — there would be nobody to run the vote, and DReps must be able to join and vote in the proposal that elects the first board. |
+| `ADMISSION_APPROVAL_VOTES` | 3 | Board YES votes needed to admit a new DAO member (3-of-5). Only consulted when `DREP_OPEN_ADMISSION` is OFF. |
 | `INTERNAL_DEFAULT_THRESHOLD_PCT` | 67 | Approval threshold (%) for ordinary internal proposals. |
 | `INTERNAL_IMPORTANT_THRESHOLD_PCT` | 75 | Approval threshold (%) for internal proposals flagged important. |
 
