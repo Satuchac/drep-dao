@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
 import { usePrefs } from '@/lib/prefs-context';
 import { useUrlNav } from '@/lib/use-url-nav';
+import { brand } from '@/lib/brand';
 import { NavIcon } from './nav-icons';
 import { ConnectWallet } from './connect-wallet';
 import { MemberArea } from './member-area';
@@ -86,7 +87,7 @@ export function HomeShell() {
   if (loading || !profile) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16">
-        <h1 className="text-3xl font-bold tracking-tight">DRep DAO</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{brand.name}</h1>
         <p className="mt-2 text-neutral-600 dark:text-neutral-400">
           {t('Cardano governance platform (Preprod).')}
         </p>
@@ -111,7 +112,7 @@ export function HomeShell() {
     <div className="flex flex-col gap-6 px-6 py-6 lg:flex-row">
       {/* Left: title + menu only. */}
       <aside className="lg:w-56 lg:shrink-0">
-        <h1 className="mb-4 text-xl font-bold tracking-tight">DRep DAO</h1>
+        <h1 className="mb-4 text-xl font-bold tracking-tight">{brand.name}</h1>
         <nav className="space-y-1">
           {nav.map((n) => {
             // §20 — mirror the in-area to-do count next to "My area" so users

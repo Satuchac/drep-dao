@@ -3,10 +3,13 @@ import './globals.css';
 import { AuthProvider } from '@/lib/auth-context';
 import { PrefsProvider } from '@/lib/prefs-context';
 import { LanguageThemeSwitcher } from '@/components/language-theme-switcher';
+import { brand } from '@/lib/brand';
 
+// Name + tab icon come from the deployment's brand (NEXT_PUBLIC_APP_NAME) — see lib/brand.ts.
 export const metadata: Metadata = {
-  title: 'DRep DAO',
-  description: 'Cardano governance DAO platform',
+  title: brand.name,
+  description: brand.description,
+  icons: { icon: brand.icon, shortcut: brand.icon, apple: brand.icon },
 };
 
 // Apply the saved theme + language to <html> BEFORE first paint, so there's no flash of the
