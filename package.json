@@ -1,8 +1,13 @@
 {
-  "name": "drep-dao",
-  "version": "0.0.0",
+  "name": "innovation-growth-dao",
+  "version": "1.0.0",
   "private": true,
-  "description": "DRep DAO — Cardano governance platform (off-chain source of truth, on-chain anchoring)",
+  "description": "Innovation & Growth DAO — Cardano governance & funding platform (off-chain source of truth, on-chain anchoring)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Satuchac/drep-dao.git"
+  },
   "packageManager": "pnpm@9.15.9",
   "engines": {
     "node": ">=20.0.0"
@@ -10,8 +15,9 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "turbo run test",
     "test:e2e": "node tools/test-all.cjs",
     "db:generate": "pnpm --filter @drep-dao/db generate",

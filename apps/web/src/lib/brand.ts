@@ -31,10 +31,10 @@ const DREP_DAO: Brand = {
 /** Resolved once at build time (NEXT_PUBLIC_ vars are inlined, so this is safe on the client). */
 export const brand: Brand = (() => {
   const configured = process.env.NEXT_PUBLIC_APP_NAME?.trim();
-  if (!configured) return DREP_DAO; // default: the DRep DAO deployment
+  if (!configured) return INNOVATION_GROWTH; // default: this is the Innovation & Growth DAO edition
   const normalized = configured.toLowerCase();
   if (normalized.includes('innovation')) return { ...INNOVATION_GROWTH, name: configured };
   if (normalized.includes('drep')) return { ...DREP_DAO, name: configured };
-  // Unknown brand: honour the name, fall back to the neutral mark.
-  return { ...DREP_DAO, name: configured };
+  // Unknown brand: honour the name, fall back to the Innovation & Growth mark.
+  return { ...INNOVATION_GROWTH, name: configured };
 })();
