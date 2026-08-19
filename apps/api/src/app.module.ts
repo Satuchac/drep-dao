@@ -23,6 +23,7 @@ import { ProposalMessagesModule } from './messages/proposal-messages.module';
 import { SubmitterModule } from './submitter/submitter.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { JobsModule } from './jobs/jobs.module';
+import { DeployModule } from './deploy/deploy.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { JobsModule } from './jobs/jobs.module';
     JobsModule,
     InternalProposalsModule,
     PreferencesModule,
+    DeployModule,
   ],
 })
 export class AppModule {}

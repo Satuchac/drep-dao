@@ -23,6 +23,7 @@ const MEMBER_GAINS: Row[] = [
 const MEMBER_LOSSES: Row[] = [
   { reason: 'MISSED_FILTER', what: 'Missed an assigned filtering review deadline' },
   { reason: 'MISSED_DV', what: 'Missed a Debate & Vote window' },
+  { reason: 'MISSED_INTERNAL', what: 'Missed an internal-proposal vote' },
   { reason: 'MISSED_QUICK_POLL', what: 'Missed a quick poll' },
   { reason: 'MISSED_MILESTONE', what: 'Missed an assigned milestone review deadline' },
 ];
