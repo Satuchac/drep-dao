@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>DRep Council — short maintenance</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: grid; place-items: center; padding: 1.5rem;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #f4f7f5; color: #14241d;
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #0b1712; color: #e7f2ec; }
+    .card { background: #10201a; border-color: #1e3a2e; }
+    .hash { background: #0b1712; color: #9fc7b4; }
+  }
+  .card {
+    width: 100%; max-width: 30rem; text-align: center;
+    background: #ffffff; border: 1px solid #dbe7e0; border-radius: 18px;
+    padding: 2.75rem 2rem; box-shadow: 0 10px 40px rgba(16, 99, 63, 0.08);
+  }
+  .badge {
+    width: 60px; height: 60px; margin: 0 auto 1.5rem; border-radius: 16px;
+    background: #10633f; display: grid; place-items: center;
+  }
+  .badge svg { width: 30px; height: 30px; }
+  h1 { font-size: 1.4rem; margin: 0 0 .6rem; letter-spacing: -0.01em; }
+  p { margin: .35rem 0; line-height: 1.55; opacity: .78; font-size: .96rem; }
+  .status { display: inline-flex; align-items: center; gap: .5rem; margin-top: 1.4rem;
+    font-size: .82rem; font-weight: 600; color: #10633f; opacity: 1; }
+  @media (prefers-color-scheme: dark) { .status { color: #4ade80; } }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: #34d399;
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, .6); animation: pulse 1.6s infinite; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, .5); }
+    70% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+  }
+  @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="badge" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 13l4 4L19 7"></path>
+      </svg>
+    </div>
+    <h1>Short maintenance mode</h1>
+    <p>DRep Council is being updated with a small change.</p>
+    <p>This only takes a moment — the page will return on its own.</p>
+    <div class="status"><span class="dot"></span> Back shortly</div>
+  </main>
+  <script>setTimeout(function () { location.reload(); }, 15000);</script>
+</body>
+</html>
