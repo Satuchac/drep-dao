@@ -334,6 +334,7 @@ export const MeritReason = {
   FILTER_COMPLETE: 'FILTER_COMPLETE', // +1
   MILESTONE_CHECK: 'MILESTONE_CHECK', // +1
   INTERNAL_SUBMIT: 'INTERNAL_SUBMIT', // +1 (drep) / +5 (board)
+  RULE_DOC_SUBMIT: 'RULE_DOC_SUBMIT', // +1 — §27 authored a new rule document
   QUICK_POLL_VOTE: 'QUICK_POLL_VOTE', // +1
   APPLICATION_REVIEW: 'APPLICATION_REVIEW', // +1 — board member decided a submitter application
   MULTISIG_KEY_PROVIDED: 'MULTISIG_KEY_PROVIDED', // +1 — board member submitted their multisig key/address
@@ -365,6 +366,7 @@ export const MERIT_DELTAS: Record<MeritReason, number> = {
   FILTER_COMPLETE: 1,
   MILESTONE_CHECK: 1,
   INTERNAL_SUBMIT: 1,
+  RULE_DOC_SUBMIT: 1,
   QUICK_POLL_VOTE: 1,
   APPLICATION_REVIEW: 1,
   MULTISIG_KEY_PROVIDED: 1,
