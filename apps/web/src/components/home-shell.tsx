@@ -104,7 +104,12 @@ export function HomeShell() {
           <div className="mx-auto flex max-w-6xl items-center gap-4 px-5 py-3">
             <button onClick={() => setView('overview')} className="flex items-center gap-2.5 font-semibold tracking-tight">
               <img src={brand.icon} alt="" className="h-7 w-7" />
-              <span className="hidden sm:inline">{brand.name.replace(/ DAO$/, '')}</span>
+              {/* The whole name.
+                  This stripped a trailing " DAO" to keep the header short, which
+                  turned "DRep DAO" into "DRep" — the name of a role in Cardano
+                  governance rather than of this organisation. A shortening that
+                  changes what a word refers to is not a shortening. */}
+              <span className="hidden sm:inline">{brand.name}</span>
             </button>
             <nav className="ml-2 hidden items-center gap-0.5 md:flex">
               {NAV.filter((n) => PUBLIC_VIEWS.includes(n.key)).map((n) => (
