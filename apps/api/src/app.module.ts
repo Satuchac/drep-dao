@@ -17,6 +17,7 @@ import { PublicConfigModule } from './config/config.module';
 import { CommentsModule } from './comments/comments.module';
 import { MilestonesModule } from './milestones/milestones.module';
 import { InternalProposalsModule } from './internal-proposals/internal-proposals.module';
+import { RuleDocumentsModule } from './rule-documents/rule-documents.module';
 import { CardanoModule } from './cardano/cardano.module';
 import { RewardsModule } from './rewards/rewards.module';
 import { ProposalMessagesModule } from './messages/proposal-messages.module';
@@ -54,6 +55,7 @@ import { DeployModule } from './deploy/deploy.module';
     NotificationsModule,
     JobsModule,
     InternalProposalsModule,
+    RuleDocumentsModule,
     PreferencesModule,
     DeployModule,
   ],
