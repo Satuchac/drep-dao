@@ -19,6 +19,7 @@ export class ActivityInterceptor implements NestInterceptor {
     const skip =
       req.method === 'OPTIONS' ||
       path.includes('/internal/deploy/readiness') ||
+      path.includes('/maintenance/status') ||
       path.includes('/healthz') ||
       path.includes('/internal/metrics');
     if (!skip) {

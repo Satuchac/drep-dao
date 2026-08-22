@@ -63,6 +63,17 @@ while :; do
   fi
 done
 
+# ── 1b. heads-up: warn connected users ~WARN_SEC before maintenance so they can finish + save ─
+# Writes the epoch-seconds when maintenance will begin into <FLAG>.pending; the API serves it at
+# /api/v1/maintenance/status and the app shows a counting-down banner. Then we wait it out.
+WARN_SEC="${MAINTENANCE_WARN_SEC:-60}"
+if [ "$WARN_SEC" -gt 0 ]; then
+  echo $(( $(date +%s) + WARN_SEC )) > "$FLAG.pending"
+  log "notifying users — maintenance in ${WARN_SEC}s (finish-your-work window)…"
+  sleep "$WARN_SEC"
+  rm -f "$FLAG.pending"
+fi
+
 # ── 2. maintenance ON (Caddy serves the page immediately, no reload needed) ───
 log "enabling maintenance mode → users now see \"Short maintenance mode\""
 touch "$FLAG"; sleep 2
