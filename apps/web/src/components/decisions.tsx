@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ruleDocumentsApi, type RuleDocSummary, type RuleDocDetail, type RuleDocVote, type RuleDocComment } from '@/lib/api';
+import { decisionsApi, type DecisionSummary, type DecisionDetail, type DecisionVote, type DecisionComment } from '@/lib/api';
 import { useUrlNav } from '@/lib/use-url-nav';
 import { useExplorer } from '@/lib/explorer';
 import { MarkdownEditor, Markdown } from './markdown';
@@ -21,7 +21,7 @@ function downloadText(name: string, content: string) {
   URL.revokeObjectURL(url);
 }
 function slugify(s: string) {
-  return (s || 'rule-document').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'rule-document';
+  return (s || 'decision').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) || 'decision';
 }
 
 const STATUS_STYLE: Record<string, string> = {
@@ -37,7 +37,7 @@ const STATUS_BADGE: Record<string, string> = {
   PRIVATE: 'bg-amber-500/15 text-amber-700 dark:text-amber-300',
 };
 
-// §27/§28 expiry helpers.
+// §28/§28 expiry helpers. expiresAt is stored as an ISO string or null (never).
 const ymd = (iso: string) => iso.slice(0, 10);
 const tomorrowYmd = () => new Date(Date.now() + 864e5).toISOString().slice(0, 10);
 const toExpiryIso = (d: string) => new Date(d + 'T23:59:59').toISOString();
@@ -56,7 +56,7 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${STATUS_BADGE[status] ?? STATUS_BADGE.DRAFT}`}>{status}</span>;
 }
 
-function LastVoteLine({ v, onOpenProposal }: { v: RuleDocVote; onOpenProposal: () => void }) {
+function LastVoteLine({ v, onOpenProposal }: { v: DecisionVote; onOpenProposal: () => void }) {
   const inProgress = v.status === 'ACTIVE';
   const outcome = inProgress ? 'Voting in progress' : v.approved ? 'Approved' : 'Rejected';
   return (
@@ -81,12 +81,12 @@ function VotingPill() {
   );
 }
 
-// Prominent banner on a document whose approval vote is live, with a one-click link to go vote.
-function VoteInProgressBanner({ v, onOpen }: { v: RuleDocVote; onOpen: () => void }) {
+// Prominent banner on a decision whose approval vote is live, with a one-click link to go vote.
+function VoteInProgressBanner({ v, onOpen }: { v: DecisionVote; onOpen: () => void }) {
   return (
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
       <div className="text-sm text-amber-900 dark:text-amber-200">
-        <span className="font-semibold">A vote {v.deleteVote ? 'to DELETE this document' : 'to APPROVE this document'} is in progress.</span>{' '}
+        <span className="font-semibold">A vote {v.deleteVote ? 'to DELETE this decision' : 'to APPROVE this decision'} is in progress.</span>{' '}
         {v.voted} of {v.eligible} DReps voted · {v.ratioPct}% approval (need {v.thresholdPct}%).
       </div>
       <button onClick={onOpen} className="shrink-0 rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">
@@ -97,7 +97,7 @@ function VoteInProgressBanner({ v, onOpen }: { v: RuleDocVote; onOpen: () => voi
 }
 
 // ── integrity / verification box ──────────────────────────────────────────────
-function IntegrityBox({ doc }: { doc: RuleDocDetail }) {
+function IntegrityBox({ doc }: { doc: DecisionDetail }) {
   const { txUrl } = useExplorer();
   const [check, setCheck] = useState<null | 'ok' | 'bad'>(null);
   const anchoredTx = doc.lastVote?.anchorTxHash ?? null;
@@ -110,7 +110,7 @@ function IntegrityBox({ doc }: { doc: RuleDocDetail }) {
 
   return (
     <div className="mt-6 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm dark:border-neutral-700 dark:bg-neutral-900/40">
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Document integrity</h3>
+      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-neutral-500">Decision integrity</h3>
       <div className="space-y-1">
         <div className="break-all font-mono text-xs">
           <span className="text-neutral-500">SHA-256(content): </span>{doc.contentHash}
@@ -150,7 +150,7 @@ function IntegrityBox({ doc }: { doc: RuleDocDetail }) {
 }
 
 // ── feedback thread ────────────────────────────────────────────────────────────
-function CommentCard({ c, doc, onDelete, onReply }: { c: RuleDocComment; doc: RuleDocDetail; onDelete: (id: string) => void; onReply?: (id: string) => void }) {
+function CommentCard({ c, doc, onDelete, onReply }: { c: DecisionComment; doc: DecisionDetail; onDelete: (id: string) => void; onReply?: (id: string) => void }) {
   return (
     <div className="rounded-lg border border-neutral-200 p-3 dark:border-neutral-700">
       <div className="mb-1 flex items-center justify-between gap-2 text-xs text-neutral-500">
@@ -169,7 +169,7 @@ function CommentCard({ c, doc, onDelete, onReply }: { c: RuleDocComment; doc: Ru
   );
 }
 
-function Feedback({ doc, reload }: { doc: RuleDocDetail; reload: () => void }) {
+function Feedback({ doc, reload }: { doc: DecisionDetail; reload: () => void }) {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [replyTo, setReplyTo] = useState<string | null>(null);
@@ -180,12 +180,12 @@ function Feedback({ doc, reload }: { doc: RuleDocDetail; reload: () => void }) {
     if (!contentMd.trim()) return;
     setBusy(true);
     try {
-      await ruleDocumentsApi.comment(doc.id, contentMd.trim(), parentId);
+      await decisionsApi.comment(doc.id, contentMd.trim(), parentId);
       if (parentId) { setReplyTo(null); setReplyText(''); } else setText('');
       reload();
     } finally { setBusy(false); }
   };
-  const del = async (id: string) => { await ruleDocumentsApi.deleteComment(id); reload(); };
+  const del = async (id: string) => { await decisionsApi.deleteComment(id); reload(); };
   const count = doc.comments.reduce((n, c) => n + 1 + (c.replies?.length ?? 0), 0);
 
   return (
@@ -221,7 +221,7 @@ function Feedback({ doc, reload }: { doc: RuleDocDetail; reload: () => void }) {
       </div>
       {doc.canComment ? (
         <div className="mt-3">
-          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="Give feedback on this document…" className="w-full rounded-lg border border-neutral-300 p-2 text-sm dark:border-neutral-600 dark:bg-neutral-900" />
+          <textarea value={text} onChange={(e) => setText(e.target.value)} rows={3} placeholder="Give feedback on this decision…" className="w-full rounded-lg border border-neutral-300 p-2 text-sm dark:border-neutral-600 dark:bg-neutral-900" />
           <button disabled={busy || !text.trim()} onClick={() => post(text)} className="mt-1 rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-40">{busy ? 'Posting…' : 'Post feedback'}</button>
         </div>
       ) : null}
@@ -231,14 +231,14 @@ function Feedback({ doc, reload }: { doc: RuleDocDetail; reload: () => void }) {
   );
 }
 
-// ── document detail view (public) ──────────────────────────────────────────────
-function RuleDocDetailView({ id, onBack, onStartVote }: { id: string; onBack: () => void; onStartVote: (docId: string) => void }) {
-  const [doc, setDoc] = useState<RuleDocDetail | null>(null);
+// ── decision detail view (public) ──────────────────────────────────────────────
+function DecisionDetailView({ id, onBack, onStartVote }: { id: string; onBack: () => void; onStartVote: (docId: string) => void }) {
+  const [doc, setDoc] = useState<DecisionDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { setParams } = useUrlNav();
 
   const load = useCallback(() => {
-    ruleDocumentsApi.get(id).then(setDoc).catch((e) => setError(e instanceof Error ? e.message : 'not found'));
+    decisionsApi.get(id).then(setDoc).catch((e) => setError(e instanceof Error ? e.message : 'not found'));
   }, [id]);
   useEffect(() => { load(); }, [load]);
   // While an approval vote is live, refresh so the page reflects the outcome (ACTIVE / DRAFT) and
@@ -254,7 +254,7 @@ function RuleDocDetailView({ id, onBack, onStartVote }: { id: string; onBack: ()
 
   return (
     <div>
-      <button onClick={onBack} className="mb-3 text-xs text-neutral-500 hover:underline">← Back to rule documents</button>
+      <button onClick={onBack} className="mb-3 text-xs text-neutral-500 hover:underline">← Back to decisions</button>
       <div className={`rounded-lg border p-5 ${STATUS_STYLE[doc.status] ?? STATUS_STYLE.DRAFT}`}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-xl font-semibold">{doc.title}</h2>
@@ -282,7 +282,7 @@ function RuleDocDetailView({ id, onBack, onStartVote }: { id: string; onBack: ()
         {doc.canPropose ? (
           <div className="mt-4 flex gap-2">
             <button onClick={() => onStartVote(doc.id)} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">
-              Start a vote on this document
+              Start a vote on this decision
             </button>
           </div>
         ) : null}
@@ -293,30 +293,30 @@ function RuleDocDetailView({ id, onBack, onStartVote }: { id: string; onBack: ()
   );
 }
 
-// ── public Rule Documents page (left nav) ──────────────────────────────────────
+// ── public Decisions page (left nav) ──────────────────────────────────────
 const FILTERS = ['all', 'active', 'draft', 'deleted'] as const;
 
-export function RuleDocuments() {
+export function Decisions() {
   const { get, setParams } = useUrlNav();
   const filter = (get('filter') as string) || 'all';
   const selected = get('doc');
-  const [docs, setDocs] = useState<RuleDocSummary[] | null>(null);
+  const [docs, setDocs] = useState<DecisionSummary[] | null>(null);
 
   useEffect(() => {
     setDocs(null);
-    ruleDocumentsApi.list(filter === 'all' ? undefined : filter).then(setDocs).catch(() => setDocs([]));
+    decisionsApi.list(filter === 'all' ? undefined : filter).then(setDocs).catch(() => setDocs([]));
   }, [filter]);
 
-  const startVote = (docId: string) => setParams({ view: 'internal', newRule: docId, doc: null, filter: null });
+  const startVote = (docId: string) => setParams({ view: 'internal', newDecision: docId, doc: null, filter: null });
 
-  if (selected) return <div className="mx-auto max-w-3xl"><RuleDocDetailView id={selected} onBack={() => setParams({ doc: null })} onStartVote={startVote} /></div>;
+  if (selected) return <div className="mx-auto max-w-3xl"><DecisionDetailView id={selected} onBack={() => setParams({ doc: null })} onStartVote={startVote} /></div>;
 
   return (
     <div className="mx-auto max-w-3xl">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold">Rule Documents</h2>
+        <h2 className="text-lg font-semibold">Decisions</h2>
       </div>
-      <p className="mb-3 text-sm text-neutral-500">The Council&rsquo;s rules. Active documents are obligatory; drafts are proposed but not yet binding. Each document&rsquo;s content is hashed and anchored on-chain when its approval vote opens.</p>
+      <p className="mb-3 text-sm text-neutral-500">The Council&rsquo;s rules. Active decisions are obligatory; drafts are proposed but not yet binding. Each decision&rsquo;s content is hashed and anchored on-chain when its approval vote opens.</p>
 
       <div className="mb-4 flex gap-1 border-b border-neutral-200 dark:border-neutral-700">
         {FILTERS.map((f) => (
@@ -333,7 +333,7 @@ export function RuleDocuments() {
       {docs === null ? (
         <p className="text-sm text-neutral-500">Loading…</p>
       ) : docs.length === 0 ? (
-        <p className="text-sm text-neutral-500">No documents.</p>
+        <p className="text-sm text-neutral-500">No decisions.</p>
       ) : (
         <div className="space-y-2">
           {docs.map((d) => (
@@ -366,23 +366,23 @@ export function RuleDocuments() {
   );
 }
 
-// ── "My Rule documents" (My Area tab) ──────────────────────────────────────────
-function MyDocEditor({ id, onDone }: { id: string | null; onDone: () => void }) {
+// ── "My Decisions" (My Area tab) ──────────────────────────────────────────
+function MyDecisionEditor({ id, onDone }: { id: string | null; onDone: () => void }) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null); // null = never
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (id) ruleDocumentsApi.get(id).then((d) => { setTitle(d.title); setContent(d.contentMd); setExpiresAt(d.expiresAt); }).catch(() => undefined);
+    if (id) decisionsApi.get(id).then((d) => { setTitle(d.title); setContent(d.contentMd); setExpiresAt(d.expiresAt); }).catch(() => undefined);
   }, [id]);
 
   const save = async () => {
     setError(null); setBusy(true);
     try {
-      if (id) await ruleDocumentsApi.update(id, { title, contentMd: content, expiresAt });
-      else await ruleDocumentsApi.create({ title, contentMd: content, expiresAt });
+      if (id) await decisionsApi.update(id, { title, contentMd: content, expiresAt });
+      else await decisionsApi.create({ title, contentMd: content, expiresAt });
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'save failed');
@@ -393,14 +393,14 @@ function MyDocEditor({ id, onDone }: { id: string | null; onDone: () => void }) 
 
   return (
     <div className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-700">
-      <h3 className="mb-3 text-sm font-semibold">{id ? 'Edit document' : 'New document'}</h3>
+      <h3 className="mb-3 text-sm font-semibold">{id ? 'Edit decision' : 'New decision'}</h3>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="Document title"
+        placeholder="Decision title"
         className="mb-3 w-full rounded-lg border border-neutral-300 p-2 text-sm dark:border-neutral-600 dark:bg-neutral-900"
       />
-      <MarkdownEditor value={content} onChange={setContent} title="Content" minRows={10} placeholder="Write the rules… (supports **bold**, *italics*, ## headings, lists)" />
+      <MarkdownEditor value={content} onChange={setContent} title="Content" minRows={10} placeholder="Write the decision… (supports **bold**, *italics*, ## headings, lists)" />
       <div className="mt-3 space-y-1.5">
         <span className="text-sm font-medium">Expiration</span>
         <label className="flex items-center gap-2 text-sm">
@@ -412,7 +412,7 @@ function MyDocEditor({ id, onDone }: { id: string | null; onDone: () => void }) 
         ) : null}
         <p className="text-xs text-neutral-400">A future date, or never (default). Once set, the expiry can only be shortened.</p>
       </div>
-            {error ? <p className="mt-2 text-xs text-red-500">{error}</p> : null}
+      {error ? <p className="mt-2 text-xs text-red-500">{error}</p> : null}
       <div className="mt-3 flex gap-2">
         <button disabled={busy || title.trim().length < 3 || content.trim().length < 1} onClick={save} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40">
           {busy ? 'Saving…' : 'Save'}
@@ -423,34 +423,34 @@ function MyDocEditor({ id, onDone }: { id: string | null; onDone: () => void }) 
   );
 }
 
-export function MyRuleDocuments() {
-  const [docs, setDocs] = useState<RuleDocSummary[] | null>(null);
+export function MyDecisions() {
+  const [docs, setDocs] = useState<DecisionSummary[] | null>(null);
   const [editing, setEditing] = useState<string | null | 'new'>(null);
   const { setParams } = useUrlNav();
 
   const load = useCallback(() => {
-    ruleDocumentsApi.mine().then(setDocs).catch(() => setDocs([]));
+    decisionsApi.mine().then(setDocs).catch(() => setDocs([]));
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const publish = async (id: string) => { await ruleDocumentsApi.publish(id); load(); };
-  const remove = async (id: string) => { await ruleDocumentsApi.remove(id); load(); };
+  const publish = async (id: string) => { await decisionsApi.publish(id); load(); };
+  const remove = async (id: string) => { await decisionsApi.remove(id); load(); };
 
   if (editing) {
-    return <MyDocEditor id={editing === 'new' ? null : editing} onDone={() => { setEditing(null); load(); }} />;
+    return <MyDecisionEditor id={editing === 'new' ? null : editing} onDone={() => { setEditing(null); load(); }} />;
   }
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">My rule documents</h3>
-        <button onClick={() => setEditing('new')} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">+ New document</button>
+        <h3 className="text-sm font-semibold">My decisions</h3>
+        <button onClick={() => setEditing('new')} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">+ New decision</button>
       </div>
-      <p className="mb-3 text-xs text-neutral-500">Draft a rule document privately, publish it for other DReps to review and give feedback, keep editing until you (or another DRep) open an approval vote — which freezes the content and anchors its hash. Only Council members can author — if you&rsquo;re a registered DRep, join the Council first (it&rsquo;s free).</p>
+      <p className="mb-3 text-xs text-neutral-500">Draft a decision privately, publish it for other DReps to review and give feedback, keep editing until you (or another DRep) open an approval vote — which freezes the content and anchors its hash. Only Council members can author — if you&rsquo;re a registered DRep, join the Council first (it&rsquo;s free).</p>
       {docs === null ? (
         <p className="text-sm text-neutral-500">Loading…</p>
       ) : docs.length === 0 ? (
-        <p className="text-sm text-neutral-500">You have no rule documents yet.</p>
+        <p className="text-sm text-neutral-500">You have no decisions yet.</p>
       ) : (
         <div className="space-y-2">
           {docs.map((d) => (
@@ -464,12 +464,12 @@ export function MyRuleDocuments() {
               </div>
               <div className="mt-2 flex flex-wrap gap-2 text-xs">
                 {d.status !== 'PRIVATE' ? (
-                  <button onClick={() => setParams({ view: 'rules', doc: d.id })} className="rounded border border-neutral-300 px-2 py-0.5 dark:border-neutral-600">View</button>
+                  <button onClick={() => setParams({ view: 'decisions', doc: d.id })} className="rounded border border-neutral-300 px-2 py-0.5 dark:border-neutral-600">View</button>
                 ) : null}
                 {d.lastVote?.status === 'ACTIVE' ? (
                   <button onClick={() => setParams({ view: 'internal', ip: d.lastVote!.proposalId })} className="rounded border border-amber-500 px-2 py-0.5 text-amber-700 dark:text-amber-300">Open the vote</button>
                 ) : d.status === 'DRAFT' || d.status === 'ACTIVE' ? (
-                  <button onClick={() => setParams({ view: 'internal', newRule: d.id })} className="rounded border border-emerald-600 px-2 py-0.5 text-emerald-700 dark:text-emerald-300">Start approval vote</button>
+                  <button onClick={() => setParams({ view: 'internal', newDecision: d.id })} className="rounded border border-emerald-600 px-2 py-0.5 text-emerald-700 dark:text-emerald-300">Start approval vote</button>
                 ) : null}
                 {d.editable ? <button onClick={() => setEditing(d.id)} className="rounded border border-neutral-300 px-2 py-0.5 dark:border-neutral-600">Edit</button> : null}
                 {d.status === 'PRIVATE' ? <button onClick={() => publish(d.id)} className="rounded border border-emerald-600 px-2 py-0.5 text-emerald-700 dark:text-emerald-300">Publish (→ draft)</button> : null}
