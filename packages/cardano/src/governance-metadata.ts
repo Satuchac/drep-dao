@@ -441,6 +441,15 @@ export function decodeGovEvent(metadataForLabel: unknown): GovEvent {
   return o as unknown as GovEvent;
 }
 
+/**
+ * §24 — decode one label's metadata into the list of events it carries. A single decision is
+ * stored as a bare object (historical shape); a batch is stored as an array (several decisions
+ * sharing one tx). This normalises both to an array so verifiers can match by proofHash.
+ */
+export function decodeGovEvents(metadataForLabel: unknown): GovEvent[] {
+  return (Array.isArray(metadataForLabel) ? metadataForLabel : [metadataForLabel]).map(decodeGovEvent);
+}
+
 export interface TallyResult {
   yes: number;
   no: number;
