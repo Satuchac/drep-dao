@@ -646,6 +646,7 @@ export class InternalProposalsService {
       myRationale,
       voters,
       tally,
+      docHash: this.proposalDocHash(p),
       anchorTxHash: anchor?.txHash ?? null,
       anchorHash: anchor?.hash ?? null,
       // §27 — rule-approval target: the document, whether this is a delete vote, and the frozen hash.
@@ -1000,18 +1001,23 @@ export class InternalProposalsService {
     if (status) await this.prisma.decision.update({ where: { id: decisionId }, data: { status } });
   }
 
+  /** §3/§27 — the canonical document hash anchored for an internal proposal, so the detail view can
+   *  show the SAME value and anyone can confirm it matches the on-chain anchor. For a rule/decision
+   *  approval it is the FROZEN target-document content hash (what was voted on); otherwise it is the
+   *  SHA-256 of the proposal's own `title\ncontent` (date-independent — the voting end can move). */
+  private proposalDocHash(p: { internalType: string | null; ruleDocContentHash: string | null; decisionContentHash: string | null; title: string; contentMd: string }): string {
+    return p.internalType === InternalType.RULE_APPROVAL && p.ruleDocContentHash
+      ? p.ruleDocContentHash
+      : p.internalType === InternalType.DECISION_APPROVAL && p.decisionContentHash
+        ? p.decisionContentHash
+        : sha256hex(`${p.title}\n${p.contentMd}`);
+  }
+
   private async anchorResult(proposalId: string, status: string, t: Awaited<ReturnType<InternalProposalsService['tally']>>) {
     const p = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
     if (!p) return;
     const voteList = await this.voteList(proposalId);
-    // §27 — for a rule-approval vote, anchor the FROZEN rule-document content hash (what was voted
-    // on). Otherwise hash the proposal's own title + content (date-independent — the end can move).
-    const docHash =
-      p.internalType === InternalType.RULE_APPROVAL && p.ruleDocContentHash
-        ? p.ruleDocContentHash
-        : p.internalType === InternalType.DECISION_APPROVAL && p.decisionContentHash
-          ? p.decisionContentHash
-          : sha256hex(`${p.title}\n${p.contentMd}`);
+    const docHash = this.proposalDocHash(p);
     const weighted = p.votingType !== VotingType.ONE_PERSON_ONE_VOTE;
     const style =
       p.votingType === VotingType.BALANCED

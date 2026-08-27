@@ -1912,6 +1912,7 @@ export interface InternalProposalDetail extends InternalProposalSummary {
   votingStartAt: string | null;
   resultFinalizedAt: string | null;
   voters: InternalProposalVoter[]; // who voted how + their rationales
+  docHash: string; // §3 — SHA-256 of title+content (or the frozen rule/decision hash); matches the on-chain anchor
   anchorTxHash: string | null;
   anchorHash: string | null;
   /** Minimum rationale words required per choice (0 = not required). Internal proposals only. */

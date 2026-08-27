@@ -26,6 +26,7 @@ import { useUrlNav } from '@/lib/use-url-nav';
 import { ShareLinkButton } from './share-link-button';
 import { BackButton, StatusBadge, PROPOSAL_STATUS_CLS, fmtDateTime, toLocalInput, DateField, RationaleText, useNow, fmtCountdown } from './round-ui';
 import { Markdown, MarkdownEditor } from './markdown';
+import { DocHashRow } from './doc-hash-row';
 
 
 const field = 'w-full rounded-md border border-neutral-300 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-900';
@@ -1020,6 +1021,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
             </ul>
           </div>
         )}
+        <DocHashRow hash={p.docHash} />
         {p.anchorTxHash ? (
           <div className="mt-2 text-xs"><a href={txUrl(p.anchorTxHash)} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{t('on-chain record ↗')}</a></div>
         ) : p.status !== 'ACTIVE' && p.anchorHash ? (
