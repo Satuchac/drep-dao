@@ -132,11 +132,11 @@ export function toLocalInput(iso: string | null | undefined): string {
 export function RationaleText({ text }: { text: string | null | undefined }) {
   const t = useT();
   const trimmed = (text ?? '').trim();
-  const long = trimmed.length > 50 || trimmed.includes('\n');
-  const [open, setOpen] = useState(!long);
+  // Always collapsed by default so a long rationale never dominates the list; the reader opts in.
+  const [open, setOpen] = useState(false);
   if (!trimmed) return null;
   return (
-    <div className="mt-1 text-xs text-neutral-600 dark:text-neutral-400">
+    <div className="mt-1 text-xs">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -144,7 +144,10 @@ export function RationaleText({ text }: { text: string | null | undefined }) {
       >
         {open ? t('▾ rationale (hide)') : `▸ ${t('rationale')} (${trimmed.length} char${trimmed.length === 1 ? '' : 's'} — ${t('show')})`}
       </button>
-      {open ? <div className="mt-0.5 whitespace-pre-wrap">{trimmed}</div> : null}
+      {/* Shown text sits in its own bordered box so it's obvious where the rationale starts and ends. */}
+      {open ? (
+        <div className="mt-1 whitespace-pre-wrap rounded-md border border-neutral-200 bg-neutral-50 p-2 text-neutral-700 dark:border-neutral-800 dark:bg-neutral-900/50 dark:text-neutral-300">{trimmed}</div>
+      ) : null}
     </div>
   );
 }
