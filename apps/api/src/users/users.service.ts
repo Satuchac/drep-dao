@@ -18,7 +18,7 @@ export interface UserProfile {
   submitterName: string | null;
   roles: Role[];
   /** On-chain DRep identity — the source of truth for the DREP role (§22.4). */
-  onchainDrep: { registered: boolean; drepId: string | null; proven?: boolean };
+  onchainDrep: { registered: boolean; drepId: string | null; proven?: boolean; proofRequired?: boolean };
   /** DAO membership (admission) status — separate from on-chain registration. */
   daoMembership: { status: string; admittedAt: Date | null } | null;
 }
@@ -230,6 +230,9 @@ export class UsersService {
         registered: isRegisteredDRep,
         drepId: user.drepKeyHash ? safeDrepId(user.drepKeyHash) : null,
         proven: !!user.drepKeyProvenAt,
+        // §SEC-01 — whether a cryptographic DRep-key proof is REQUIRED. When false (auto-detect
+        // mode) the "Verify DRep key" button/popup is hidden — the DRep is already recognised.
+        proofRequired: isProvenDrepRequired(this.config),
       },
       daoMembership: drep ? { status: drep.status, admittedAt: drep.admittedAt } : null,
     };

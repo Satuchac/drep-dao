@@ -20,16 +20,18 @@ export function DrepVerifyPrompt() {
 
   const stakeKey = profile?.user?.stakeKeyHash ?? null;
   const proven = profile?.onchainDrep.proven ?? false;
+  const proofRequired = profile?.onchainDrep.proofRequired ?? false;
 
   useEffect(() => {
-    if (checked.current || !profile || proven || !stakeKey) return;
+    // Only nudge when a proof is actually REQUIRED — in auto-detect mode the DRep is already recognised.
+    if (checked.current || !profile || !proofRequired || proven || !stakeKey) return;
     checked.current = true;
     void (async () => {
       if (typeof window !== 'undefined' && window.localStorage.getItem(`${DISMISS_KEY}:${stakeKey}`)) return;
       const drepId = await detectDRepId().catch(() => null); // only nudge wallets that expose a DRep key
       if (drepId) setOpen(true);
     })();
-  }, [profile, proven, stakeKey, detectDRepId]);
+  }, [profile, proven, proofRequired, stakeKey, detectDRepId]);
 
   if (!open) return null;
 

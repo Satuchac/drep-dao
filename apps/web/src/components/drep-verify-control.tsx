@@ -14,6 +14,9 @@ export function DrepVerifyControl({ className }: { className?: string }) {
   const [msg, setMsg] = useState<string | null>(null);
 
   if (!profile) return null;
+  // Auto-detect mode (proof not required): the DRep is recognised at login, so hide the
+  // now-pointless "Verify DRep key" control entirely.
+  if (!profile.onchainDrep.proofRequired) return null;
 
   if (profile.onchainDrep.proven) {
     return (

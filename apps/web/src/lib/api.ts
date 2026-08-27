@@ -14,7 +14,7 @@ export interface UserProfile {
   submitterName: string | null;
   roles: string[];
   /** On-chain DRep identity — source of truth for the DREP role (verified at login). */
-  onchainDrep: { registered: boolean; drepId: string | null; proven?: boolean };
+  onchainDrep: { registered: boolean; drepId: string | null; proven?: boolean; proofRequired?: boolean };
   /** DAO membership (admission) status — separate from on-chain registration. */
   daoMembership: { status: string; admittedAt: string | null } | null;
 }
