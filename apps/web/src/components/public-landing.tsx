@@ -90,25 +90,25 @@ export function PublicLanding({ onConnect, onExplore }: { onConnect: () => void;
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         {governance ? (
           <>
-            <Tile bg="#0e7a4b" label={t('Voting DReps')} big={`${data?.members.votingDReps ?? 0}`}
+            <Tile loading={!data} bg="#0e7a4b" label={t('Voting DReps')} big={`${data?.members.votingDReps ?? 0}`}
               sub={data?.admissionOpen ? t('Open admission — join freely') : t('Board-gated admission')} />
-            <Tile bg="#0e6f73" label={t('Governance proposals')} big={`${data?.internalProposals.total ?? 0}`}
+            <Tile loading={!data} bg="#0e6f73" label={t('Governance proposals')} big={`${data?.internalProposals.total ?? 0}`}
               sub={`${data?.internalProposals.passed ?? 0} ${t('passed')} · ${data?.internalProposals.active ?? 0} ${t('in voting')}`} />
-            <Tile bg="#4f8f2f" label={t('Board')} big={data ? (data.board.elected ? `${data.board.seats}` : '—') : '—'}
+            <Tile loading={!data} bg="#4f8f2f" label={t('Board')} big={data ? (data.board.elected ? `${data.board.seats}` : '—') : '—'}
               sub={data?.board.elected ? t('seats elected') : t('not yet elected')} />
-            <Tile bg="#173a2a" label={t('Governance')} big={data?.admissionOpen ? t('Open') : t('Gated')}
+            <Tile loading={!data} bg="#173a2a" label={t('Governance')} big={data?.admissionOpen ? t('Open') : t('Gated')}
               sub={t('Any registered DRep can join & vote')} />
           </>
         ) : (
           <>
-            <Tile bg="#0e7a4b" label={t('Treasury balance')} big={ada(data?.treasuryBalanceAda)}
+            <Tile loading={!data} bg="#0e7a4b" label={t('Treasury balance')} big={ada(data?.treasuryBalanceAda)}
               sub={round ? `₳ ${n(round.budgetAda)} ${t('committed to Round')} ${round.number}` : t('On-chain, live')} />
-            <Tile bg="#0e6f73" label={round ? `${t('Round')} ${round.number} ${t('budget')}` : t('Round budget')}
+            <Tile loading={!data} bg="#0e6f73" label={round ? `${t('Round')} ${round.number} ${t('budget')}` : t('Round budget')}
               big={round ? ada(round.budgetAda) : '—'}
               sub={round ? `+ ₳ ${n(round.rewardsPoolAda)} ${t('rewards pool')}` : t('No active round')} />
-            <Tile bg="#4f8f2f" label={t('Voting DReps')} big={`${data?.members.votingDReps ?? 0}`}
+            <Tile loading={!data} bg="#4f8f2f" label={t('Voting DReps')} big={`${data?.members.votingDReps ?? 0}`}
               sub={`${data?.members.experts ?? 0} ${t('experts advising')}`} />
-            <Tile bg="#173a2a" label={t('Proposals')} big={`${data?.proposals.total ?? 0}`}
+            <Tile loading={!data} bg="#173a2a" label={t('Proposals')} big={`${data?.proposals.total ?? 0}`}
               sub={`${data?.proposals.approved ?? 0} ${t('approved')} · ${data?.proposals.inReview ?? 0} ${t('in review')}`} />
           </>
         )}
@@ -165,13 +165,24 @@ export function PublicLanding({ onConnect, onExplore }: { onConnect: () => void;
   );
 }
 
-function Tile({ bg, label, big, sub }: { bg: string; label: string; big: string; sub: string }) {
+function Tile({ bg, label, big, sub, loading }: { bg: string; label: string; big: string; sub: string; loading?: boolean }) {
   return (
     <div className="flex min-h-[118px] flex-col justify-between rounded-2xl p-4 text-white" style={{ backgroundColor: bg }}>
       <div className="text-[12.5px] opacity-90">{label}</div>
       <div>
-        <div className="text-[30px] font-bold leading-none tracking-tight tabular-nums">{big}</div>
-        <div className="mt-1 text-[12px] opacity-90">{sub}</div>
+        {loading ? (
+          // Skeleton while the overview loads — so a real number appears in place, instead of a
+          // placeholder "0" that visibly jumps to the true value a moment later.
+          <>
+            <div className="h-[26px] w-14 animate-pulse rounded-md bg-white/25" />
+            <div className="mt-2 h-3 w-24 animate-pulse rounded bg-white/20" />
+          </>
+        ) : (
+          <>
+            <div className="text-[30px] font-bold leading-none tracking-tight tabular-nums">{big}</div>
+            <div className="mt-1 text-[12px] opacity-90">{sub}</div>
+          </>
+        )}
       </div>
     </div>
   );
