@@ -47,6 +47,9 @@ export const PLATFORM_CONFIG_DEFAULTS = {
   // without being named in the body, e.g. Eternl). 2_PHASE: Authorize → Sign ceremony that
   // works with any CIP-30 wallet — the backup when a member's wallet can't do 1-phase.
   TX_SIGNING_PROCESS: '1_PHASE', // 1_PHASE | 2_PHASE
+  // Invite link to the community/coordination Telegram group, shown on the landing page.
+  // Empty (default) → the Telegram invite is not shown at all.
+  TELEGRAM_GROUP_URL: '',
 } as const;
 
 export type PlatformConfigKey = keyof typeof PLATFORM_CONFIG_DEFAULTS;
@@ -61,6 +64,8 @@ export type PlatformConfigKey = keyof typeof PLATFORM_CONFIG_DEFAULTS;
  * are set per round in the round setup — not here.
  */
 export const PLATFORM_CONFIG_META: Record<PlatformConfigKey, string> = {
+  TELEGRAM_GROUP_URL:
+    'Invite link to the community Telegram group (e.g. https://t.me/+…), shown on the landing page below the flow strip. Leave empty to hide the invite entirely.',
   MILESTONE_MAX_REJECTIONS:
     'After a milestone POA is rejected this many times, the platform automatically opens a stop-funding proposal for the board (0 = disabled).',
   DREP_OPEN_ADMISSION:
