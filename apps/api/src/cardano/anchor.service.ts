@@ -278,6 +278,7 @@ export class AnchorService implements OnModuleInit {
     no: number;
     threshold: number;
     totalPower?: number; // BAL: total eligible voting power (for the on-chain tally)
+    abstain?: number; // BAL: summed power of the abstentions
     preimageVotes?: unknown; // richer votes (rationale/signature) for the off-chain preimage
   }): Promise<AnchorResult> {
     const preimage = {
@@ -305,6 +306,7 @@ export class AnchorService implements OnModuleInit {
       no: params.no,
       threshold: params.threshold,
       totalPower: params.totalPower,
+      abstain: params.abstain,
       outcome: params.outcome,
       proofHash: hash,
     })[GOVERNANCE_METADATA_LABEL];

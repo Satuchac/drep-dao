@@ -1055,6 +1055,8 @@ export class InternalProposalsService {
       no: t.kind === 'THRESHOLD' ? round2(t.totalPower - t.yesPower - t.abstainPower) : 0,
       threshold: t.kind === 'THRESHOLD' ? t.thresholdPct : 0,
       totalPower: t.kind === 'THRESHOLD' ? round2(t.totalPower) : undefined,
+      // Told apart on-chain, so "no" cannot be read as "voted against".
+      abstain: t.kind === 'THRESHOLD' ? round2(t.abstainPower) : undefined,
     });
   }
 
