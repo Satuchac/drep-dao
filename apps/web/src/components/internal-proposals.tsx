@@ -336,6 +336,8 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
   const [buckets, setBuckets] = useState<TreasuryBucket[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // §14/§17 — a board-member election must pick exactly this many candidates (configurable; default 5).
+  const boardSize = cfg?.boardSize ?? 5;
 
   useEffect(() => {
     daoApi.members().then(setMembers).catch(() => setMembers([]));
@@ -430,7 +432,7 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
     if (Number.isNaN(end.getTime()) || end.getTime() <= Date.now()) { setError(t('Pick a voting-end date in the future.')); return; }
 
     if (election) {
-      if (candidates.length !== 5) { setError(t('Pick exactly 5 candidates.')); return; }
+      if (candidates.length !== boardSize) { setError(t('Pick exactly {n} candidates.').replace('{n}', String(boardSize))); return; }
       const install = new Date(installDate);
       if (Number.isNaN(install.getTime()) || install.getTime() <= end.getTime()) {
         setError(t('The installation date must be later than the voting end.')); return;
@@ -646,7 +648,7 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
       {election ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
-            <span className="text-sm font-medium">{t('Candidates (pick exactly 5 DReps)')}</span>
+            <span className="text-sm font-medium">{t('Candidates (pick exactly {n} DReps)').replace('{n}', String(boardSize))}</span>
             {/* §14 — the 5 candidates who will become the new board on approval + installation date. */}
             <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border border-neutral-300 p-2 dark:border-neutral-700">
               {members.length === 0 ? (
@@ -655,11 +657,11 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
                 members.map((m) => {
                   const picked = candidates.includes(m.drepId);
                   return (
-                    <label key={m.drepId} className={`flex items-center gap-2 text-sm ${!picked && candidates.length >= 5 ? 'opacity-50' : ''}`}>
+                    <label key={m.drepId} className={`flex items-center gap-2 text-sm ${!picked && candidates.length >= boardSize ? 'opacity-50' : ''}`}>
                       <input
                         type="checkbox"
                         checked={picked}
-                        disabled={!picked && candidates.length >= 5}
+                        disabled={!picked && candidates.length >= boardSize}
                         onChange={() => setCandidates((s) => (s.includes(m.drepId) ? s.filter((x) => x !== m.drepId) : [...s, m.drepId]))}
                       />
                       {m.displayName}{m.isBoard ? <span className="text-[10px] text-neutral-400"> {t('(board)')}</span> : null}
@@ -668,8 +670,8 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
                 })
               )}
             </div>
-            <span className={`text-xs ${candidates.length === 5 ? 'text-emerald-600' : 'text-neutral-500'}`}>
-              {candidates.length} {t('/ 5 selected')}
+            <span className={`text-xs ${candidates.length === boardSize ? 'text-emerald-600' : 'text-neutral-500'}`}>
+              {candidates.length} {t('selected (need {n})').replace('{n}', String(boardSize))}
             </span>
           </div>
           <label className="block space-y-1">
@@ -735,7 +737,7 @@ function SubmitInternalForm({ onDone, onCancel, draftId = null, election = false
         const endMs = new Date(votingEnd).getTime();
         if (!votingEnd || Number.isNaN(endMs) || endMs <= Date.now()) missing.push(t('voting end must be in the future'));
         if (election) {
-          if (candidates.length !== 5) missing.push(`${t('pick exactly 5 candidates')} (${candidates.length} ${t('so far')})`);
+          if (candidates.length !== boardSize) missing.push(`${t('pick exactly {n} candidates').replace('{n}', String(boardSize))} (${candidates.length} ${t('so far')})`);
           if (!installDate) missing.push(t('installation date'));
           else if (!Number.isNaN(new Date(installDate).getTime()) && !Number.isNaN(endMs) && new Date(installDate).getTime() <= endMs) {
             missing.push(t('installation date must be later than the voting end'));

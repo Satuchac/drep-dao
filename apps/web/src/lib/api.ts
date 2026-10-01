@@ -1422,6 +1422,7 @@ export interface PublicConfig {
   submissionFeeAddress: string | null;
   pledgeAddress: string | null;
   anchorMetadataLabel: number;
+  boardSize: number; // §14/§17 — a board-member election must put up exactly this many candidates
   internalThresholds: { default: number; important: number };
   /** §15.3 — true once the board has assembled the on-chain multisig. UI
    *  uses this to gate features that only make sense when the script

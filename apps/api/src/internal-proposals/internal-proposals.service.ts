@@ -109,10 +109,11 @@ export class InternalProposalsService {
       votingType = VotingType.BALANCED;
       thresholdKind = 'IMPORTANT';
       if (dto.isPrivate) throw new BadRequestException('board-member elections are public — cannot be PRIVATE');
-      if (!dto.candidates || dto.candidates.length !== 5) {
-        throw new BadRequestException('a board-member election must include exactly 5 candidates');
+      const boardSize = await this.boardSize();
+      if (!dto.candidates || dto.candidates.length !== boardSize) {
+        throw new BadRequestException(`a board-member election must include exactly ${boardSize} candidates`);
       }
-      if (new Set(dto.candidates).size !== 5) throw new BadRequestException('candidates must be distinct');
+      if (new Set(dto.candidates).size !== boardSize) throw new BadRequestException('candidates must be distinct');
       if (!dto.deliveryDate) throw new BadRequestException('an installation date (delivery date) is required');
       deliveryDate = new Date(dto.deliveryDate);
       if (Number.isNaN(deliveryDate.getTime()) || deliveryDate.getTime() <= end.getTime()) {
@@ -134,7 +135,7 @@ export class InternalProposalsService {
         },
         include: { user: { select: { drepKeyHash: true, displayName: true } } },
       });
-      if (dreps.length !== 5) throw new BadRequestException('every candidate must be an admitted DRep');
+      if (dreps.length !== boardSize) throw new BadRequestException('every candidate must be an admitted DRep');
       const missingKey = dreps.find((d) => !d.user?.drepKeyHash);
       if (missingKey) throw new BadRequestException('a candidate has no on-chain DRep key — cannot install');
       actorsData = dreps.map((d) => ({
@@ -315,6 +316,14 @@ export class InternalProposalsService {
     return typeof row?.value === 'number'
       ? row.value
       : ((PLATFORM_CONFIG_DEFAULTS as Record<string, unknown>)[key] as number);
+  }
+
+  /** §14/§17 — configured number of board seats (platform param BOARD_SIZE, default 5). A board-member
+   *  election must put up exactly this many candidates. */
+  private async boardSize(): Promise<number> {
+    const row = await this.prisma.platformConfig.findUnique({ where: { key: 'BOARD_SIZE' } });
+    const n = typeof row?.value === 'number' ? Number(row.value) : PLATFORM_CONFIG_DEFAULTS.BOARD_SIZE;
+    return Number.isInteger(n) && n >= 1 && n <= 15 ? n : PLATFORM_CONFIG_DEFAULTS.BOARD_SIZE;
   }
 
   // ---- eligibility + snapshot ----------------------------------------------
@@ -852,12 +861,15 @@ export class InternalProposalsService {
     return this.installBoardFromProposal(p.id);
   }
 
-  /** Replace the board seats with the proposal's 5 candidates in one transaction, mark installed. */
+  /** Replace the board seats with the proposal's elected candidates in one transaction, mark installed.
+   *  The candidate set size was fixed to BOARD_SIZE when the election was created; here we only ensure
+   *  it's a valid, non-empty set (comparing to the CURRENT BOARD_SIZE could wrongly reject an election
+   *  created before the size was changed). */
   private async installBoardFromProposal(proposalId: string) {
     const p = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
     if (!p) throw new NotFoundException('proposal not found');
     const candidates = (p.actors as unknown) as { drepKeyHash: string; drepIdOnchain: string; displayName: string }[];
-    if (!Array.isArray(candidates) || candidates.length !== 5) {
+    if (!Array.isArray(candidates) || candidates.length < 1) {
       throw new BadRequestException('election has no valid candidate set');
     }
     await this.prisma.$transaction(async (tx) => {

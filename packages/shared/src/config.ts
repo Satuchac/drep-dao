@@ -50,6 +50,14 @@ export const PLATFORM_CONFIG_DEFAULTS = {
   // Invite link to the community/coordination Telegram group, shown on the landing page.
   // Empty (default) → the Telegram invite is not shown at all.
   TELEGRAM_GROUP_URL: '',
+  // §14/§17 — how many seats the board has. A board-member election must put up exactly this many
+  // candidates, the genesis board-seating caps at it, and it drives the default multisig threshold
+  // (majority of the seated keys). Default 5.
+  BOARD_SIZE: 5,
+  // §15 — board multisig signing threshold (M of the N board keys). 0 (default) = automatic MAJORITY
+  // of the actually-seated keys (3-of-5, 2-of-3, …). A positive value forces an explicit M (clamped
+  // to 1…N). Applied when the multisig is (re-)assembled; existing wallets keep their stored threshold.
+  MULTISIG_THRESHOLD: 0,
 } as const;
 
 export type PlatformConfigKey = keyof typeof PLATFORM_CONFIG_DEFAULTS;
@@ -97,6 +105,10 @@ export const PLATFORM_CONFIG_META: Record<PlatformConfigKey, string> = {
   CARDANO_EXPLORER: 'Block explorer for on-chain links: cardanoscan, cexplorer, or adastat.',
   TX_SIGNING_PROCESS:
     'Multisig signing ceremony. 1-Phase (default): each board member signs the tx once — requires the Eternl wallet (broadcasts on the 3rd signature). 2-Phase: Authorize → Sign — the backup that works with any CIP-30 wallet.',
+  BOARD_SIZE:
+    'Number of board seats. A board-member election must put up exactly this many candidates, genesis board-seating is capped at it, and it drives the default multisig threshold (majority). Typical: 5 (3-of-5 multisig) or 3 (2-of-3).',
+  MULTISIG_THRESHOLD:
+    'Board treasury multisig signing threshold — how many of the N board keys must sign. 0 (default) = automatic majority of the seated keys (so 5 keys → 3-of-5, 3 keys → 2-of-3). A positive number forces an explicit M (clamped to 1…N). Takes effect when the multisig is next assembled; existing wallets keep their threshold until funds migrate.',
 };
 
 /**

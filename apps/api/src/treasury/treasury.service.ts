@@ -33,7 +33,7 @@ export interface TreasuryTx {
   // Which treasury address the funds left (board actions; for search).
   sourceAddress?: string;
 }
-const APPROVAL_THRESHOLD = 3; // 3-of-5 board multisig
+const APPROVAL_THRESHOLD = 3; // fallback only — the real M is the active MultisigConfig.threshold (2-of-3, 3-of-5, …)
 const HOT_WALLET_MIN_ADA = 100; // below this, the platform prepares a top-up
 const HOT_WALLET_TOPUP_ADA = 500;
 // §15.3 — hard cap on a single board-prepared top-up. The hot wallet only
@@ -79,6 +79,17 @@ export class TreasuryService implements OnModuleInit {
       select: { bech32Address: true },
     });
     return active?.bech32Address ?? this.config.get<string>('TREASURY_ADDRESS') ?? null;
+  }
+
+  /** §15 — M (board signatures needed) = the ACTIVE multisig config's stored threshold (2-of-3,
+   *  3-of-5, …), not a constant. Falls back to APPROVAL_THRESHOLD only before any multisig exists. */
+  private async activeThreshold(): Promise<number> {
+    const active = await this.prisma.multisigConfig.findFirst({
+      where: { replacedAt: null },
+      orderBy: { assembledAt: 'desc' },
+      select: { threshold: true },
+    });
+    return active?.threshold ?? APPROVAL_THRESHOLD;
   }
 
   async overview() {
@@ -544,6 +555,7 @@ export class TreasuryService implements OnModuleInit {
       threshold?: number;   // for top-ups: how many needed (always 3)
     };
     const items: Item[] = [];
+    const topupThreshold = await this.activeThreshold();
     for (const t of topups) {
       items.push({
         id: t.id,
@@ -555,7 +567,7 @@ export class TreasuryService implements OnModuleInit {
         initiatedBy: null,
         status: t.status,
         approvals: t.signatures.length,
-        threshold: APPROVAL_THRESHOLD,
+        threshold: topupThreshold,
       });
     }
     for (const s of sweeps) {
@@ -839,8 +851,9 @@ export class TreasuryService implements OnModuleInit {
     });
 
     const count = await this.prisma.multisigSignature.count({ where: { actionId } });
+    const threshold = await this.activeThreshold();
     let status = action.status;
-    if (count >= APPROVAL_THRESHOLD) {
+    if (count >= threshold) {
       // 3-of-5 reached. Before flipping to READY, sanity-check that the
       // treasury can actually cover the amount — otherwise the disbursement
       // would fail at broadcast and the action would sit in limbo. Refuse
@@ -863,7 +876,7 @@ export class TreasuryService implements OnModuleInit {
       status = 'READY';
       await this.prisma.multisigAction.update({ where: { id: actionId }, data: { status } });
     }
-    return { approvals: count, threshold: APPROVAL_THRESHOLD, status };
+    return { approvals: count, threshold, status };
   }
 
   /**
