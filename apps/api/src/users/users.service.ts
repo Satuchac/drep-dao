@@ -97,7 +97,8 @@ export class UsersService {
     }
   }
 
-  /** Is this CIP-95 DRep key a registered + active on-chain DRep? undefined if unknown. */
+  /** Is this CIP-95 DRep key a registered on-chain DRep (live registration, even if its activity
+   *  window has lapsed)? A registered-but-inactive DRep is still a DRep. undefined if unknown. */
   private async checkOnchainRegistration(drepKeyHash: string): Promise<boolean | undefined> {
     try {
       const drepId = drepIdFromKeyHashHex(drepKeyHash);
