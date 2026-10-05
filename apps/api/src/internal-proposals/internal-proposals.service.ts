@@ -497,8 +497,49 @@ export class InternalProposalsService {
     return this.detail(proposalId, userId);
   }
 
-  // §10 — the voting end is fixed at submission and never changes afterwards (set it before
-  // submitting / while it's a draft). There is intentionally no "extend voting" endpoint.
+  // §10 — the proposal CONTENT is frozen at submission and never changes. The voting deadline,
+  // however, may be pushed out while the proposal is still ACTIVE when INTERNAL_EXTEND_ENABLED is on
+  // (board-member election: only its submitter; any other internal proposal: only a board member).
+  // Only the deadline moves; each extension is recorded + anchored on-chain. See extend().
+
+  /** INTERNAL_EXTEND_ENABLED — board + super admin configure it (/admin/governance, /sysadmin/config). */
+  private async extendEnabled(): Promise<boolean> {
+    const row = await this.prisma.platformConfig.findUnique({ where: { key: 'INTERNAL_EXTEND_ENABLED' } }).catch(() => null);
+    return row && typeof row.value === 'boolean' ? row.value : (PLATFORM_CONFIG_DEFAULTS.INTERNAL_EXTEND_ENABLED as boolean);
+  }
+
+  /** §10 — push out an internal proposal's voting deadline (content stays frozen). Only while ACTIVE,
+   *  only when enabled, and only by the permitted actor: the submitter for a board-member election,
+   *  a board member for everything else. Each extension is recorded + anchored on-chain. */
+  async extend(userId: string, proposalId: string, newVotingEndAt: string) {
+    const p = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    if (!p || p.type !== ProposalType.INTERNAL) throw new NotFoundException('internal proposal not found');
+    if (!(await this.extendEnabled())) throw new BadRequestException('extending the voting deadline is disabled');
+    if (p.status !== ProposalStatus.ACTIVE) throw new ConflictException('a closed internal proposal cannot be extended');
+    if (p.isBoardElection) {
+      if (p.submitterUserId !== userId) throw new ForbiddenException('only the member who submitted this election can extend it');
+    } else if (!(await this.isBoardUser(userId))) {
+      throw new ForbiddenException('only a board member can extend an internal proposal');
+    }
+    const end = new Date(newVotingEndAt);
+    if (Number.isNaN(end.getTime())) throw new BadRequestException('invalid date');
+    if (!p.votingEndAt || end.getTime() <= p.votingEndAt.getTime()) throw new BadRequestException('the new deadline must be later than the current one');
+    if (end.getTime() <= Date.now()) throw new BadRequestException('the new deadline must be in the future');
+    if (end.getTime() - Date.now() > 365 * 24 * 3600_000) throw new BadRequestException('the new deadline is too far in the future (max one year)');
+    const fromIso = p.votingEndAt.toISOString();
+    const drep = await this.prisma.drep.findUnique({ where: { userId }, include: { user: { select: { displayName: true } } } }).catch(() => null);
+    await this.prisma.proposal.update({ where: { id: proposalId }, data: { votingEndAt: end } });
+    await this.anchor.anchorExtension({
+      proposalRowId: p.id,
+      publicId: p.publicId ?? p.id,
+      title: p.title,
+      fromIso,
+      toIso: end.toISOString(),
+      byDrepId: drep?.drepIdOnchain ?? null,
+      byName: drep?.user?.displayName ?? 'Board',
+    }).catch(() => undefined); // anchoring never blocks the extension
+    return this.detail(proposalId, userId);
+  }
 
   // ---- listing + detail -----------------------------------------------------
 
@@ -624,6 +665,16 @@ export class InternalProposalsService {
     const spendingBucket = freshAfterInstall?.spendingSourceBucketId
       ? await this.prisma.treasuryBucket.findUnique({ where: { id: freshAfterInstall.spendingSourceBucketId }, select: { label: true } })
       : null;
+    // §10 — deadline extension: allowed while ACTIVE + enabled, by the submitter (election) or a
+    // board member (everything else). The recorded extensions are the 'internal_extended' anchors.
+    const statusNow = freshAfterInstall?.status ?? fresh?.status ?? p.status;
+    const mayExtend = isElection ? p.submitterUserId === ctx.userId : ctx.isBoard;
+    const canExtend = statusNow === ProposalStatus.ACTIVE && mayExtend && (await this.extendEnabled());
+    const extensionAnchors = await this.prisma.anchor.findMany({ where: { proposalId, kind: 'internal_extended' }, orderBy: { createdAt: 'asc' } });
+    const extensions = extensionAnchors.map((a) => {
+      const pre = (a.preimage ?? {}) as { fromIso?: string; toIso?: string; by?: string; atIso?: string };
+      return { fromIso: pre.fromIso ?? null, toIso: pre.toIso ?? null, by: pre.by ?? null, atIso: pre.atIso ?? null, txHash: a.txHash ?? null };
+    });
     return {
       id: p.id,
       publicId: p.publicId,
@@ -650,6 +701,8 @@ export class InternalProposalsService {
       votingEndAt: p.votingEndAt,
       resultFinalizedAt: p.resultFinalizedAt,
       canVote: !!eligibleEntry && (fresh?.status ?? p.status) === ProposalStatus.ACTIVE,
+      canExtend,
+      extensions,
       rationaleMinWords,
       myVotes,
       myRationale,

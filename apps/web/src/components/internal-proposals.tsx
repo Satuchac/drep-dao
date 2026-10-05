@@ -816,6 +816,8 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const [picked, setPicked] = useState<string[]>([]);
   // Once a DRep has voted the card locks to a read-only summary; "Change vote" reopens the form.
   const [changing, setChanging] = useState(false);
+  // §10 — new voting deadline the viewer is proposing (datetime-local), when extension is allowed.
+  const [extendTo, setExtendTo] = useState('');
 
   const load = useCallback(() => {
     internalProposalsApi.get(id).then((d) => { setP(d); setPicked(d.myVotes); }).catch((e) => setError(e instanceof Error ? e.message : 'failed'));
@@ -1075,6 +1077,43 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
               {busy ? t('Installing…') : t('Install new board members now')}
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* §10 — deadline extension (content stays frozen). Shown only to the permitted actor while enabled + ACTIVE. */}
+      {p.canExtend ? (
+        <div className={card}>
+          <h3 className="text-base font-semibold">{t('Extend voting deadline')}</h3>
+          <p className="text-xs text-neutral-500">
+            {t('Current deadline:')} {fmtDateTime(p.votingEndAt)}. {t('Only the deadline moves — the proposal content stays frozen. Each extension is recorded on-chain.')}
+          </p>
+          <div className="mt-2 flex flex-wrap items-end gap-2">
+            <DateField value={extendTo} onChange={setExtendTo} min={toLocalInput(p.votingEndAt ?? new Date().toISOString())} required />
+            <button
+              disabled={busy || !extendTo}
+              onClick={() => act(async () => { await internalProposalsApi.extend(id, new Date(extendTo).toISOString()); setExtendTo(''); })}
+              className="rounded-md border border-sky-500 px-3 py-1.5 text-sm font-medium text-sky-700 hover:bg-sky-50 disabled:opacity-40 dark:text-sky-300 dark:hover:bg-sky-950"
+            >
+              {busy ? t('Extending…') : t('Extend deadline')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* §10 — recorded deadline extensions (each anchored on-chain). */}
+      {p.extensions.length > 0 ? (
+        <div className={card}>
+          <h3 className="text-base font-semibold">{t('Deadline extensions')} ({p.extensions.length})</h3>
+          <ul className="mt-2 space-y-1 text-sm">
+            {p.extensions.map((e, i) => (
+              <li key={i} className="flex flex-wrap items-center gap-x-2 text-neutral-600 dark:text-neutral-300">
+                <span>{fmtDateTime(e.fromIso)} → <span className="font-medium">{fmtDateTime(e.toIso)}</span></span>
+                {e.by ? <span className="text-xs text-neutral-400">· {e.by}</span> : null}
+                {e.atIso ? <span className="text-[10px] text-neutral-400">· {fmtDateTime(e.atIso)}</span> : null}
+                {e.txHash ? <a href={txUrl(e.txHash)} target="_blank" rel="noreferrer" className="text-xs text-emerald-700 underline dark:text-emerald-400">{t('on-chain ↗')}</a> : null}
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 

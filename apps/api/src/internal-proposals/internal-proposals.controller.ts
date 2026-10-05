@@ -63,4 +63,11 @@ export class InternalProposalsController {
   installBoard(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
     return this.internal.installNewBoard(c.userId, id);
   }
+
+  // §10 — push out the voting deadline (election: submitter only; otherwise board only; must be enabled).
+  @Post(':id/extend')
+  @UseGuards(JwtAuthGuard)
+  extend(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: { votingEndAt: string }) {
+    return this.internal.extend(c.userId, id, dto.votingEndAt);
+  }
 }

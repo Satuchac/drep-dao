@@ -465,6 +465,66 @@ export class AnchorService implements OnModuleInit {
   }
 
   /**
+   * §10 — anchor a **voting-deadline extension** on-chain: which internal proposal, the old and new
+   * deadlines, and who extended it. Each extension is its own Anchor row (kind 'internal_extended'),
+   * so the row set is also the recorded extension history. Degrades gracefully (txHash null) when no
+   * anchor hot wallet is configured.
+   */
+  async anchorExtension(params: {
+    proposalRowId: string;
+    publicId: string;
+    title: string;
+    fromIso: string;
+    toIso: string;
+    byDrepId: string | null;
+    byName: string;
+  }): Promise<AnchorResult> {
+    const hashAlgo = 'SHA-256';
+    const atIso = new Date().toISOString();
+    const text = `internal-deadline-extension|${params.publicId}|${params.fromIso}->${params.toIso}|by:${params.byDrepId ?? params.byName}|at:${atIso}`;
+    const contentHash = sha256hex(text);
+    const preimage = {
+      subject: 'INTERNAL_EXTEND',
+      proposalId: params.publicId,
+      title: params.title,
+      fromIso: params.fromIso,
+      toIso: params.toIso,
+      by: params.byName,
+      byDrepId: params.byDrepId,
+      hashAlgo,
+      contentHash,
+      atIso,
+    };
+    const metadata = buildDocHashMetadata({
+      title: `Deadline extension — ${params.title}`,
+      proposalId: params.publicId,
+      round: null,
+      hashAlgo,
+      contentHash,
+      frozenAt: atIso,
+    })[GOVERNANCE_METADATA_LABEL];
+
+    let txHash: string | null = null;
+    try {
+      txHash = await this.maybeSubmitInline(metadata);
+    } catch (e) {
+      this.logger.warn(`internal-extend anchor submit skipped/failed: ${e instanceof Error ? e.message : e}`);
+    }
+    await this.prisma.anchor.create({
+      data: {
+        kind: 'internal_extended',
+        proposalId: params.proposalRowId,
+        hash: contentHash,
+        preimage: preimage as unknown as object,
+        metadataLabel: GOVERNANCE_METADATA_LABEL,
+        txHash,
+        submittedAt: txHash ? new Date() : null,
+      },
+    });
+    return { hash: contentHash, txHash, submitted: !!txHash };
+  }
+
+  /**
    * §12 — anchor a **reward payout** on-chain: the stage it rewards, the payout tx hash, every
    * recipient (DRep id, or name for an expert) with the lovelace paid, and the board members who
    * signed the multisig. Records an Anchor row (kind 'reward_payout'). Degrades gracefully

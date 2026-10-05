@@ -1921,6 +1921,10 @@ export interface InternalProposalDetail extends InternalProposalSummary {
   rationaleMinWords: { YES: number; NO: number; ABSTAIN: number };
   /** The viewer's current (live) rationale, shown read-only in the locked vote card. */
   myRationale: string | null;
+  /** §10 — the viewer may push out this proposal's voting deadline (enabled + ACTIVE + permitted). */
+  canExtend: boolean;
+  /** §10 — recorded deadline extensions (each is anchored on-chain), oldest first. */
+  extensions: { fromIso: string | null; toIso: string | null; by: string | null; atIso: string | null; txHash: string | null }[];
   /** §27 RULE_APPROVAL: the targeted rule document + the frozen content hash. */
   rule?: { documentId: string; title: string; documentStatus: string; deleteRequested: boolean; contentHash: string | null } | null;
   decision?: { decisionId: string; title: string; decisionStatus: string; deleteRequested: boolean; contentHash: string | null } | null;
@@ -1982,6 +1986,8 @@ export const internalProposalsApi = {
       `/internal-proposals/${id}/install-board`,
       { method: 'POST' },
     ),
+  extend: (id: string, votingEndAt: string) =>
+    request<InternalProposalDetail>(`/internal-proposals/${id}/extend`, { method: 'POST', body: JSON.stringify({ votingEndAt }) }),
 };
 
 // §13 — merit points + avoid-period ("vacancy") signalling.
