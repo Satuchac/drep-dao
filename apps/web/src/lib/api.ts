@@ -131,7 +131,8 @@ export interface DaoMember {
   displayName: string;
   image: string | null; // CIP-119 on-chain DRep image, else null (generic avatar)
   isBoard: boolean;
-  votingPowerAda: number; // on-chain DRep voting power (vote delegation), in ADA
+  votingPowerAda: number; // on-chain DRep voting power (vote delegation), in ADA — ACTIVE for votingPowerEpoch
+  votingPowerEpoch: number; // the on-chain epoch this active voting-power snapshot is for (0 if unknown)
   delegators: number; // accounts that delegated their vote to this DRep
   merit: number;
   basePower: number;

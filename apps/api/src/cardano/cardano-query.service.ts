@@ -38,6 +38,9 @@ export class CardanoQueryService {
   // Single process, so a plain Map is enough; lost on restart by design.
   private readonly vpCache = new Map<string, { value: { votingPowerLovelace: bigint; delegators: number }; expiresAt: number }>();
   private readonly VP_TTL_MS = 10 * 60 * 1000;
+  // Current on-chain epoch — the snapshot that DRep voting power (drep_info.amount) is active for.
+  // Changes once per ~5-day epoch, so a 5-minute cache is plenty.
+  private epochCache: { value: number; expiresAt: number } | null = null;
   // Same idea for the on-chain DRep registration check, which runs on EVERY login.
   // A 60s TTL keeps role recognition fresh while collapsing repeated logins of the
   // same DRep into one Koios call (the test suite alone logs in ~10 personas many
@@ -662,6 +665,35 @@ export class CardanoQueryService {
    * expects. db-sync when configured (no rate limit), else Koios. The tx-building
    * path uses this so a Koios 429 doesn't block on-chain anchoring/sweeps.
    */
+  /** The current on-chain epoch — the stake-distribution snapshot DRep voting power is active for.
+   *  Used to label the displayed voting power ("active voting power, epoch N"). Cached 5 min;
+   *  degrades to the last known value (or 0) if every source is unreachable. */
+  async currentEpoch(): Promise<number> {
+    if (this.epochCache && this.epochCache.expiresAt > Date.now()) return this.epochCache.value;
+    try {
+      const n = await this.fromSources('currentEpoch', {
+        koios: async () => {
+          const r = await this.koiosFetch(`/tip`, { signal: AbortSignal.timeout(10000) });
+          if (!r.ok) throw new Error(`koios /tip: ${r.status}`);
+          return Number(((await r.json()) as { epoch_no?: number }[])[0]?.epoch_no ?? 0);
+        },
+        blockfrost: async () => {
+          const r = await this.blockfrostFetch(`/epochs/latest`, { signal: AbortSignal.timeout(10000) });
+          if (!r.ok) throw new Error(`Blockfrost /epochs/latest ${r.status}`);
+          return Number(((await r.json()) as { epoch?: number }).epoch ?? 0);
+        },
+        dbsync: async () => {
+          const { rows } = await this.dbsync()!.query<{ e: number }>(`SELECT max(epoch_no) AS e FROM block`);
+          return Number(rows[0]?.e ?? 0);
+        },
+      });
+      this.epochCache = { value: n, expiresAt: Date.now() + 5 * 60 * 1000 };
+      return n;
+    } catch {
+      return this.epochCache?.value ?? 0;
+    }
+  }
+
   async epochParams(): Promise<Record<string, string | number>> {
     return this.fromSources('epochParams', {
       koios: async () => {
