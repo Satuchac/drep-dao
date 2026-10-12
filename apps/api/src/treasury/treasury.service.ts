@@ -42,6 +42,10 @@ const HOT_WALLET_MIN_ADA = 100; // below this, the platform prepares a top-up
 // pays Cardano fees for anchor txs, so a small running balance is enough;
 // large amounts shouldn't sit there unsigned. Configurable later if needed.
 const HOT_WALLET_TOPUP_MAX_ADA = 1000;
+// §15.3 — Postgres advisory-lock key that serializes the AUTO top-up's check-then-create, so
+// concurrent treasury-status reads (page reloads, multiple tabs) can't each create a duplicate
+// pending top-up. Arbitrary but stable per deployment.
+const HOT_WALLET_TOPUP_LOCK = 915030001;
 
 @Injectable()
 export class TreasuryService implements OnModuleInit {
@@ -285,6 +289,7 @@ export class TreasuryService implements OnModuleInit {
   async maybePrepareTopUp() {
     const hot = this.anchor.hotWalletAddress();
     if (!hot) return;
+    // Cheap early-outs (no lock): an already-open top-up, or a still-healthy balance.
     const open = await this.prisma.multisigAction.findFirst({ where: { kind: 'OPS', status: 'PENDING_SIGS', description: { contains: 'hot wallet' } } });
     if (open) return;
     // Strict read: Koios unavailable → null (NOT a 0-filled map), so a transient
@@ -294,16 +299,26 @@ export class TreasuryService implements OnModuleInit {
     if (Number(bal.get(hot) ?? 0n) / ADA >= HOT_WALLET_MIN_ADA) return;
     // §15.6 — route to the OPERATIONS default bucket (fallback primary).
     const bucket = await this.buckets.defaultBucketFor('OPERATIONS');
-    await this.prisma.multisigAction.create({
-      data: {
-        kind: 'OPS',
-        status: 'PENDING_SIGS',
-        amountAda: BigInt((await this.autoTopUpAda()) * ADA),
-        // destAddress = hot wallet so the Actions UI shows the full destination + Copy button.
-        destAddress: hot,
-        description: `Top up the anchor hot wallet — balance below ${HOT_WALLET_MIN_ADA} ₳`,
-        sourceBucketId: bucket?.id ?? null,
-      },
+    const amountLovelace = BigInt((await this.autoTopUpAda()) * ADA);
+    // maybePrepareTopUp runs on every treasury-status read, so concurrent reads (reloads, multiple
+    // tabs, cancel+refresh) all clear the checks above before any of them creates the action — a
+    // check-then-create race that spawned duplicate top-ups. Serialize the create on a
+    // transaction-level advisory lock and RE-CHECK inside it, so only the first caller creates one.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${HOT_WALLET_TOPUP_LOCK})`;
+      const stillOpen = await tx.multisigAction.findFirst({ where: { kind: 'OPS', status: 'PENDING_SIGS', description: { contains: 'hot wallet' } } });
+      if (stillOpen) return;
+      await tx.multisigAction.create({
+        data: {
+          kind: 'OPS',
+          status: 'PENDING_SIGS',
+          amountAda: amountLovelace,
+          // destAddress = hot wallet so the Actions UI shows the full destination + Copy button.
+          destAddress: hot,
+          description: `Top up the anchor hot wallet — balance below ${HOT_WALLET_MIN_ADA} ₳`,
+          sourceBucketId: bucket?.id ?? null,
+        },
+      });
     });
   }
 
