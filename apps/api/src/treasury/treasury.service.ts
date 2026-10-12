@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException, OnModuleInit, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { boardActionMessage } from '@drep-dao/cardano';
+import { PLATFORM_CONFIG_DEFAULTS } from '@drep-dao/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { AnchorService } from '../cardano/anchor.service';
@@ -35,7 +36,8 @@ export interface TreasuryTx {
 }
 const APPROVAL_THRESHOLD = 3; // fallback only — the real M is the active MultisigConfig.threshold (2-of-3, 3-of-5, …)
 const HOT_WALLET_MIN_ADA = 100; // below this, the platform prepares a top-up
-const HOT_WALLET_TOPUP_ADA = 500;
+// §15.3 — the auto top-up AMOUNT is board/admin-configurable (PLATFORM_HOT_WALLET_TOPUP_AMOUNT);
+// see autoTopUpAda(). The default lives in PLATFORM_CONFIG_DEFAULTS.
 // §15.3 — hard cap on a single board-prepared top-up. The hot wallet only
 // pays Cardano fees for anchor txs, so a small running balance is enough;
 // large amounts shouldn't sit there unsigned. Configurable later if needed.
@@ -296,7 +298,7 @@ export class TreasuryService implements OnModuleInit {
       data: {
         kind: 'OPS',
         status: 'PENDING_SIGS',
-        amountAda: BigInt(HOT_WALLET_TOPUP_ADA * ADA),
+        amountAda: BigInt((await this.autoTopUpAda()) * ADA),
         // destAddress = hot wallet so the Actions UI shows the full destination + Copy button.
         destAddress: hot,
         description: `Top up the anchor hot wallet — balance below ${HOT_WALLET_MIN_ADA} ₳`,
@@ -588,12 +590,23 @@ export class TreasuryService implements OnModuleInit {
 
   /** Surface the per-platform constants the UI needs (top-up cap, low-balance
    *  threshold) so the form can validate locally + show the right help text. */
-  hotWalletPolicy() {
+  async hotWalletPolicy() {
     return {
       minAda: HOT_WALLET_MIN_ADA,
       topUpMaxAda: HOT_WALLET_TOPUP_MAX_ADA,
-      autoTopUpAda: HOT_WALLET_TOPUP_ADA,
+      autoTopUpAda: await this.autoTopUpAda(),
     };
+  }
+
+  /** §15.3 — the auto top-up amount (ADA) applied when the hot wallet drops below
+   *  HOT_WALLET_MIN_ADA. Board/admin-configurable via PLATFORM_HOT_WALLET_TOPUP_AMOUNT;
+   *  falls back to the default and is clamped to (0, HOT_WALLET_TOPUP_MAX_ADA]. */
+  private async autoTopUpAda(): Promise<number> {
+    const def = PLATFORM_CONFIG_DEFAULTS.PLATFORM_HOT_WALLET_TOPUP_AMOUNT as number;
+    const row = await this.prisma.platformConfig.findUnique({ where: { key: 'PLATFORM_HOT_WALLET_TOPUP_AMOUNT' } }).catch(() => null);
+    const n = row && typeof row.value === 'number' ? Number(row.value) : def;
+    if (!Number.isFinite(n) || n <= 0) return def;
+    return Math.min(n, HOT_WALLET_TOPUP_MAX_ADA);
   }
 
   /**
