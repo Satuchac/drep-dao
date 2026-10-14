@@ -68,6 +68,13 @@ export const authApi = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  // Whether the wallet's CIP-95 DRep key is a REGISTERED on-chain DRep — decides whether to show the
+  // "Verify DRep key" proof prompt at all (CIP-95 wallets derive a DRep key for every account).
+  drepRegistered: (drepKeyHex: string) =>
+    request<{ registered: boolean }>('/auth/drep/registered', {
+      method: 'POST',
+      body: JSON.stringify({ drepKeyHex }),
+    }),
 
   me: () => request<UserProfile>('/auth/me'),
 

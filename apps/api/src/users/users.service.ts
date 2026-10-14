@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Role, DRepStatus } from '@drep-dao/shared';
-import { drepIdFromKeyHashHex } from '@drep-dao/cardano';
+import { drepIdFromKeyHashHex, drepKeyHashFromPubKeyHex } from '@drep-dao/cardano';
 import { PrismaService } from '../prisma/prisma.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
 import { isProvenDrepRequired } from '../auth/drep-link.service';
@@ -107,6 +107,17 @@ export class UsersService {
     } catch (e) {
       this.logger.warn(`on-chain DRep check failed for ${drepKeyHash}: ${e instanceof Error ? e.message : e}`);
       return undefined;
+    }
+  }
+
+  /** §SEC-01 — is the wallet's CIP-95 DRep public key a REGISTERED on-chain DRep? Used by the UI to
+   *  decide whether to show the "Verify DRep key" proof prompt at all: CIP-95 wallets derive a DRep
+   *  key for EVERY account, so a plain ADA holder (non-DRep) must not be nagged to prove one. */
+  async isClaimedDrepRegistered(drepKeyHex: string): Promise<boolean> {
+    try {
+      return (await this.checkOnchainRegistration(drepKeyHashFromPubKeyHex(drepKeyHex))) === true;
+    } catch {
+      return false;
     }
   }
 
