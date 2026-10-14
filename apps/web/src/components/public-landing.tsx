@@ -97,7 +97,7 @@ export function PublicLanding({ onConnect, onExplore }: { onConnect: () => void;
             <Tile loading={!data} bg="#4f8f2f" label={t('Board')} big={data ? (data.board.elected ? `${data.board.seats}` : '—') : '—'}
               sub={data?.board.elected ? t('seats elected') : t('not yet elected')} />
             <Tile loading={!data} bg="#173a2a" label={t('Governance')} big={data?.admissionOpen ? t('Open') : t('Gated')}
-              sub={t('Any registered DRep can join & vote')} />
+              sub={data?.admissionOpen ? t('Any registered DRep can join & vote') : t('Any registered DRep can apply to become a member')} />
           </>
         ) : (
           <>
