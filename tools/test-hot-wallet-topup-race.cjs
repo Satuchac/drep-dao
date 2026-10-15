@@ -60,6 +60,14 @@ const ok = (l, c, d) => { console.log(`  ${c ? '✅' : '❌'} ${l}${d ? ` — ${
     await Promise.all(Array.from({ length: N }, () => treasury.maybePrepareTopUp().catch(() => {})));
     const after = await db.multisigAction.findMany({ where: { destAddress: HOT, status: 'PENDING_SIGS' } });
     ok('still exactly ONE while an open top-up exists', after.length === 1, `got ${after.length}`);
+
+    console.log('— hot wallet now topped up (≥ 100) → the stale auto top-up is auto-cancelled —');
+    cardano.addressBalanceStrict = async () => new Map([[HOT, 110_000_000n]]); // 110 ₳ ≥ 100
+    await treasury.maybePrepareTopUp();
+    const pendingNow = await db.multisigAction.findMany({ where: { destAddress: HOT, status: 'PENDING_SIGS' } });
+    ok('no pending auto top-up remains once the hot wallet is healthy', pendingNow.length === 0, `got ${pendingNow.length}`);
+    const failed = await db.multisigAction.findMany({ where: { destAddress: HOT, status: 'FAILED' } });
+    ok('the stale one was moved to FAILED (auto-cancelled)', failed.length === 1 && /Auto-cancelled/.test(failed[0].description ?? ''), `${failed.length} failed`);
   } catch (e) {
     console.error('crashed:', e);
     fail++;

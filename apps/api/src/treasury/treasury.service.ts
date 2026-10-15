@@ -289,14 +289,30 @@ export class TreasuryService implements OnModuleInit {
   async maybePrepareTopUp() {
     const hot = this.anchor.hotWalletAddress();
     if (!hot) return;
-    // Cheap early-outs (no lock): an already-open top-up, or a still-healthy balance.
-    const open = await this.prisma.multisigAction.findFirst({ where: { kind: 'OPS', status: 'PENDING_SIGS', description: { contains: 'hot wallet' } } });
-    if (open) return;
     // Strict read: Koios unavailable → null (NOT a 0-filled map), so a transient
     // lookup failure is never mistaken for an empty wallet → no spurious top-up.
     const bal = await this.cardano.addressBalanceStrict([hot]);
     if (!bal) return;
-    if (Number(bal.get(hot) ?? 0n) / ADA >= HOT_WALLET_MIN_ADA) return;
+
+    // Balance FIRST: if the hot wallet is already topped up, cancel any lingering AUTO top-up so it
+    // doesn't sit in "Actions to sign" as a signable duplicate (it could otherwise send a redundant
+    // top-up once the treasury is funded). This happens when a top-up pays and a new one was auto-
+    // prepared a moment earlier, before the paid balance reflected on-chain (Koios lag). An AUTO
+    // top-up is identified by its "balance below" description — a board-REQUESTED one is left alone.
+    if (Number(bal.get(hot) ?? 0n) / ADA >= HOT_WALLET_MIN_ADA) {
+      const stale = await this.prisma.multisigAction.findMany({ where: { kind: 'OPS', status: 'PENDING_SIGS', description: { contains: 'balance below' } } });
+      for (const s of stale) {
+        await this.prisma.multisigAction.update({
+          where: { id: s.id },
+          data: { status: 'FAILED', description: `${s.description}\n\n[Auto-cancelled: the hot wallet is already above ${HOT_WALLET_MIN_ADA} ₳, so no top-up is needed.]` },
+        }).catch(() => undefined);
+      }
+      return;
+    }
+
+    // Still low — don't pile on if a 'hot wallet' top-up (auto OR board-requested) is already pending.
+    const open = await this.prisma.multisigAction.findFirst({ where: { kind: 'OPS', status: 'PENDING_SIGS', description: { contains: 'hot wallet' } } });
+    if (open) return;
     // §15.6 — route to the OPERATIONS default bucket (fallback primary).
     const bucket = await this.buckets.defaultBucketFor('OPERATIONS');
     const amountLovelace = BigInt((await this.autoTopUpAda()) * ADA);
