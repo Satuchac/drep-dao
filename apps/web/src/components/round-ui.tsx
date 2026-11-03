@@ -43,6 +43,9 @@ export const PROPOSAL_STATUS_CLS: Record<string, string> = {
   COMPLETE: 'bg-emerald-200 text-emerald-900 dark:bg-emerald-900 dark:text-emerald-100',
   FAILED: 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-100',
   DRAFT: 'bg-neutral-100 text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300',
+  DELETED: 'bg-neutral-200 text-neutral-500 line-through dark:bg-neutral-800 dark:text-neutral-400',
+  // §30 — "document for public comment": published for comment, not yet a vote.
+  COMMENT: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200',
 };
 // Order proposal-status chips consistently. The backend (both the round detail and the rounds
 // list) sends counts for every status, including DRAFT/PENDING.

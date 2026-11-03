@@ -28,7 +28,15 @@ import { Prisma } from '@drep-dao/db';
 import { PrismaService } from '../prisma/prisma.service';
 import { AnchorService } from '../cardano/anchor.service';
 import { CardanoQueryService } from '../cardano/cardano-query.service';
-import { CreateInternalProposalDto, SaveDraftDto, VoteInternalDto } from './dto';
+import { extractText, parseDataUrl, fetchAndExtract } from '../proposal-checker/text-extract';
+import {
+  CreateInternalProposalDto,
+  SaveDraftDto,
+  VoteInternalDto,
+  SaveDocumentDto,
+  AddAttachmentDto,
+  OpenVotingDto,
+} from './dto';
 
 const LOVELACE = 1_000_000n;
 const DAY_MS = 86_400_000;
@@ -266,6 +274,231 @@ export class InternalProposalsService {
     await this.ownDraft(userId, draftId);
     await this.prisma.proposal.delete({ where: { id: draftId } });
     return { id: draftId, deleted: true };
+  }
+
+  /** §10 — a board member soft-deletes a SUBMITTED internal proposal (e.g. one created by mistake).
+   *  The row is kept for the record (its public id, votes and any on-chain anchor stay) and only its
+   *  status flips to DELETED, which hides it from the normal lists and shows it under the Deleted
+   *  filter (board only). A DRAFT is not deleted here — its author removes it from the draft editor. */
+  async deleteProposal(userId: string, proposalId: string) {
+    if (!(await this.isBoardUser(userId))) throw new ForbiddenException('only board members can delete a proposal');
+    const p = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    if (!p || p.type !== ProposalType.INTERNAL) throw new NotFoundException('proposal not found');
+    if (p.status === ProposalStatus.DRAFT) throw new BadRequestException('a draft is removed from the draft editor, not deleted here');
+    if (p.status === ProposalStatus.DELETED) return { id: proposalId, deleted: true }; // idempotent
+    await this.prisma.proposal.update({ where: { id: proposalId }, data: { status: ProposalStatus.DELETED } });
+    return { id: proposalId, deleted: true };
+  }
+
+  // ---- §30 "Document for public comment" ------------------------------------
+  // A DOCUMENT internal proposal holds uploaded files / external links and is open for comment but
+  // NOT yet a vote (status COMMENT). The author later opens voting, picks the real vote type, and the
+  // document locks. Heavy reuse: text extraction (proposal-checker/text-extract), the Comment thread,
+  // buildSnapshot, and the normal DRAFT→ACTIVE→APPROVED/REJECTED lifecycle once voting opens.
+
+  private static readonly MAX_UPLOAD_BYTES = 6 * 1024 * 1024;
+
+  /** Ingest one attachment: an UPLOAD (store the data URL + best-effort extracted text) or a LINK
+   *  (store the URL + best-effort fetched text). Extraction never blocks: a scanned PDF or a private
+   *  Drive link is still stored so it stays downloadable/clickable, just without searchable text. */
+  private async ingestAttachment(proposalId: string, dto: AddAttachmentDto, sortIdx: number) {
+    if (dto.source === 'UPLOAD') {
+      const parsed = parseDataUrl(dto.dataUrl ?? '');
+      if (!parsed) throw new BadRequestException('invalid file data');
+      if (parsed.buffer.length > InternalProposalsService.MAX_UPLOAD_BYTES) {
+        throw new BadRequestException(`file too large (max ${Math.round(InternalProposalsService.MAX_UPLOAD_BYTES / 1024 / 1024)} MB)`);
+      }
+      const { text, note } = await extractText(parsed.buffer, parsed.mime, dto.fileName).catch(() => ({ text: '', note: 'no extractable text' as const }));
+      return this.prisma.proposalAttachment.create({
+        data: {
+          proposalId,
+          source: 'UPLOAD',
+          title: (dto.title || dto.fileName || 'Document').trim().slice(0, 300),
+          fileName: dto.fileName?.slice(0, 300) ?? null,
+          mimeType: parsed.mime,
+          fileDataUrl: dto.dataUrl,
+          extractedText: text + (note ? `\n\n[${note}]` : ''),
+          sortIdx,
+        },
+      });
+    }
+    // LINK
+    const url = (dto.url ?? '').trim();
+    if (!/^https?:\/\//i.test(url)) throw new BadRequestException('enter a valid http(s) link');
+    const got = await fetchAndExtract(url).catch(() => null); // best-effort: keep the link even if unreadable
+    return this.prisma.proposalAttachment.create({
+      data: {
+        proposalId,
+        source: 'LINK',
+        title: (dto.title || url).trim().slice(0, 300),
+        sourceUrl: url,
+        mimeType: got?.mime ?? null,
+        extractedText: got ? got.text + (got.note ? `\n\n[${got.note}]` : '') : '',
+        sortIdx,
+      },
+    });
+  }
+
+  /** §30 — probe a link while composing: can we fetch + read it? Returns a short preview so the
+   *  author knows whether the document will be readable on-platform (and can import it into content). */
+  async probeLink(url: string) {
+    const u = (url || '').trim();
+    if (!/^https?:\/\//i.test(u)) throw new BadRequestException('enter a valid http(s) link');
+    try {
+      const { text, note, mime } = await fetchAndExtract(u);
+      return { ok: true, chars: text.length, mime, note: note ?? null, preview: text.slice(0, 2000) };
+    } catch (e) {
+      return { ok: false, chars: 0, mime: null, note: e instanceof Error ? e.message : 'could not read the link', preview: '' };
+    }
+  }
+
+  /** §30 — fetch a link's full extracted text so the author can insert it into the document body
+   *  while composing (before the proposal exists). Throws a user-facing error if it can't be read. */
+  async fetchLinkText(url: string) {
+    const u = (url || '').trim();
+    if (!/^https?:\/\//i.test(u)) throw new BadRequestException('enter a valid http(s) link');
+    const { text } = await fetchAndExtract(u);
+    return { text, chars: text.length };
+  }
+
+  /** Create a "document for public comment": status COMMENT, visible + commentable, no vote yet. */
+  async saveForComment(userId: string, dto: SaveDocumentDto) {
+    const drep = await this.prisma.drep.findUnique({ where: { userId } });
+    if (!drep || drep.status !== 'ADMITTED') {
+      throw new ForbiddenException('only admitted DReps (board members included) can create a document');
+    }
+    const publicId = await this.nextPublicId();
+    const now = new Date();
+    const proposal = await this.prisma.proposal.create({
+      data: {
+        type: ProposalType.INTERNAL,
+        status: ProposalStatus.COMMENT,
+        publicId,
+        submitterUserId: userId,
+        submitterDrepId: drep.id,
+        title: dto.title.trim(),
+        contentMd: dto.contentMd ?? '',
+        internalType: InternalType.DOCUMENT,
+        votersScope: dto.isPrivate ? VotersScope.BOARD_ONLY : VotersScope.BOTH,
+        isPrivate: !!dto.isPrivate,
+        commentAudience: dto.commentAudience,
+        docEditableBy: dto.docEditableBy,
+        votingType: VotingType.BALANCED, // placeholder until the author opens voting and picks the config
+        submittedAt: now,
+      },
+    });
+    const items = dto.attachments ?? [];
+    for (let i = 0; i < items.length; i++) await this.ingestAttachment(proposal.id, items[i], i);
+    return this.detail(proposal.id, userId);
+  }
+
+  /** The DOCUMENT row + the caller's right to edit it (author, or board when docEditableBy allows).
+   *  Editing is only possible while in COMMENT/DRAFT; once voting opens the document is frozen. */
+  private async docEditable(userId: string, proposalId: string) {
+    const p = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    if (!p || p.type !== ProposalType.INTERNAL || p.internalType !== InternalType.DOCUMENT) throw new NotFoundException('document not found');
+    if (p.status !== ProposalStatus.COMMENT && p.status !== ProposalStatus.DRAFT) {
+      throw new ConflictException('the document is locked — voting has opened');
+    }
+    const mayEdit = p.submitterUserId === userId || (p.docEditableBy === 'PROPOSER_BOARD' && (await this.isBoardUser(userId)));
+    if (!mayEdit) throw new ForbiddenException('you cannot edit this document');
+    return p;
+  }
+
+  /** Edit the document's title / content / settings while in COMMENT/DRAFT. */
+  async updateDocument(userId: string, proposalId: string, dto: SaveDocumentDto) {
+    await this.docEditable(userId, proposalId);
+    await this.prisma.proposal.update({
+      where: { id: proposalId },
+      data: {
+        title: dto.title.trim(),
+        contentMd: dto.contentMd ?? '',
+        commentAudience: dto.commentAudience,
+        docEditableBy: dto.docEditableBy,
+        votersScope: dto.isPrivate ? VotersScope.BOARD_ONLY : VotersScope.BOTH,
+        isPrivate: !!dto.isPrivate,
+      },
+    });
+    return this.detail(proposalId, userId);
+  }
+
+  async addAttachment(userId: string, proposalId: string, dto: AddAttachmentDto) {
+    await this.docEditable(userId, proposalId);
+    const count = await this.prisma.proposalAttachment.count({ where: { proposalId } });
+    await this.ingestAttachment(proposalId, dto, count);
+    return this.detail(proposalId, userId);
+  }
+
+  async removeAttachment(userId: string, proposalId: string, attachmentId: string) {
+    await this.docEditable(userId, proposalId);
+    const att = await this.prisma.proposalAttachment.findUnique({ where: { id: attachmentId } });
+    if (!att || att.proposalId !== proposalId) throw new NotFoundException('attachment not found');
+    await this.prisma.proposalAttachment.delete({ where: { id: attachmentId } });
+    return this.detail(proposalId, userId);
+  }
+
+  /** Download the original uploaded file of an attachment (the stored base64 data URL). A private
+   *  document's files are only served to the board or the author, mirroring the detail-view gate. */
+  async getAttachmentFile(proposalId: string, attachmentId: string, viewerUserId: string | null) {
+    const p = await this.prisma.proposal.findUnique({ where: { id: proposalId }, select: { isPrivate: true, submitterUserId: true } });
+    if (!p) throw new NotFoundException('file not found');
+    if (p.isPrivate && p.submitterUserId !== viewerUserId && !(await this.isBoardUser(viewerUserId))) {
+      throw new ForbiddenException('this document is private to the board');
+    }
+    const att = await this.prisma.proposalAttachment.findUnique({ where: { id: attachmentId } });
+    if (!att || att.proposalId !== proposalId || !att.fileDataUrl) throw new NotFoundException('file not found');
+    return { fileName: att.fileName, mimeType: att.mimeType, dataUrl: att.fileDataUrl };
+  }
+
+  /** §30 — the author (or board) opens voting on a document: picks the real vote type + its params.
+   *  The document + its attachments freeze, a voter snapshot is taken, and it becomes a normal
+   *  ACTIVE internal proposal of the chosen type (reusing all the existing voting/tally/finalize code). */
+  async openVoting(userId: string, proposalId: string, dto: OpenVotingDto) {
+    const p = await this.prisma.proposal.findUnique({ where: { id: proposalId } });
+    if (!p || p.type !== ProposalType.INTERNAL || p.internalType !== InternalType.DOCUMENT) throw new NotFoundException('document not found');
+    if (p.status !== ProposalStatus.COMMENT) throw new ConflictException('voting can only be opened on a document that is open for comment');
+    if (p.submitterUserId !== userId) throw new ForbiddenException('only the author can open voting on this document');
+    if (dto.internalType === InternalType.POLL && (!dto.pollOptions || dto.pollOptions.length < 2)) {
+      throw new BadRequestException('a poll needs at least two options');
+    }
+    if (dto.internalType === InternalType.SPENDING) {
+      if (!(dto.spendingAmountAda && dto.spendingAmountAda > 0)) throw new BadRequestException('a spending proposal needs a positive ADA amount');
+      if (!dto.spendingDestAddress?.trim().startsWith('addr')) throw new BadRequestException('a spending proposal needs a destination address (bech32, addr…)');
+      if (dto.spendingSourceBucketId) {
+        const b = await this.prisma.treasuryBucket.findUnique({ where: { id: dto.spendingSourceBucketId } });
+        const active = await this.prisma.multisigConfig.findFirst({ where: { replacedAt: null }, orderBy: { assembledAt: 'desc' } });
+        if (!b || !active || b.configId !== active.id) throw new BadRequestException('the source address must belong to the active treasury multisig');
+      }
+    }
+    const now = new Date();
+    const end = dto.votingEndAt ? new Date(dto.votingEndAt) : new Date(now.getTime() + (dto.votingPeriodDays ?? 7) * DAY_MS);
+    if (Number.isNaN(end.getTime()) || end.getTime() <= now.getTime()) throw new BadRequestException('the voting end must be a date in the future');
+
+    const scope = p.isPrivate ? VotersScope.BOARD_ONLY : dto.votersScope;
+    const thresholdPct = await this.thresholdPct(dto.thresholdKind);
+    const isInstructive = dto.internalType === InternalType.INSTRUCTIVE;
+    await this.prisma.proposal.update({
+      where: { id: proposalId },
+      data: {
+        internalType: dto.internalType,
+        status: ProposalStatus.ACTIVE,
+        stage: ProposalStage.VOTING,
+        votersScope: scope,
+        thresholdKind: dto.thresholdKind,
+        votingType: dto.votingType,
+        approvalThresholdPct: thresholdPct,
+        pollOptions: dto.internalType === InternalType.POLL ? { multiple: !!dto.pollMultiple, options: dto.pollOptions } : undefined,
+        actors: isInstructive && dto.actors?.length ? (dto.actors as Prisma.InputJsonValue) : undefined,
+        deliveryDate: isInstructive && dto.deliveryDate ? new Date(dto.deliveryDate) : undefined,
+        spendingAmountAda: dto.internalType === InternalType.SPENDING ? BigInt(Math.round(dto.spendingAmountAda! * 1_000_000)) : undefined,
+        spendingSourceBucketId: dto.internalType === InternalType.SPENDING ? dto.spendingSourceBucketId ?? null : undefined,
+        spendingDestAddress: dto.internalType === InternalType.SPENDING ? dto.spendingDestAddress!.trim() : undefined,
+        votingStartAt: now,
+        votingEndAt: end,
+      },
+    });
+    await this.buildSnapshot(proposalId, scope, dto.votingType);
+    return this.detail(proposalId, userId);
   }
 
   /** Assert the row is an INTERNAL DRAFT owned by the caller (throws otherwise). */
@@ -594,6 +827,8 @@ export class InternalProposalsService {
         if (!mine) continue; // §10 — a draft is private work-in-progress, visible only to its author
       } else if (p.isPrivate && !isBoard) {
         continue; // PRIVATE submitted → board only
+      } else if (p.status === ProposalStatus.DELETED && !isBoard) {
+        continue; // §10 — soft-deleted proposals are kept for the record but shown to board only
       }
       out.push(await this.summary(p.id, { userId: viewerUserId, isBoard }));
     }
@@ -675,7 +910,31 @@ export class InternalProposalsService {
       const pre = (a.preimage ?? {}) as { fromIso?: string; toIso?: string; by?: string; atIso?: string };
       return { fromIso: pre.fromIso ?? null, toIso: pre.toIso ?? null, by: pre.by ?? null, atIso: pre.atIso ?? null, txHash: a.txHash ?? null };
     });
+    // §30 — attachments stay visible after voting opens (the document being voted on), so fetch them
+    // regardless of the current internalType; only the edit / open-voting RIGHTS depend on the type.
+    const isDocument = p.internalType === InternalType.DOCUMENT;
+    const attachmentRows = await this.prisma.proposalAttachment.findMany({ where: { proposalId }, orderBy: { sortIdx: 'asc' } });
+    const attachments = attachmentRows.map((a) => ({
+      id: a.id,
+      source: a.source,
+      title: a.title,
+      fileName: a.fileName,
+      mimeType: a.mimeType,
+      sourceUrl: a.sourceUrl,
+      hasFile: !!a.fileDataUrl,
+      extractedText: a.extractedText,
+    }));
+    const isMineDoc = p.submitterUserId === ctx.userId;
+    const inEditableState = statusNow === ProposalStatus.COMMENT || statusNow === ProposalStatus.DRAFT;
+    const canEditDocument = isDocument && inEditableState && (isMineDoc || (p.docEditableBy === 'PROPOSER_BOARD' && ctx.isBoard));
+    // §30 — only the author may open voting (turn the document into a vote), per the board's request.
+    const canOpenVoting = isDocument && statusNow === ProposalStatus.COMMENT && isMineDoc;
     return {
+      commentAudience: p.commentAudience,
+      docEditableBy: p.docEditableBy,
+      attachments,
+      canEditDocument,
+      canOpenVoting,
       id: p.id,
       publicId: p.publicId,
       title: p.title,
@@ -1164,7 +1423,8 @@ export class InternalProposalsService {
     }));
   }
 
-  private async isBoardUser(userId: string): Promise<boolean> {
+  private async isBoardUser(userId: string | null): Promise<boolean> {
+    if (!userId) return false;
     const u = await this.prisma.appUser.findUnique({ where: { id: userId }, select: { drepKeyHash: true } });
     if (!u?.drepKeyHash) return false;
     return !!(await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash: u.drepKeyHash } }));

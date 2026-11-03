@@ -1,8 +1,9 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { InternalProposalsService } from './internal-proposals.service';
-import { CreateInternalProposalDto, SaveDraftDto, VoteInternalDto } from './dto';
+import { CreateInternalProposalDto, SaveDraftDto, VoteInternalDto, SaveDocumentDto, AddAttachmentDto, OpenVotingDto, ProbeLinkDto } from './dto';
 
 // §10 — internal proposals (threshold voting / polls). Any authenticated user reads the public
 // ones; PRIVATE ones are filtered to board members inside the service.
@@ -48,6 +49,14 @@ export class InternalProposalsController {
     return this.internal.submit(c.userId, dto);
   }
 
+  // §10 — board member soft-deletes a submitted proposal (kept as DELETED for the record). The
+  // service enforces the board-only check. Route is one segment, so it never collides with drafts/:id.
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  remove(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string) {
+    return this.internal.deleteProposal(c.userId, id);
+  }
+
   @Post(':id/vote')
   vote(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: VoteInternalDto) {
     return this.internal.vote(c.userId, id, dto);
@@ -69,5 +78,58 @@ export class InternalProposalsController {
   @UseGuards(JwtAuthGuard)
   extend(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: { votingEndAt: string }) {
     return this.internal.extend(c.userId, id, dto.votingEndAt);
+  }
+
+  // §30 — "Document for public comment": create (→ status COMMENT), edit while in comment phase,
+  // manage attachments (files/links), download an uploaded file, and open voting (author/board).
+  @Post('document')
+  @UseGuards(JwtAuthGuard)
+  createDocument(@CurrentUser() c: AuthContext, @Body() dto: SaveDocumentDto) {
+    return this.internal.saveForComment(c.userId, dto);
+  }
+
+  @Patch('document/:id')
+  @UseGuards(JwtAuthGuard)
+  updateDocument(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: SaveDocumentDto) {
+    return this.internal.updateDocument(c.userId, id, dto);
+  }
+
+  // §30 — probe a link while composing (can we fetch + read it?), so the author gets a readability check.
+  @Post('probe-link')
+  @UseGuards(JwtAuthGuard)
+  probeLink(@Body() dto: ProbeLinkDto) {
+    return this.internal.probeLink(dto.url);
+  }
+
+  // §30 — pull a link's full text so the author can insert it as the document body while composing.
+  @Post('fetch-link')
+  @UseGuards(JwtAuthGuard)
+  fetchLink(@Body() dto: ProbeLinkDto) {
+    return this.internal.fetchLinkText(dto.url);
+  }
+
+  @Post(':id/attachments')
+  @UseGuards(JwtAuthGuard)
+  addAttachment(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: AddAttachmentDto) {
+    return this.internal.addAttachment(c.userId, id, dto);
+  }
+
+  @Delete(':id/attachments/:attId')
+  @UseGuards(JwtAuthGuard)
+  removeAttachment(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('attId', ParseUUIDPipe) attId: string) {
+    return this.internal.removeAttachment(c.userId, id, attId);
+  }
+
+  // Public read of an uploaded file (the service enforces the private-document gate).
+  @Get(':id/attachments/:attId/file')
+  @UseGuards(OptionalJwtAuthGuard)
+  attachmentFile(@Param('id', ParseUUIDPipe) id: string, @Param('attId', ParseUUIDPipe) attId: string, @CurrentUser() c?: AuthContext) {
+    return this.internal.getAttachmentFile(id, attId, c?.userId ?? null);
+  }
+
+  @Post(':id/open-voting')
+  @UseGuards(JwtAuthGuard)
+  openVoting(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Body() dto: OpenVotingDto) {
+    return this.internal.openVoting(c.userId, id, dto);
   }
 }

@@ -93,8 +93,14 @@ export class CommentsService {
   }
 
   async create(userId: string, proposalId: string, contentMd: string, parentId?: string) {
-    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId }, select: { id: true } });
+    const proposal = await this.prisma.proposal.findUnique({ where: { id: proposalId }, select: { id: true, commentAudience: true } });
     if (!proposal) throw new NotFoundException('proposal not found');
+    // §30 — a document proposal may restrict commenting to registered DReps (commentAudience=DREPS);
+    // ANY_WALLET (or null, the default) lets any signed-in wallet user comment.
+    if (proposal.commentAudience === 'DREPS') {
+      const drep = await this.prisma.drep.findUnique({ where: { userId }, select: { id: true } });
+      if (!drep) throw new ForbiddenException('only registered DReps may comment on this document');
+    }
     if (parentId) {
       const parent = await this.prisma.comment.findUnique({ where: { id: parentId } });
       if (!parent || parent.proposalId !== proposalId) throw new BadRequestException('parent comment not found on this proposal');

@@ -1936,6 +1936,55 @@ export interface InternalProposalDetail extends InternalProposalSummary {
   /** §27 RULE_APPROVAL: the targeted rule document + the frozen content hash. */
   rule?: { documentId: string; title: string; documentStatus: string; deleteRequested: boolean; contentHash: string | null } | null;
   decision?: { decisionId: string; title: string; decisionStatus: string; deleteRequested: boolean; contentHash: string | null } | null;
+  /** §30 — "Document for public comment": attachments + who may comment/edit + the viewer's rights. */
+  attachments?: InternalAttachment[];
+  commentAudience?: string | null; // DREPS | ANY_WALLET | null
+  docEditableBy?: string | null; // PROPOSER | PROPOSER_BOARD | null
+  canEditDocument?: boolean;
+  canOpenVoting?: boolean;
+}
+/** §30 — one file/link attached to a document proposal. */
+export interface InternalAttachment {
+  id: string;
+  source: string; // UPLOAD | LINK
+  title: string | null;
+  fileName: string | null;
+  mimeType: string | null;
+  sourceUrl: string | null;
+  hasFile: boolean;
+  extractedText: string;
+}
+/** §30 — create/update a document proposal. */
+export interface SaveDocumentInput {
+  title: string;
+  contentMd?: string;
+  commentAudience: string; // DREPS | ANY_WALLET
+  docEditableBy: string; // PROPOSER | PROPOSER_BOARD
+  isPrivate?: boolean;
+  attachments?: AddAttachmentInput[];
+}
+export interface AddAttachmentInput {
+  source: string; // UPLOAD | LINK
+  title?: string;
+  dataUrl?: string; // UPLOAD
+  fileName?: string; // UPLOAD
+  url?: string; // LINK
+}
+/** §30 — open voting on a document: the chosen vote type + its params. */
+export interface OpenVotingInput {
+  internalType: string; // INSTRUCTIVE | INFORMATIVE | POLL | SPENDING
+  votersScope: string;
+  thresholdKind: string;
+  votingType: string;
+  votingEndAt?: string;
+  votingPeriodDays?: number;
+  pollOptions?: string[];
+  pollMultiple?: boolean;
+  actors?: string[];
+  deliveryDate?: string;
+  spendingAmountAda?: number;
+  spendingSourceBucketId?: string;
+  spendingDestAddress?: string;
 }
 export interface CreateInternalInput {
   /** §10.5 SPENDING: amount + destination (+ optional source bucket). */
@@ -1987,6 +2036,9 @@ export const internalProposalsApi = {
     request<InternalProposalDetail>(`/internal-proposals/drafts/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   deleteDraft: (id: string) =>
     request<{ id: string; deleted: boolean }>(`/internal-proposals/drafts/${id}`, { method: 'DELETE' }),
+  // §10 — board member soft-deletes a submitted proposal (kept as DELETED for the record).
+  remove: (id: string) =>
+    request<{ id: string; deleted: boolean }>(`/internal-proposals/${id}`, { method: 'DELETE' }),
   vote: (id: string, input: VoteInternalInput) =>
     request<InternalProposalDetail>(`/internal-proposals/${id}/vote`, { method: 'POST', body: JSON.stringify(input) }),
   installBoard: (id: string) =>
@@ -1996,7 +2048,32 @@ export const internalProposalsApi = {
     ),
   extend: (id: string, votingEndAt: string) =>
     request<InternalProposalDetail>(`/internal-proposals/${id}/extend`, { method: 'POST', body: JSON.stringify({ votingEndAt }) }),
+  // §30 — "Document for public comment".
+  createDocument: (input: SaveDocumentInput) =>
+    request<InternalProposalDetail>('/internal-proposals/document', { method: 'POST', body: JSON.stringify(input) }),
+  updateDocument: (id: string, input: SaveDocumentInput) =>
+    request<InternalProposalDetail>(`/internal-proposals/document/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  addAttachment: (id: string, input: AddAttachmentInput) =>
+    request<InternalProposalDetail>(`/internal-proposals/${id}/attachments`, { method: 'POST', body: JSON.stringify(input) }),
+  removeAttachment: (id: string, attId: string) =>
+    request<InternalProposalDetail>(`/internal-proposals/${id}/attachments/${attId}`, { method: 'DELETE' }),
+  openVoting: (id: string, input: OpenVotingInput) =>
+    request<InternalProposalDetail>(`/internal-proposals/${id}/open-voting`, { method: 'POST', body: JSON.stringify(input) }),
+  attachmentFile: (id: string, attId: string) =>
+    request<{ fileName: string | null; mimeType: string | null; dataUrl: string }>(`/internal-proposals/${id}/attachments/${attId}/file`),
+  probeLink: (url: string) =>
+    request<LinkProbe>('/internal-proposals/probe-link', { method: 'POST', body: JSON.stringify({ url }) }),
+  fetchLinkText: (url: string) =>
+    request<{ text: string; chars: number }>('/internal-proposals/fetch-link', { method: 'POST', body: JSON.stringify({ url }) }),
 };
+/** §30 — result of probing a link while composing a document (can we fetch + read it?). */
+export interface LinkProbe {
+  ok: boolean;
+  chars: number;
+  mime: string | null;
+  note: string | null;
+  preview: string;
+}
 
 // §13 — merit points + avoid-period ("vacancy") signalling.
 export interface MeritInfo {
