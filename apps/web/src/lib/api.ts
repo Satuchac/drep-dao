@@ -1925,6 +1925,7 @@ export interface InternalProposalDetail extends InternalProposalSummary {
   docHash: string; // §3 — SHA-256 of title+content (or the frozen rule/decision hash); matches the on-chain anchor
   anchorTxHash: string | null;
   anchorHash: string | null;
+  docAnchorTxHash?: string | null; // §30 — content anchor taken when voting opened on a document
   /** Minimum rationale words required per choice (0 = not required). Internal proposals only. */
   rationaleMinWords: { YES: number; NO: number; ABSTAIN: number };
   /** The viewer's current (live) rationale, shown read-only in the locked vote card. */
@@ -2057,6 +2058,8 @@ export const internalProposalsApi = {
     request<InternalProposalDetail>(`/internal-proposals/${id}/attachments`, { method: 'POST', body: JSON.stringify(input) }),
   removeAttachment: (id: string, attId: string) =>
     request<InternalProposalDetail>(`/internal-proposals/${id}/attachments/${attId}`, { method: 'DELETE' }),
+  renameAttachment: (id: string, attId: string, title: string) =>
+    request<InternalProposalDetail>(`/internal-proposals/${id}/attachments/${attId}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
   openVoting: (id: string, input: OpenVotingInput) =>
     request<InternalProposalDetail>(`/internal-proposals/${id}/open-voting`, { method: 'POST', body: JSON.stringify(input) }),
   attachmentFile: (id: string, attId: string) =>

@@ -3,7 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
 import { CurrentUser, AuthContext } from '../auth/current-user.decorator';
 import { InternalProposalsService } from './internal-proposals.service';
-import { CreateInternalProposalDto, SaveDraftDto, VoteInternalDto, SaveDocumentDto, AddAttachmentDto, OpenVotingDto, ProbeLinkDto } from './dto';
+import { CreateInternalProposalDto, SaveDraftDto, VoteInternalDto, SaveDocumentDto, AddAttachmentDto, RenameAttachmentDto, OpenVotingDto, ProbeLinkDto } from './dto';
 
 // §10 — internal proposals (threshold voting / polls). Any authenticated user reads the public
 // ones; PRIVATE ones are filtered to board members inside the service.
@@ -118,6 +118,13 @@ export class InternalProposalsController {
   @UseGuards(JwtAuthGuard)
   removeAttachment(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('attId', ParseUUIDPipe) attId: string) {
     return this.internal.removeAttachment(c.userId, id, attId);
+  }
+
+  // §30 — name (or rename) an already-added file/link; works retroactively while open for comment.
+  @Patch(':id/attachments/:attId')
+  @UseGuards(JwtAuthGuard)
+  renameAttachment(@CurrentUser() c: AuthContext, @Param('id', ParseUUIDPipe) id: string, @Param('attId', ParseUUIDPipe) attId: string, @Body() dto: RenameAttachmentDto) {
+    return this.internal.renameAttachment(c.userId, id, attId, dto.title);
   }
 
   // Public read of an uploaded file (the service enforces the private-document gate).

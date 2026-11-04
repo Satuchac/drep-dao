@@ -58,6 +58,10 @@ const COMMENT_AUDIENCE_LABEL: Record<string, string> = {
   DREPS: 'Registered DReps only',
   ANY_WALLET: 'Anyone signed in with a wallet',
 };
+// §30 — status-badge label overrides for internal proposals. COMMENT is document-only, so spell it out.
+const PROPOSAL_STATUS_LABEL: Record<string, string> = {
+  COMMENT: 'DOCUMENT COMMENT PHASE',
+};
 const DOC_EDITABLE_LABEL: Record<string, string> = {
   PROPOSER: 'Only me (the author)',
   PROPOSER_BOARD: 'Me and board members',
@@ -286,7 +290,7 @@ export function InternalProposals() {
                   </span>
                   <div className="flex items-center gap-2">
                     <MyVoteBadge p={p} />
-                    <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} />
+                    <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} labels={PROPOSAL_STATUS_LABEL} />
                   </div>
                 </div>
                 <div className="mt-1 text-xs text-neutral-500">
@@ -885,25 +889,35 @@ function fileToDataUrl(file: File): Promise<string> {
  *  create form flushes a pending draft on save. Adding a file/link is delegated to the parent (which
  *  probes the link in create mode, or hits the API in live mode). Items may carry a readability note. */
 function AttachmentEditor({
-  items, linkDraft, setLinkDraft, onAddFile, onAddLink, onRemove, onInsertBody, disabled,
+  items, linkDraft, setLinkDraft, linkTitle, setLinkTitle, onAddFile, onAddLink, onRemove, onRename, onInsertBody, disabled,
 }: {
   items: { id?: string; source: string; title?: string | null; fileName?: string | null; sourceUrl?: string | null; note?: string | null; ok?: boolean }[];
   linkDraft: string;
   setLinkDraft: (v: string) => void;
+  linkTitle: string;
+  setLinkTitle: (v: string) => void;
   onAddFile: (dataUrl: string, fileName: string) => void | Promise<void>;
-  onAddLink: (url: string) => void | Promise<void>;
+  onAddLink: (url: string, title?: string) => void | Promise<void>;
   onRemove: (index: number, id?: string) => void | Promise<void>;
+  onRename?: (id: string, title: string) => void | Promise<void>;
   onInsertBody?: (index: number) => void | Promise<void>;
   disabled?: boolean;
 }) {
   const t = useT();
   const [busy, setBusy] = useState(false);
+  // Which saved item is having its name edited inline, and the draft name being typed.
+  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const addLink = async () => {
     const url = linkDraft.trim();
     if (!url) return;
     setBusy(true);
-    try { await onAddLink(url); setLinkDraft(''); } finally { setBusy(false); }
+    try { await onAddLink(url, linkTitle.trim() || undefined); setLinkDraft(''); setLinkTitle(''); } finally { setBusy(false); }
+  };
+  const saveRename = async () => {
+    if (!renaming || !onRename) return;
+    setBusy(true);
+    try { await onRename(renaming.id, renaming.value.trim()); setRenaming(null); } finally { setBusy(false); }
   };
   const onFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -920,22 +934,49 @@ function AttachmentEditor({
       {items.length ? (
         <ul className="space-y-1">
           {items.map((a, i) => (
-            <li key={a.id ?? i} className="flex items-center justify-between gap-2 rounded-md border border-neutral-200 px-2.5 py-1.5 text-sm dark:border-neutral-800">
-              <span className="min-w-0 truncate">
-                <span className="mr-1.5 rounded bg-neutral-100 px-1 text-[10px] font-semibold uppercase text-neutral-500 dark:bg-neutral-800">{a.source === 'LINK' ? t('link') : t('file')}</span>
-                {a.source === 'LINK'
-                  ? <a href={a.sourceUrl ?? '#'} target="_blank" rel="noopener noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{a.title || a.sourceUrl}</a>
-                  : <span>{a.fileName || a.title}</span>}
-                {a.note ? <span className={`ml-2 text-[11px] ${a.ok === false ? 'text-amber-600' : 'text-neutral-400'}`}>{a.note}</span> : null}
-              </span>
-              {!disabled ? (
-                <span className="flex shrink-0 items-center gap-2">
-                  {onInsertBody && a.source === 'LINK' && a.ok ? (
-                    <button type="button" onClick={() => void onInsertBody(i)} className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700">{t('Insert content into body')}</button>
+            <li key={a.id ?? i} className="rounded-md border border-neutral-200 px-2.5 py-1.5 text-sm dark:border-neutral-800">
+              {renaming && a.id && renaming.id === a.id ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    autoFocus
+                    value={renaming.value}
+                    onChange={(e) => setRenaming({ id: a.id!, value: e.target.value })}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void saveRename(); } if (e.key === 'Escape') setRenaming(null); }}
+                    placeholder={t('Document name')}
+                    disabled={busy}
+                    className={`${field} min-w-0 flex-1`}
+                  />
+                  <button type="button" onClick={() => void saveRename()} disabled={busy || !renaming.value.trim()} className="shrink-0 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700 disabled:opacity-50">{t('Save name')}</button>
+                  <button type="button" onClick={() => setRenaming(null)} disabled={busy} className="shrink-0 rounded-md border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">{t('Cancel')}</button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate">
+                    <span className="mr-1.5 rounded bg-neutral-100 px-1 text-[10px] font-semibold uppercase text-neutral-500 dark:bg-neutral-800">{a.source === 'LINK' ? t('link') : t('file')}</span>
+                    {a.source === 'LINK'
+                      ? <a href={a.sourceUrl ?? '#'} target="_blank" rel="noopener noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{a.title || a.sourceUrl}</a>
+                      : <span>{a.title || a.fileName}</span>}
+                    {a.source === 'LINK' && a.title && a.sourceUrl && a.title !== a.sourceUrl ? <span className="ml-2 truncate text-[11px] text-neutral-400">{a.sourceUrl}</span> : null}
+                    {a.source !== 'LINK' && a.title && a.fileName && a.title !== a.fileName ? <span className="ml-2 truncate text-[11px] text-neutral-400">{a.fileName}</span> : null}
+                    {a.note ? <span className={`ml-2 text-[11px] ${a.ok === false ? 'text-amber-600' : 'text-neutral-400'}`}>{a.note}</span> : null}
+                  </span>
+                  {!disabled ? (
+                    <span className="flex shrink-0 items-center gap-2">
+                      {onInsertBody && a.source === 'LINK' && a.ok ? (
+                        <button type="button" onClick={() => void onInsertBody(i)} className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700">{t('Insert content into body')}</button>
+                      ) : null}
+                      {onRename && a.id ? (() => {
+                        // A link with no name has title === its URL; an unnamed file has title === its
+                        // fileName. In both cases "Add name" must open an EMPTY field, never the URL.
+                        const auto = a.source === 'LINK' ? a.sourceUrl : a.fileName;
+                        const named = !!a.title && a.title !== auto;
+                        return <button type="button" onClick={() => setRenaming({ id: a.id!, value: named ? a.title! : '' })} className="rounded-md border border-neutral-300 px-2.5 py-1 text-xs hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">{named ? t('Rename') : t('Add name')}</button>;
+                      })() : null}
+                      <button type="button" onClick={() => onRemove(i, a.id)} className="rounded-md bg-rose-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-rose-700">{t('Remove')}</button>
+                    </span>
                   ) : null}
-                  <button type="button" onClick={() => onRemove(i, a.id)} className="rounded-md bg-rose-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-rose-700">{t('Remove')}</button>
-                </span>
-              ) : null}
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -945,6 +986,14 @@ function AttachmentEditor({
           <div className="flex items-center gap-2">
             <input ref={fileRef} type="file" multiple accept=".pdf,.docx,.txt,.md,.csv,.json,.html" onChange={(e) => onFiles(e.target.files)} disabled={busy} className="text-sm" />
           </div>
+          <input
+            value={linkTitle}
+            onChange={(e) => setLinkTitle(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void addLink(); } }}
+            placeholder={t('Document name (optional) — e.g. “Budget 2026 proposal”')}
+            disabled={busy}
+            className={field}
+          />
           <div className="flex gap-2">
             <input
               value={linkDraft}
@@ -963,13 +1012,38 @@ function AttachmentEditor({
   );
 }
 
+/** §30 — should an attachment's extracted text be shown FORMATTED (Markdown) rather than as raw text?
+ *  Markdown docs (headings / bold / lists / tables / links) read far better rendered, so people can read
+ *  them here instead of opening the link; CSV/tabular data and slide-deck text dumps stay raw. A mime
+ *  type or .md/.csv extension decides outright; otherwise a light content heuristic does. */
+function extractedIsMarkdown(a: Pick<InternalAttachment, 'mimeType' | 'fileName' | 'sourceUrl' | 'extractedText'>): boolean {
+  const mime = (a.mimeType ?? '').toLowerCase();
+  const name = `${a.fileName ?? ''} ${a.sourceUrl ?? ''}`.toLowerCase();
+  if (mime.includes('markdown') || /\.(md|markdown)(\?|#|$)/.test(name)) return true;
+  if (mime.includes('csv') || /\.csv(\?|#|$)/.test(name)) return false;
+  const s = (a.extractedText ?? '').slice(0, 4000);
+  if (!s.trim()) return false;
+  const heading = /^#{1,6}\s+\S/m.test(s);
+  // CSV / tabular data: most non-empty lines are comma-separated rows → keep raw (unless it has headings).
+  const lines = s.split('\n').filter((l) => l.trim());
+  const commaRows = lines.filter((l) => (l.match(/,/g)?.length ?? 0) >= 2).length;
+  if (lines.length >= 3 && commaRows / lines.length > 0.7 && !heading) return false;
+  const bold = /\*\*\S[\s\S]*?\S\*\*/.test(s);
+  const list = /^\s{0,3}([-*+]|\d+\.)\s+\S/m.test(s);
+  const table = /^\s*\|.+\|\s*$/m.test(s) && /^\s*\|?\s*:?-{3,}/m.test(s);
+  const link = /\[[^\]]+\]\([^)]+\)/.test(s);
+  return heading || bold || list || table || link;
+}
+
 // §30 — one attachment in the detail view: open a link, download an uploaded file, peek at the text,
 // and (for an editor) import its extracted text into the document content. A readability line tells
 // everyone whether we could read the source on our side (so it can be shown/commented here).
 function AttachmentView({ proposalId, a, onImport }: { proposalId: string; a: InternalAttachment; onImport?: (text: string) => void }) {
   const t = useT();
   const [showText, setShowText] = useState(false);
+  const [raw, setRaw] = useState(false); // §30 — Markdown content renders formatted; this flips to the source.
   const readable = !!a.extractedText?.trim();
+  const isMarkdown = extractedIsMarkdown(a);
   const download = async () => {
     const f = await internalProposalsApi.attachmentFile(proposalId, a.id);
     const el = document.createElement('a'); el.href = f.dataUrl; el.download = f.fileName || a.fileName || 'document'; el.click();
@@ -991,7 +1065,20 @@ function AttachmentView({ proposalId, a, onImport }: { proposalId: string; a: In
         </span>
       </div>
       {showText && a.extractedText ? (
-        <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded bg-neutral-50 p-2 text-xs text-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">{a.extractedText}</pre>
+        <div className="mt-2">
+          {isMarkdown ? (
+            <div className="mb-1 text-right">
+              <button onClick={() => setRaw((v) => !v)} className="text-[11px] text-neutral-400 hover:underline">{raw ? t('Show formatted') : t('Show raw text')}</button>
+            </div>
+          ) : null}
+          {isMarkdown && !raw ? (
+            <div className="prose prose-sm max-h-96 max-w-none overflow-auto rounded bg-neutral-50 p-3 dark:prose-invert dark:bg-neutral-900">
+              <Markdown>{a.extractedText}</Markdown>
+            </div>
+          ) : (
+            <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded bg-neutral-50 p-2 text-xs text-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">{a.extractedText}</pre>
+          )}
+        </div>
       ) : null}
     </li>
   );
@@ -1124,15 +1211,16 @@ function DocumentForm({ onCancel, onDone }: { onCancel: () => void; onDone: (id:
   // Each pending attachment carries a readability note (links are probed on add; files are read on save).
   const [attachments, setAttachments] = useState<(AddAttachmentInput & { note?: string; ok?: boolean })[]>([]);
   const [linkDraft, setLinkDraft] = useState('');
+  const [linkTitle, setLinkTitle] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const canSave = title.trim().length >= 3 && !busy;
   // Probe a link as it's added so the author sees whether we can read + display it on-platform.
-  const addLink = async (url: string) => {
+  const addLink = async (url: string, name?: string) => {
     let note = t('checking…'); let ok: boolean | undefined;
     try { const p = await internalProposalsApi.probeLink(url); ok = p.ok; note = p.ok ? `✓ ${t('readable')} (${p.chars.toLocaleString()} ${t('chars')})` : `✗ ${p.note ?? t('could not read')}`; }
     catch { ok = false; note = `✗ ${t('could not read')}`; }
-    setAttachments((s) => [...s, { source: 'LINK', url, note, ok }]);
+    setAttachments((s) => [...s, { source: 'LINK', url, title: name, note, ok }]);
   };
   const addFile = (dataUrl: string, fileName: string) => setAttachments((s) => [...s, { source: 'UPLOAD', dataUrl, fileName, note: t('will be read on save') }]);
   // Pull a readable link's full text straight into the body, so the author can just set a Title and
@@ -1151,7 +1239,7 @@ function DocumentForm({ onCancel, onDone }: { onCancel: () => void; onDone: (id:
     try {
       // Flush a link typed but not yet added, so a URL left in the box is never silently lost.
       const finalAtts = [...attachments];
-      if (linkDraft.trim()) finalAtts.push({ source: 'LINK', url: linkDraft.trim() });
+      if (linkDraft.trim()) finalAtts.push({ source: 'LINK', url: linkDraft.trim(), title: linkTitle.trim() || undefined });
       const payload: AddAttachmentInput[] = finalAtts.map((a) => ({ source: a.source, dataUrl: a.dataUrl, fileName: a.fileName, url: a.url, title: a.title }));
       const d = await internalProposalsApi.createDocument({ title: title.trim(), contentMd: contentMd.trim() || undefined, commentAudience, docEditableBy, isPrivate, attachments: payload });
       onDone(d.id);
@@ -1177,6 +1265,8 @@ function DocumentForm({ onCancel, onDone }: { onCancel: () => void; onDone: (id:
           items={attachments.map((a) => ({ source: a.source, fileName: a.fileName, sourceUrl: a.url, title: a.title, note: a.note, ok: a.ok }))}
           linkDraft={linkDraft}
           setLinkDraft={setLinkDraft}
+          linkTitle={linkTitle}
+          setLinkTitle={setLinkTitle}
           onAddFile={addFile}
           onAddLink={addLink}
           onRemove={(i) => setAttachments((s) => s.filter((_, idx) => idx !== i))}
@@ -1233,6 +1323,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const [comments, setComments] = useState<CommentNode[] | null>(null);
   // §30 — live link draft for the in-detail attachment editor, and the "edit document" sub-form.
   const [attLinkDraft, setAttLinkDraft] = useState('');
+  const [attLinkTitle, setAttLinkTitle] = useState('');
   const [editingDoc, setEditingDoc] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
@@ -1342,7 +1433,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <ShareLinkButton />
           {/* §10 — a board member may delete a submitted proposal (e.g. one created by mistake). The
               row is kept as DELETED for the record and only hidden from the normal lists. */}
-          {isBoard && p.status !== 'DELETED' && !p.isBoardElection ? (
+          {isBoard && p.status !== 'DELETED' && !p.isBoardElection && !(p.commentAudience != null && p.status === 'ACTIVE') ? (
             <button
               onClick={() => setConfirmingDelete(true)}
               className="rounded-md border border-red-300 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950/40"
@@ -1383,7 +1474,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-neutral-500">
             {p.publicId ? <span>{t('ID:')} <span className="rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300">{p.publicId}</span></span> : null}
             {p.isPrivate ? <span className="rounded bg-neutral-200 px-1.5 py-0.5 font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{t('PRIVATE · board')}</span> : null}
-            <span className="flex items-center gap-1">{t('Status:')} <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} /></span>
+            <span className="flex items-center gap-1">{t('Status:')} <StatusBadge status={p.status} cls={PROPOSAL_STATUS_CLS} labels={PROPOSAL_STATUS_LABEL} /></span>
           </div>
         </div>
         <div className="mt-1 text-xs text-neutral-500">
@@ -1449,9 +1540,12 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
                   items={(p.attachments ?? []).map((a) => ({ id: a.id, source: a.source, title: a.title, fileName: a.fileName, sourceUrl: a.sourceUrl, note: a.extractedText?.trim() ? `✓ ${t('readable')}` : t('link only'), ok: !!a.extractedText?.trim() }))}
                   linkDraft={attLinkDraft}
                   setLinkDraft={setAttLinkDraft}
+                  linkTitle={attLinkTitle}
+                  setLinkTitle={setAttLinkTitle}
                   onAddFile={(dataUrl, fileName) => act(async () => { await internalProposalsApi.addAttachment(id, { source: 'UPLOAD', dataUrl, fileName }); })}
-                  onAddLink={(url) => act(async () => { await internalProposalsApi.addAttachment(id, { source: 'LINK', url }); })}
+                  onAddLink={(url, name) => act(async () => { await internalProposalsApi.addAttachment(id, { source: 'LINK', url, title: name }); })}
                   onRemove={(_, aid) => { if (aid) return act(async () => { await internalProposalsApi.removeAttachment(id, aid); }); }}
+                  onRename={(aid, name) => act(async () => { await internalProposalsApi.renameAttachment(id, aid, name); })}
                 />
               </div>
             ) : null}
@@ -1564,6 +1658,9 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
           </div>
         )}
         <DocHashRow hash={p.docHash} />
+        {p.docAnchorTxHash ? (
+          <div className="mt-1 text-xs"><a href={txUrl(p.docAnchorTxHash)} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{t('content anchored on-chain ↗')}</a> <span className="text-neutral-400">· {t('taken when voting opened')}</span></div>
+        ) : null}
         {p.anchorTxHash ? (
           <div className="mt-2 text-xs"><a href={txUrl(p.anchorTxHash)} target="_blank" rel="noreferrer" className="text-emerald-700 underline dark:text-emerald-400">{t('on-chain record ↗')}</a></div>
         ) : p.status !== 'ACTIVE' && p.anchorHash ? (

@@ -114,6 +114,13 @@ export class AddAttachmentDto {
   @IsOptional() @IsString() @MaxLength(2000) url?: string;
 }
 
+/** §30 — set/change an attachment's display name (title) after it was added. The title is a label
+ *  only — it is not part of the anchored content hash — so an already-added link/file can be named
+ *  retroactively while the document is still open for comment. */
+export class RenameAttachmentDto {
+  @IsString() @MinLength(1) @MaxLength(300) title!: string;
+}
+
 /** §30 — create / update a "document for public comment" internal proposal. Content is optional (the
  *  substance lives in the attachments); attachments on create are the initial set. */
 export class SaveDocumentDto {
