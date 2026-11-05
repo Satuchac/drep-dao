@@ -2247,9 +2247,23 @@ export interface RuleDocComment {
   createdAt: string;
   replies?: RuleDocComment[]; // present on top-level comments (one level of threading)
 }
+// §27 — a file/link attached to a rule document (same shape as the §30 document feature).
+export interface RuleAttachment {
+  id: string;
+  source: string; // UPLOAD | LINK
+  title: string | null;
+  fileName: string | null;
+  mimeType: string | null;
+  sourceUrl: string | null;
+  hasFile: boolean;
+  extractedText: string;
+}
 export interface RuleDocDetail extends RuleDocSummary {
   contentMd: string;
   contentHash: string; // sha256(content), computed live — verify against this
+  commentAudience: string; // BOARD | MEMBERS | EVERYONE
+  docEditableBy: string; // PROPOSER | PROPOSER_BOARD
+  attachments: RuleAttachment[];
   isOwner: boolean;
   editable: boolean;
   canPropose: boolean;
@@ -2261,9 +2275,9 @@ export const ruleDocumentsApi = {
   list: (filter?: string) => request<RuleDocSummary[]>(`/rule-documents${filter ? `?filter=${filter}` : ''}`),
   mine: () => request<RuleDocSummary[]>('/rule-documents/mine'),
   get: (id: string) => request<RuleDocDetail>(`/rule-documents/${id}`),
-  create: (input: { title: string; contentMd: string; expiresAt?: string | null }) =>
+  create: (input: { title: string; contentMd: string; expiresAt?: string | null; commentAudience?: string; docEditableBy?: string; attachments?: AddAttachmentInput[] }) =>
     request<RuleDocDetail>('/rule-documents', { method: 'POST', body: JSON.stringify(input) }),
-  update: (id: string, input: { title?: string; contentMd?: string; expiresAt?: string | null }) =>
+  update: (id: string, input: { title?: string; contentMd?: string; expiresAt?: string | null; commentAudience?: string; docEditableBy?: string }) =>
     request<RuleDocDetail>(`/rule-documents/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   publish: (id: string) => request<RuleDocDetail>(`/rule-documents/${id}/publish`, { method: 'POST' }),
   remove: (id: string) => request<{ ok: boolean }>(`/rule-documents/${id}`, { method: 'DELETE' }),
@@ -2271,6 +2285,18 @@ export const ruleDocumentsApi = {
     request<RuleDocDetail>(`/rule-documents/${id}/comments`, { method: 'POST', body: JSON.stringify({ contentMd, ...(parentId ? { parentId } : {}) }) }),
   deleteComment: (commentId: string) =>
     request<{ ok: boolean }>(`/rule-documents/comments/${commentId}`, { method: 'DELETE' }),
+  addAttachment: (id: string, input: AddAttachmentInput) =>
+    request<RuleDocDetail>(`/rule-documents/${id}/attachments`, { method: 'POST', body: JSON.stringify(input) }),
+  removeAttachment: (id: string, attId: string) =>
+    request<RuleDocDetail>(`/rule-documents/${id}/attachments/${attId}`, { method: 'DELETE' }),
+  renameAttachment: (id: string, attId: string, title: string) =>
+    request<RuleDocDetail>(`/rule-documents/${id}/attachments/${attId}`, { method: 'PATCH', body: JSON.stringify({ title }) }),
+  attachmentFile: (id: string, attId: string) =>
+    request<{ fileName: string | null; mimeType: string | null; dataUrl: string }>(`/rule-documents/${id}/attachments/${attId}/file`),
+  probeLink: (url: string) =>
+    request<LinkProbe>('/rule-documents/probe-link', { method: 'POST', body: JSON.stringify({ url }) }),
+  fetchLinkText: (url: string) =>
+    request<{ text: string; chars: number }>('/rule-documents/fetch-link', { method: 'POST', body: JSON.stringify({ url }) }),
 };
 
 // §28 — Decisions.

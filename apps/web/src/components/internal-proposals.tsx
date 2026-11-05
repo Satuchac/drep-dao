@@ -54,10 +54,27 @@ const OPEN_VOTE_TYPES: Record<string, string> = {
   INSTRUCTIVE: 'Instructive (names actors to act)',
   SPENDING: 'Spending (treasury payment on approval)',
 };
+// §30 — comment-audience tiers (shared with Rule Documents). The select offers the three current
+// tiers; the label map also resolves legacy values (DREPS/ANY_WALLET) for display of older documents.
+const COMMENT_AUDIENCE_OPTIONS: Record<string, string> = {
+  BOARD: 'Board members only',
+  MEMBERS: 'Board members, DReps and experts',
+  EVERYONE: 'Anyone signed in with a wallet',
+};
 const COMMENT_AUDIENCE_LABEL: Record<string, string> = {
-  DREPS: 'Registered DReps only',
+  ...COMMENT_AUDIENCE_OPTIONS,
+  DREPS: 'Board members, DReps and experts',
   ANY_WALLET: 'Anyone signed in with a wallet',
 };
+/** §30 — client-side gate for showing the comment composer (the server enforces the real rule). */
+function canCommentClient(audience: string | null | undefined, profile: { roles: string[]; onchainDrep: { registered: boolean } } | null | undefined): boolean {
+  if (!profile) return false;
+  const a = audience === 'BOARD' ? 'BOARD' : audience === 'MEMBERS' || audience === 'DREPS' ? 'MEMBERS' : 'EVERYONE';
+  if (a === 'EVERYONE') return true;
+  if (profile.roles.includes('BOARD')) return true;
+  if (a === 'BOARD') return false;
+  return profile.roles.includes('DAO_MEMBER') || profile.roles.includes('EXPERT') || profile.onchainDrep.registered;
+}
 // §30 — status-badge label overrides for internal proposals. COMMENT is document-only, so spell it out.
 const PROPOSAL_STATUS_LABEL: Record<string, string> = {
   COMMENT: 'DOCUMENT COMMENT PHASE',
@@ -1203,9 +1220,10 @@ function OpenVotingPanel({ id, onDone }: { id: string; onDone: () => void }) {
  *  and who may edit, then publish it for comment (voting is opened later from the document page). */
 function DocumentForm({ onCancel, onDone }: { onCancel: () => void; onDone: (id: string) => void }) {
   const t = useT();
+  const { setParams } = useUrlNav();
   const [title, setTitle] = useState('');
   const [contentMd, setContentMd] = useState('');
-  const [commentAudience, setCommentAudience] = useState('ANY_WALLET');
+  const [commentAudience, setCommentAudience] = useState('EVERYONE');
   const [docEditableBy, setDocEditableBy] = useState('PROPOSER');
   const [isPrivate, setIsPrivate] = useState(false);
   // Each pending attachment carries a readability note (links are probed on add; files are read on save).
@@ -1249,6 +1267,13 @@ function DocumentForm({ onCancel, onDone }: { onCancel: () => void; onDone: (id:
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">{t('New document for public comment')}</h2>
       <p className="text-sm text-neutral-500">{t('Publish a document (files or links) for people to comment on. No vote yet — you can open voting later and choose the vote type.')}</p>
+      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">
+        <p className="mb-1"><span className="font-semibold">{t('Use this when')}</span> {t('you need to put several documents up for comment at once (files and links gathered in one place).')}</p>
+        <p className="mb-1"><span className="font-semibold">{t('Flow:')}</span> {t('it stays here in Internal proposals — you (and optionally the board) edit it, people comment, then you open voting and pick the vote type, which freezes and anchors the content.')}</p>
+        <p className="mb-1 font-semibold">{t('Important: approving this does NOT create a Rule document — the result stays an internal proposal.')}</p>
+        <p>{t('Want the result to live in Rule Documents instead? Create it as a')}{' '}
+          <button type="button" onClick={() => setParams({ view: 'me', tab: 'rules' })} className="font-medium underline hover:no-underline">{t('Rule document (My area → New document)')}</button>.</p>
+      </div>
       {error ? <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{error}</div> : null}
       <div>
         <label className="mb-1 block text-sm font-medium">{t('Title')}</label>
@@ -1277,7 +1302,7 @@ function DocumentForm({ onCancel, onDone }: { onCancel: () => void; onDone: (id:
         <div>
           <label className="mb-1 block text-sm font-medium">{t('Who can comment')}</label>
           <select className={field} value={commentAudience} onChange={(e) => setCommentAudience(e.target.value)}>
-            {Object.entries(COMMENT_AUDIENCE_LABEL).map(([k, v]) => <option key={k} value={k}>{t(v)}</option>)}
+            {Object.entries(COMMENT_AUDIENCE_OPTIONS).map(([k, v]) => <option key={k} value={k}>{t(v)}</option>)}
           </select>
         </div>
         <div>
@@ -1378,7 +1403,7 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
   // §30 — open/close the "edit document" sub-form (title + content), seeded from the current values.
   const openEdit = (seedContent?: string) => { setEditTitle(p.title); setEditContent(seedContent ?? p.contentMd); setEditingDoc(true); };
   const saveEdit = () => act(async () => {
-    await internalProposalsApi.updateDocument(id, { title: editTitle.trim(), contentMd: editContent, commentAudience: p.commentAudience ?? 'ANY_WALLET', docEditableBy: p.docEditableBy ?? 'PROPOSER', isPrivate: p.isPrivate });
+    await internalProposalsApi.updateDocument(id, { title: editTitle.trim(), contentMd: editContent, commentAudience: p.commentAudience ?? 'EVERYONE', docEditableBy: p.docEditableBy ?? 'PROPOSER', isPrivate: p.isPrivate });
     setEditingDoc(false);
   });
   // §30 — import an attachment's extracted text into the document content (opens the edit form).
@@ -1677,14 +1702,14 @@ function InternalDetail({ id, onBack }: { id: string; onBack: () => void }) {
         <div className={card}>
           <DiscussionThread
             comments={(comments ?? []).map(commentToDisc)}
-            canComment={!!profile && (p.commentAudience !== 'DREPS' || profile.roles.includes('DAO_MEMBER') || profile.roles.includes('BOARD') || profile.onchainDrep.registered)}
+            canComment={canCommentClient(p.commentAudience, profile)}
             canModerate={false}
             onPost={(md, pid) => commentsApi.create(id, md, pid).then(() => loadComments())}
             onDelete={(cid) => commentsApi.remove(cid).then(() => loadComments())}
             label={t('Comments')}
             submitLabel={t('Post comment')}
             placeholder={t('Comment on this document… (supports **bold**, *italics*, lists, [links](https://…))')}
-            emptyText={p.commentAudience === 'DREPS' ? t('No comments yet. Registered DReps can comment.') : t('No comments yet.')}
+            emptyText={p.commentAudience === 'BOARD' ? t('No comments yet. Board members can comment.') : p.commentAudience === 'MEMBERS' || p.commentAudience === 'DREPS' ? t('No comments yet. Board members, DReps and experts can comment.') : t('No comments yet.')}
           />
           {!profile ? <p className="mt-2 text-xs text-neutral-500">{t('Connect your wallet to comment.')}</p> : null}
         </div>

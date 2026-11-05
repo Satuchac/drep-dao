@@ -98,8 +98,10 @@ export class VoteInternalDto {
   @IsOptional() @IsString() @MaxLength(4000) rationale?: string;
 }
 
-// §30 — "Document for public comment".
-const COMMENT_AUDIENCES = ['DREPS', 'ANY_WALLET'];
+// §30 — "Document for public comment". Audience tiers (shared with Rule Documents): BOARD | MEMBERS
+// (board + DReps + experts) | EVERYONE. Legacy values DREPS/ANY_WALLET are still accepted so existing
+// documents can be re-saved (the server normalizes them: DREPS → MEMBERS, ANY_WALLET → EVERYONE).
+const COMMENT_AUDIENCES = ['BOARD', 'MEMBERS', 'EVERYONE', 'DREPS', 'ANY_WALLET'];
 const DOC_EDITABLE_BY = ['PROPOSER', 'PROPOSER_BOARD'];
 
 /** One attachment on a document proposal: an UPLOAD (base64 data URL + original file name) or a
