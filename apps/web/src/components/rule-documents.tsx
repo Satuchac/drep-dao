@@ -445,6 +445,7 @@ function Feedback({ doc, reload }: { doc: RuleDocDetail; reload: () => void }) {
 function RuleDocDetailView({ id, onBack, onStartVote }: { id: string; onBack: () => void; onStartVote: (docId: string) => void }) {
   const [doc, setDoc] = useState<RuleDocDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const { setParams } = useUrlNav();
 
   const load = useCallback(() => {
@@ -462,6 +463,15 @@ function RuleDocDetailView({ id, onBack, onStartVote }: { id: string; onBack: ()
   if (error) return <div className="text-sm text-red-500">{error} <button onClick={onBack} className="underline">back</button></div>;
   if (!doc) return <div className="text-sm text-neutral-500">Loading…</div>;
 
+  if (editing && doc.editable) {
+    return (
+      <div>
+        <button onClick={() => setEditing(false)} className="mb-3 text-xs text-neutral-500 hover:underline">← Back to document</button>
+        <MyDocEditor id={doc.id} onDone={() => { setEditing(false); load(); }} />
+      </div>
+    );
+  }
+
   return (
     <div>
       <button onClick={onBack} className="mb-3 text-xs text-neutral-500 hover:underline">← Back to rule documents</button>
@@ -469,6 +479,7 @@ function RuleDocDetailView({ id, onBack, onStartVote }: { id: string; onBack: ()
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-xl font-semibold">{doc.title}</h2>
           <div className="flex items-center gap-2">
+            {doc.editable ? <button onClick={() => setEditing(true)} className="rounded border border-neutral-300 px-2.5 py-1 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-600 dark:hover:bg-neutral-800">Edit</button> : null}
             {doc.lastVote?.status === 'ACTIVE' ? <VotingPill /> : null}
             <StatusBadge status={doc.status} />
           </div>
@@ -749,7 +760,7 @@ export function MyRuleDocuments() {
         <button onClick={() => setEditing('new')} className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700">+ New document</button>
       </div>
       <div className="mb-4 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs leading-relaxed text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900/40 dark:text-neutral-300">
-        <p className="mb-2"><span className="font-semibold text-neutral-700 dark:text-neutral-200">Use a rule document when</span> you are writing a rule for the DAO, or a document meant to be publicly available and binding. The result lives here, in Rule Documents.</p>
+        <p className="mb-2"><span className="font-semibold text-neutral-700 dark:text-neutral-200">Use a rule document when</span> you are writing a rule for the DAO, or a document meant to be publicly available. The result lives here, in Rule Documents.</p>
         <p className="mb-1 font-semibold text-neutral-700 dark:text-neutral-200">How it works</p>
         <ol className="ml-4 list-decimal space-y-0.5">
           <li><span className="font-medium">Private</span> — you draft it (and attach files/links); only you can see it.</li>
