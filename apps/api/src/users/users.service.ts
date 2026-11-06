@@ -56,6 +56,18 @@ export class UsersService {
         }
       }
     }
+    // SEC — a board seat's DRep key confers board authority, so it must NEVER be bound by a plain
+    // (unproven) login. Otherwise an attacker could front-run an as-yet-unbound board-seat key and
+    // seize board authority without proving the key. A board-seat key may be bound only through the
+    // cryptographic /auth/drep/verify proof flow. Already-bound members are unaffected (binding is
+    // immutable above); this only blocks a NEW plain-login claim of a seat key.
+    if (drepKeyHash) {
+      const boardSeat = await this.prisma.boardSeat.findFirst({ where: { removedAt: null, drepKeyHash }, select: { id: true } });
+      if (boardSeat) {
+        this.logger.warn(`refusing to bind a board-seat DRep key via plain login — requires /auth/drep/verify proof (stake ${params.stakeKeyHash.slice(0, 12)}…)`);
+        drepKeyHash = undefined;
+      }
+    }
     // undefined = couldn't determine (no key, or chain query failed) → preserve prior value.
     // Refresh registration for the effective key (existing binding or the just-bound key) so a member
     // who registers their DRep on-chain after first login still gets drepRegistered updated.
