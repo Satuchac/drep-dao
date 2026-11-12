@@ -1092,13 +1092,17 @@ export class InternalProposalsService {
     let abstainPower = 0;
     let totalPower = 0;
     let cast = 0;
+    let yesVoters = 0;
+    let noVoters = 0;
+    let abstainVoters = 0;
     for (const e of snapshot?.entries ?? []) {
       const fp = Number(e.finalPower ?? 0);
       totalPower += fp;
       const c = choiceByDrep.get(e.drepId);
       if (c) cast++;
-      if (c === VoteChoice.YES) yesPower += fp;
-      else if (c === VoteChoice.ABSTAIN) abstainPower += fp;
+      if (c === VoteChoice.YES) { yesPower += fp; yesVoters++; }
+      else if (c === VoteChoice.ABSTAIN) { abstainPower += fp; abstainVoters++; }
+      else if (c === VoteChoice.NO) noVoters++;
     }
     const t = { yesPower, totalPower, abstainPower, thresholdPct };
     return {
@@ -1112,6 +1116,10 @@ export class InternalProposalsService {
       ratioPct: round2(approvalRatio(t) * 100),
       thresholdPct,
       approved: isApproved(t),
+      // §R5 — voter headcounts shown on the list rows alongside the power-weighted ratio.
+      yesVoters,
+      noVoters,
+      abstainVoters,
     };
   }
 

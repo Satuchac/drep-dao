@@ -315,7 +315,7 @@ export function InternalProposals() {
                   {/* §30 — a document still open for comment has no vote config yet; don't show it. */}
                   {p.internalType === 'DOCUMENT' && p.status === 'COMMENT'
                     ? ` · ${tr('open for comment')}`
-                    : <> · {tr(SCOPE_LABEL[p.votersScope] ?? p.votersScope)} · {tr(VTYPE_LABEL[p.votingType] ?? p.votingType)}{p.tally.kind === 'THRESHOLD' ? ` · ${tr('threshold')} ${p.thresholdPct ?? '?'}%` : ''}</>}
+                    : <> · {tr(SCOPE_LABEL[p.votersScope] ?? p.votersScope)} · {tr(VTYPE_LABEL[p.votingType] ?? p.votingType)}{p.tally.kind === 'THRESHOLD' ? <> · {tr('threshold')} {p.thresholdPct ?? '?'}% · {p.tally.cast} {tr('of')} {p.tally.eligible} {tr('voted')}{p.tally.cast > 0 ? <> · <span className="text-emerald-600 dark:text-emerald-400">{p.tally.yesVoters} {tr('Yes')}</span> · <span className="text-rose-600 dark:text-rose-400">{p.tally.noVoters} {tr('No')}</span> · <span className="text-amber-600 dark:text-amber-400">{p.tally.abstainVoters} {tr('Abstain')}</span></> : null}</> : null}</>}
                   {p.submitter ? ` · ${tr('by')} ${p.submitter}` : ''}
                   {p.status === 'ACTIVE' && p.votingEndAt ? ` · ${tr('ends')} ${fmtDateTime(p.votingEndAt)}` : ''}
                 </div>

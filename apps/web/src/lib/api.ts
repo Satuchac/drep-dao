@@ -1863,6 +1863,10 @@ export type InternalTally =
       ratioPct: number;
       thresholdPct: number;
       approved: boolean;
+      // §R5 — voter headcounts shown on the list rows.
+      yesVoters: number;
+      noVoters: number;
+      abstainVoters: number;
     }
   | {
       kind: 'POLL';

@@ -100,6 +100,17 @@ export function HomeShell() {
   const todoCounts = useTodoCounts(isBoard, canVote, !!profile, todoRefresh);
   const myAreaTodo = todoTotal(todoCounts);
 
+  // A board-only view in the URL passes the NAV-key check above, but its render branch is guarded by
+  // `&& isBoard` — so a non-board user landing on e.g. ?view=setup sees a blank page. Once signed in,
+  // downgrade any view this user can't access to the default (overview), so login always lands
+  // somewhere consistent.
+  useEffect(() => {
+    if (!profile) return;
+    const n = NAV.find((x) => x.key === view);
+    if (n?.boardOnly && !isBoard) setView('overview');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, view, isBoard]);
+
   // Logged out (or restoring): the public, read-only shell — a top bar with the brand,
   // a read-only nav, and "Connect wallet" top-right. Everyone sees live public data; only
   // signing in unlocks "My area" and anything actionable.
